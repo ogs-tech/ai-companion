@@ -4,9 +4,10 @@ import { AppFooter } from '../../../../src/renderer/components/shell/AppFooter.j
 import { renderWithTheme } from '../../test-utils.js';
 
 describe('AppFooter', () => {
-  it('carries the OGS brand line', () => {
+  it('carries the OGS Tech brand line with link', () => {
     renderWithTheme(<AppFooter />);
     expect(screen.getByTestId('app-footer')).toBeInTheDocument();
-    expect(screen.getByText(/OGS · TECNOLOGIA BRASIL/i)).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /OGS Tech/i });
+    expect(link).toHaveAttribute('href', 'https://www.useogs.com/');
   });
 });

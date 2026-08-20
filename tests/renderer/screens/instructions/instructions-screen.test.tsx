@@ -183,7 +183,7 @@ describe('<InstructionsScreen>', () => {
     confirmSpy.mockRestore();
   });
 
-  it('clicking "Usar template OGS" opens the editor pre-filled with template content', async () => {
+  it('clicking "Usar template padrão" opens the editor pre-filled with template content', async () => {
     const user = userEvent.setup();
     routeCalls({
       'instruction.list': [],

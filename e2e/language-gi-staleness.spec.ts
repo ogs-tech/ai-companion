@@ -48,7 +48,7 @@ const linesOf = (text: string): string | undefined => /(\d+)\s+lines/.exec(text)
 
 test.beforeAll(async () => {
   const home = mkdtempSync(join(tmpdir(), 'sde-e2e-'));
-  const ws = join(home, '.superset-ai-app');
+  const ws = join(home, '.ai-companion');
   mkdirSync(join(ws, 'global-instructions'), { recursive: true });
   mkdirSync(join(home, '.claude'), { recursive: true });
   giPath = join(ws, 'global-instructions', 'default.md');

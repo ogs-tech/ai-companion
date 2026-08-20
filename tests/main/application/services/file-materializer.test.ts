@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FileMaterializer } from '../../../../src/main/application/services/file-materializer.js';
 import { GENERATED_FILE_MARKER } from '../../../../src/main/application/entity/agents-file.js';
+import { brand } from '../../../../src/shared/brand.js';
 import { InMemoryFileSystem } from '../../../../src/main/infrastructure/filesystem/in-memory-filesystem.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 
@@ -27,6 +28,14 @@ describe('FileMaterializer.write', () => {
     const result = await materializer.write({ destination: '/repos/app/AGENTS.md', content: owned('new') });
     expect(result.status).toBe('ok');
     expect(result.details?.backupPath).toBeUndefined();
+    expect(await fs.readFile('/repos/app/AGENTS.md')).toBe(owned('new'));
+  });
+
+  it('overwrites a file with a legacy ownership marker without a backup', async () => {
+    const { fs, materializer } = make();
+    fs.createFile('/repos/app/AGENTS.md', `${brand.legacy.generatedFileMarker}\n\nold\n`);
+    const result = await materializer.write({ destination: '/repos/app/AGENTS.md', content: owned('new') });
+    expect(result.status).toBe('ok');
     expect(await fs.readFile('/repos/app/AGENTS.md')).toBe(owned('new'));
   });
 

@@ -9,9 +9,12 @@ import '@fontsource/jetbrains-mono/500.css';
 import '@fontsource/jetbrains-mono/600.css';
 import { App } from './App.js';
 import { ThemeModeProvider } from './lib/theme-mode-context.js';
+import { brand } from '../shared/brand.js';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element #root not found');
+
+document.title = brand.documentTitle;
 
 createRoot(root).render(
   <StrictMode>

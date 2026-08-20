@@ -1,6 +1,7 @@
 import { AppBar, Button, IconButton, Stack, Tab, Tabs, Toolbar, Tooltip, Typography } from '@mui/material';
 import { Moon, Sun, Settings as SettingsGlyph } from 'lucide-react';
 import { Logo } from '../../assets/Logo.js';
+import { brand } from '../../../shared/brand.js';
 import { Icon } from '../ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from '../ds/StatusPill.js';
 import { useThemeMode } from '../../lib/theme-mode-context.js';
@@ -51,7 +52,7 @@ export function TopNav({
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', color: 'text.primary' }}>
           <Logo />
           <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1 }}>
-            Superset AI
+            {brand.displayName}
           </Typography>
         </Stack>
 

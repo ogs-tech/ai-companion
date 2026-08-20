@@ -30,6 +30,26 @@ npm run dev
 
 `electron-vite` boots the main and preload bundles, starts Vite for the renderer, and opens an Electron window.
 
+### Launch without `cd` into the repo
+
+From the repo root, install the Mac dev shortcut once:
+
+```bash
+npm run install:dev-shortcut
+```
+
+This registers the global CLI **`superset-ai-dev`** and installs **`/Applications/Superset AI Dev.app`** (or `~/Applications/` if `/Applications` is not writable). Finder opens on the app after install — drag it to the Dock.
+
+Clicking the Dock icon while dev is already running focuses the open window. Dev starts in the background (no Terminal window). **Right-click** the Dock icon → **Open Terminal** to stream logs — closing that Terminal does **not** stop dev. Use **Quit Superset AI Dev** (Dock menu or ⌘Q on the launcher) to stop the project.
+
+If you installed the shortcut before this behavior existed, rerun `npm run install:dev-shortcut` once to refresh the launcher.
+
+Then from anywhere in Terminal:
+
+```bash
+superset-ai-dev
+```
+
 ## 3. First-launch onboarding
 
 On first launch the app has no workspace yet, so the **Onboarding** screen asks you to pick one. The workspace is just a folder on disk where your customizations live as `.md` files with YAML frontmatter.
@@ -57,6 +77,6 @@ You're ready when:
 
 ## Troubleshooting
 
-- **Window doesn't open** — check that no other process is holding port 5173 (Vite default) and rerun `npm run dev`.
+- **Window doesn't open** — check that no other process is holding port **47173** (dev renderer; see `electron.vite.config.ts`) and rerun `npm run dev`.
 - **I/O error screen** — the bootstrap step failed (workspace not writable, missing parent, etc.). Pick a different folder; the same retry button reruns the failed step.
 - **Stale build artifacts** — delete `out/` and rerun.

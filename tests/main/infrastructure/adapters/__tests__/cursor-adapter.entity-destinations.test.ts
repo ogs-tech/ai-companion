@@ -12,6 +12,7 @@ import {
   CURSOR_PLUGIN_JSON_MARKER,
   CURSOR_RULE_MDC_MARKER,
 } from '../../../../../src/main/application/entity/cursor-plugin-manifest.js';
+import { brand } from '../../../../../src/shared/brand.js';
 
 const meta = { version: '0.1.0', createdAt: '', updatedAt: '' };
 const adapter = new CursorAdapter({ homedir: '/home/u' });
@@ -60,14 +61,14 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     const [manifest, rule] = out;
     expect(manifest).toMatchObject({
       scope: 'personal',
-      destination: '/home/u/.cursor/plugins/superset-ai/.cursor-plugin/plugin.json',
+      destination: `/home/u/.cursor/plugins/${brand.cursorPluginId}/.cursor-plugin/plugin.json`,
       strategy: 'write',
       ownershipMarker: CURSOR_PLUGIN_JSON_MARKER,
       ownershipCheck: 'includes',
     });
     expect(rule).toMatchObject({
       scope: 'personal',
-      destination: '/home/u/.cursor/plugins/superset-ai/rules/personal-default.mdc',
+      destination: `/home/u/.cursor/plugins/${brand.cursorPluginId}/rules/personal-default.mdc`,
       strategy: 'write',
       ownershipMarker: CURSOR_RULE_MDC_MARKER,
       ownershipCheck: 'includes',

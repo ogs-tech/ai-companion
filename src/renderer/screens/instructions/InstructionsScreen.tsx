@@ -32,6 +32,7 @@ import { useInstructionsList, useInvalidateInstructions } from '../../hooks/use-
 import { useQuery } from '@tanstack/react-query';
 import { defaultGlobalInstruction } from '../../lib/default-global-instruction.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
+import { cursorPluginSyncPathHints } from '../../../shared/brand.js';
 
 interface EditorState {
   entity: Instruction;
@@ -67,10 +68,7 @@ const HOME_SYNC_GROUPS: readonly SyncGroup[] = [
 const HOME_CURSOR_SYNC_GROUP: SyncGroup = {
   key: 'cursor',
   label: 'Cursor',
-  paths: [
-    '~/.cursor/plugins/superset-ai/.cursor-plugin/plugin.json',
-    '~/.cursor/plugins/superset-ai/rules/personal-default.mdc',
-  ],
+  paths: cursorPluginSyncPathHints(),
 } as const;
 
 function basenameFromPath(p: string): string {
@@ -294,7 +292,7 @@ function PersonalCard({ personal, cursorEnabled, onEdit, onTemplate, onBlank }: 
             {personal
               ? personal.description ||
                 'Distribuídas para cada assistente habilitado (Claude Code, Cursor via plugin).'
-              : 'Um perfil único aplicado a todos os assistentes habilitados. Comece com o template OGS ou do zero.'}
+              : 'Um perfil único aplicado a todos os assistentes habilitados. Comece com o template padrão ou do zero.'}
           </Typography>
         </Box>
         {personal ? (
@@ -325,7 +323,7 @@ function PersonalCard({ personal, cursorEnabled, onEdit, onTemplate, onBlank }: 
               onClick={onTemplate}
               data-testid="personal-instruction-use-template"
             >
-              Usar template OGS
+              Usar template padrão
             </Button>
             <Button
               variant="text"

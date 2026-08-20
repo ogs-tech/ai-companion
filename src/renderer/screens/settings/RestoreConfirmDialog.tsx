@@ -6,6 +6,7 @@ import {
   DialogContentText,
   DialogTitle,
 } from '@mui/material';
+import { workspacePathHint } from '../../../shared/brand.js';
 
 interface RestoreConfirmDialogProps {
   open: boolean;
@@ -31,7 +32,7 @@ export function RestoreConfirmDialog({
       <DialogContent>
         <DialogContentText>
           Esta ação irá <strong>restaurar o app ao estado inicial</strong>: remove o diretório{' '}
-          <code>~/.superset-ai-app</code> e os symlinks que o app criou em <code>~/.claude</code>, e
+          <code>{workspacePathHint()}</code> e os symlinks que o app criou em <code>~/.claude</code>, e
           fecha o aplicativo. O restante da sua configuração do Claude não é afetado. Isso não pode
           ser desfeito.
         </DialogContentText>

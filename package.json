@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
+  "bin": {
+    "superset-ai-dev": "./scripts/dev-app.sh"
+  },
   "scripts": {
     "dev": "electron-vite dev",
+    "install:dev-shortcut": "bash scripts/install-dev-shortcut.sh",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "test": "vitest run --coverage",

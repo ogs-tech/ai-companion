@@ -3,7 +3,9 @@ import { WorkspaceTeardownService } from '../../../../src/main/application/servi
 import type { ClaudeSettings } from '../../../../src/main/application/schemas/claude-settings.schema.js';
 import type { Scope } from '../../../../src/main/application/ports/scope.js';
 
-const WORKSPACE = '/home/user/.superset-ai-app';
+import { workspacePath } from '../../../../src/shared/brand-paths.js';
+
+const WORKSPACE = workspacePath('/home/user');
 
 const buildService = () => {
   const order: string[] = [];

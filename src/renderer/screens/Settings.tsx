@@ -27,6 +27,7 @@ import { ConfirmDisableModal } from './settings/ConfirmDisableModal.js';
 import { RestoreConfirmDialog } from './settings/RestoreConfirmDialog.js';
 import type { SyncResult } from '../../shared/sync-result.js';
 import type { LanguagePreference, Settings as SettingsModel } from '../../shared/settings.js';
+import { workspacePathHint } from '../../shared/brand.js';
 
 const LANGUAGE_OPTIONS: { value: LanguagePreference; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -333,7 +334,7 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
             <Kicker component="h2">Zona de perigo</Kicker>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Restaura o aplicativo para o estado inicial deletando <code>~/.superset-ai-app</code>,{' '}
+            Restaura o aplicativo para o estado inicial deletando <code>{workspacePathHint()}</code>,{' '}
             <code>~/.claude</code> e <code>.env.local</code>. O aplicativo será fechado em seguida.
           </Typography>
           {restoreError !== null && (

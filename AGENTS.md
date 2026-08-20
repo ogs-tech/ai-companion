@@ -1,4 +1,4 @@
-<!-- Managed by Superset AI — edits will be overwritten -->
+<!-- Managed by AI Companion — edits will be overwritten -->
 
 # Project instructions
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { callIpc } from '../lib/ipc.js';
 import type { HealthReport } from '../../shared/health.js';
+import { productLabel } from '../../shared/brand.js';
 
 /**
  * Fires an OS notification (via health.notify) only when a NEW error id appears
@@ -33,7 +34,7 @@ export function useHealthNotifications(report: HealthReport | undefined): void {
         : `${fresh.length} new problems detected: ${fresh.join(', ')}`;
 
     void callIpc('health.notify', {
-      title: 'Superset AI — a problem was detected',
+      title: productLabel('a problem was detected'),
       body,
     });
   }, [report]);

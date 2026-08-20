@@ -2,6 +2,9 @@ import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 
+/** Dev-only renderer port — avoids clashing with other Vite apps on 5173. */
+const DEV_RENDERER_PORT = 47173;
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -25,6 +28,10 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
+    server: {
+      port: DEV_RENDERER_PORT,
+      strictPort: true,
+    },
     build: {
       outDir: 'out/renderer',
       rollupOptions: {

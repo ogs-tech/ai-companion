@@ -3,6 +3,7 @@ import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.j
 import type { ClockPort } from '../ports/clock-port.js';
 import type { OwnershipCheck } from '../ports/adapter.js';
 import { GENERATED_FILE_MARKER } from '../entity/agents-file.js';
+import { legacyOwnershipMarkers } from '../../../shared/brand.js';
 import { DomainError, ioError } from '../../domain/errors.js';
 
 export type GeneratedFileState = 'ok' | 'missing' | 'drift' | 'foreign';
@@ -24,11 +25,16 @@ interface Ownership {
  * and never deleted. Backup scheme mirrors SymlinkManager: <workspace>/_backups/<ts>/<rel>.
  */
 export class FileMaterializer {
+  private readonly legacyOwnershipMarkers: readonly string[];
+
   constructor(
     private readonly fs: WritableFileSystemPort,
     private readonly clock: ClockPort,
     private readonly workspacePath: string,
-  ) {}
+    legacyMarkers: readonly string[] = legacyOwnershipMarkers(),
+  ) {
+    this.legacyOwnershipMarkers = legacyMarkers;
+  }
 
   async write(args: {
     destination: string;
@@ -67,7 +73,7 @@ export class FileMaterializer {
         return { status: 'conflict', details };
       }
       const existing = await this.fs.readFile(dest);
-      if (isOwned(existing, ownership)) {
+      if (isOwned(existing, ownership, this.legacyOwnershipMarkers)) {
         await this.fs.writeFile(dest, args.content);
         return { status: 'ok' };
       }
@@ -97,7 +103,7 @@ export class FileMaterializer {
     if (stat.kind === 'none') return { removed: false };
     if (stat.kind === 'symlink') return { removed: false };
     const existing = await this.fs.readFile(dest);
-    if (!isOwned(existing, ownership)) return { removed: false };
+    if (!isOwned(existing, ownership, this.legacyOwnershipMarkers)) return { removed: false };
     await this.fs.unlink(dest);
     return { removed: true };
   }
@@ -114,7 +120,7 @@ export class FileMaterializer {
     if (stat.kind === 'none') return 'missing';
     if (stat.kind === 'symlink') return 'foreign';
     const existing = await this.fs.readFile(dest);
-    if (!isOwned(existing, ownership)) return 'foreign';
+    if (!isOwned(existing, ownership, this.legacyOwnershipMarkers)) return 'foreign';
     return existing === args.content ? 'ok' : 'drift';
   }
 
@@ -162,7 +168,14 @@ function ownershipOf(args: { ownershipMarker?: string; ownershipCheck?: Ownershi
   };
 }
 
-function isOwned(content: string, ownership: Ownership): boolean {
-  if (ownership.check === 'startsWith') return content.startsWith(ownership.marker);
-  return content.includes(ownership.marker);
+function isOwned(
+  content: string,
+  ownership: Ownership,
+  legacyMarkers: readonly string[],
+): boolean {
+  const markers = [ownership.marker, ...legacyMarkers];
+  if (ownership.check === 'startsWith') {
+    return markers.some((marker) => content.startsWith(marker));
+  }
+  return markers.some((marker) => content.includes(marker));
 }

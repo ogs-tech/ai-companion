@@ -1,7 +1,8 @@
 import type { Instruction } from '../../../shared/entity.js';
+import { brand } from '../../../shared/brand.js';
 
 /** First line of every app-generated file; the ownership signal. Keep verbatim. */
-export const GENERATED_FILE_MARKER = '<!-- Managed by Superset AI — edits will be overwritten -->';
+export const GENERATED_FILE_MARKER = brand.generatedFileMarker;
 
 /**
  * Renders an `AGENTS.md` from the global instruction: the marker, a blank line,

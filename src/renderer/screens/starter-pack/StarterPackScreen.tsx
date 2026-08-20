@@ -21,6 +21,7 @@ import type { Nav } from '../../components/shell/nav.js';
 import { PluginInstallPreviewDialog } from '../marketplaces/PluginInstallPreviewDialog.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { useStarterPack } from '../../hooks/use-starter-pack.js';
+import { brand } from '../../../shared/brand.js';
 import {
   STARTER_PACK_GROUPS,
   type MarketplacePlugin,
@@ -126,7 +127,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
     >
       <ScreenHeader
         kicker="Plugins"
-        title="Superset AI · Starter Pack"
+        title={brand.starterPackTitle}
         subtitle="Deixe seu ambiente AI pronto em minutos"
         actions={
           <Box
@@ -236,7 +237,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
       {!isLoading && plugins.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Adicione o marketplace oficial para descobrir plugins OGS.
+            Adicione o marketplace oficial para descobrir plugins recomendados.
           </Typography>
           <Button
             size="small"

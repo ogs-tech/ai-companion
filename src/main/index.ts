@@ -1,12 +1,20 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { createServer, type Server } from 'node:http';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
+import { brand } from '../shared/brand.js';
+import {
+  devLockPath,
+  projectWorkspacePath,
+} from '../shared/brand-paths.js';
 import { SettingsService } from './application/services/settings-service.js';
 import { RepoService } from './application/services/repo-service.js';
 import { WorkspaceBootstrapService } from './application/services/workspace-bootstrap.js';
 import { WorkspaceTeardownService } from './application/services/workspace-teardown.js';
+import { ProductMigrationService } from './application/services/product-migration-service.js';
 import { AdapterManager } from './application/services/adapter-manager.js';
 import { SymlinkManager } from './application/services/symlink-manager.js';
 import { FileMaterializer } from './application/services/file-materializer.js';
@@ -62,6 +70,60 @@ import { createDispatcher } from './ipc/dispatcher.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const isDev = process.env['NODE_ENV'] === 'development';
+const devLockPathValue = devLockPath(homedir());
+/** Localhost-only — Dock launcher hits GET /focus (see scripts/focus-dev.sh). */
+const DEV_FOCUS_PORT = 47174;
+
+let mainWindow: BrowserWindow | null = null;
+let devFocusServer: Server | null = null;
+
+function writeDevLock(): void {
+  if (!isDev) return;
+  try {
+    writeFileSync(devLockPathValue, String(process.pid), 'utf8');
+  } catch {
+    // Non-fatal — focus-dev.sh falls back to port check.
+  }
+}
+
+function removeDevLock(): void {
+  if (!isDev) return;
+  try {
+    unlinkSync(devLockPathValue);
+  } catch {
+    // Already removed or never written.
+  }
+}
+
+function startDevFocusServer(): void {
+  if (!isDev || devFocusServer !== null) return;
+
+  devFocusServer = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/focus') {
+      focusMainWindow();
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok');
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  devFocusServer.listen(DEV_FOCUS_PORT, '127.0.0.1', () => {
+    writeDevLock();
+  });
+
+  devFocusServer.on('error', (error) => {
+    console.warn('[dev] focus server unavailable:', error.message);
+  });
+}
+
+function stopDevFocusServer(): void {
+  devFocusServer?.close();
+  devFocusServer = null;
+}
+
 interface IpcCallPayload {
   method: string;
   params: unknown;
@@ -77,7 +139,9 @@ function isCallPayload(value: unknown): value is IpcCallPayload {
 }
 
 async function wireIpc(): Promise<void> {
-  const workspacePath = join(homedir(), '.superset-ai-app');
+  const nodeFsAdapter = new NodeFsAdapter();
+  const home = homedir();
+  const { workspacePath } = await new ProductMigrationService(nodeFsAdapter).migrate(home);
 
   const workspaceBootstrap = new WorkspaceBootstrapService(new FsWorkspaceBootstrap());
   await workspaceBootstrap.create(workspacePath);
@@ -92,7 +156,6 @@ async function wireIpc(): Promise<void> {
   const clock = new SystemClock();
 
   const symlinkManager = new SymlinkManager(new NodeFsAdapter(), clock, workspacePath);
-  const nodeFsAdapter = new NodeFsAdapter();
   const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, workspacePath);
   const claudeAdapter = new ClaudeAdapter({ homedir: homedir() });
   const cursorAdapter = new CursorAdapter({ homedir: homedir() });
@@ -122,7 +185,7 @@ async function wireIpc(): Promise<void> {
     pluginsDir: (scope) =>
       scope === 'personal'
         ? pluginsWorkspaceDir
-        : join(process.cwd(), '.superset-ai-app', 'plugins'),
+        : join(projectWorkspacePath(process.cwd()), 'plugins'),
     cacheDir: (scope) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'plugins', 'cache', 'local')
@@ -200,7 +263,7 @@ async function wireIpc(): Promise<void> {
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
-      : join(process.cwd(), '.superset-ai-app', 'marketplaces-cache');
+      : join(projectWorkspacePath(process.cwd()), 'marketplaces-cache');
   const marketplaceService = new MarketplaceService({
     repository: new SettingsMarketplaceRepository(claudeSettingsFile),
     parser: marketplaceParser,
@@ -286,10 +349,11 @@ async function wireIpc(): Promise<void> {
 }
 
 function createWindow(): void {
-  const window = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1024,
     height: 768,
     show: false,
+    title: brand.documentTitle,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -298,13 +362,38 @@ function createWindow(): void {
     },
   });
 
-  window.on('ready-to-show', () => window.show());
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  mainWindow.on('ready-to-show', () => mainWindow?.show());
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
   if (devServerUrl) {
-    void window.loadURL(devServerUrl);
+    void mainWindow.loadURL(devServerUrl);
   } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'));
+    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+  }
+}
+
+function configureDevDock(): void {
+  if (!isDev || process.platform !== 'darwin') return;
+  app.setName(brand.devAppName);
+  app.dock?.hide();
+}
+
+function focusMainWindow(): void {
+  if (mainWindow !== null) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    if (process.platform === 'darwin') {
+      app.focus({ steal: true });
+    }
+    mainWindow.focus();
+    return;
+  }
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
   }
 }
 
@@ -312,27 +401,47 @@ function reportFatalBootError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   console.error('[boot] fatal error during startup:', error);
   dialog.showErrorBox(
-    'Superset AI failed to start',
+    brand.fatalErrorTitle,
     `The app could not finish initializing and will now close.\n\n${message}`,
   );
   app.quit();
 }
 
-void app.whenReady().then(async () => {
-  try {
-    await wireIpc();
-  } catch (error) {
-    reportFatalBootError(error);
-    return;
-  }
-
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    focusMainWindow();
   });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.on('will-quit', () => {
+    stopDevFocusServer();
+    removeDevLock();
+  });
+
+  app.on('window-all-closed', () => {
+    // Dev: quit when the window closes so `npm run dev` restarts cleanly on macOS.
+    // Prod macOS: keep the Dock icon alive until explicit Quit (platform convention).
+    if (isDev || process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
+  void app.whenReady().then(async () => {
+    try {
+      await wireIpc();
+    } catch (error) {
+      reportFatalBootError(error);
+      return;
+    }
+
+    configureDevDock();
+    createWindow();
+    startDevFocusServer();
+
+    app.on('activate', () => {
+      focusMainWindow();
+    });
+  });
+}

@@ -21,14 +21,14 @@ describe('AppShell', () => {
     await userEvent.click(screen.getByTestId('nav-biblioteca'));
     expect(onNavigate).toHaveBeenCalledWith({ area: 'biblioteca', sub: 'skills' });
   });
-  it('renders the global footer with the OGS brand line', () => {
+  it('renders the global footer with the OGS Tech brand line', () => {
     renderWithShell(
       <AppShell nav={{ area: 'inicio' }} onNavigate={() => undefined} onOpenSettings={() => undefined}>
         <div data-testid="screen" />
       </AppShell>,
     );
     expect(screen.getByTestId('app-footer')).toBeInTheDocument();
-    expect(screen.getByText(/OGS · TECNOLOGIA BRASIL/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /OGS Tech/i })).toBeInTheDocument();
   });
   it('opens the command palette on ⌘K', async () => {
     renderWithShell(
