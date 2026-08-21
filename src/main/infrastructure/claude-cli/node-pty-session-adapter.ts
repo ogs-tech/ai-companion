@@ -35,6 +35,15 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
     this.exitListener = listener;
   }
 
+  /**
+   * Known limitation: On platforms where node-pty reports spawn failures
+   * asynchronously (via immediate exit), the heuristic below detects "no data
+   * before exit" and classifies it as a spawn failure (rejected promise).
+   * This works reliably for actual missing binaries (which almost always print
+   * an error first), but could rarely misclassify a legitimate silent exit as
+   * a spawn failure. Callers should not assume spawn rejection is *only* caused
+   * by a missing binary — it could be a fast, silent exit from the process itself.
+   */
   spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
     return new Promise((resolve, reject) => {
       let child: IPty;

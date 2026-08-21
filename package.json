@@ -8,6 +8,7 @@
     "ai-companion-dev": "./scripts/dev-app.sh"
   },
   "scripts": {
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "rebuild:native": "electron-rebuild -f -w node-pty",
     "predev": "npm run rebuild:native",
     "prebuild": "npm run rebuild:native",
