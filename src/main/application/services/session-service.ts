@@ -18,6 +18,7 @@ export type SessionStatusListener = (sessionId: string, status: SessionStatus, e
  */
 export class SessionService {
   private readonly sessions = new Map<string, SessionSnapshot>();
+  private readonly pending = new Map<string, Promise<SessionSnapshot>>();
   private readonly outputListeners: SessionOutputListener[] = [];
   private readonly exitListeners: SessionStatusListener[] = [];
 
@@ -40,21 +41,31 @@ export class SessionService {
     const existing = this.sessions.get(entityUrn);
     if (existing && existing.status === 'running') return existing;
 
-    const entity = await this.entityService.get(entityUrn);
-    const cwd = this.resolveCwd(entity);
+    const pendingSpawn = this.pending.get(entityUrn);
+    if (pendingSpawn) return pendingSpawn;
 
-    try {
-      await this.claudeSession.spawn(entityUrn, cwd, { cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
-    } catch (err) {
-      throw ioError({
-        message: `Failed to start a claude session: ${(err as Error).message}`,
-        details: { reason: 'claude_session_spawn_failed' },
-      });
-    }
+    const spawnPromise = (async () => {
+      const entity = await this.entityService.get(entityUrn);
+      const cwd = this.resolveCwd(entity);
 
-    const session: SessionSnapshot = { entityUrn, cwd, status: 'running' };
-    this.sessions.set(entityUrn, session);
-    return session;
+      try {
+        await this.claudeSession.spawn(entityUrn, cwd, { cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
+      } catch (err) {
+        throw ioError({
+          message: `Failed to start a claude session: ${(err as Error).message}`,
+          details: { reason: 'claude_session_spawn_failed' },
+        });
+      }
+
+      const session: SessionSnapshot = { entityUrn, cwd, status: 'running' };
+      this.sessions.set(entityUrn, session);
+      return session;
+    })().finally(() => {
+      this.pending.delete(entityUrn);
+    });
+
+    this.pending.set(entityUrn, spawnPromise);
+    return spawnPromise;
   }
 
   write(sessionId: string, data: string): void {

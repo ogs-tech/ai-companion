@@ -149,4 +149,14 @@ describe('SessionService', () => {
     claudeSession.simulateExit(entityUrn('skill', 'foo'), 7);
     expect(received).toEqual([[entityUrn('skill', 'foo'), 'exited', 7]]);
   });
+
+  it('spawn deduplicates concurrent calls for the same entityUrn (single-flight)', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const first = service.spawn(entityUrn('skill', 'foo'));
+    const second = service.spawn(entityUrn('skill', 'foo'));
+    const [result1, result2] = await Promise.all([first, second]);
+    expect(result1).toEqual(result2);
+    expect(claudeSession.spawnCalls).toHaveLength(1);
+  });
 });
