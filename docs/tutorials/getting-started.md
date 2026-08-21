@@ -1,6 +1,6 @@
 ---
 title: Getting started
-description: Run superset-ai-app locally from a fresh clone in under 5 minutes.
+description: Run ai-companion locally from a fresh clone in under 5 minutes.
 ---
 
 # Getting started
@@ -17,8 +17,8 @@ description: Run superset-ai-app locally from a fresh clone in under 5 minutes.
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/ogs-tech/superset-ai-app.git
-cd superset-ai-app
+git clone https://github.com/ogs-tech/ai-companion.git
+cd ai-companion
 npm install
 ```
 
@@ -38,16 +38,16 @@ From the repo root, install the Mac dev shortcut once:
 npm run install:dev-shortcut
 ```
 
-This registers the global CLI **`superset-ai-dev`** and installs **`/Applications/Superset AI Dev.app`** (or `~/Applications/` if `/Applications` is not writable). Finder opens on the app after install — drag it to the Dock.
+This registers the global CLI **`ai-companion-dev`** and installs **`/Applications/AI Companion Dev.app`** (or `~/Applications/` if `/Applications` is not writable). Finder opens on the app after install — drag it to the Dock.
 
-Clicking the Dock icon while dev is already running focuses the open window. Dev starts in the background (no Terminal window). **Right-click** the Dock icon → **Open Terminal** to stream logs — closing that Terminal does **not** stop dev. Use **Quit Superset AI Dev** (Dock menu or ⌘Q on the launcher) to stop the project.
+Clicking the Dock icon while dev is already running focuses the open window. Dev starts in the background (no Terminal window). **Right-click** the Dock icon → **Open Terminal** to stream logs — closing that Terminal does **not** stop dev. Use **Quit AI Companion Dev** (Dock menu or ⌘Q on the launcher) to stop the project.
 
 If you installed the shortcut before this behavior existed, rerun `npm run install:dev-shortcut` once to refresh the launcher.
 
 Then from anywhere in Terminal:
 
 ```bash
-superset-ai-dev
+ai-companion-dev
 ```
 
 ## 3. First-launch onboarding

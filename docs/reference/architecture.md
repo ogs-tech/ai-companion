@@ -1,11 +1,11 @@
 ---
 title: Architecture
-description: Hexagonal layout of superset-ai-app — main, preload, renderer, and the ports/adapters split inside the main process.
+description: Hexagonal layout of ai-companion — main, preload, renderer, and the ports/adapters split inside the main process.
 ---
 
 # Architecture
 
-superset-ai-app is an Electron app with three processes (**main**, **preload**, **renderer**) and a hexagonal split inside the main process.
+ai-companion is an Electron app with three processes (**main**, **preload**, **renderer**) and a hexagonal split inside the main process.
 
 ## Process layout
 
@@ -68,7 +68,7 @@ Cross-cutting:
 - `file-materializer` — write-side twin of `symlink-manager` for **generated** files (e.g. Cursor's per-repo `AGENTS.md`): ownership is signalled by a marker comment on the file's first line (`GENERATED_FILE_MARKER`), so the app only overwrites/removes files it owns; a foreign file (no marker) is backed up before overwrite and never deleted. Backup scheme mirrors `symlink-manager`'s (`<workspace>/_backups/<ts>/<rel-path>`).
 - `repo-service` — small git helpers (`detectGit`, `getCurrentBranch`) used when creating a new project instruction. The old global `settings.linkedRepos` list is gone, and the `repo.link` / `repo.unlink` / `repo.list` IPC methods were removed with it — a project entity now carries its own `repoPath` directly.
 - `settings-service` — load/merge/persist settings.
-- `workspace-bootstrap` — creates the `~/.superset-ai-app/` directory tree on first run (called at startup, not via IPC).
+- `workspace-bootstrap` — creates the `~/.ai-companion/` directory tree on first run (called at startup, not via IPC).
 - `health-service` — aggregates `HealthCheck` results from collectors (MCP auth, MCP runtime, config-drift, symlink, generated-file) into a `HealthReport`; exposed via the `health.*` IPC namespace.
 - **MCP (live-config broker):** `mcp-service` is NOT an `Entity`-backed facade. It reads/writes MCP
   servers directly in the real Claude files (`~/.claude.json` `mcpServers` and
@@ -84,7 +84,7 @@ The polymorphic `Customization` model and its `customization-service` umbrella a
 The adapter implementations live under `src/main/infrastructure/adapters/`:
 
 - `claude-adapter.ts` — resolves sync destinations per entity kind via `resolveEntityDestinations`: `skill` → `~/.claude/skills/<name>` (dir), `agent` → `~/.claude/agents/<name>.md`, `PersonalInstruction` → **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`, `ProjectInstruction` → `<entity.repoPath>/.claude/CLAUDE.md` and `<entity.repoPath>/AGENTS.md`. All destinations use `strategy: 'symlink'`. Skill/agent `project` scope is a temporary no-op (see the schema TODO block); once each carries its own `repoPath`, the adapter will resolve `<repoPath>/.claude/{skills,agents}/…` for them too.
-- `cursor-adapter.ts` — publishes into Cursor's native file surface, toggled by `settings.adapters.cursor` (default **off**): `skill` → `~/.cursor/skills/<name>/` (dir, symlink), `agent` → `~/.cursor/agents/<name>.md` (symlink). `PersonalInstruction` is materialized as a Cursor local plugin under `~/.cursor/plugins/superset-ai/` — a `.cursor-plugin/plugin.json` manifest and a `rules/personal-default.mdc` rule with `alwaysApply: true` — because Cursor loads plugin rules at startup and applies them to every conversation, which is the closest analogue today to Claude's home-level `CLAUDE.md`. `ProjectInstruction` is written to `<entity.repoPath>/AGENTS.md`. Both `write` destinations carry a custom `ownershipMarker` (JSON key for the plugin manifest, YAML key for the rule) and matching `ownershipCheck: 'includes'`, so `FileMaterializer` refuses to touch foreign files. Skill/agent `project` scope is a no-op here for the same reason as the Claude adapter.
+- `cursor-adapter.ts` — publishes into Cursor's native file surface, toggled by `settings.adapters.cursor` (default **off**): `skill` → `~/.cursor/skills/<name>/` (dir, symlink), `agent` → `~/.cursor/agents/<name>.md` (symlink). `PersonalInstruction` is materialized as a Cursor local plugin under `~/.cursor/plugins/ai-companion/` — a `.cursor-plugin/plugin.json` manifest and a `rules/personal-default.mdc` rule with `alwaysApply: true` — because Cursor loads plugin rules at startup and applies them to every conversation, which is the closest analogue today to Claude's home-level `CLAUDE.md`. `ProjectInstruction` is written to `<entity.repoPath>/AGENTS.md`. Both `write` destinations carry a custom `ownershipMarker` (JSON key for the plugin manifest, YAML key for the rule) and matching `ownershipCheck: 'includes'`, so `FileMaterializer` refuses to touch foreign files. Skill/agent `project` scope is a no-op here for the same reason as the Claude adapter.
 
 Both implement the `Adapter` port at `src/main/application/ports/adapter.ts`. `AdapterDestination` is a discriminated union on `strategy`: `{ scope, destination, strategy: 'symlink' }` for symlink targets, or `{ scope, destination, strategy: 'write', content }` for generated files. `AdapterManager` branches on `strategy` when syncing: `symlink` destinations go through `SymlinkManager`; `write` destinations go through `FileMaterializer` (see above).
 
@@ -126,7 +126,7 @@ I/O failures bubble up to the `IoError` screen, which retries the failing step.
 - **Entities** — `.md` files under the workspace folder. Skills at `skills/<name>/SKILL.md` and agents at `agents/<name>.md` keep YAML frontmatter. Instructions are frontmatter-free: the personal singleton at `instructions/default.md`, project instructions at `instructions/project/<slug>/INSTRUCTION.md` plus a sidecar `meta.json` (description, version, timestamps, `repoPath`).
 - **Settings** — JSON file managed by `settings-service`. The old global `linkedRepos` array was retired — project scope now lives on the entity itself (`ProjectInstruction.repoPath`).
 - **Sync** — symbolic links from each adapter target into the workspace files, with two `write`-strategy exceptions:
-  1. `PersonalInstruction` on the Cursor adapter materializes a small local plugin under `~/.cursor/plugins/superset-ai/` (a `plugin.json` manifest and an `alwaysApply: true` rule .mdc), marker-owned via `FileMaterializer` so foreign files stay untouched.
+  1. `PersonalInstruction` on the Cursor adapter materializes a small local plugin under `~/.cursor/plugins/ai-companion/` (a `plugin.json` manifest and an `alwaysApply: true` rule .mdc), marker-owned via `FileMaterializer` so foreign files stay untouched.
   2. `ProjectInstruction` on the Cursor adapter materializes a generated `<entity.repoPath>/AGENTS.md`, also marker-owned.
   Everything else is a symlink; the Claude adapter never uses `write`.
 

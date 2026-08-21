@@ -21,7 +21,7 @@ cd "${ROOT_DIR}"
 
 chmod +x "${SCRIPT_DIR}/dev-app-background.sh" "${SCRIPT_DIR}/open-dev-terminal.sh" "${SCRIPT_DIR}/stop-dev.sh"
 
-echo "→ Linking global CLI (superset-ai-dev)…"
+echo "→ Linking global CLI (ai-companion-dev)…"
 npm link
 
 echo "→ Installing Dock app (${APP_BUNDLE})…"
@@ -85,7 +85,7 @@ rm -f "${LEGACY_COMMAND}"
 
 echo ""
 echo "Atalho dev instalado:"
-echo "  Terminal: superset-ai-dev   (de qualquer pasta)"
+echo "  Terminal: ai-companion-dev   (de qualquer pasta)"
 echo "  Finder:   ${APP_BUNDLE}"
 echo "  Dock:     arraste o app de Aplicativos para o Dock"
 echo "  Dock (botão direito): Open Terminal (logs) | Quit AI Companion Dev (para o projeto)"

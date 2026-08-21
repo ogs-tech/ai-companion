@@ -1,14 +1,14 @@
 ---
-title: PRD — Superset AI App
-internal_name: superset-ai-app
+title: PRD — AI Companion
+internal_name: ai-companion
 codename: forge
-public_name: Superset AI App
+public_name: AI Companion
 status: Ready
 created_at: 2026-04-19
 updated_at: 2026-06-04
 ---
 
-# PRD — Superset AI App
+# PRD — AI Companion
 
 > [!NOTE]
 > Stack, processes and technical decisions in [reference/architecture.md](../reference/architecture.md).

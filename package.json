@@ -1,11 +1,11 @@
 {
-  "name": "superset-ai-app",
+  "name": "ai-companion",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
   "bin": {
-    "superset-ai-dev": "./scripts/dev-app.sh"
+    "ai-companion-dev": "./scripts/dev-app.sh"
   },
   "scripts": {
     "dev": "electron-vite dev",

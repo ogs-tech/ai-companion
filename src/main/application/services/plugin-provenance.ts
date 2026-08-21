@@ -43,7 +43,7 @@ export interface PluginProvenanceDeps {
 /**
  * Computes plugin provenance by scanning each installed plugin's skills/,
  * agents/ and commands/ across two registries, in tier order:
- *   1. workspace-managed (~/.superset-ai-app/plugins)
+ *   1. workspace-managed (~/.ai-companion/plugins)
  *   2. claude-code       (~/.claude/plugins, personal scope only)
  * A {type/name} present in a higher tier shadows the same key in a lower tier.
  * Plugin-provided customizations are read-only; their lifecycle owns the files.

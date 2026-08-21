@@ -117,7 +117,7 @@ The Markdown body is unconstrained at the schema layer — `content: string` (sk
 
 | Scope | Meaning | Adapter target (typical) |
 |---|---|---|
-| `personal` | Applies machine-wide for the author. | `~/.claude/` (personal instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; and — when Cursor is enabled — the plugin under `~/.cursor/plugins/superset-ai/`). |
+| `personal` | Applies machine-wide for the author. | `~/.claude/` (personal instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; and — when Cursor is enabled — the plugin under `~/.cursor/plugins/ai-companion/`). |
 | `project` | Applies to the specific repo the entity carries. | For a project instruction: `<entity.repoPath>/.claude/CLAUDE.md` + `<entity.repoPath>/AGENTS.md`. Skill/agent `project` scope is currently disallowed — the previous global `settings.linkedRepos` fan-out was removed; a per-entity `repoPath` for skill/agent is a follow-up. |
 
 ## Validation result

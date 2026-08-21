@@ -1,9 +1,9 @@
 ---
-title: superset-ai-app
+title: AI Companion
 description: Local desktop app to centralize AI customizations (skills, agent profiles) and sync them to Claude Code via symlinks.
 ---
 
-# superset-ai-app
+# AI Companion
 
 > **Status:** Spike — validating in 4 weeks whether centralizing AI context in a local app with symlink-based sync replaces ad-hoc folders and loose notes.
 
@@ -74,4 +74,4 @@ Pure TypeScript — no backend, API, database, auth, or telemetry.
 
 ## Repository
 
-Source: [github.com/ogs-tech/superset-ai-app](https://github.com/ogs-tech/superset-ai-app).
+Source: [github.com/ogs-tech/ai-companion](https://github.com/ogs-tech/ai-companion).

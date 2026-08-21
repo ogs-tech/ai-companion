@@ -75,7 +75,7 @@ Grouped by namespace. Source: [`src/main/ipc/registry.ts`](../../src/main/ipc/re
 |---|---|---|
 | `app.restore` | — | `void` |
 
-> **Destructive (scoped).** `app.restore` restores the app to its initial state: it removes the app-created symlinks under adapter targets (those pointing into the workspace, via `AdapterManager.removeAllAdapterSymlinks`) and deletes the workspace directory `~/.superset-ai-app/`, then quits. It does **not** delete the rest of `~/.claude/` or any `.env.local` — only this app's own footprint. Orchestrated by `WorkspaceTeardownService`; no raw filesystem access lives in the IPC layer.
+> **Destructive (scoped).** `app.restore` restores the app to its initial state: it removes the app-created symlinks under adapter targets (those pointing into the workspace, via `AdapterManager.removeAllAdapterSymlinks`) and deletes the workspace directory `~/.ai-companion/`, then quits. It does **not** delete the rest of `~/.claude/` or any `.env.local` — only this app's own footprint. Orchestrated by `WorkspaceTeardownService`; no raw filesystem access lives in the IPC layer.
 
 ### `settings`
 
@@ -101,7 +101,7 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 
 ### `workspace`
 
-There is **no `workspace` IPC namespace**. Workspace lifecycle — creating the `~/.superset-ai-app/` directory tree on first run — runs at process startup via `WorkspaceBootstrapService`, called directly from [`src/main/index.ts`](../../src/main/index.ts), not over IPC. The workspace path is fixed.
+There is **no `workspace` IPC namespace**. Workspace lifecycle — creating the `~/.ai-companion/` directory tree on first run — runs at process startup via `WorkspaceBootstrapService`, called directly from [`src/main/index.ts`](../../src/main/index.ts), not over IPC. The workspace path is fixed.
 
 ### `dialog`
 
@@ -285,7 +285,7 @@ interface PluginPublishInfo {
 
 **Detected servers** (`source.kind === 'detected'`, `scope === 'detected'`, `transport` absent, `def === {}`) are servers the Claude Code runtime knows about (via logs / `mcp-needs-auth-cache.json`) that have a health problem (`error` or `needs-auth`) **and** no broker-readable config. They are surfaced read-only so failures are visible; healthy orphans are intentionally omitted to avoid noise. `mcp.authenticate` opens the external claude.ai connectors page (`https://claude.ai/customize/connectors`) — the app cannot complete the OAuth flow itself (it has no def/URL for runtime-managed connectors), so it acts as a trampoline. The `id` is validated but the v1 target URL is fixed regardless of which server. Throws `internal` if no shell port is configured.
 
-Disable semantics: project-shared servers use `projects[repoPath].disabledMcpjsonServers` in `~/.claude.json`; inline (global / project-local) servers are parked in `~/.superset-ai-app/mcp-disabled.json` and restored on enable.
+Disable semantics: project-shared servers use `projects[repoPath].disabledMcpjsonServers` in `~/.claude.json`; inline (global / project-local) servers are parked in `~/.ai-companion/mcp-disabled.json` and restored on enable.
 
 ### `health`
 

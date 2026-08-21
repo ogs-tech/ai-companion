@@ -1,6 +1,6 @@
-# superset-ai-app
+# ai-companion
 
-[![GitHub Repo](https://img.shields.io/badge/github-ogs--tech%2Fsuperset--ai--app-blue)](https://github.com/ogs-tech/superset-ai-app)
+[![GitHub Repo](https://img.shields.io/badge/github-ogs--tech%2Fai--companion-blue)](https://github.com/ogs-tech/ai-companion)
 
 > **Validation spike** — local desktop app to centralize AI customizations (skills, agent profiles, global instructions, commands) in Markdown + YAML and sync them to **Claude Code** via symlinks.
 >
@@ -27,8 +27,8 @@ Pure TypeScript — no backend, API, database, auth, or telemetry.
 ## Quick start
 
 ```bash
-git clone https://github.com/ogs-tech/superset-ai-app.git
-cd superset-ai-app
+git clone https://github.com/ogs-tech/ai-companion.git
+cd ai-companion
 npm install
 npm run dev
 ```
@@ -70,4 +70,4 @@ Success = author uses the app daily for ≥ 2 consecutive weeks without falling 
 
 ## Repository
 
-Source: [github.com/ogs-tech/superset-ai-app](https://github.com/ogs-tech/superset-ai-app).
+Source: [github.com/ogs-tech/ai-companion](https://github.com/ogs-tech/ai-companion).
