@@ -38,6 +38,10 @@ type IpcErrorKind =
 
 Defined in [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts).
 
+## Push channels (exception to request/response)
+
+Every method above is request/response over `ipc:call`. One exception: `session:output` and `session:exit` (defined in [`src/shared/session.ts`](../../src/shared/session.ts)) stream live PTY output and report a session's exit code while a `claude` process spawned via `session.spawn` is running — that streaming can't fit the request/response `ipc:call` envelope. **Multiple sessions can be live at once** (one per entity with an open session), so preload itself filters by `sessionId` (the entity's own `urn`) before invoking the renderer's listener — there's no single "the" session to assume. Preload exposes these as `window.api.session.onOutput(sessionId, listener) → unsubscribe` and `window.api.session.onExit(sessionId, listener) → unsubscribe`, each listener receiving only the payload (`chunk` / `exitCode`) for that session.
+
 ## Preload bridge
 
 `src/preload/index.ts` exposes a single function on `window.api`:
@@ -143,6 +147,18 @@ Saving or deleting a plugin-provided skill (`source.kind === 'plugin'`) raises `
 | `instruction.delete` | `{ name: string; removeSymlinks?: boolean }` | `{ ok: true; syncReport?: SyncResult[] }` |
 
 `Instruction` is a discriminated union: `PersonalInstruction` (`name === 'default'`, `scopes === ['personal']`) or `ProjectInstruction` (any slug except `'default'`, `scopes === ['project']`, absolute `repoPath: string`). Enforced by `personalInstructionId` / `projectInstructionSlug` (`src/main/domain/instruction-id.ts`) and by `instructionEntitySchema` (branch via `superRefine`). Storage is **frontmatter-free**; the personal singleton lives at `instructions/default.md`, project instructions at `instructions/project/<slug>/{INSTRUCTION.md,meta.json}` — see [Entity schema](customization-schema.md#instruction). `save`'s sync report fans out to Claude (`~/.claude/CLAUDE.md` + `~/AGENTS.md` for personal, `<repoPath>/.claude/CLAUDE.md` + `<repoPath>/AGENTS.md` for project) and — when Cursor is enabled — either the Cursor plugin files (personal) or `<repoPath>/AGENTS.md` (project). `delete` removes the entity plus its symlinks / generated files by default; pass `removeSymlinks: false` to keep the sync artefacts.
+
+### `session`
+
+| Method | Params | Result |
+|---|---|---|
+| `session.spawn` | `{ entityUrn: string }` | `SessionSnapshot` |
+| `session.write` | `{ sessionId: string; data: string }` | `void` |
+| `session.resize` | `{ sessionId: string; cols: number; rows: number }` | `void` |
+| `session.kill` | `{ sessionId: string }` | `void` |
+| `session.status` | `{ sessionId: string }` | `SessionSnapshot \| null` |
+
+`SessionSnapshot` (`src/shared/session.ts`): `{ entityUrn: string; cwd: string; status: 'running' \| 'exited' }`. A session is anchored to a single Skill, Agent, or Instruction entity by its `urn` — there's no separate "project" registry, and the `sessionId` taken by `write`/`resize`/`kill`/`status` is always that same `urn` (the port itself never mints a separate id). `session.spawn` is idempotent: calling it again for an `entityUrn` that already has a live session returns the existing `SessionSnapshot` instead of spawning a second PTY, and concurrent calls for the same `entityUrn` share the same in-flight spawn rather than racing. Working directory is derived from the entity, never asked for: a `ProjectInstruction` uses its own `repoPath`; every other kind uses the app's workspace root. Backed by `SessionService` (`src/main/application/services/session-service.ts`) over `ClaudeSessionPort` (`NodePtySessionAdapter`, `src/main/infrastructure/claude-cli/`) — see [Session bounded context](architecture.md#session-bounded-context). `session.spawn` surfaces `kind: 'io'` for spawn failures (binary missing, PTY spawn error) and `kind: 'not_found'` for an unknown `entityUrn`; `session.write`/`resize`/`kill`/`status` never throw for an unrecognized or non-running `sessionId` — they silently no-op (`status` returns `null`). Live PTY output streams separately over the `session:output` / `session:exit` push channels (see above) — `session.spawn`'s response only confirms the process started, it doesn't carry any output itself.
 
 ### `command` *(removed)*
 
