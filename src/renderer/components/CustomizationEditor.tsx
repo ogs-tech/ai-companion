@@ -1,18 +1,29 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
-  Box, Button, Checkbox, CircularProgress, Container, FormControlLabel,
+  Alert, Box, Button, Checkbox, CircularProgress, Container, FormControlLabel,
   FormGroup, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
+import { WandSparkles } from 'lucide-react';
 import { Kicker } from './ds/Kicker.js';
+import { Icon } from './ds/Icon.js';
 import { fonts } from '../tokens.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
 import { Toast, type ToastMessage } from './Toast.js';
 import { SyncReportModal } from './SyncReportModal.js';
+import { SessionPanel } from './SessionPanel.js';
 import type { Agent, Instruction, Scope, Skill } from '../../shared/entity.js';
 import { entityUrn } from '../../shared/entity.js';
 import type { SyncResult } from '../../shared/sync-result.js';
 import { entityBody, withEntityBody } from '../lib/entity-body.js';
+import type { GenerateDraftPhase } from '../../shared/instruction-generation.js';
+
+const GENERATE_PHASE_LABEL: Record<GenerateDraftPhase, string> = {
+  starting: 'Iniciando sessão…',
+  requesting: 'Consultando o modelo…',
+  writing: 'Escrevendo…',
+  done: 'Concluído',
+};
 
 type EditableEntity = Skill | Agent | Instruction;
 
@@ -48,6 +59,11 @@ interface CustomizationEditorProps {
    * "Nova customização" / "Editar <name>".
    */
   titleOverride?: { create: string; edit: string };
+  /**
+   * Personal Instruction only: shows a "Gerar com IA" action that streams a
+   * draft from the user's local `claude` CLI straight into the body field.
+   */
+  enableGenerate?: boolean;
 }
 
 type BodyView = 'edit' | 'preview' | 'split';
@@ -59,6 +75,7 @@ export function CustomizationEditor({
   onCancel,
   hiddenFields,
   titleOverride,
+  enableGenerate,
 }: CustomizationEditorProps): React.ReactElement {
   const [entity, setEntity] = useState<EditableEntity>(initial);
   const [body, setBody] = useState(entityBody(initial));
@@ -66,6 +83,40 @@ export function CustomizationEditor({
   const [saving, setSaving] = useState(false);
   const [syncReport, setSyncReport] = useState<SyncResult[]>([]);
   const [bodyView, setBodyView] = useState<BodyView>('split');
+
+  const [generatePanelOpen, setGeneratePanelOpen] = useState(false);
+  const [generateContext, setGenerateContext] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [generatePhase, setGeneratePhase] = useState<GenerateDraftPhase | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const handleGenerate = async (): Promise<void> => {
+    setGenerateError(null);
+    setGenerating(true);
+    setGeneratePhase('starting');
+    setBody('');
+
+    const unsubscribe = window.api.onInstructionGenerateProgress((event) => {
+      setGeneratePhase(event.phase);
+      if (event.textDelta) setBody((prev) => prev + event.textDelta);
+    });
+
+    try {
+      const trimmed = generateContext.trim();
+      const result = await callIpc<{ content: string }>('instruction.generateDraft', {
+        ...(trimmed ? { context: trimmed } : {}),
+      });
+      setBody(result.content);
+      setGeneratePanelOpen(false);
+      setGenerateContext('');
+    } catch (err) {
+      setGenerateError(err instanceof IpcCallError ? err.message : String(err));
+    } finally {
+      unsubscribe();
+      setGenerating(false);
+      setGeneratePhase(null);
+    }
+  };
 
   const handleSave = async (): Promise<void> => {
     setSaving(true);
@@ -110,8 +161,8 @@ export function CustomizationEditor({
           {title}
         </Typography>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" onClick={onCancel}>Cancelar</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}
+          <Button variant="outlined" onClick={onCancel} disabled={generating}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving || generating}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}>
             {saving ? 'Salvando…' : 'Salvar'}
           </Button>
@@ -179,8 +230,21 @@ export function CustomizationEditor({
       )}
 
       <Paper variant="outlined" sx={{ p: 3 }}>
-        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Kicker>Body</Kicker>
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+            <Kicker>Body</Kicker>
+            {enableGenerate && !generatePanelOpen && !generating && (
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<Icon glyph={WandSparkles} size={14} />}
+                onClick={() => setGeneratePanelOpen(true)}
+                data-testid="editor-generate-open"
+              >
+                Gerar com IA
+              </Button>
+            )}
+          </Stack>
           <ToggleButtonGroup size="small" exclusive value={bodyView} onChange={(_, v: BodyView | null) => v && setBodyView(v)}>
             <ToggleButton value="edit">Editar</ToggleButton>
             <ToggleButton value="split">Dividir</ToggleButton>
@@ -188,12 +252,85 @@ export function CustomizationEditor({
           </ToggleButtonGroup>
         </Stack>
 
+        {enableGenerate && generatePanelOpen && !generating && (
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Contexto opcional — como você gosta de trabalhar, preferências, regras de segurança…"
+              value={generateContext}
+              onChange={(e) => setGenerateContext(e.target.value)}
+              slotProps={{ htmlInput: { 'data-testid': 'editor-generate-context' } }}
+            />
+            <Stack direction="row" spacing={1}>
+              <Button variant="contained" onClick={() => void handleGenerate()} data-testid="editor-generate-submit">
+                Gerar
+              </Button>
+              <Button
+                variant="text"
+                onClick={() => { setGeneratePanelOpen(false); setGenerateContext(''); }}
+              >
+                Cancelar
+              </Button>
+            </Stack>
+          </Stack>
+        )}
+
+        {generateError && (
+          <Alert severity="error" role="alert" data-testid="editor-generate-error" sx={{ mb: 2 }}>
+            {generateError}
+          </Alert>
+        )}
+
+        {generating && (
+          <Box
+            data-testid="editor-generate-phase"
+            sx={(theme) => ({
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.75,
+              alignSelf: 'flex-start',
+              px: 1,
+              py: 0.25,
+              mb: 2,
+              borderRadius: theme.ogs.radius.pill,
+              border: `1px solid ${theme.palette.info.main}`,
+              color: theme.palette.info.main,
+            })}
+          >
+            <Box
+              component="span"
+              sx={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                bgcolor: 'currentColor',
+                animation: 'editorGeneratePulse 1.4s ease-in-out infinite',
+                '@keyframes editorGeneratePulse': { '0%, 100%': { opacity: 0.35 }, '50%': { opacity: 1 } },
+              }}
+            />
+            <Typography
+              component="span"
+              sx={(theme) => ({
+                fontFamily: theme.ogs.fonts.mono,
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              })}
+            >
+              {generatePhase ? GENERATE_PHASE_LABEL[generatePhase] : ''}
+            </Typography>
+          </Box>
+        )}
+
         <Box sx={{ display: 'grid', gridTemplateColumns: bodyView === 'split' ? '1fr 1fr' : '1fr', gap: 2 }}>
           {(bodyView === 'edit' || bodyView === 'split') && (
             <TextField
               value={body}
               onChange={(e) => setBody(e.target.value)}
               multiline minRows={16} fullWidth
+              disabled={generating}
               slotProps={{ htmlInput: { 'data-testid': 'body-textarea', style: { fontFamily: fonts.mono, fontSize: '0.9rem', lineHeight: 1.5 } } }}
             />
           )}
@@ -213,6 +350,13 @@ export function CustomizationEditor({
           )}
         </Box>
       </Paper>
+
+      {!isCreate && initial.urn && (
+        <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
+          <Box sx={{ mb: 2 }}><Kicker>Sessão</Kicker></Box>
+          <SessionPanel entityUrn={initial.urn} />
+        </Paper>
+      )}
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <SyncReportModal report={syncReport} onClose={() => setSyncReport([])} />

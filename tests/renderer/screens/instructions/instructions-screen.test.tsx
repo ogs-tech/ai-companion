@@ -6,6 +6,26 @@ import { WORKSPACE_SOURCE, type PersonalInstruction, type ProjectInstruction } f
 import type { Settings } from '../../../../src/shared/settings.js';
 import { mockApi, ok, renderWithQuery, type CallSpy } from '../../test-utils.js';
 
+// InstructionsScreen opens the editor in edit mode for an existing personal
+// instruction, which now renders <SessionPanel>. Lightweight mocks — same as
+// tests/renderer/components/customization-editor.test.tsx — keep xterm's real
+// browser-only Terminal (canvas, matchMedia) out of jsdom.
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    write = vi.fn();
+    open = vi.fn();
+    dispose = vi.fn();
+    loadAddon = vi.fn();
+    onData = vi.fn(() => ({ dispose: vi.fn() }));
+  },
+}));
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    fit = vi.fn();
+    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+  },
+}));
+
 const meta = { version: '0.1.0', createdAt: '', updatedAt: '' };
 
 const personal: PersonalInstruction = {
@@ -52,12 +72,11 @@ describe('<InstructionsScreen>', () => {
     renderWithQuery(<InstructionsScreen />);
 
     await screen.findByTestId('personal-instruction-card');
-    expect(screen.getByTestId('personal-instruction-use-template')).toBeInTheDocument();
-    expect(screen.getByTestId('personal-instruction-start-blank')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-instruction-open')).toHaveTextContent('Configurar');
     expect(screen.getByText(/Nenhuma project instruction ainda/i)).toBeInTheDocument();
   });
 
-  it('shows Configurado chip + Edit button when the personal singleton exists', async () => {
+  it('shows Configurado chip + a single open button when the personal singleton exists', async () => {
     routeCalls({
       'instruction.list': [personal],
       'settings.get': settings(),
@@ -65,8 +84,42 @@ describe('<InstructionsScreen>', () => {
 
     renderWithQuery(<InstructionsScreen />);
 
-    await screen.findByTestId('personal-instruction-edit');
+    await screen.findByTestId('personal-instruction-open');
     expect(screen.getByText(/Configurado/i)).toBeInTheDocument();
+    expect(screen.getByTestId('personal-instruction-open')).toHaveTextContent('Editar');
+  });
+
+  it('clicking the single button in the unconfigured state opens the editor in create mode, with "Gerar com IA" available inside', async () => {
+    const user = userEvent.setup();
+    routeCalls({
+      'instruction.list': [],
+      'settings.get': settings(),
+    });
+
+    renderWithQuery(<InstructionsScreen />);
+
+    await user.click(await screen.findByTestId('personal-instruction-open'));
+
+    expect(await screen.findByText(/Configurar Personal Instruction/i)).toBeInTheDocument();
+    expect(screen.getByTestId('body-textarea')).toHaveValue('');
+    expect(screen.getByTestId('editor-generate-open')).toBeInTheDocument();
+  });
+
+  it('clicking the single button on a configured personal instruction opens the editor in edit mode', async () => {
+    const user = userEvent.setup();
+    routeCalls({
+      'instruction.list': [personal],
+      'settings.get': settings(),
+    });
+
+    renderWithQuery(<InstructionsScreen />);
+
+    await user.click(await screen.findByTestId('personal-instruction-open'));
+
+    expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
+    expect(screen.getByText(/Editar Personal Instruction/i)).toBeInTheDocument();
+    expect(screen.getByTestId('body-textarea')).toHaveValue('## Section A\n- item\n');
+    expect(screen.getByTestId('editor-generate-open')).toBeInTheDocument();
   });
 
   it('lists project instructions with a delete + edit button per row', async () => {
@@ -81,6 +134,20 @@ describe('<InstructionsScreen>', () => {
     expect(rows).toHaveLength(2);
     expect(screen.getByText('/repos/acme')).toBeInTheDocument();
     expect(screen.getByText('/repos/bravo')).toBeInTheDocument();
+  });
+
+  it('project instruction editor does NOT expose "Gerar com IA" (Personal Instruction only)', async () => {
+    const user = userEvent.setup();
+    routeCalls({
+      'instruction.list': [project('acme', '/repos/acme')],
+      'settings.get': settings(),
+    });
+
+    renderWithQuery(<InstructionsScreen />);
+
+    await user.click(await screen.findByTestId('project-instruction-edit'));
+    await screen.findByTestId('customization-editor');
+    expect(screen.queryByTestId('editor-generate-open')).toBeNull();
   });
 
   it('shows the Cursor sync chip on the personal card only when Cursor is enabled', async () => {
@@ -181,31 +248,5 @@ describe('<InstructionsScreen>', () => {
     await user.click(await screen.findByTestId('project-instruction-delete'));
     expect(call).not.toHaveBeenCalledWith('instruction.delete', expect.anything());
     confirmSpy.mockRestore();
-  });
-
-  it('clicking "Usar template padrão" opens the editor pre-filled with template content', async () => {
-    const user = userEvent.setup();
-    routeCalls({
-      'instruction.list': [],
-      'settings.get': settings(),
-    });
-
-    renderWithQuery(<InstructionsScreen />);
-
-    await user.click(await screen.findByTestId('personal-instruction-use-template'));
-    expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
-  });
-
-  it('clicking Edit on an existing personal instruction opens the editor', async () => {
-    const user = userEvent.setup();
-    routeCalls({
-      'instruction.list': [personal],
-      'settings.get': settings(),
-    });
-
-    renderWithQuery(<InstructionsScreen />);
-
-    await user.click(await screen.findByTestId('personal-instruction-edit'));
-    expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
   });
 });

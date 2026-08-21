@@ -1,9 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CustomizationListScreen } from '../../../src/renderer/components/CustomizationListScreen.js';
 import { mockApi, ok, renderWithQuery, type CallSpy } from '../test-utils.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../src/shared/entity.js';
+
+// Editing a workspace item opens CustomizationEditor in edit mode, which now
+// renders <SessionPanel>. Lightweight mocks — same as
+// tests/renderer/components/customization-editor.test.tsx — keep xterm's real
+// browser-only Terminal (canvas, matchMedia) out of jsdom.
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    write = vi.fn();
+    open = vi.fn();
+    dispose = vi.fn();
+    loadAddon = vi.fn();
+    onData = vi.fn(() => ({ dispose: vi.fn() }));
+  },
+}));
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    fit = vi.fn();
+    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+  },
+}));
 
 let call: CallSpy;
 

@@ -5,6 +5,22 @@ import { CustomizationEditor } from '../../../src/renderer/components/Customizat
 import { mockApi, ok, fail, renderWithTheme, type CallSpy } from '../test-utils.js';
 import { WORKSPACE_SOURCE, type PersonalInstruction, type Skill } from '../../../src/shared/entity.js';
 
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    write = vi.fn();
+    open = vi.fn();
+    dispose = vi.fn();
+    loadAddon = vi.fn();
+    onData = vi.fn(() => ({ dispose: vi.fn() }));
+  },
+}));
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    fit = vi.fn();
+    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+  },
+}));
+
 const baseCustomization = (): Skill => ({
   urn: 'urn:skill:foo',
   kind: 'skill',
@@ -242,5 +258,112 @@ describe('<CustomizationEditor>', () => {
     const toast = await screen.findByTestId('toast');
     expect(toast).toHaveAttribute('data-variant', 'error');
     expect(toast).toHaveTextContent(/slug inválido/);
+  });
+
+  describe('"Gerar com IA" (enableGenerate)', () => {
+    it('is not shown when enableGenerate is not set', () => {
+      renderWithTheme(
+        <CustomizationEditor
+          initial={baseCustomization()}
+          isCreate={true}
+          onSaved={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(screen.queryByTestId('editor-generate-open')).toBeNull();
+    });
+
+    it('reveals a context field + submit button when opened', async () => {
+      const user = userEvent.setup();
+      renderWithTheme(
+        <CustomizationEditor
+          initial={basePersonalInstruction()}
+          isCreate={false}
+          enableGenerate
+          onSaved={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByTestId('editor-generate-open'));
+      expect(screen.getByTestId('editor-generate-context')).toBeInTheDocument();
+      expect(screen.getByTestId('editor-generate-submit')).toBeInTheDocument();
+    });
+
+    it('streams live text deltas into the body field and shows the phase pill while generating', async () => {
+      const user = userEvent.setup();
+      let resolveCall: (value: unknown) => void = () => {};
+      call.mockImplementation(() => new Promise((resolve) => { resolveCall = resolve; }));
+
+      renderWithTheme(
+        <CustomizationEditor
+          initial={basePersonalInstruction()}
+          isCreate={false}
+          enableGenerate
+          onSaved={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByTestId('editor-generate-open'));
+      await user.click(screen.getByTestId('editor-generate-submit'));
+
+      const onProgress = vi.mocked(window.api.onInstructionGenerateProgress);
+      const listener = onProgress.mock.calls[0]?.[0];
+      expect(listener).toBeTypeOf('function');
+
+      listener?.({ phase: 'writing', textDelta: 'Hello ' });
+      listener?.({ phase: 'writing', textDelta: 'world' });
+
+      await waitFor(() => expect(screen.getByTestId('body-textarea')).toHaveValue('Hello world'));
+      expect(screen.getByTestId('editor-generate-phase')).toHaveTextContent(/escrevendo/i);
+      expect(screen.getByTestId('body-textarea')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /salvar/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /cancelar/i })).toBeDisabled();
+
+      resolveCall(ok({ content: 'Hello world' }));
+      await waitFor(() => expect(screen.queryByTestId('editor-generate-phase')).toBeNull());
+      expect(screen.getByTestId('body-textarea')).toHaveValue('Hello world');
+      expect(screen.getByTestId('body-textarea')).not.toBeDisabled();
+    });
+
+    it('shows an error and re-enables the body field when generation fails', async () => {
+      const user = userEvent.setup();
+      call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
+
+      renderWithTheme(
+        <CustomizationEditor
+          initial={basePersonalInstruction()}
+          isCreate={false}
+          enableGenerate
+          onSaved={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByTestId('editor-generate-open'));
+      await user.click(screen.getByTestId('editor-generate-submit'));
+
+      expect(await screen.findByTestId('editor-generate-error')).toHaveTextContent(
+        'claude CLI not found in PATH',
+      );
+      expect(screen.getByTestId('body-textarea')).not.toBeDisabled();
+    });
+  });
+
+  describe('session panel', () => {
+    it('is not shown while creating a new entity', () => {
+      renderWithTheme(
+        <CustomizationEditor initial={baseCustomization()} isCreate={true} onSaved={vi.fn()} onCancel={vi.fn()} />,
+      );
+      expect(screen.queryByTestId('session-open')).toBeNull();
+    });
+
+    it('is shown for an existing entity', () => {
+      renderWithTheme(
+        <CustomizationEditor initial={baseCustomization()} isCreate={false} onSaved={vi.fn()} onCancel={vi.fn()} />,
+      );
+      expect(screen.getByTestId('session-open')).toBeInTheDocument();
+    });
   });
 });
