@@ -11,8 +11,13 @@ export type CallSpy = ReturnType<typeof vi.fn>;
 
 export function mockApi(): CallSpy {
   const call = vi.fn();
+  const onInstructionGenerateProgress = vi.fn(() => () => {});
+  const session = {
+    onOutput: vi.fn(() => () => {}),
+    onExit: vi.fn(() => () => {}),
+  };
   Object.defineProperty(window, 'api', {
-    value: { call },
+    value: { call, onInstructionGenerateProgress, session },
     writable: true,
     configurable: true,
   });
