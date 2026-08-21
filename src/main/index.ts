@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
+import {
+  INSTRUCTION_GENERATE_PROGRESS_CHANNEL,
+  type GenerateDraftProgressEvent,
+} from '../shared/instruction-generation.js';
 import { brand } from '../shared/brand.js';
 import {
   devLockPath,
@@ -48,6 +52,10 @@ import { SkillService } from './application/services/skill-service.js';
 import { AgentService } from './application/services/agent-service.js';
 import { HookService } from './application/services/hook-service.js';
 import { InstructionService } from './application/services/instruction-service.js';
+import { NodeClaudeCliAdapter } from './infrastructure/claude-cli/node-claude-cli-adapter.js';
+import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
+import { SessionService } from './application/services/session-service.js';
+import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
 import { SettingsMarketplaceRepository } from './infrastructure/marketplace/settings-marketplace-repository.js';
@@ -259,7 +267,21 @@ async function wireIpc(): Promise<void> {
     cache: pluginCache,
     fs: nodeFsAdapter,
   });
-  const instructionService = new InstructionService(entityService);
+  const instructionService = new InstructionService(entityService, new NodeClaudeCliAdapter());
+  const emitInstructionGenerateProgress = (event: GenerateDraftProgressEvent): void => {
+    mainWindow?.webContents.send(INSTRUCTION_GENERATE_PROGRESS_CHANNEL, event);
+  };
+  const claudeSessionPort = new NodePtySessionAdapter();
+  const sessionService = new SessionService(entityService, claudeSessionPort, workspacePath);
+  sessionService.onOutput((sessionId, chunk) => {
+    mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
+  });
+  sessionService.onExit((sessionId, _status, exitCode) => {
+    mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });
+  });
+  app.on('before-quit', () => {
+    sessionService.killAll();
+  });
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
@@ -328,12 +350,14 @@ async function wireIpc(): Promise<void> {
     agentService,
     hookService,
     instructionService,
+    sessionService,
     marketplaceService,
     healthService,
     mcpService,
     notificationPort,
     workspaceTeardownService,
     appQuit: () => app.quit(),
+    emitInstructionGenerateProgress,
   });
   const dispatch = createDispatcher(handlers);
 

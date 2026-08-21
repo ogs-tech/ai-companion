@@ -6,6 +6,8 @@ import type { PluginService } from '../application/services/plugin-service.js';
 import type { SkillService } from '../application/services/skill-service.js';
 import type { AgentService } from '../application/services/agent-service.js';
 import type { InstructionService } from '../application/services/instruction-service.js';
+import type { SessionService } from '../application/services/session-service.js';
+import { buildSessionHandlers } from './session-handlers.js';
 import type { HookService } from '../application/services/hook-service.js';
 import type { MarketplaceService } from '../application/services/marketplace-service.js';
 import type { CredentialStorePort } from '../application/ports/credential-store-port.js';
@@ -27,6 +29,7 @@ import type { NotificationPort } from '../application/ports/notification-port.js
 import type { WorkspaceTeardownService } from '../application/services/workspace-teardown.js';
 import { updateLanguageSection } from '../application/services/language-section.js';
 import { asLanguagePreference } from './_validators.js';
+import type { GenerateDraftProgressEvent } from '../../shared/instruction-generation.js';
 
 export interface IpcDeps {
   settingsService: SettingsService;
@@ -39,12 +42,14 @@ export interface IpcDeps {
   agentService: AgentService;
   hookService: HookService;
   instructionService: InstructionService;
+  sessionService: SessionService;
   marketplaceService: MarketplaceService;
   healthService: HealthService;
   mcpService: McpService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   appQuit: () => void;
+  emitInstructionGenerateProgress?: (event: GenerateDraftProgressEvent) => void;
 }
 
 interface RepoPathParams {
@@ -77,12 +82,14 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     agentService,
     hookService,
     instructionService,
+    sessionService,
     marketplaceService,
     healthService,
     mcpService,
     notificationPort,
     workspaceTeardownService,
     appQuit,
+    emitInstructionGenerateProgress,
   } = deps;
 
   return {
@@ -196,7 +203,8 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildSkillHandlers(skillService),
     ...buildAgentHandlers(agentService),
     ...buildHookHandlers(hookService),
-    ...buildInstructionHandlers(instructionService),
+    ...buildInstructionHandlers(instructionService, emitInstructionGenerateProgress),
+    ...buildSessionHandlers(sessionService),
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),

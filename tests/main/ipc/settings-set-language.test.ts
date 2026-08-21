@@ -30,6 +30,7 @@ const baseDeps = (): IpcDeps => {
       get: vi.fn().mockResolvedValue(instruction),
       save: vi.fn().mockResolvedValue({ instruction, syncReport: [] }),
     } as unknown as IpcDeps['instructionService'],
+    sessionService: {} as IpcDeps['sessionService'],
     repoService: {} as IpcDeps['repoService'],
     adapterManager: {} as IpcDeps['adapterManager'],
     dialogPort: {} as IpcDeps['dialogPort'],
