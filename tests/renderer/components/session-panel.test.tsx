@@ -131,4 +131,21 @@ describe('<SessionPanel>', () => {
 
     expect(await screen.findByTestId('session-error')).toHaveTextContent('claude CLI not found in PATH');
   });
+
+  it('lets the user retry in place after session.spawn fails', async () => {
+    const user = userEvent.setup();
+    call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
+
+    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    await user.click(screen.getByTestId('session-open'));
+    await screen.findByTestId('session-error');
+
+    const retryButton = screen.getByTestId('session-open');
+    expect(retryButton).toBeInTheDocument();
+
+    await user.click(retryButton);
+
+    await waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+    expect(call).toHaveBeenNthCalledWith(2, 'session.spawn', { entityUrn: 'urn:skill:foo' });
+  });
 });

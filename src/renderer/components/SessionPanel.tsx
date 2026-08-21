@@ -86,7 +86,7 @@ export function SessionPanel({ entityUrn }: SessionPanelProps): React.ReactEleme
   return (
     <Box data-testid="session-panel">
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
-        {status === 'idle' && (
+        {(status === 'idle' || status === 'error') && (
           <Button variant="outlined" size="small" onClick={() => void handleOpen()} data-testid="session-open">
             Abrir sessão
           </Button>
