@@ -50,7 +50,10 @@ export function CustomizationListScreen({
   const items = data ?? [];
 
   const handleSaved = async (saved: Skill | Agent): Promise<void> => {
-    setEditor({ kind: 'closed' });
+    // Stay in the editor with the saved entity instead of bouncing back to the
+    // list — a brand-new item only gets a real urn once saved, and closing
+    // here would strand the user right when the Session panel becomes usable.
+    setEditor({ kind: 'edit', customization: saved });
     setToast({ variant: 'success', message: `${saved.name} salvo` });
     await invalidate(entityType);
   };

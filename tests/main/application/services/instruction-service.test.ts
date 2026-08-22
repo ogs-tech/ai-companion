@@ -4,6 +4,7 @@ import { EntityService } from '../../../../src/main/application/services/entity-
 import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
+import { FakeClaudeCliPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
 import {
   WORKSPACE_SOURCE,
   type Instruction,
@@ -31,7 +32,8 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  return { service: new InstructionService(base), repo, adapterManager };
+  const claudeCli = new FakeClaudeCliPort();
+  return { service: new InstructionService(base, claudeCli), repo, adapterManager, claudeCli };
 };
 
 describe('InstructionService', () => {
@@ -93,5 +95,30 @@ describe('InstructionService', () => {
     const { service } = setup();
     const saved = await service.save({ instruction: personal() });
     expect((saved.instruction as Instruction).name).toBe('default');
+  });
+
+  it('generatePersonalDraft returns the claude CLI text as content', async () => {
+    const { service, claudeCli } = setup();
+    claudeCli.seedResponse('# Global instructions\n\nBe concise.\n');
+    const result = await service.generatePersonalDraft('I like short replies');
+    expect(result.content).toBe('# Global instructions\n\nBe concise.\n');
+    expect(claudeCli.lastPrompt).toContain('I like short replies');
+  });
+
+  it('generatePersonalDraft forwards onEvent through to the claude CLI port', async () => {
+    const { service, claudeCli } = setup();
+    claudeCli.seedResponse('draft');
+    const onEvent = vi.fn();
+    await service.generatePersonalDraft(undefined, onEvent);
+    expect(claudeCli.lastOnEvent).toBe(onEvent);
+  });
+
+  it('generatePersonalDraft wraps a claude CLI failure as an io DomainError', async () => {
+    const { service, claudeCli } = setup();
+    claudeCli.failNext(new Error('claude CLI not found in PATH'));
+    const err = await service.generatePersonalDraft().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect((err as DomainError).kind).toBe('io');
+    expect((err as DomainError).message).toContain('claude CLI not found in PATH');
   });
 });

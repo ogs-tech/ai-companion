@@ -7,7 +7,11 @@ export type StatusPillVariant =
   | 'claude-code'
   | 'error'
   | 'ok'
-  | 'warning';
+  | 'warning'
+  | 'idle'
+  | 'starting'
+  | 'running'
+  | 'exited';
 
 interface StatusPillProps {
   variant: StatusPillVariant;
@@ -19,17 +23,20 @@ function color(theme: Theme, variant: StatusPillVariant): string {
   switch (variant) {
     case 'synced':
     case 'ok':
+    case 'running':
       return theme.palette.success.main;
     case 'unsynced':
     case 'warning':
+    case 'starting':
       return theme.palette.warning.main;
     case 'plugin':
       return theme.palette.info.main;
     case 'claude-code':
-      // Neutral slate: a Claude Code badge marks origin/provenance, not a
-      // status — so it deliberately avoids the chromatic status roles (blue
-      // 'plugin', amber 'warning', green 'ok', red 'error') and uses the
-      // design system's neutral accent instead.
+    case 'idle':
+    case 'exited':
+      // Neutral slate: marks origin/provenance or an inactive state, not an
+      // in-progress one — deliberately avoids the chromatic status roles
+      // (blue 'plugin', amber 'warning', green 'ok', red 'error').
       return theme.ogs.slate;
     case 'error':
       return theme.palette.error.main;
@@ -53,7 +60,22 @@ export function StatusPill({ variant, label, testId }: StatusPillProps): React.R
         bgcolor: 'transparent',
       })}
     >
-      <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'currentColor' }} />
+      <Box
+        component="span"
+        sx={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          bgcolor: 'currentColor',
+          // 'running' is the only variant meant to read as a live process —
+          // the pulse is the one motion cue this pill ever needs.
+          ...(variant === 'running' && {
+            animation: 'statusPillPulse 1.6s ease-in-out infinite',
+            '@keyframes statusPillPulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.35 } },
+            '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+          }),
+        }}
+      />
       <Typography
         component="span"
         sx={(theme) => ({

@@ -11,7 +11,7 @@ import { fonts } from '../tokens.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
 import { Toast, type ToastMessage } from './Toast.js';
 import { SyncReportModal } from './SyncReportModal.js';
-import { SessionPanel } from './SessionPanel.js';
+import { SessionPanel, SessionPanelLocked } from './SessionPanel.js';
 import type { Agent, Instruction, Scope, Skill } from '../../shared/entity.js';
 import { entityUrn } from '../../shared/entity.js';
 import type { SyncResult } from '../../shared/sync-result.js';
@@ -351,12 +351,9 @@ export function CustomizationEditor({
         </Box>
       </Paper>
 
-      {!isCreate && initial.urn && (
-        <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
-          <Box sx={{ mb: 2 }}><Kicker>Sessão</Kicker></Box>
-          <SessionPanel entityUrn={initial.urn} />
-        </Paper>
-      )}
+      <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
+        {!isCreate && initial.urn ? <SessionPanel entityUrn={initial.urn} /> : <SessionPanelLocked />}
+      </Paper>
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <SyncReportModal report={syncReport} onClose={() => setSyncReport([])} />

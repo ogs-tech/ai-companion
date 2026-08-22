@@ -10,6 +10,7 @@ import { EntityService } from '../../../src/main/application/services/entity-ser
 import { InMemoryEntityRepository } from '../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
+import { FakeClaudeCliPort } from '../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import { WORKSPACE_SOURCE, type Skill, type Agent, type Instruction } from '../../../src/shared/entity.js';
 
@@ -73,7 +74,7 @@ const setupInstructionService = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  return new InstructionService(base);
+  return new InstructionService(base, new FakeClaudeCliPort());
 };
 
 describe('skill-handlers', () => {
@@ -176,6 +177,31 @@ describe('instruction-handlers', () => {
     const h = buildInstructionHandlers(svc);
     await h['instruction.save']!({ instruction: instruction(), isCreate: true });
     expect(spy).toHaveBeenCalled();
+  });
+
+  it('instruction.generateDraft passes the context through', async () => {
+    const svc = setupInstructionService();
+    const spy = vi.spyOn(svc, 'generatePersonalDraft');
+    const h = buildInstructionHandlers(svc);
+    await h['instruction.generateDraft']!({ context: 'I like short replies' });
+    expect(spy).toHaveBeenCalledWith('I like short replies');
+  });
+
+  it('instruction.generateDraft works with no params (no context)', async () => {
+    const svc = setupInstructionService();
+    const spy = vi.spyOn(svc, 'generatePersonalDraft');
+    const h = buildInstructionHandlers(svc);
+    await h['instruction.generateDraft']!(undefined);
+    expect(spy).toHaveBeenCalledWith(undefined);
+  });
+
+  it('instruction.generateDraft forwards the progress emitter when wired', async () => {
+    const svc = setupInstructionService();
+    const spy = vi.spyOn(svc, 'generatePersonalDraft');
+    const emitProgress = vi.fn();
+    const h = buildInstructionHandlers(svc, emitProgress);
+    await h['instruction.generateDraft']!({ context: 'I like short replies' });
+    expect(spy).toHaveBeenCalledWith('I like short replies', emitProgress);
   });
 });
 

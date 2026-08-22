@@ -352,11 +352,12 @@ describe('<CustomizationEditor>', () => {
   });
 
   describe('session panel', () => {
-    it('is not shown while creating a new entity', () => {
+    it('shows a locked explanation instead of a live session while creating a new entity', () => {
       renderWithTheme(
         <CustomizationEditor initial={baseCustomization()} isCreate={true} onSaved={vi.fn()} onCancel={vi.fn()} />,
       );
       expect(screen.queryByTestId('session-open')).toBeNull();
+      expect(screen.getByTestId('session-panel-locked')).toBeInTheDocument();
     });
 
     it('is shown for an existing entity', () => {
@@ -364,6 +365,7 @@ describe('<CustomizationEditor>', () => {
         <CustomizationEditor initial={baseCustomization()} isCreate={false} onSaved={vi.fn()} onCancel={vi.fn()} />,
       );
       expect(screen.getByTestId('session-open')).toBeInTheDocument();
+      expect(screen.queryByTestId('session-panel-locked')).toBeNull();
     });
   });
 });

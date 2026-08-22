@@ -124,4 +124,26 @@ describe('<CustomizationListScreen>', () => {
     // The editor is an early-return, so the list container is gone
     expect(screen.queryByTestId('entity-list-skill')).not.toBeInTheDocument();
   });
+
+  it('keeps a newly created item in the editor after saving, unlocking its session panel', async () => {
+    call.mockImplementation((method: string, params?: unknown) => {
+      if (method === 'skill.list') return Promise.resolve(ok([]));
+      if (method === 'skill.save') {
+        const { skill } = params as { skill: Skill };
+        return Promise.resolve(ok({ skill: { ...skill, urn: 'urn:skill:new-one' }, syncReport: [] }));
+      }
+      return Promise.resolve(ok(undefined));
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByTestId('new-skill-button'));
+    expect(screen.getByTestId('session-panel-locked')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Name'), 'new-one');
+    await user.click(screen.getByRole('button', { name: /salvar/i }));
+
+    expect(await screen.findByTestId('session-open')).toBeInTheDocument();
+    expect(screen.getByTestId('customization-editor')).toBeInTheDocument();
+  });
 });

@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { fonts } from '../../tokens.js';
-import { FolderOpen, Globe, Pencil, Plus, Trash2, WandSparkles } from 'lucide-react';
+import { FolderOpen, Globe, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { ErrorState } from '../../components/ds/ErrorState.js';
 import { Kicker } from '../../components/ds/Kicker.js';
@@ -30,7 +30,6 @@ import { WORKSPACE_SOURCE, isPersonalInstruction, isProjectInstruction } from '.
 import type { Settings } from '../../../shared/settings.js';
 import { useInstructionsList, useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { useQuery } from '@tanstack/react-query';
-import { defaultGlobalInstruction } from '../../lib/default-global-instruction.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import { cursorPluginSyncPathHints } from '../../../shared/brand.js';
 
@@ -115,13 +114,15 @@ export function InstructionsScreen(): React.ReactElement {
     ? error instanceof IpcCallError ? error.message : String(error)
     : null;
 
-  const openPersonalEdit = (): void => {
-    if (personal) setEditor({ entity: personal, isCreate: false });
+  // Single entry point into the Personal Instruction editor, whether it
+  // already exists or not — "Gerar com IA" lives inside the editor itself.
+  const openPersonal = (): void => {
+    setEditor(
+      personal
+        ? { entity: personal, isCreate: false }
+        : { entity: blankCustomization('instruction') as PersonalInstruction, isCreate: true },
+    );
   };
-  const openPersonalTemplate = (): void =>
-    setEditor({ entity: defaultGlobalInstruction(), isCreate: true });
-  const openPersonalBlank = (): void =>
-    setEditor({ entity: blankCustomization('instruction') as PersonalInstruction, isCreate: true });
 
   const openProjectEdit = (p: ProjectInstruction): void =>
     setEditor({ entity: p, isCreate: false });
@@ -160,13 +161,18 @@ export function InstructionsScreen(): React.ReactElement {
         initial={editorEntity}
         isCreate={editor.isCreate}
         hiddenFields={isPersonal ? PERSONAL_HIDDEN : PROJECT_HIDDEN}
+        enableGenerate={isPersonal}
         titleOverride={
           isPersonal
             ? { create: 'Configurar Personal Instruction', edit: 'Editar Personal Instruction' }
             : { create: `Nova Project Instruction (${editorEntity.name})`, edit: `Editar ${editorEntity.name}` }
         }
-        onSaved={async () => {
-          setEditor(null);
+        onSaved={async (saved) => {
+          // Stay in the editor with the saved entity instead of bouncing back
+          // to the list — a brand-new instruction only gets a real urn once
+          // saved, and closing here would strand the user right when the
+          // Session panel becomes usable.
+          setEditor({ entity: saved as Instruction, isCreate: false });
           await invalidate();
           setToast({ variant: 'success', message: 'Instruction salva' });
         }}
@@ -191,9 +197,7 @@ export function InstructionsScreen(): React.ReactElement {
           <PersonalCard
             personal={personal}
             cursorEnabled={cursorEnabled}
-            onEdit={openPersonalEdit}
-            onTemplate={openPersonalTemplate}
-            onBlank={openPersonalBlank}
+            onOpen={openPersonal}
           />
 
           <Paper variant="outlined" sx={{ p: 2.5, mt: 3 }}>
@@ -265,12 +269,10 @@ export function InstructionsScreen(): React.ReactElement {
 interface PersonalCardProps {
   personal: PersonalInstruction | null;
   cursorEnabled: boolean;
-  onEdit: () => void;
-  onTemplate: () => void;
-  onBlank: () => void;
+  onOpen: () => void;
 }
 
-function PersonalCard({ personal, cursorEnabled, onEdit, onTemplate, onBlank }: PersonalCardProps): React.ReactElement {
+function PersonalCard({ personal, cursorEnabled, onOpen }: PersonalCardProps): React.ReactElement {
   const groups: readonly SyncGroup[] = [
     ...HOME_SYNC_GROUPS,
     ...(cursorEnabled ? [HOME_CURSOR_SYNC_GROUP] : []),
@@ -292,7 +294,7 @@ function PersonalCard({ personal, cursorEnabled, onEdit, onTemplate, onBlank }: 
             {personal
               ? personal.description ||
                 'Distribuídas para cada assistente habilitado (Claude Code, Cursor via plugin).'
-              : 'Um perfil único aplicado a todos os assistentes habilitados. Comece com o template padrão ou do zero.'}
+              : 'Um perfil único aplicado a todos os assistentes habilitados. Escreva à mão ou gere com IA.'}
           </Typography>
         </Box>
         {personal ? (
@@ -306,34 +308,14 @@ function PersonalCard({ personal, cursorEnabled, onEdit, onTemplate, onBlank }: 
       </Stack>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2 }}>
-        {personal ? (
-          <Button
-            variant="outlined"
-            startIcon={<Icon glyph={Pencil} size={16} />}
-            onClick={onEdit}
-            data-testid="personal-instruction-edit"
-          >
-            Editar
-          </Button>
-        ) : (
-          <>
-            <Button
-              variant="contained"
-              startIcon={<Icon glyph={WandSparkles} size={16} />}
-              onClick={onTemplate}
-              data-testid="personal-instruction-use-template"
-            >
-              Usar template padrão
-            </Button>
-            <Button
-              variant="text"
-              onClick={onBlank}
-              data-testid="personal-instruction-start-blank"
-            >
-              Começar do zero
-            </Button>
-          </>
-        )}
+        <Button
+          variant={personal ? 'outlined' : 'contained'}
+          startIcon={<Icon glyph={Pencil} size={16} />}
+          onClick={onOpen}
+          data-testid="personal-instruction-open"
+        >
+          {personal ? 'Editar' : 'Configurar'}
+        </Button>
       </Stack>
 
       <Divider sx={{ my: 2 }} />
