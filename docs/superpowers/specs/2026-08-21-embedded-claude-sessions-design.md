@@ -44,6 +44,11 @@ see §2 for the specific decisions and why.
    (Skill, Agent, or Instruction — all types, uniformly, "simplify" per the author), keyed by its
    `urn`. The entry point is a button inside that customization's own editor screen, not a separate
    top-level "Sessions" nav item — the editor and the live session sit side by side.
+
+   > **Superseded in part** by the 2026-08-22 Workspace/Project design (see its §2.12): a new,
+   > independent `Project` concept now exists there, and sessions may additionally anchor directly to
+   > a `Workspace` or `Project`, not only to a customization entity. The per-entity anchor described
+   > above is unchanged and still valid — this is additive, not a reversal.
 3. **Working directory is derived from the entity, not asked for.**
    - `ProjectInstruction` → its own `repoPath`.
    - Everything else (`Skill`, `Agent`, `PersonalInstruction` — none of which carry a `repoPath`
