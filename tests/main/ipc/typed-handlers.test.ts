@@ -17,6 +17,9 @@ import { buildWorkspaceHandlers } from '../../../src/main/ipc/workspace-handlers
 import { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
 import { InMemoryWorkspaceRegistry } from '../../../src/main/infrastructure/workspace/in-memory-workspace-registry.js';
 import type { Workspace } from '../../../src/shared/workspace.js';
+import { buildProjectHandlers } from '../../../src/main/ipc/project-handlers.js';
+import { ProjectService } from '../../../src/main/application/services/project-service.js';
+import { InMemoryProjectRegistry } from '../../../src/main/infrastructure/project/in-memory-project-registry.js';
 
 const skill = (name = 'foo'): Skill => ({
   urn: `urn:skill:${name}`,
@@ -313,5 +316,49 @@ describe('workspace-handlers', () => {
   it('workspace.create rejects a missing name', async () => {
     const h = buildWorkspaceHandlers(setupWorkspaceService(), vi.fn());
     await expect(h['workspace.create']!({ rootPath: '/repos/acme' })).rejects.toMatchObject({ kind: 'validation' });
+  });
+});
+
+const setupProjectService = () =>
+  new ProjectService(new InMemoryProjectRegistry(), new FixedClock(new Date('2026-04-26T10:00:00.000Z')));
+
+describe('project-handlers', () => {
+  it('project.list calls service.list', async () => {
+    const svc = setupProjectService();
+    const spy = vi.spyOn(svc, 'list');
+    const h = buildProjectHandlers(svc);
+    await h['project.list']!({});
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('project.create passes name and path through', async () => {
+    const svc = setupProjectService();
+    const spy = vi.spyOn(svc, 'create');
+    const h = buildProjectHandlers(svc);
+    await h['project.create']!({ name: 'acme', path: '/repos/acme' });
+    expect(spy).toHaveBeenCalledWith({ name: 'acme', path: '/repos/acme' });
+  });
+
+  it('project.update passes id and optional fields through', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const spy = vi.spyOn(svc, 'update');
+    const h = buildProjectHandlers(svc);
+    await h['project.update']!({ id: created.id, name: 'acme-renamed' });
+    expect(spy).toHaveBeenCalledWith({ id: created.id, name: 'acme-renamed' });
+  });
+
+  it('project.delete passes the id through', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const spy = vi.spyOn(svc, 'delete');
+    const h = buildProjectHandlers(svc);
+    await h['project.delete']!({ id: created.id });
+    expect(spy).toHaveBeenCalledWith(created.id);
+  });
+
+  it('project.create rejects a missing path', async () => {
+    const h = buildProjectHandlers(setupProjectService());
+    await expect(h['project.create']!({ name: 'acme' })).rejects.toMatchObject({ kind: 'validation' });
   });
 });
