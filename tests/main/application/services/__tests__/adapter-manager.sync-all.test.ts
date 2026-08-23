@@ -28,6 +28,11 @@ const agentEntity = (name: string, scopes: Scope[] = ['personal']): Agent => ({
   systemPrompt: `# ${name}`,
 });
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 const instructionEntity = (): Instruction => ({
   urn: 'urn:instruction:default',
   kind: 'instruction',
@@ -78,7 +83,7 @@ describe('AdapterManager.syncAll', () => {
 
   it('fans a single instruction out to BOTH CLAUDE.md and AGENTS.md', async () => {
     const { manager, registerEntity, fs } = await setupAdapterManager([
-      new ClaudeAdapter({ homedir: '/home/u' }),
+      new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps }),
     ]);
     await registerEntity(instructionEntity());
 

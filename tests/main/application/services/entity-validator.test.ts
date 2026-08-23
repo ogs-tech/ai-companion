@@ -4,8 +4,6 @@ import { DomainError } from '../../../../src/main/domain/errors.js';
 import {
   WORKSPACE_SOURCE,
   type Instruction,
-  type PersonalInstruction,
-  type ProjectInstruction,
   type Skill,
 } from '../../../../src/shared/entity.js';
 
@@ -26,7 +24,7 @@ describe('EntityValidator', () => {
   });
 
   it('accepts a valid personal instruction (name=default, scopes=[personal])', () => {
-    const good: PersonalInstruction = {
+    const good: Instruction = {
       urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
       description: '', scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
     };
@@ -41,20 +39,20 @@ describe('EntityValidator', () => {
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('rejects a personal instruction carrying repoPath', () => {
+  it('rejects a personal instruction carrying scopeId', () => {
     const bad = {
       urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
       description: '', scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
-      repoPath: '/tmp/some-repo',
+      scopeId: 'proj-1',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('accepts a valid project instruction (scopes=[project] + repoPath absolute)', () => {
-    const good: ProjectInstruction = {
+  it('accepts a valid project instruction (scopes=[project] + scopeId)', () => {
+    const good: Instruction = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
       description: 'acme project rules', scopes: ['project'], metadata: meta,
-      source: WORKSPACE_SOURCE, content: 'b', repoPath: '/Users/me/projects/acme',
+      source: WORKSPACE_SOURCE, content: 'b', scopeId: 'proj-1',
     };
     expect(() => v.validate(good)).not.toThrow();
   });
@@ -63,12 +61,12 @@ describe('EntityValidator', () => {
     const bad = {
       urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
       description: '', scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
-      repoPath: '/Users/me/projects/x',
+      scopeId: 'proj-1',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('rejects a project instruction without repoPath', () => {
+  it('rejects a project instruction without scopeId', () => {
     const bad = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
       description: '', scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
@@ -76,11 +74,11 @@ describe('EntityValidator', () => {
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('rejects a project instruction whose repoPath is not absolute', () => {
+  it('rejects a project instruction with an empty-string scopeId', () => {
     const bad = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
       description: '', scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
-      repoPath: 'relative/path',
+      scopeId: '',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
   });

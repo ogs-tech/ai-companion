@@ -3,17 +3,17 @@ import { FakeAdapter } from '../../../../../src/main/application/services/__fixt
 import { setupAdapterManager, defaultSettings } from './adapter-manager.helpers.js';
 import {
   WORKSPACE_SOURCE,
-  type ProjectInstruction,
+  type Instruction,
   type Skill,
 } from '../../../../../src/shared/entity.js';
 
 const meta = { version: '1.0.0', createdAt: '', updatedAt: '' };
 
 describe('AdapterManager.syncEntity counts destinations by scope', () => {
-  it('returns 1 result per project instruction (destination follows entity.repoPath)', async () => {
+  it('returns 1 result per project instruction (destination follows entity.scopeId)', async () => {
     const adapters = [new FakeAdapter('claude', '/workspace/personal/claude')];
     const { manager, fs, registerEntity } = await setupAdapterManager(adapters, defaultSettings);
-    const entity: ProjectInstruction = {
+    const entity: Instruction = {
       urn: 'urn:instruction:acme',
       kind: 'instruction',
       name: 'acme',
@@ -22,7 +22,7 @@ describe('AdapterManager.syncEntity counts destinations by scope', () => {
       metadata: meta,
       source: WORKSPACE_SOURCE,
       content: 'body',
-      repoPath: '/repos/acme',
+      scopeId: '/repos/acme',
     };
     await registerEntity(entity);
     fs.createFile('/workspace/instructions/project/acme/INSTRUCTION.md', 'body');

@@ -23,23 +23,27 @@ import { join } from 'node:path';
 import {
   WORKSPACE_SOURCE,
   type Entity,
-  type PersonalInstruction,
-  type ProjectInstruction,
+  type Instruction,
 } from '../../../../../src/shared/entity.js';
 
-const personal: PersonalInstruction = {
+const personal: Instruction = {
   urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
   description: 'Global rules', scopes: ['personal'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'Reply in pt-BR.',
 };
 
-const project: ProjectInstruction = {
+const project: Instruction = {
   urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
   description: 'Acme project rules', scopes: ['project'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'Only in acme.',
-  repoPath: '/repos/acme',
+  scopeId: 'acme',
+};
+
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
 };
 
 const settings: Settings = {
@@ -63,8 +67,8 @@ function makeManager(fs: InMemoryFileSystem, entities: Entity[]): AdapterManager
     fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
     workspacePath: '/workspace',
     adapters: new Map<string, Adapter>([
-      ['claude', new ClaudeAdapter({ homedir: '/home/u' })],
-      ['cursor', new CursorAdapter({ homedir: '/home/u' })],
+      ['claude', new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps })],
+      ['cursor', new CursorAdapter({ homedir: '/home/u', ...scopeDeps })],
     ]),
   });
 }

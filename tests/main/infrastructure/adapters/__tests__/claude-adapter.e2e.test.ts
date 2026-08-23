@@ -10,7 +10,7 @@ import { AdapterManager } from '../../../../../src/main/application/services/ada
 import { SettingsService } from '../../../../../src/main/application/services/settings-service.js';
 import {
   WORKSPACE_SOURCE,
-  type ProjectInstruction,
+  type Instruction,
   type Skill,
 } from '../../../../../src/shared/entity.js';
 import type { Settings } from '../../../../../src/shared/settings.js';
@@ -31,7 +31,7 @@ const skillPersonal: Skill = {
   content: '# review',
 };
 
-const projectInstruction: ProjectInstruction = {
+const projectInstruction: Instruction = {
   urn: 'urn:instruction:acme',
   kind: 'instruction',
   name: 'acme',
@@ -40,7 +40,12 @@ const projectInstruction: ProjectInstruction = {
   metadata: meta,
   source: WORKSPACE_SOURCE,
   content: '# acme',
-  repoPath: '/repos/acme',
+  scopeId: 'acme',
+};
+
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
 };
 
 const buildSettings = (): Settings => ({
@@ -61,7 +66,7 @@ const setup = async (settings: Settings) => {
   const clock = new FixedClock(new Date('2026-04-26T10:00:00.000Z'));
   const symlinkManager = new SymlinkManager(fs, clock, WORKSPACE);
   const fileMaterializer = new FileMaterializer(fs, clock, WORKSPACE);
-  const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR });
+  const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR, ...scopeDeps });
   const adapterManager = new AdapterManager({
     settingsService,
     entityRepository,

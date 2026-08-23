@@ -31,6 +31,11 @@ const skillEntity: Skill = {
   content: '# test',
 };
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 const setup = async () => {
   const repo = new InMemorySettingsRepository();
   await repo.save(baseSettings);
@@ -41,7 +46,7 @@ const setup = async () => {
   await fs.symlink({ target: join(WORKSPACE, 'skills/test/SKILL.md'), path: join(HOMEDIR, '.claude/skills/test') });
   const sm = new SymlinkManager(fs, new FixedClock(new Date()), WORKSPACE);
   const fileMaterializer = new FileMaterializer(fs, new FixedClock(new Date()), WORKSPACE);
-  const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR });
+  const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR, ...scopeDeps });
   const manager = new AdapterManager({
     settingsService,
     entityRepository,

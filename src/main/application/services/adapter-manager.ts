@@ -33,7 +33,7 @@ export interface SymlinkPlanEntry {
   adapterId: string;
   source: string;
   destination: string;
-  scope: 'personal' | 'project';
+  scope: 'personal' | 'project' | 'workspace';
 }
 
 export interface GeneratedFilePlanEntry {

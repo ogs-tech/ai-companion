@@ -17,12 +17,16 @@ import {
 } from '../../../../../src/main/application/entity/cursor-plugin-manifest.js';
 import type { Adapter } from '../../../../../src/main/application/ports/adapter.js';
 import type { Settings } from '../../../../../src/shared/settings.js';
-import { WORKSPACE_SOURCE, type Entity, type PersonalInstruction } from '../../../../../src/shared/entity.js';
+import { WORKSPACE_SOURCE, type Entity, type Instruction } from '../../../../../src/shared/entity.js';
 
-const instruction: PersonalInstruction = {
+const instruction: Instruction = {
   urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
   scopes: ['personal'], metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'body',
+};
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 const settings: Settings = {
   adapters: { claude: { enabled: false }, cursor: { enabled: true } },  ui: { theme: 'system' }, language: 'off',
@@ -45,7 +49,7 @@ const setup = async () => {
     symlinkManager: new SymlinkManager(fs, clock, '/workspace'),
     fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
     workspacePath: '/workspace',
-    adapters: new Map<string, Adapter>([['cursor', new CursorAdapter({ homedir: '/home/u' })]]),
+    adapters: new Map<string, Adapter>([['cursor', new CursorAdapter({ homedir: '/home/u', ...scopeDeps })]]),
   });
   return { manager, fs };
 };

@@ -55,6 +55,11 @@ const skillRealFile: Skill = {
   content: '# real skill',
 };
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 describe('disable-claude e2e (AC#10)', () => {
   it('removes workspace symlinks and skips real file', async () => {
     const settingsRepo = new InMemorySettingsRepository();
@@ -76,7 +81,7 @@ describe('disable-claude e2e (AC#10)', () => {
 
     const sm = new SymlinkManager(fs, new FixedClock(new Date()), WORKSPACE);
     const fileMaterializer = new FileMaterializer(fs, new FixedClock(new Date()), WORKSPACE);
-    const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR });
+    const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR, ...scopeDeps });
     const manager = new AdapterManager({
       settingsService,
       entityRepository,

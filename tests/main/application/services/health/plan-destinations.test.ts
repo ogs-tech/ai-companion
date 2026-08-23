@@ -34,6 +34,11 @@ const instruction = (): Instruction => ({
   content: 'body',
 });
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 const settingsWith = (over: Partial<Settings> = {}): Settings => ({
   ...getDefaults(),
   adapters: { claude: { enabled: true }, cursor: { enabled: false } },
@@ -73,7 +78,7 @@ const setupInstruction = async () => {
     getDefaults: () => getDefaults(),
   } as unknown as SettingsService;
 
-  const adapter: Adapter = new ClaudeAdapter({ homedir: '/home/u' });
+  const adapter: Adapter = new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps });
 
   const manager = new AdapterManager({
     settingsService,

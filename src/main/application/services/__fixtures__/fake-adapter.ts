@@ -1,5 +1,5 @@
 import type { Adapter, AdapterDestination } from '../../ports/adapter.js';
-import type { Entity, ProjectInstruction } from '../../../../shared/entity.js';
+import type { Entity, Instruction } from '../../../../shared/entity.js';
 
 export class FakeAdapter implements Adapter {
   constructor(
@@ -20,10 +20,10 @@ export class FakeAdapter implements Adapter {
     // own repoPath. Everything else (skill/agent 'project' scope) is a no-op
     // until per-entity repoPath lands for those kinds too.
     if (scopes.includes('project') && args.entity.kind === 'instruction') {
-      const project = args.entity as ProjectInstruction;
+      const project = args.entity as Instruction;
       out.push({
         scope: 'project',
-        destination: this.projectDestinationTemplate(project.repoPath),
+        destination: this.projectDestinationTemplate(project.scopeId ?? ''),
         strategy: 'symlink',
       });
     }

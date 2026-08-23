@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CustomizationEditor } from '../../../src/renderer/components/CustomizationEditor.js';
 import { mockApi, ok, fail, renderWithTheme, type CallSpy } from '../test-utils.js';
-import { WORKSPACE_SOURCE, type PersonalInstruction, type Skill } from '../../../src/shared/entity.js';
+import { WORKSPACE_SOURCE, type Instruction, type Skill } from '../../../src/shared/entity.js';
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
@@ -32,7 +32,7 @@ const baseCustomization = (): Skill => ({
   content: '# Title\n\nSome **markdown** body.',
 });
 
-const basePersonalInstruction = (): PersonalInstruction => ({
+const basePersonalInstruction = (): Instruction => ({
   urn: 'urn:instruction:default',
   kind: 'instruction',
   name: 'default',

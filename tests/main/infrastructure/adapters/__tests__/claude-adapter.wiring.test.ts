@@ -33,6 +33,11 @@ const buildSettings = (claudeEnabled: boolean): Settings => ({
   language: 'off',
 });
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 const setup = async (settings: Settings) => {
   const settingsRepo = new InMemorySettingsRepository();
   await settingsRepo.save(settings);
@@ -43,7 +48,7 @@ const setup = async (settings: Settings) => {
   const clock = new FixedClock(new Date('2026-04-26T10:00:00.000Z'));
   const symlinkManager = new SymlinkManager(fs, clock, WORKSPACE);
   const fileMaterializer = new FileMaterializer(fs, clock, WORKSPACE);
-  const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR });
+  const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR, ...scopeDeps });
   const manager = new AdapterManager({
     settingsService,
     entityRepository,

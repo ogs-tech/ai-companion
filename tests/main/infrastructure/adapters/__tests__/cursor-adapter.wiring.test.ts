@@ -16,10 +16,15 @@ const settings = (cursorEnabled: boolean): Settings => ({
   language: 'off',
 });
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 describe('CursorAdapter wiring through AdapterManager', () => {
   it('plans a ~/.cursor destination when cursor is enabled', async () => {
-    const claude = new ClaudeAdapter({ homedir: '/home/u' });
-    const cursor = new CursorAdapter({ homedir: '/home/u' });
+    const claude = new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps });
+    const cursor = new CursorAdapter({ homedir: '/home/u', ...scopeDeps });
     const { manager, registerEntity } = await setupAdapterManager([claude, cursor], settings(true));
     await registerEntity(skill);
 
@@ -31,8 +36,8 @@ describe('CursorAdapter wiring through AdapterManager', () => {
   });
 
   it('plans NO .cursor destination when cursor is disabled', async () => {
-    const claude = new ClaudeAdapter({ homedir: '/home/u' });
-    const cursor = new CursorAdapter({ homedir: '/home/u' });
+    const claude = new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps });
+    const cursor = new CursorAdapter({ homedir: '/home/u', ...scopeDeps });
     const { manager, registerEntity } = await setupAdapterManager([claude, cursor], settings(false));
     await registerEntity(skill);
 

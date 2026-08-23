@@ -3,9 +3,14 @@ import { setupAdapterManager } from './adapter-manager.helpers.js';
 import { ClaudeAdapter } from '../../../../../src/main/infrastructure/adapters/claude-adapter.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../../../src/shared/entity.js';
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 describe('AdapterManager.syncEntity', () => {
   it('creates a symlink for a personal skill', async () => {
-    const { manager, fs } = await setupAdapterManager([new ClaudeAdapter({ homedir: '/home/u' })]);
+    const { manager, fs } = await setupAdapterManager([new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps })]);
     const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
       scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
       source: WORKSPACE_SOURCE, content: 'b' };

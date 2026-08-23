@@ -31,6 +31,11 @@ const skillPersonal: Skill = {
   content: '# skill',
 };
 
+const scopeDeps = {
+  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+  projectService: { get: async () => { throw new Error('not stubbed'); } },
+};
+
 describe('disable-claude-external-symlink e2e (AC#13)', () => {
   it('external symlink is skipped and remains after removeAdapterSymlinks', async () => {
     const settingsRepo = new InMemorySettingsRepository();
@@ -45,7 +50,7 @@ describe('disable-claude-external-symlink e2e (AC#13)', () => {
 
     const sm = new SymlinkManager(fs, new FixedClock(new Date()), WORKSPACE);
     const fileMaterializer = new FileMaterializer(fs, new FixedClock(new Date()), WORKSPACE);
-    const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR });
+    const claudeAdapter = new ClaudeAdapter({ homedir: HOMEDIR, ...scopeDeps });
     const manager = new AdapterManager({
       settingsService,
       entityRepository,
