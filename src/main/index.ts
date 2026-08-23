@@ -25,6 +25,7 @@ import {
   buildWorkspaceScopedServices,
   type WorkspaceScopedServices,
 } from './application/workspace-scoped-services.js';
+import { createTaskQueue } from './application/task-queue.js';
 import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repository.js';
 import { FsRepoReader } from './infrastructure/repo/fs-repo-reader.js';
 import { FsWorkspaceBootstrap } from './infrastructure/workspace/fs-workspace-bootstrap.js';
@@ -348,15 +349,27 @@ async function wireIpc(): Promise<void> {
     emitInstructionGenerateProgress,
   });
 
+  const switchQueue = createTaskQueue();
+
   let dispatch = createDispatcher(buildHandlers(buildDeps()));
 
-  async function switchActiveWorkspace(id: string): Promise<Workspace> {
-    workspaceScoped.sessionService.killAll();
-    const target = await workspaceService.switchTo(id);
-    workspaceScoped = buildWorkspaceScopedServices(dataDirFor(target), sharedDeps);
-    attachSessionBridges(workspaceScoped);
-    dispatch = createDispatcher(buildHandlers(buildDeps()));
-    return target;
+  /**
+   * Serialized: `workspace.switchTo` is renderer-triggerable, and two
+   * overlapping switches would interleave across the `await` below — leaving
+   * the workspace that "wins" up to which registry write happened to land
+   * last rather than which switch was requested last, and leaving the on-disk
+   * active pointer free to disagree with the graph every later IPC call reads.
+   * Queuing makes each switch atomic with respect to the others.
+   */
+  function switchActiveWorkspace(id: string): Promise<Workspace> {
+    return switchQueue(async () => {
+      workspaceScoped.sessionService.killAll();
+      const target = await workspaceService.switchTo(id);
+      workspaceScoped = buildWorkspaceScopedServices(dataDirFor(target), sharedDeps);
+      attachSessionBridges(workspaceScoped);
+      dispatch = createDispatcher(buildHandlers(buildDeps()));
+      return target;
+    });
   }
 
   ipcMain.handle(IPC_CHANNEL, async (_event, payload: unknown) => {
