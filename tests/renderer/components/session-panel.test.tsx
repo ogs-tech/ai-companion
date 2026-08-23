@@ -54,7 +54,7 @@ beforeEach(() => {
 
 describe('<SessionPanel>', () => {
   it('mounts the terminal and shows an "Abrir sessão" button before any session is started', () => {
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     expect(screen.getByTestId('session-open')).toBeInTheDocument();
     expect(mockTerminalInstances).toHaveLength(1);
     expect(mockTerminalInstances[0]!.open).toHaveBeenCalled();
@@ -62,25 +62,25 @@ describe('<SessionPanel>', () => {
 
   it('spawns a session and switches out of the idle state on click', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ entityUrn: 'urn:skill:foo', cwd: '/workspace', status: 'running' }));
+    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
 
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
 
     await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('session.spawn', { entityUrn: 'urn:skill:foo' }),
+      expect(call).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'entity', urn: 'urn:skill:foo' } }),
     );
     await waitFor(() => expect(screen.queryByTestId('session-open')).toBeNull());
   });
 
   it('subscribes to output/exit for the spawned sessionId and writes chunks into the terminal', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ entityUrn: 'urn:skill:foo', cwd: '/workspace', status: 'running' }));
+    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
 
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await waitFor(() =>
-      expect(onOutput).toHaveBeenCalledWith('urn:skill:foo', expect.any(Function)),
+      expect(onOutput).toHaveBeenCalledWith('entity:urn:skill:foo', expect.any(Function)),
     );
 
     const chunkListener = onOutput.mock.calls[0]?.[1] as (chunk: string) => void;
@@ -92,28 +92,28 @@ describe('<SessionPanel>', () => {
 
   it('forwards keystrokes typed into the terminal as session.write calls', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ entityUrn: 'urn:skill:foo', cwd: '/workspace', status: 'running' }));
+    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
 
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', { entityUrn: 'urn:skill:foo' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'entity', urn: 'urn:skill:foo' } }));
 
     const terminal = mockTerminalInstances[0]!;
     terminal._onDataCb?.('ls\r');
 
     await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('session.write', { sessionId: 'urn:skill:foo', data: 'ls\r' }),
+      expect(call).toHaveBeenCalledWith('session.write', { sessionId: 'entity:urn:skill:foo', data: 'ls\r' }),
     );
   });
 
   it('shows the ended state and a resume action when the session exits', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ entityUrn: 'urn:skill:foo', cwd: '/workspace', status: 'running' }));
+    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
 
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await waitFor(() =>
-      expect(onExit).toHaveBeenCalledWith('urn:skill:foo', expect.any(Function)),
+      expect(onExit).toHaveBeenCalledWith('entity:urn:skill:foo', expect.any(Function)),
     );
 
     const exitListener = onExit.mock.calls[0]?.[1] as (exitCode: number) => void;
@@ -126,7 +126,7 @@ describe('<SessionPanel>', () => {
     const user = userEvent.setup();
     call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
 
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
 
     expect(await screen.findByTestId('session-error')).toHaveTextContent('claude CLI not found in PATH');
@@ -136,7 +136,7 @@ describe('<SessionPanel>', () => {
     const user = userEvent.setup();
     call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
 
-    renderWithTheme(<SessionPanel entityUrn="urn:skill:foo" />);
+    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await screen.findByTestId('session-error');
 
@@ -146,6 +146,6 @@ describe('<SessionPanel>', () => {
     await user.click(retryButton);
 
     await waitFor(() => expect(call).toHaveBeenCalledTimes(2));
-    expect(call).toHaveBeenNthCalledWith(2, 'session.spawn', { entityUrn: 'urn:skill:foo' });
+    expect(call).toHaveBeenNthCalledWith(2, 'session.spawn', { anchor: { kind: 'entity', urn: 'urn:skill:foo' } });
   });
 });

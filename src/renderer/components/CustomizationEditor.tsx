@@ -352,7 +352,7 @@ export function CustomizationEditor({
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
-        {!isCreate && initial.urn ? <SessionPanel entityUrn={initial.urn} /> : <SessionPanelLocked />}
+        {!isCreate && initial.urn ? <SessionPanel anchor={{ kind: 'entity', urn: initial.urn }} /> : <SessionPanelLocked />}
       </Paper>
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />

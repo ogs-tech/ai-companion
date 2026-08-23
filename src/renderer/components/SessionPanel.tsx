@@ -5,7 +5,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
-import type { SessionSnapshot } from '../../shared/session.js';
+import type { SessionAnchor, SessionSnapshot } from '../../shared/session.js';
 import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from './ds/StatusPill.js';
@@ -15,7 +15,7 @@ import { ogs, colorRoles } from '../tokens.js';
 type PanelStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error';
 
 interface SessionPanelProps {
-  entityUrn: string;
+  anchor: SessionAnchor;
 }
 
 const STATUS_PILL: Record<PanelStatus, { variant: StatusPillVariant; label: string }> = {
@@ -72,7 +72,7 @@ export function SessionPanelLocked(): React.ReactElement {
   );
 }
 
-export function SessionPanel({ entityUrn }: SessionPanelProps): React.ReactElement {
+export function SessionPanel({ anchor }: SessionPanelProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -129,13 +129,13 @@ export function SessionPanel({ entityUrn }: SessionPanelProps): React.ReactEleme
     setStatus('starting');
     setError(null);
     try {
-      const session = await callIpc<SessionSnapshot>('session.spawn', { entityUrn });
-      setSessionId(session.entityUrn);
+      const session = await callIpc<SessionSnapshot>('session.spawn', { anchor });
+      setSessionId(session.sessionId);
       setStatus(session.status === 'exited' ? 'exited' : 'running');
       fitAddonRef.current?.fit();
       const dims = fitAddonRef.current?.proposeDimensions();
       if (dims) {
-        void callIpc('session.resize', { sessionId: session.entityUrn, cols: dims.cols, rows: dims.rows });
+        void callIpc('session.resize', { sessionId: session.sessionId, cols: dims.cols, rows: dims.rows });
       }
     } catch (err) {
       setStatus('error');
