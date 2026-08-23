@@ -25,8 +25,10 @@ import { ScreenHeader } from '../../components/ds/ScreenHeader.js';
 import { CustomizationEditor, type EditorHiddenField } from '../../components/CustomizationEditor.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import type { Instruction, PersonalInstruction, ProjectInstruction } from '../../../shared/entity.js';
+import type { Instruction } from '../../../shared/entity.js';
 import { WORKSPACE_SOURCE, isPersonalInstruction, isProjectInstruction } from '../../../shared/entity.js';
+import type { Project } from '../../../shared/project.js';
+import { useProjects, useFindOrCreateProjectByPath } from '../../hooks/use-projects.js';
 import type { Settings } from '../../../shared/settings.js';
 import { useInstructionsList, useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { useQuery } from '@tanstack/react-query';
@@ -81,17 +83,17 @@ function basenameFromPath(p: string): string {
     .slice(0, 64) || 'project';
 }
 
-function seedProjectInstruction(repoPath: string): ProjectInstruction {
+function seedProjectInstruction(project: Project): Instruction {
   return {
     urn: '',
     kind: 'instruction',
-    name: basenameFromPath(repoPath),
+    name: basenameFromPath(project.path),
     description: '',
     scopes: ['project'],
+    scopeId: project.id,
     metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
     source: WORKSPACE_SOURCE,
     content: `# Project instructions\n\nContext, conventions, and workflows specific to this repo.\n`,
-    repoPath,
   };
 }
 
@@ -102,12 +104,14 @@ export function InstructionsScreen(): React.ReactElement {
     queryKey: ['settings'],
     queryFn: () => callIpc<Settings | null>('settings.get', {}),
   });
+  const { data: projects = [] } = useProjects();
+  const findOrCreateProject = useFindOrCreateProjectByPath();
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
 
   const personal = data?.find(isPersonalInstruction) ?? null;
-  const projects = (data ?? []).filter(isProjectInstruction);
+  const projectInstructions = (data ?? []).filter(isProjectInstruction);
   const cursorEnabled = settings?.adapters.cursor.enabled === true;
 
   const loadError = isError
@@ -120,11 +124,11 @@ export function InstructionsScreen(): React.ReactElement {
     setEditor(
       personal
         ? { entity: personal, isCreate: false }
-        : { entity: blankCustomization('instruction') as PersonalInstruction, isCreate: true },
+        : { entity: blankCustomization('instruction') as Instruction, isCreate: true },
     );
   };
 
-  const openProjectEdit = (p: ProjectInstruction): void =>
+  const openProjectEdit = (p: Instruction): void =>
     setEditor({ entity: p, isCreate: false });
 
   const openProjectCreate = async (): Promise<void> => {
@@ -132,14 +136,16 @@ export function InstructionsScreen(): React.ReactElement {
     try {
       const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
       if (picked.canceled || !picked.path) return;
-      setEditor({ entity: seedProjectInstruction(picked.path), isCreate: true });
+      const project = await findOrCreateProject.mutateAsync(picked.path);
+      setEditor({ entity: seedProjectInstruction(project), isCreate: true });
     } catch (err) {
       setPickerError(err instanceof Error ? err.message : 'Erro ao abrir o seletor');
     }
   };
 
-  const handleDelete = async (p: ProjectInstruction): Promise<void> => {
-    const confirmed = window.confirm(`Remover a project instruction "${p.name}" (${p.repoPath})?`);
+  const handleDelete = async (p: Instruction): Promise<void> => {
+    const resolvedPath = projects.find((proj) => proj.id === p.scopeId)?.path ?? p.scopeId ?? '?';
+    const confirmed = window.confirm(`Remover a project instruction "${p.name}" (${resolvedPath})?`);
     if (!confirmed) return;
     try {
       await callIpc('instruction.delete', { name: p.name, removeSymlinks: true });
@@ -227,7 +233,7 @@ export function InstructionsScreen(): React.ReactElement {
               </Alert>
             )}
 
-            {projects.length === 0 ? (
+            {projectInstructions.length === 0 ? (
               <Box
                 sx={{
                   border: 1,
@@ -246,10 +252,11 @@ export function InstructionsScreen(): React.ReactElement {
               </Box>
             ) : (
               <List dense disablePadding>
-                {projects.map((p) => (
+                {projectInstructions.map((p) => (
                   <ProjectInstructionRow
                     key={p.urn}
                     project={p}
+                    resolvedPath={projects.find((proj) => proj.id === p.scopeId)?.path}
                     cursorEnabled={cursorEnabled}
                     onEdit={() => openProjectEdit(p)}
                     onDelete={() => void handleDelete(p)}
@@ -267,7 +274,7 @@ export function InstructionsScreen(): React.ReactElement {
 }
 
 interface PersonalCardProps {
-  personal: PersonalInstruction | null;
+  personal: Instruction | null;
   cursorEnabled: boolean;
   onOpen: () => void;
 }
@@ -370,13 +377,14 @@ function SyncGroupChip({ group }: SyncGroupChipProps): React.ReactElement {
 }
 
 interface ProjectRowProps {
-  project: ProjectInstruction;
+  project: Instruction;
+  resolvedPath: string | undefined;
   cursorEnabled: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function ProjectInstructionRow({ project, cursorEnabled, onEdit, onDelete }: ProjectRowProps): React.ReactElement {
+function ProjectInstructionRow({ project, resolvedPath, cursorEnabled, onEdit, onDelete }: ProjectRowProps): React.ReactElement {
   const destCount = 2 + (cursorEnabled ? 1 : 0); // .claude/CLAUDE.md, AGENTS.md (+cursor AGENTS.md on top)
   return (
     <ListItem
@@ -402,7 +410,7 @@ function ProjectInstructionRow({ project, cursorEnabled, onEdit, onDelete }: Pro
         secondary={
           <>
             <Box component="code" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-              {project.repoPath}
+              {resolvedPath ?? 'Projeto não encontrado'}
             </Box>
             {' — '}
             {destCount} destino{destCount === 1 ? '' : 's'}
