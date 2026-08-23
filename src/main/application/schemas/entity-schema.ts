@@ -1,10 +1,9 @@
-import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'name must match ^[a-z0-9][a-z0-9-]*$');
 const version = z.string().regex(/^\d+\.\d+\.\d+(-[\w.-]+)?$/, 'version must follow semver');
 const scopes = z
-  .array(z.enum(['personal', 'project']))
+  .array(z.enum(['personal', 'project', 'workspace']))
   .min(1, 'scopes must have at least 1 entry')
   .refine((arr) => new Set(arr).size === arr.length, { message: 'scopes must not contain duplicates' });
 const metadata = z.object({
@@ -53,17 +52,17 @@ export const agentEntitySchema = entityBase
   })
   .passthrough();
 
-// Instruction: discriminated union by scopes[0]. Because Zod's
-// discriminatedUnion requires a top-level literal discriminator (and 'scopes'
-// is a tuple, not a scalar), we branch via superRefine on the shared shape.
+// Instruction: discriminated by scopes[0]. Because Zod's discriminatedUnion
+// requires a top-level literal discriminator (and 'scopes' is a tuple, not a
+// scalar), we branch via superRefine on the shared shape.
 export const instructionEntitySchema = entityBase
   .extend({
     kind: z.literal('instruction'),
     content: z.string(),
-    scopes: z.tuple([z.enum(['personal', 'project'])], {
-      message: 'instruction scopes must be exactly ["personal"] or ["project"]',
+    scopes: z.tuple([z.enum(['personal', 'project', 'workspace'])], {
+      message: 'instruction scopes must be exactly ["personal"], ["project"] or ["workspace"]',
     }),
-    repoPath: z.string().optional(),
+    scopeId: z.string().optional(),
   })
   .passthrough()
   .superRefine((val, ctx) => {
@@ -76,11 +75,11 @@ export const instructionEntitySchema = entityBase
           message: 'personal instruction name must be "default"',
         });
       }
-      if (val.repoPath !== undefined) {
+      if (val.scopeId !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['repoPath'],
-          message: 'personal instruction must not carry repoPath',
+          path: ['scopeId'],
+          message: 'personal instruction must not carry scopeId',
         });
       }
     } else {
@@ -88,20 +87,14 @@ export const instructionEntitySchema = entityBase
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['name'],
-          message: 'project instruction name cannot be "default" (reserved for personal singleton)',
+          message: 'non-personal instruction name cannot be "default" (reserved for personal singleton)',
         });
       }
-      if (typeof val.repoPath !== 'string' || val.repoPath.trim() === '') {
+      if (typeof val.scopeId !== 'string' || val.scopeId.trim() === '') {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['repoPath'],
-          message: 'project instruction requires a non-empty repoPath',
-        });
-      } else if (!isAbsolute(val.repoPath)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['repoPath'],
-          message: 'project instruction repoPath must be an absolute path',
+          path: ['scopeId'],
+          message: `${scope} instruction requires a non-empty scopeId`,
         });
       }
     }
