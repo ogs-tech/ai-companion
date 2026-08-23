@@ -33,8 +33,6 @@ import { FsWorkspaceRegistry } from './infrastructure/workspace/fs-workspace-reg
 import { SystemClock } from './infrastructure/clock/system-clock.js';
 import { ElectronDialogAdapter } from './infrastructure/dialog/electron-dialog-adapter.js';
 import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
-import { ClaudeAdapter } from './infrastructure/adapters/claude-adapter.js';
-import { CursorAdapter } from './infrastructure/adapters/cursor-adapter.js';
 import type { CredentialStorePort } from './application/ports/credential-store-port.js';
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
@@ -167,9 +165,6 @@ async function wireIpc(): Promise<void> {
   const repoService = new RepoService(repoReader);
   const dialogPort = new ElectronDialogAdapter();
 
-  const claudeAdapter = new ClaudeAdapter({ homedir: homedir() });
-  const cursorAdapter = new CursorAdapter({ homedir: homedir() });
-
   const credentialStore: CredentialStorePort = new SafeStorageCredentials(app.getPath('userData'));
 
   // T10.1: wire full PluginService
@@ -294,8 +289,8 @@ async function wireIpc(): Promise<void> {
     clock,
     nodeFsAdapter,
     settingsService,
-    claudeAdapter,
-    cursorAdapter,
+    homedir: home,
+    workspaceService,
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,

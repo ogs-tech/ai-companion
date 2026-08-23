@@ -7,8 +7,6 @@ import { SystemClock } from '../../../src/main/infrastructure/clock/system-clock
 import { NodeFsAdapter } from '../../../src/main/infrastructure/filesystem/node-fs-adapter.js';
 import { SettingsService } from '../../../src/main/application/services/settings-service.js';
 import { InMemorySettingsRepository } from '../../../src/main/infrastructure/settings/in-memory-settings-repository.js';
-import { ClaudeAdapter } from '../../../src/main/infrastructure/adapters/claude-adapter.js';
-import { CursorAdapter } from '../../../src/main/infrastructure/adapters/cursor-adapter.js';
 import { PluginProvenanceService } from '../../../src/main/application/services/plugin-provenance.js';
 import { PluginCacheFile } from '../../../src/main/infrastructure/plugins/plugin-cache-file.js';
 import { ClaudeCodePluginReader } from '../../../src/main/infrastructure/plugins/claude-code-plugin-reader.js';
@@ -46,8 +44,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
   const clock = new SystemClock();
   const settingsService = new SettingsService(new InMemorySettingsRepository());
   const homedir = '/home/test-user';
-  const claudeAdapter = new ClaudeAdapter({ homedir });
-  const cursorAdapter = new CursorAdapter({ homedir });
+  const workspaceService = { get: async () => { throw new Error('not stubbed in this test'); } };
   const pluginCache = new PluginCacheFile({
     pluginsDir: () => join(homedir, '.ai-companion', 'plugins'),
     cacheDir: () => join(homedir, '.claude', 'plugins', 'cache', 'local'),
@@ -90,8 +87,8 @@ function buildShared(): WorkspaceScopedSharedDeps {
     clock,
     nodeFsAdapter,
     settingsService,
-    claudeAdapter,
-    cursorAdapter,
+    homedir,
+    workspaceService,
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,

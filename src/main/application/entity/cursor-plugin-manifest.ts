@@ -1,4 +1,4 @@
-import type { PersonalInstruction } from '../../../shared/entity.js';
+import type { Instruction } from '../../../shared/entity.js';
 import { brand } from '../../../shared/brand.js';
 
 /**
@@ -45,7 +45,7 @@ export function renderCursorPluginManifest(): string {
  * User Rule via the filesystem — the workaround the Cursor community uses
  * while native ~/.cursor/rules support is not yet stable).
  */
-export function renderCursorPersonalRule(instruction: PersonalInstruction): string {
+export function renderCursorPersonalRule(instruction: Instruction): string {
   const description = escapeYaml(
     instruction.description || `Personal instruction managed by ${brand.managedByPhrase}`,
   );

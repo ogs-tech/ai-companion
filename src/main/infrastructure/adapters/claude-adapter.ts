@@ -1,15 +1,21 @@
 import { join } from 'node:path';
 import type { Adapter, AdapterDestination } from '../../application/ports/adapter.js';
-import type { Entity, Instruction, ProjectInstruction } from '../../../shared/entity.js';
+import type { Entity, Instruction } from '../../../shared/entity.js';
+import type { WorkspaceService } from '../../application/services/workspace-service.js';
+import type { ProjectService } from '../../application/services/project-service.js';
+import { resolveScopePath } from '../../application/resolve-scope-path.js';
 import { DomainError } from '../../domain/errors.js';
 
 export interface ClaudeAdapterDeps {
   homedir: string;
+  workspaceService: Pick<WorkspaceService, 'get'>;
+  projectService: Pick<ProjectService, 'get'>;
 }
 
 export class ClaudeAdapter implements Adapter {
   readonly adapterId = 'claude';
   private readonly homedir: string;
+  private readonly scopeDeps: Pick<ClaudeAdapterDeps, 'workspaceService' | 'projectService'>;
 
   constructor(deps: ClaudeAdapterDeps) {
     if (deps.homedir === undefined || deps.homedir === null || deps.homedir === '') {
@@ -20,9 +26,10 @@ export class ClaudeAdapter implements Adapter {
       );
     }
     this.homedir = deps.homedir;
+    this.scopeDeps = { workspaceService: deps.workspaceService, projectService: deps.projectService };
   }
 
-  resolveEntityDestinations(args: { entity: Entity }): AdapterDestination[] {
+  async resolveEntityDestinations(args: { entity: Entity }): Promise<AdapterDestination[]> {
     const { kind, name, scopes } = args.entity;
 
     if (kind === 'instruction') {
@@ -33,10 +40,16 @@ export class ClaudeAdapter implements Adapter {
           { scope: 'personal', destination: join(this.homedir, 'AGENTS.md'), strategy: 'symlink' },
         ];
       }
-      const project = instruction as ProjectInstruction;
+      const scope = instruction.scopes[0];
+      if (scope === undefined) {
+        throw new DomainError('internal', `Instruction ${instruction.urn} has no scope`, {
+          reason: 'missing-scope',
+        });
+      }
+      const repoPath = await resolveScopePath(instruction, this.scopeDeps);
       return [
-        { scope: 'project', destination: join(project.repoPath, '.claude/CLAUDE.md'), strategy: 'symlink' },
-        { scope: 'project', destination: join(project.repoPath, 'AGENTS.md'), strategy: 'symlink' },
+        { scope, destination: join(repoPath, '.claude/CLAUDE.md'), strategy: 'symlink' },
+        { scope, destination: join(repoPath, 'AGENTS.md'), strategy: 'symlink' },
       ];
     }
 
@@ -44,9 +57,10 @@ export class ClaudeAdapter implements Adapter {
       return [];
     }
 
-    // TODO(follow-up): skill/agent scope 'project' is temporarily blocked at
-    // the schema level while linkedRepos is removed. When we introduce a
-    // per-entity repoPath for skill/agent, re-add project destinations here.
+    // TODO(follow-up): skill/agent scope 'project'/'workspace' is temporarily
+    // blocked at the schema level (skillAgentScopes still pins ['personal']).
+    // When we introduce a per-entity repoPath/scopeId for skill/agent, re-add
+    // project/workspace destinations here.
     const subfolder = kind === 'skill' ? '.claude/skills' : '.claude/agents';
     const fileName = kind === 'skill' ? name : `${name}.md`;
     const out: AdapterDestination[] = [];

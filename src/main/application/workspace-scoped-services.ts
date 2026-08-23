@@ -9,6 +9,7 @@ import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
 import type { ClaudeCliPort } from './ports/claude-cli-port.js';
 import type { ClaudeSessionPort } from './ports/claude-session-port.js';
+import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
 import { FsEntityRepository } from '../infrastructure/entity/fs-entity-repository.js';
@@ -29,13 +30,15 @@ import { SymlinkCollector } from './services/health/symlink-collector.js';
 import { GeneratedFileCollector } from './services/health/generated-file-collector.js';
 import type { HealthCollector } from './services/health/health-collector.js';
 import { WorkspaceTeardownService } from './services/workspace-teardown.js';
+import { ClaudeAdapter } from '../infrastructure/adapters/claude-adapter.js';
+import { CursorAdapter } from '../infrastructure/adapters/cursor-adapter.js';
 
 export interface WorkspaceScopedSharedDeps {
   clock: ClockPort;
   nodeFsAdapter: NodeFsAdapter;
   settingsService: SettingsService;
-  claudeAdapter: Adapter;
-  cursorAdapter: Adapter;
+  homedir: string;
+  workspaceService: Pick<WorkspaceService, 'get'>;
   pluginProvenance: PluginProvenanceService;
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
@@ -65,10 +68,15 @@ export function buildWorkspaceScopedServices(
   shared: WorkspaceScopedSharedDeps,
 ): WorkspaceScopedServices {
   const {
-    clock, nodeFsAdapter, settingsService, claudeAdapter, cursorAdapter,
+    clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
     claudeCli, claudeSessionPort,
   } = shared;
+
+  const projectService = new ProjectService(new FsProjectRegistry(join(dataDir, 'projects.json')), clock);
+
+  const claudeAdapter = new ClaudeAdapter({ homedir, workspaceService, projectService });
+  const cursorAdapter = new CursorAdapter({ homedir, workspaceService, projectService });
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
   const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, dataDir);
@@ -92,7 +100,6 @@ export function buildWorkspaceScopedServices(
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const instructionService = new InstructionService(entityService, claudeCli);
   const sessionService = new SessionService(entityService, claudeSessionPort, dataDir);
-  const projectService = new ProjectService(new FsProjectRegistry(join(dataDir, 'projects.json')), clock);
 
   const healthCollectors: HealthCollector[] = [
     new McpAuthCollector(claudeRuntimeReader, clock),

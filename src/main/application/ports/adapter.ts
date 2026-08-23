@@ -11,9 +11,9 @@ import type { Entity } from '../../../shared/entity.js';
 export type OwnershipCheck = 'startsWith' | 'includes';
 
 export type AdapterDestination =
-  | { scope: 'personal' | 'project'; destination: string; strategy: 'symlink' }
+  | { scope: 'personal' | 'project' | 'workspace'; destination: string; strategy: 'symlink' }
   | {
-      scope: 'personal' | 'project';
+      scope: 'personal' | 'project' | 'workspace';
       destination: string;
       strategy: 'write';
       content: string;
@@ -34,8 +34,9 @@ export interface Adapter {
   adapterId: string;
   /**
    * Resolve the concrete on-disk destinations for an entity. Personal-scoped
-   * entities go to the adapter's home surface; project-scoped instructions
-   * carry their own `repoPath` and fan out to that repo alone.
+   * entities go to the adapter's home surface; project/workspace-scoped
+   * instructions resolve their target path via `resolveScopePath` and fan out
+   * to that single path.
    */
   resolveEntityDestinations(args: {
     entity: Entity;
