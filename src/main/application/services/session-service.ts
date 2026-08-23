@@ -1,8 +1,10 @@
 import type { Entity, Instruction } from '../../../shared/entity.js';
-import { isProjectInstruction } from '../../../shared/entity.js';
 import type { SessionSnapshot, SessionStatus } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
 import type { ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { WorkspaceService } from './workspace-service.js';
+import type { ProjectService } from './project-service.js';
+import { resolveScopePath } from '../resolve-scope-path.js';
 import { ioError } from '../../domain/errors.js';
 
 const DEFAULT_COLS = 80;
@@ -26,6 +28,10 @@ export class SessionService {
     private readonly entityService: EntityService,
     private readonly claudeSession: ClaudeSessionPort,
     private readonly workspacePath: string,
+    private readonly scopeDeps: {
+      workspaceService: Pick<WorkspaceService, 'get'>;
+      projectService: Pick<ProjectService, 'get'>;
+    },
   ) {
     this.claudeSession.onData((sessionId, chunk) => {
       for (const listener of this.outputListeners) listener(sessionId, chunk);
@@ -46,7 +52,7 @@ export class SessionService {
 
     const spawnPromise = (async () => {
       const entity = await this.entityService.get(entityUrn);
-      const cwd = this.resolveCwd(entity);
+      const cwd = await this.resolveCwd(entity);
 
       try {
         await this.claudeSession.spawn(entityUrn, cwd, { cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
@@ -108,10 +114,12 @@ export class SessionService {
     this.exitListeners.push(listener);
   }
 
-  private resolveCwd(entity: Entity): string {
+  private async resolveCwd(entity: Entity): Promise<string> {
     if (entity.kind === 'instruction') {
       const instruction = entity as Instruction;
-      if (isProjectInstruction(instruction)) return instruction.repoPath;
+      if (instruction.scopes[0] !== 'personal') {
+        return resolveScopePath(instruction, this.scopeDeps);
+      }
     }
     return this.workspacePath;
   }

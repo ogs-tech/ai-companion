@@ -5,7 +5,7 @@ import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/en
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { FakeClaudeSessionPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
-import { WORKSPACE_SOURCE, entityUrn, type Skill, type ProjectInstruction } from '../../../../src/shared/entity.js';
+import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
 
 const WORKSPACE = '/home/user/.ai-companion';
@@ -16,10 +16,10 @@ const skill = (name = 'foo'): Skill => ({
   source: WORKSPACE_SOURCE, content: 'body',
 });
 
-const projectInstruction = (name = 'acme', repoPath = '/repos/acme'): ProjectInstruction => ({
+const projectInstruction = (name = 'acme', scopeId = 'proj-1'): Instruction => ({
   urn: entityUrn('instruction', name), kind: 'instruction', name, description: '',
-  scopes: ['project'], metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
-  source: WORKSPACE_SOURCE, content: '# notes\n', repoPath,
+  scopes: ['project'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE, content: '# notes\n',
 });
 
 const setup = () => {
@@ -30,7 +30,11 @@ const setup = () => {
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
-  const service = new SessionService(base, claudeSession, WORKSPACE);
+  const scopeDeps = {
+    workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+    projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
+  };
+  const service = new SessionService(base, claudeSession, WORKSPACE, scopeDeps);
   return { service, base, claudeSession };
 };
 
@@ -43,9 +47,9 @@ describe('SessionService', () => {
     expect(session.status).toBe('running');
   });
 
-  it('spawn resolves cwd to repoPath for a project instruction', async () => {
+  it('spawn resolves cwd via resolveScopePath for a project instruction', async () => {
     const { service, base } = setup();
-    await base.save({ entity: projectInstruction('acme', '/repos/acme'), isCreate: true });
+    await base.save({ entity: projectInstruction('acme', 'proj-1'), isCreate: true });
     const session = await service.spawn(entityUrn('instruction', 'acme'));
     expect(session.cwd).toBe('/repos/acme');
   });

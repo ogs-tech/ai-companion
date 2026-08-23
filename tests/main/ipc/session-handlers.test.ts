@@ -22,7 +22,11 @@ const setup = () => {
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
-  const service = new SessionService(base, claudeSession, '/workspace');
+  const scopeDeps = {
+    workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+    projectService: { get: async () => { throw new Error('not stubbed'); } },
+  };
+  const service = new SessionService(base, claudeSession, '/workspace', scopeDeps);
   return { service, base, claudeSession };
 };
 
