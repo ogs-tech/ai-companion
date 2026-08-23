@@ -82,8 +82,7 @@ describe('<InstructionsScreen>', () => {
     renderWithQuery(<InstructionsScreen />);
 
     await screen.findByTestId('personal-instruction-card');
-    expect(screen.getByTestId('personal-instruction-use-template')).toBeInTheDocument();
-    expect(screen.getByTestId('personal-instruction-start-blank')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-instruction-open')).toBeInTheDocument();
     expect(screen.getByText(/Nenhuma project instruction ainda/i)).toBeInTheDocument();
   });
 
@@ -96,7 +95,7 @@ describe('<InstructionsScreen>', () => {
 
     renderWithQuery(<InstructionsScreen />);
 
-    await screen.findByTestId('personal-instruction-edit');
+    await screen.findByTestId('personal-instruction-open');
     expect(screen.getByText(/Configurado/i)).toBeInTheDocument();
   });
 
@@ -260,7 +259,7 @@ describe('<InstructionsScreen>', () => {
     confirmSpy.mockRestore();
   });
 
-  it('clicking "Usar template padrão" opens the editor pre-filled with template content', async () => {
+  it('clicking Configurar opens the editor for a new personal instruction', async () => {
     const user = userEvent.setup();
     routeCalls({
       'instruction.list': [],
@@ -270,7 +269,7 @@ describe('<InstructionsScreen>', () => {
 
     renderWithQuery(<InstructionsScreen />);
 
-    await user.click(await screen.findByTestId('personal-instruction-use-template'));
+    await user.click(await screen.findByTestId('personal-instruction-open'));
     expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
   });
 
@@ -284,7 +283,7 @@ describe('<InstructionsScreen>', () => {
 
     renderWithQuery(<InstructionsScreen />);
 
-    await user.click(await screen.findByTestId('personal-instruction-edit'));
+    await user.click(await screen.findByTestId('personal-instruction-open'));
     expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
   });
 });
