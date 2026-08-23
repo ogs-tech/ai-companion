@@ -13,27 +13,27 @@ import { brand } from '../shared/brand.js';
 import {
   devLockPath,
   projectWorkspacePath,
+  workspacePath as workspaceDataDir,
 } from '../shared/brand-paths.js';
+import type { Workspace } from '../shared/workspace.js';
 import { SettingsService } from './application/services/settings-service.js';
 import { RepoService } from './application/services/repo-service.js';
 import { WorkspaceBootstrapService } from './application/services/workspace-bootstrap.js';
-import { WorkspaceTeardownService } from './application/services/workspace-teardown.js';
+import { WorkspaceService } from './application/services/workspace-service.js';
 import { ProductMigrationService } from './application/services/product-migration-service.js';
-import { AdapterManager } from './application/services/adapter-manager.js';
-import { SymlinkManager } from './application/services/symlink-manager.js';
-import { FileMaterializer } from './application/services/file-materializer.js';
+import {
+  buildWorkspaceScopedServices,
+  type WorkspaceScopedServices,
+} from './application/workspace-scoped-services.js';
 import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repository.js';
 import { FsRepoReader } from './infrastructure/repo/fs-repo-reader.js';
 import { FsWorkspaceBootstrap } from './infrastructure/workspace/fs-workspace-bootstrap.js';
+import { FsWorkspaceRegistry } from './infrastructure/workspace/fs-workspace-registry.js';
 import { SystemClock } from './infrastructure/clock/system-clock.js';
 import { ElectronDialogAdapter } from './infrastructure/dialog/electron-dialog-adapter.js';
 import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
 import { ClaudeAdapter } from './infrastructure/adapters/claude-adapter.js';
 import { CursorAdapter } from './infrastructure/adapters/cursor-adapter.js';
-import { EntityService } from './application/services/entity-service.js';
-import { EntityValidator } from './application/services/entity-validator.js';
-import { FsEntityRepository } from './infrastructure/entity/fs-entity-repository.js';
-import type { Adapter } from './application/ports/adapter.js';
 import type { CredentialStorePort } from './application/ports/credential-store-port.js';
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
@@ -48,13 +48,9 @@ import { PluginPublisher } from './application/services/plugin-publisher.js';
 import { PluginService } from './application/services/plugin-service.js';
 import { PluginProvenanceService } from './application/services/plugin-provenance.js';
 import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plugin-reader.js';
-import { SkillService } from './application/services/skill-service.js';
-import { AgentService } from './application/services/agent-service.js';
 import { HookService } from './application/services/hook-service.js';
-import { InstructionService } from './application/services/instruction-service.js';
 import { NodeClaudeCliAdapter } from './infrastructure/claude-cli/node-claude-cli-adapter.js';
 import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
-import { SessionService } from './application/services/session-service.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
@@ -66,13 +62,6 @@ import { McpService } from './application/services/mcp-service.js';
 import { McpDisabledStash } from './infrastructure/mcp/mcp-disabled-stash.js';
 import { ElectronShell } from './infrastructure/shell/electron-shell.js';
 import { ElectronNotificationAdapter } from './infrastructure/notification/electron-notification-adapter.js';
-import { HealthService } from './application/services/health/health-service.js';
-import { McpAuthCollector } from './application/services/health/mcp-auth-collector.js';
-import { McpRuntimeCollector } from './application/services/health/mcp-runtime-collector.js';
-import { ConfigDriftCollector } from './application/services/health/config-drift-collector.js';
-import { SymlinkCollector } from './application/services/health/symlink-collector.js';
-import { GeneratedFileCollector } from './application/services/health/generated-file-collector.js';
-import type { HealthCollector } from './application/services/health/health-collector.js';
 import { buildHandlers } from './ipc/registry.js';
 import { createDispatcher } from './ipc/dispatcher.js';
 
@@ -154,6 +143,22 @@ async function wireIpc(): Promise<void> {
   const workspaceBootstrap = new WorkspaceBootstrapService(new FsWorkspaceBootstrap());
   await workspaceBootstrap.create(workspacePath);
 
+  const clock = new SystemClock();
+
+  const workspaceService = new WorkspaceService(
+    new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json')),
+    clock,
+    workspaceBootstrap,
+    home,
+  );
+  /**
+   * The default workspace reuses the already-migrated `workspacePath` constant instead of
+   * recomputing the identical string a second time.
+   */
+  const dataDirFor = (workspace: Workspace): string =>
+    workspace.rootPath === home ? workspacePath : workspaceDataDir(workspace.rootPath);
+  const activeDataDir = dataDirFor(await workspaceService.getActive());
+
   const settingsService = new SettingsService(
     new FsSettingsRepository(join(workspacePath, 'settings.json')),
   );
@@ -161,27 +166,8 @@ async function wireIpc(): Promise<void> {
   const repoService = new RepoService(repoReader);
   const dialogPort = new ElectronDialogAdapter();
 
-  const clock = new SystemClock();
-
-  const symlinkManager = new SymlinkManager(new NodeFsAdapter(), clock, workspacePath);
-  const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, workspacePath);
   const claudeAdapter = new ClaudeAdapter({ homedir: homedir() });
   const cursorAdapter = new CursorAdapter({ homedir: homedir() });
-  const entityRepository = new FsEntityRepository(workspacePath);
-  const adapterManager = new AdapterManager({
-    settingsService,
-    entityRepository,
-    symlinkManager,
-    fileMaterializer,
-    workspacePath,
-    adapters: new Map<string, Adapter>([
-      [claudeAdapter.adapterId, claudeAdapter],
-      [cursorAdapter.adapterId, cursorAdapter],
-    ]),
-  });
-
-  const entityValidator = new EntityValidator();
-  const entityService = new EntityService(entityRepository, clock, adapterManager, entityValidator);
 
   const credentialStore: CredentialStorePort = new SafeStorageCredentials(app.getPath('userData'));
 
@@ -255,33 +241,13 @@ async function wireIpc(): Promise<void> {
     fs: nodeFsAdapter,
     claudeCodeRegistry: claudeCodePluginReader,
   });
-  const skillService = new SkillService(entityService, {
-    provenance: pluginProvenance,
-    fs: nodeFsAdapter,
-  });
-  const agentService = new AgentService(entityService, {
-    provenance: pluginProvenance,
-    fs: nodeFsAdapter,
-  });
   const hookService = new HookService(claudeSettingsFile, {
     cache: pluginCache,
     fs: nodeFsAdapter,
   });
-  const instructionService = new InstructionService(entityService, new NodeClaudeCliAdapter());
   const emitInstructionGenerateProgress = (event: GenerateDraftProgressEvent): void => {
     mainWindow?.webContents.send(INSTRUCTION_GENERATE_PROGRESS_CHANNEL, event);
   };
-  const claudeSessionPort = new NodePtySessionAdapter();
-  const sessionService = new SessionService(entityService, claudeSessionPort, workspacePath);
-  sessionService.onOutput((sessionId, chunk) => {
-    mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
-  });
-  sessionService.onExit((sessionId, _status, exitCode) => {
-    mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });
-  });
-  app.on('before-quit', () => {
-    sessionService.killAll();
-  });
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
@@ -323,43 +289,75 @@ async function wireIpc(): Promise<void> {
     shell: new ElectronShell(),
   });
 
-  const healthCollectors: HealthCollector[] = [
-    new McpAuthCollector(claudeRuntimeReader, clock),
-    new McpRuntimeCollector(claudeRuntimeReader, clock),
-    new ConfigDriftCollector(pluginService, clock),
-    new SymlinkCollector(adapterManager, symlinkManager, clock),
-    new GeneratedFileCollector(adapterManager, fileMaterializer, settingsService, clock),
-  ];
-  const healthService = new HealthService(healthCollectors, clock);
-  const notificationPort = new ElectronNotificationAdapter();
-  const workspaceTeardownService = new WorkspaceTeardownService(
-    adapterManager,
+  const sharedDeps = {
+    clock,
     nodeFsAdapter,
-    workspacePath,
+    settingsService,
+    claudeAdapter,
+    cursorAdapter,
+    pluginProvenance,
+    pluginService,
+    claudeRuntimeReader,
     claudeSettingsFile,
+    claudeCli: new NodeClaudeCliAdapter(),
+    claudeSessionPort: new NodePtySessionAdapter(),
+  };
+
+  let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
+    activeDataDir,
+    sharedDeps,
   );
 
-  const handlers = buildHandlers({
+  const attachSessionBridges = (services: WorkspaceScopedServices): void => {
+    services.sessionService.onOutput((sessionId, chunk) => {
+      mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
+    });
+    services.sessionService.onExit((sessionId, _status, exitCode) => {
+      mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });
+    });
+  };
+  attachSessionBridges(workspaceScoped);
+
+  app.on('before-quit', () => {
+    workspaceScoped.sessionService.killAll();
+  });
+
+  const notificationPort = new ElectronNotificationAdapter();
+
+  const buildDeps = () => ({
     settingsService,
     repoService,
-    adapterManager,
+    adapterManager: workspaceScoped.adapterManager,
     dialogPort,
     pluginService,
     credentialStore,
-    skillService,
-    agentService,
+    skillService: workspaceScoped.skillService,
+    agentService: workspaceScoped.agentService,
     hookService,
-    instructionService,
-    sessionService,
+    instructionService: workspaceScoped.instructionService,
+    sessionService: workspaceScoped.sessionService,
+    workspaceService,
+    projectService: workspaceScoped.projectService,
+    switchActiveWorkspace,
     marketplaceService,
-    healthService,
+    healthService: workspaceScoped.healthService,
     mcpService,
     notificationPort,
-    workspaceTeardownService,
+    workspaceTeardownService: workspaceScoped.workspaceTeardownService,
     appQuit: () => app.quit(),
     emitInstructionGenerateProgress,
   });
-  const dispatch = createDispatcher(handlers);
+
+  let dispatch = createDispatcher(buildHandlers(buildDeps()));
+
+  async function switchActiveWorkspace(id: string): Promise<Workspace> {
+    workspaceScoped.sessionService.killAll();
+    const target = await workspaceService.switchTo(id);
+    workspaceScoped = buildWorkspaceScopedServices(dataDirFor(target), sharedDeps);
+    attachSessionBridges(workspaceScoped);
+    dispatch = createDispatcher(buildHandlers(buildDeps()));
+    return target;
+  }
 
   ipcMain.handle(IPC_CHANNEL, async (_event, payload: unknown) => {
     if (!isCallPayload(payload)) {
