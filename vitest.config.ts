@@ -17,6 +17,8 @@ export default defineConfig({
         'src/main/infrastructure/dialog/**',
         'src/main/infrastructure/notification/**',
         'src/main/infrastructure/settings/in-memory-settings-repository.ts',
+        'src/main/infrastructure/workspace/in-memory-workspace-registry.ts',
+        'src/main/infrastructure/project/in-memory-project-registry.ts',
       ],
       // Ratchet floor: locked to the 2026-06-06 post-cleanup baseline
       // (S78 / B66 / F76 / L80). Raise toward the 80/70 production target as
