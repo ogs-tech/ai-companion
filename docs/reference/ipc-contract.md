@@ -105,7 +105,26 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 
 ### `workspace`
 
-There is **no `workspace` IPC namespace**. Workspace lifecycle — creating the `~/.ai-companion/` directory tree on first run — runs at process startup via `WorkspaceBootstrapService`, called directly from [`src/main/index.ts`](../../src/main/index.ts), not over IPC. The workspace path is fixed.
+| Method | Params | Result |
+|---|---|---|
+| `workspace.list` | – | `Workspace[]` |
+| `workspace.getActive` | – | `Workspace` |
+| `workspace.create` | `{ name: string; rootPath: string }` | `Workspace` |
+| `workspace.switchTo` | `{ id: string }` | `Workspace` |
+| `workspace.delete` | `{ id: string }` | `void` |
+
+`workspace.list` returns every registered workspace. `workspace.getActive` returns the currently active workspace. `workspace.create` registers a new workspace and bootstraps its `.ai-companion` data dir (does not switch to it). `workspace.switchTo` kills the outgoing workspace's live sessions and rebuilds the Entity-backed service graph against the target workspace. `workspace.delete` rejects (`validation`) if `id` is the active workspace.
+
+### `project`
+
+| Method | Params | Result |
+|---|---|---|
+| `project.list` | – | `Project[]` |
+| `project.create` | `{ name: string; path: string }` | `Project` |
+| `project.update` | `{ id: string; name?: string; path?: string }` | `Project` |
+| `project.delete` | `{ id: string }` | `void` |
+
+`project.list` returns every project registered under the active workspace.
 
 ### `dialog`
 

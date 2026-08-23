@@ -98,6 +98,27 @@ On the renderer side, `SessionPanel` (`src/renderer/components/SessionPanel.tsx`
 
 **Native module caveat:** `node-pty` must be rebuilt against Electron's own Node ABI to run inside the app — wired into `predev`/`prebuild` as `npm run rebuild:native` (`electron-rebuild -f -w node-pty` via `@electron/rebuild`), not `postinstall` (see `package.json`). That rebuilt binary can't be loaded from plain-Node `vitest`, so `npm install` and `npm test` always see the binary built against the host Node ABI instead. Running `npm run dev` or `npm run build` leaves the binary rebuilt for Electron's ABI; run `npm install` (or `npm rebuild node-pty`) to restore the host build before running `npm test` again. Separately, `postinstall` runs `chmod +x node_modules/node-pty/prebuilds/*/spawn-helper` (harmlessly no-op on platforms without that file, via `2>/dev/null || true`): `npm install` sometimes resets the prebuilt helper binary's execute bit, which breaks `posix_spawnp` on macOS at spawn time.
 
+## Workspace / Project
+
+`Workspace` and `Project` are non-synced, purely organizational entities — never an `EntityKind`, never
+materialized to `~/.claude/` or `~/.cursor/`. Both are flat JSON registries following the
+`FsSettingsRepository` load/save/atomic-rename pattern:
+
+- `~/.ai-companion/workspaces.json` — every known `Workspace` (`id`, `name`, `rootPath`, `isDefault`,
+  `createdAt`) plus `activeWorkspaceId`. Always at this fixed location, seeded with the default workspace
+  (`rootPath` = home dir) on first read. Owned by `WorkspaceService`.
+- `<workspace.rootPath>/.ai-companion/projects.json` — every `Project` (`id`, `name`, `path`, `createdAt`)
+  belonging to that workspace. Owned by `ProjectService`, re-pointed at a different file whenever the
+  active workspace changes.
+
+Only one workspace is "active" at a time. `workspace.switchTo` kills the outgoing workspace's live
+`claude` sessions, then rebuilds the Entity-backed service graph (`FsEntityRepository`, `AdapterManager`,
+`SymlinkManager`, `FileMaterializer`, `EntityService`, `SkillService`, `AgentService`,
+`InstructionService`, `SessionService`, `ProjectService`, `HealthService`) against the new workspace's
+data dir via `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`) — see
+`src/main/index.ts`'s `switchActiveWorkspace`. Plugin installs, marketplaces, MCP config, and adapter
+on/off settings stay anchored to the workspace active at app startup; they are not (yet) per-workspace.
+
 ## Renderer structure
 
 ```
