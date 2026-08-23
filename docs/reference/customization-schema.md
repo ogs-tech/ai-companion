@@ -56,7 +56,7 @@ Free Markdown — this becomes `content` (skill) or `systemPrompt` (agent).
 `instruction` is stored **frontmatter-free**: the file is the body (`content`) verbatim so the assistant-facing target (`AGENTS.md`, `CLAUDE.md`) never has to strip YAML. The storage layout differs by scope:
 
 - **Personal** singleton → `instructions/default.md` (body only). Metadata (`description`, `metadata.*`) is defaulted on read; the legacy fallback `global-instructions/default.md` is still tolerated for backwards compatibility on `get`/`exists`.
-- **Project** → `instructions/project/<slug>/INSTRUCTION.md` for the body, `instructions/project/<slug>/meta.json` for the sidecar (`description`, `version`, `createdAt`, `updatedAt`, `repoPath`, `tags?`). Both files are written atomically; a slug dir with a body but no `meta.json` is treated as "not found" so partial writes don't poison the list.
+- **Project/Workspace** → `instructions/project/<slug>/INSTRUCTION.md` for the body, `instructions/project/<slug>/meta.json` for the sidecar (`description`, `version`, `createdAt`, `updatedAt`, `scope?`, `scopeId?`, `tags?` — plus a legacy, read-only `repoPath?` tolerated on parse for pre-migration data). Both files are written atomically; a slug dir with a body but no `meta.json` is treated as "not found" so partial writes don't poison the list.
 
 The old dead fields (`activation`, `globs`) were removed; the on-disk model is exactly what's described above.
 
@@ -71,7 +71,7 @@ All three kinds share these fields (defined once in `entity-schema.ts`'s `entity
 | `name` | string | yes | Slug — must match `^[a-z0-9][a-z0-9-]*$` (lowercase, digits, hyphens; no leading hyphen). |
 | `kind` (frontmatter `type`) | enum | yes | One of `skill` · `agent` · `instruction`. |
 | `description` | string | yes for skill/agent | 1–1024 characters for `skill`/`agent` (empty string rejected); always `''` for `instruction` (frontmatter-free, see above). |
-| `scopes` | array | yes | At least 1 entry, no duplicates, each `personal` or `project`. Per-kind: `instruction` is a discriminated union (exactly `['personal']` **or** exactly `['project']`); `skill`/`agent` are temporarily restricted to `['personal']` after `settings.linkedRepos` was removed — see the TODO block in `entity-schema.ts`. |
+| `scopes` | array | yes | At least 1 entry, no duplicates, each `personal`, `project`, or `workspace`. Per-kind: `instruction` is a discriminated union (exactly `['personal']`, `['project']`, or `['workspace']`); `skill`/`agent` are temporarily restricted to `['personal']` — see the TODO block in `entity-schema.ts`. |
 | `metadata.version` | string | yes | Semver `^\d+\.\d+\.\d+(-[\w.-]+)?$` (e.g. `1.2.3`, `1.2.3-rc.1`). |
 | `metadata.createdAt` | string | yes | ISO 8601 datetime (e.g. `2026-05-04T12:00:00.000Z`). |
 | `metadata.updatedAt` | string | yes | ISO 8601 datetime. |
@@ -98,16 +98,26 @@ Each kind's schema extends the common base. Only the differences are listed.
 
 ### `instruction`
 
-Discriminated union over `scopes`: **Personal** is the machine-wide singleton, **Project** is per-repo. Both are stored frontmatter-free.
+Discriminated by `scopes[0]`: **Personal** is the machine-wide singleton, **Project**/**Workspace** each
+carry a `scopeId` resolved against a `Project`/`Workspace` (see [Architecture](architecture.md#workspace--project)).
+All variants are stored frontmatter-free.
 
-| Variant | `name` | `scopes` | `repoPath` |
+| Variant | `name` | `scopes` | `scopeId` |
 |---|---|---|---|
-| Personal (singleton) | must be the literal `default` | must be exactly `["personal"]` | must be absent |
-| Project (one per repo) | any slug except `default` | must be exactly `["project"]` | required, must be an absolute path |
+| Personal (singleton) | must be the literal `default` | exactly `["personal"]` | must be absent |
+| Project (per `Project`) | any slug except `default` | exactly `["project"]` | required, references a `Project.id` |
+| Workspace (per `Workspace`) | any slug except `default` | exactly `["workspace"]` | required, references a `Workspace.id` |
 
-Both variants have `kind: 'instruction'` and reject the reserved-name / missing-repoPath / non-absolute-repoPath cases. Enforced by `instructionEntitySchema` in `entity-schema.ts` (branch via `superRefine`) and by the domain guards `personalInstructionId()` and `projectInstructionSlug()` in `src/main/domain/instruction-id.ts`.
+Enforced by `instructionEntitySchema` in `entity-schema.ts` (branch via `superRefine`) and by the domain
+guards `personalInstructionId()` and `projectInstructionSlug()` in `src/main/domain/instruction-id.ts`.
+`resolveScopePath(entity, { workspaceService, projectService })` (`src/main/application/resolve-scope-path.ts`)
+maps `scopeId` to a concrete absolute path at sync/session-spawn time — the path itself is never persisted
+on the entity, only the id.
 
-The old `global-instruction` kind was renamed. The dead `activation` and `globs` fields have been removed — Cursor's native "rules" activation modes are hacked around today by materializing a plugin (see [Architecture](architecture.md)).
+A pre-existing on-disk `ProjectInstruction` (from before this scoping generalization) carries the old
+`repoPath` sidecar field instead of `scopeId`; `InstructionService.get`/`.list` migrate it transparently on
+first read — see the storage layout note above and `docs/reference/architecture.md`'s Workspace/Project
+section.
 
 ## Body
 
@@ -118,7 +128,8 @@ The Markdown body is unconstrained at the schema layer — `content: string` (sk
 | Scope | Meaning | Adapter target (typical) |
 |---|---|---|
 | `personal` | Applies machine-wide for the author. | `~/.claude/` (personal instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; and — when Cursor is enabled — the plugin under `~/.cursor/plugins/ai-companion/`). |
-| `project` | Applies to the specific repo the entity carries. | For a project instruction: `<entity.repoPath>/.claude/CLAUDE.md` + `<entity.repoPath>/AGENTS.md`. Skill/agent `project` scope is currently disallowed — the previous global `settings.linkedRepos` fan-out was removed; a per-entity `repoPath` for skill/agent is a follow-up. |
+| `project` | Applies to the `Project` the entity's `scopeId` references. | For a project instruction: `<resolved Project.path>/.claude/CLAUDE.md` + `<resolved Project.path>/AGENTS.md`. Skill/agent `project` scope is currently disallowed — a per-entity `scopeId` for skill/agent is a follow-up. |
+| `workspace` | Applies to the `Workspace` the entity's `scopeId` references. | For a workspace instruction: `<resolved Workspace.rootPath>/.claude/CLAUDE.md` + `<resolved Workspace.rootPath>/AGENTS.md`. Not yet exposed in any editor UI (schema/service-level only — see the Workspace/Project spec). |
 
 ## Validation result
 

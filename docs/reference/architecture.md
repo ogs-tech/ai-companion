@@ -113,6 +113,12 @@ materialized to `~/.claude/` or `~/.cursor/`. Both are flat JSON registries foll
   belonging to that workspace. Owned by `ProjectService`, re-pointed at a different file whenever the
   active workspace changes.
 
+`resolveScopePath(entity, { workspaceService, projectService })` (`src/main/application/resolve-scope-path.ts`)
+maps a `project`/`workspace`-scoped entity's `scopeId` to a concrete absolute path at the point of use — the
+Claude/Cursor adapters and `SessionService.resolveCwd` call it instead of reading a persisted path off the
+entity, so a `Project`/`Workspace` renamed or repointed after entities reference it never leaves a stale
+cached path behind.
+
 Only one workspace is "active" at a time. `workspace.switchTo` kills the outgoing workspace's live
 `claude` sessions, then rebuilds the Entity-backed service graph (`FsEntityRepository`, `AdapterManager`,
 `SymlinkManager`, `FileMaterializer`, `EntityService`, `SkillService`, `AgentService`,

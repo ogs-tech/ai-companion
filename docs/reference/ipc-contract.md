@@ -121,6 +121,7 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 |---|---|---|
 | `project.list` | — | `Project[]` |
 | `project.create` | `{ name: string; path: string }` | `Project` |
+| `project.findOrCreateByPath` | `{ path: string }` | `Project` |
 | `project.update` | `{ id: string; name?: string; path?: string }` | `Project` |
 | `project.delete` | `{ id: string }` | `void` |
 
