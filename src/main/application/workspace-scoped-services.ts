@@ -98,7 +98,7 @@ export function buildWorkspaceScopedServices(
 
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
-  const instructionService = new InstructionService(entityService, claudeCli);
+  const instructionService = new InstructionService(entityService, claudeCli, projectService);
   const sessionService = new SessionService(entityService, claudeSessionPort, dataDir, {
     workspaceService: shared.workspaceService,
     projectService,

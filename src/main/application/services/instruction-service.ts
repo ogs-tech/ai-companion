@@ -5,6 +5,7 @@ import type { SyncResult } from '../../../shared/sync-result.js';
 import { personalInstructionId, projectInstructionSlug } from '../../domain/instruction-id.js';
 import { ioError } from '../../domain/errors.js';
 import type { ClaudeCliPort } from '../ports/claude-cli-port.js';
+import type { ProjectService } from './project-service.js';
 import { buildPersonalInstructionPrompt } from './instruction-generation-prompt.js';
 import type { GenerateDraftProgressEvent } from '../../../shared/instruction-generation.js';
 
@@ -26,15 +27,30 @@ export class InstructionService {
   constructor(
     private readonly base: EntityService,
     private readonly claudeCli: ClaudeCliPort,
+    private readonly projectService: Pick<ProjectService, 'findOrCreateByPath'>,
   ) {}
+
+  /**
+   * Backfills the `scopeId` for pre-migration on-disk instructions that still
+   * carry a `legacyRepoPath` (the old `repoPath`-only shape), persisting the
+   * migrated entity so a subsequent read never sees `legacyRepoPath` again.
+   */
+  private async migrateIfLegacy(instruction: Instruction): Promise<Instruction> {
+    if (instruction.legacyRepoPath === undefined) return instruction;
+    const project = await this.projectService.findOrCreateByPath(instruction.legacyRepoPath);
+    const migrated: Instruction = { ...instruction, scopeId: project.id };
+    delete migrated.legacyRepoPath;
+    await this.base.save({ entity: migrated });
+    return migrated;
+  }
 
   /**
    * List every instruction — the personal singleton (when present) followed by
    * any project instructions found under `instructions/project/*`.
    */
   async list(): Promise<Instruction[]> {
-    const entities = await this.base.list('instruction');
-    return entities as Instruction[];
+    const entities = (await this.base.list('instruction')) as Instruction[];
+    return Promise.all(entities.map((i) => this.migrateIfLegacy(i)));
   }
 
   /**
@@ -43,12 +59,15 @@ export class InstructionService {
    * (validated by `projectInstructionSlug`).
    */
   async get(name = 'default'): Promise<Instruction> {
+    let entity: Instruction;
     if (name === 'default') {
       const id = personalInstructionId(name);
-      return (await this.base.get(entityUrn('instruction', id))) as Instruction;
+      entity = (await this.base.get(entityUrn('instruction', id))) as Instruction;
+    } else {
+      const slug = projectInstructionSlug(name);
+      entity = (await this.base.get(entityUrn('instruction', slug))) as Instruction;
     }
-    const slug = projectInstructionSlug(name);
-    return (await this.base.get(entityUrn('instruction', slug))) as Instruction;
+    return this.migrateIfLegacy(entity);
   }
 
   async save(input: { instruction: Instruction; isCreate?: boolean }): Promise<SaveInstructionResult> {

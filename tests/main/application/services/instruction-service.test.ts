@@ -5,24 +5,25 @@ import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/en
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { FakeClaudeCliPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
-import {
-  WORKSPACE_SOURCE,
-  type Instruction,
-  type PersonalInstruction,
-  type ProjectInstruction,
-} from '../../../../src/shared/entity.js';
+import { WORKSPACE_SOURCE, type Instruction } from '../../../../src/shared/entity.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
 
-const personal = (): PersonalInstruction => ({
+const personal = (): Instruction => ({
   urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
   scopes: ['personal'], metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: '# Instructions\n',
 });
 
-const project = (name = 'acme', repoPath = '/repos/acme'): ProjectInstruction => ({
+const project = (name = 'acme', scopeId = 'proj-1'): Instruction => ({
   urn: `urn:instruction:${name}`, kind: 'instruction', name, description: `${name} rules`,
-  scopes: ['project'], metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
-  source: WORKSPACE_SOURCE, content: `# ${name}\n`, repoPath,
+  scopes: ['project'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE, content: `# ${name}\n`,
+});
+
+const legacyProject = (name = 'legacy-acme', repoPath = '/repos/legacy-acme'): Instruction => ({
+  urn: `urn:instruction:${name}`, kind: 'instruction', name, description: `${name} rules`,
+  scopes: ['project'], legacyRepoPath: repoPath, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE, content: `# ${name}\n`,
 });
 
 const setup = () => {
@@ -33,7 +34,17 @@ const setup = () => {
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeCli = new FakeClaudeCliPort();
-  return { service: new InstructionService(base, claudeCli), repo, adapterManager, claudeCli };
+  const projects = new Map<string, { id: string; name: string; path: string; createdAt: string }>();
+  const projectService = {
+    findOrCreateByPath: vi.fn(async (path: string) => {
+      const existing = [...projects.values()].find((p) => p.path === path);
+      if (existing) return existing;
+      const created = { id: `proj-${projects.size + 1}`, name: path.split('/').pop() ?? path, path, createdAt: '' };
+      projects.set(created.id, created);
+      return created;
+    }),
+  };
+  return { service: new InstructionService(base, claudeCli, projectService), repo, adapterManager, claudeCli, projectService };
 };
 
 describe('InstructionService', () => {
@@ -48,8 +59,8 @@ describe('InstructionService', () => {
   it('list returns the personal instruction followed by every project instruction', async () => {
     const { service } = setup();
     await service.save({ instruction: personal(), isCreate: true });
-    await service.save({ instruction: project('acme', '/repos/acme'), isCreate: true });
-    await service.save({ instruction: project('bravo', '/repos/bravo'), isCreate: true });
+    await service.save({ instruction: project('acme', 'proj-1'), isCreate: true });
+    await service.save({ instruction: project('bravo', 'proj-2'), isCreate: true });
 
     const list = await service.list();
     const names = list.map((i) => i.name);
@@ -59,10 +70,10 @@ describe('InstructionService', () => {
 
   it('get(<slug>) validates the slug and returns the project instruction', async () => {
     const { service } = setup();
-    await service.save({ instruction: project('acme', '/repos/acme'), isCreate: true });
-    const got = await service.get('acme') as ProjectInstruction;
+    await service.save({ instruction: project('acme', 'proj-1'), isCreate: true });
+    const got = await service.get('acme');
     expect(got.name).toBe('acme');
-    expect(got.repoPath).toBe('/repos/acme');
+    expect(got.scopeId).toBe('proj-1');
   });
 
   it('get rejects an invalid slug via the domain guard', async () => {
@@ -81,7 +92,7 @@ describe('InstructionService', () => {
   it('delete("<slug>") removes a project instruction; removeSymlinks=false skips sync', async () => {
     const { service, adapterManager } = setup();
     const removeEntity = (adapterManager as unknown as { removeEntity: ReturnType<typeof vi.fn> }).removeEntity;
-    await service.save({ instruction: project('acme', '/repos/acme'), isCreate: true });
+    await service.save({ instruction: project('acme', 'proj-1'), isCreate: true });
     await service.delete({ name: 'acme', removeSymlinks: false });
     expect(removeEntity).not.toHaveBeenCalled();
   });
@@ -120,5 +131,29 @@ describe('InstructionService', () => {
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('io');
     expect((err as DomainError).message).toContain('claude CLI not found in PATH');
+  });
+
+  it('get migrates a legacy repoPath-only project instruction to a real scopeId on read', async () => {
+    const { service, projectService } = setup();
+    await service.save({ instruction: legacyProject('legacy-acme', '/repos/legacy-acme'), isCreate: true });
+    const got = await service.get('legacy-acme');
+    expect(got.scopeId).toBe('proj-1');
+    expect(got.legacyRepoPath).toBeUndefined();
+    expect(projectService.findOrCreateByPath).toHaveBeenCalledWith('/repos/legacy-acme');
+
+    // Persisted, not just returned in-memory — a second read must not re-migrate.
+    const reread = await service.get('legacy-acme');
+    expect(reread.scopeId).toBe('proj-1');
+    expect(projectService.findOrCreateByPath).toHaveBeenCalledTimes(1);
+  });
+
+  it('list migrates every legacy instruction it encounters', async () => {
+    const { service } = setup();
+    await service.save({ instruction: personal(), isCreate: true });
+    await service.save({ instruction: legacyProject('legacy-acme', '/repos/legacy-acme'), isCreate: true });
+    const list = await service.list();
+    const migrated = list.find((i) => i.name === 'legacy-acme');
+    expect(migrated?.scopeId).toBe('proj-1');
+    expect(migrated?.legacyRepoPath).toBeUndefined();
   });
 });

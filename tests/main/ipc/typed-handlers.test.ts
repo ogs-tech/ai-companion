@@ -81,7 +81,7 @@ const setupInstructionService = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  return new InstructionService(base, new FakeClaudeCliPort());
+  return new InstructionService(base, new FakeClaudeCliPort(), { findOrCreateByPath: vi.fn() });
 };
 
 describe('skill-handlers', () => {
