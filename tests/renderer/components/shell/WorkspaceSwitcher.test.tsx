@@ -76,4 +76,28 @@ describe('WorkspaceSwitcher', () => {
       expect(ipc.callIpc).toHaveBeenCalledWith('workspace.create', { name: 'client-x', rootPath: '/repos/client-x' }),
     );
   });
+
+  it('deletes a workspace via the keyboard (Enter) on the delete control', async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+    await user.click(await screen.findByTestId('workspace-switcher-trigger'));
+    const deleteControl = await screen.findByTestId('workspace-delete-w1');
+    deleteControl.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.delete', { id: 'w1' }));
+  });
+
+  it('shows an error toast when a mutation fails', async () => {
+    const user = userEvent.setup();
+    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+      if (method === 'workspace.list') return workspaces;
+      if (method === 'workspace.getActive') return workspaces[0];
+      if (method === 'workspace.switchTo') throw new Error('boom');
+      return undefined;
+    });
+    renderSwitcher();
+    await user.click(await screen.findByTestId('workspace-switcher-trigger'));
+    await user.click(await screen.findByTestId('workspace-switch-w1'));
+    expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
+  });
 });
