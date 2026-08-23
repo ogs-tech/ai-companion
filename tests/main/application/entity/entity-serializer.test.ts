@@ -99,7 +99,35 @@ describe('instruction — frontmatter-free', () => {
     expect(ins.metadata.version).toBe('1.2.3');
   });
 
-  it('emits a project instruction when name != default and sidecar.repoPath is present', () => {
+  it('emits a project instruction with scopeId when sidecar.scopeId is present', () => {
+    const raw = '# Body\n';
+    const ins = parseEntityFile({
+      kind: 'instruction', name: 'acme', raw, source: WORKSPACE_SOURCE,
+      instructionSidecar: {
+        description: 'Acme rules', version: '0.1.0', createdAt: '', updatedAt: '',
+        scope: 'project', scopeId: 'proj-1',
+      },
+    }) as Instruction;
+    expect(ins.name).toBe('acme');
+    expect(ins.scopes).toEqual(['project']);
+    expect(ins.scopeId).toBe('proj-1');
+    expect(ins.legacyRepoPath).toBeUndefined();
+  });
+
+  it('emits a workspace-scoped instruction when sidecar.scope is "workspace"', () => {
+    const raw = '# Body\n';
+    const ins = parseEntityFile({
+      kind: 'instruction', name: 'ws-wide', raw, source: WORKSPACE_SOURCE,
+      instructionSidecar: {
+        description: 'Workspace rules', version: '0.1.0', createdAt: '', updatedAt: '',
+        scope: 'workspace', scopeId: 'ws-1',
+      },
+    }) as Instruction;
+    expect(ins.scopes).toEqual(['workspace']);
+    expect(ins.scopeId).toBe('ws-1');
+  });
+
+  it('flags a legacy repoPath sidecar as scopes:["project"] with legacyRepoPath, no scopeId', () => {
     const raw = '# Body\n';
     const ins = parseEntityFile({
       kind: 'instruction', name: 'acme', raw, source: WORKSPACE_SOURCE,
@@ -108,17 +136,14 @@ describe('instruction — frontmatter-free', () => {
         repoPath: '/Users/me/projects/acme',
       },
     }) as Instruction;
-    expect(ins.name).toBe('acme');
     expect(ins.scopes).toEqual(['project']);
-    if (ins.scopes[0] !== 'project') throw new Error('narrow');
-    // Narrowing to ProjectInstruction gives access to repoPath.
-    const project = ins as Extract<Instruction, { scopes: ['project'] }>;
-    expect(project.repoPath).toBe('/Users/me/projects/acme');
+    expect(ins.scopeId).toBeUndefined();
+    expect(ins.legacyRepoPath).toBe('/Users/me/projects/acme');
   });
 
-  it('throws when a project instruction is parsed without sidecar.repoPath', () => {
+  it('throws when a non-personal instruction has neither scopeId nor legacy repoPath', () => {
     expect(() =>
       parseEntityFile({ kind: 'instruction', name: 'acme', raw: 'x', source: WORKSPACE_SOURCE }),
-    ).toThrow(/repoPath/);
+    ).toThrow(/scopeId/);
   });
 });

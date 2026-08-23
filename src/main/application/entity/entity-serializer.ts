@@ -8,8 +8,6 @@ import type {
   EntitySource,
   Instruction,
   InstructionSidecar,
-  PersonalInstruction,
-  ProjectInstruction,
   Scope,
   Skill,
 } from '../../../shared/entity.js';
@@ -50,7 +48,9 @@ function readMetadata(fm: Record<string, unknown>): EntityMetadata {
 
 function readScopes(fm: Record<string, unknown>): Scope[] {
   const raw = fm['scopes'];
-  if (Array.isArray(raw)) return raw.filter((s): s is Scope => s === 'personal' || s === 'project');
+  if (Array.isArray(raw)) {
+    return raw.filter((s): s is Scope => s === 'personal' || s === 'project' || s === 'workspace');
+  }
   return ['personal'];
 }
 
@@ -152,7 +152,7 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
       updatedAt: sidecar.updatedAt,
     };
     if (name === 'default') {
-      const personal: PersonalInstruction = {
+      const personal: Instruction = {
         urn: entityUrn('instruction', name),
         kind: 'instruction',
         name: 'default',
@@ -164,21 +164,40 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
       };
       return personal;
     }
-    if (sidecar.repoPath === undefined || sidecar.repoPath === '') {
-      throw new Error(`parseEntityFile: project instruction '${name}' requires sidecar.repoPath`);
+    if (sidecar.scopeId !== undefined && sidecar.scopeId !== '') {
+      const scoped: Instruction = {
+        urn: entityUrn('instruction', name),
+        kind: 'instruction',
+        name,
+        description: sidecar.description,
+        scopes: [sidecar.scope ?? 'project'],
+        scopeId: sidecar.scopeId,
+        metadata: meta,
+        source,
+        content: body,
+      };
+      return scoped;
     }
-    const project: ProjectInstruction = {
-      urn: entityUrn('instruction', name),
-      kind: 'instruction',
-      name,
-      description: sidecar.description,
-      scopes: ['project'],
-      metadata: meta,
-      source,
-      content: body,
-      repoPath: sidecar.repoPath,
-    };
-    return project;
+    if (sidecar.repoPath !== undefined && sidecar.repoPath !== '') {
+      // Pre-migration shape: no scopeId persisted yet. InstructionService
+      // lazily finds-or-creates a matching Project and re-saves with a real
+      // scopeId — see InstructionService.get/.list.
+      const legacy: Instruction = {
+        urn: entityUrn('instruction', name),
+        kind: 'instruction',
+        name,
+        description: sidecar.description,
+        scopes: ['project'],
+        legacyRepoPath: sidecar.repoPath,
+        metadata: meta,
+        source,
+        content: body,
+      };
+      return legacy;
+    }
+    throw new Error(
+      `parseEntityFile: non-personal instruction '${name}' requires sidecar.scopeId (or legacy sidecar.repoPath)`,
+    );
   }
   throw new Error(`parseEntityFile: unsupported kind '${kind}'`);
 }
