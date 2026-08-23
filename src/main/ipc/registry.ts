@@ -8,6 +8,9 @@ import type { AgentService } from '../application/services/agent-service.js';
 import type { InstructionService } from '../application/services/instruction-service.js';
 import type { SessionService } from '../application/services/session-service.js';
 import { buildSessionHandlers } from './session-handlers.js';
+import { buildWorkspaceHandlers } from './workspace-handlers.js';
+import type { WorkspaceService } from '../application/services/workspace-service.js';
+import type { Workspace } from '../../shared/workspace.js';
 import type { HookService } from '../application/services/hook-service.js';
 import type { MarketplaceService } from '../application/services/marketplace-service.js';
 import type { CredentialStorePort } from '../application/ports/credential-store-port.js';
@@ -43,6 +46,8 @@ export interface IpcDeps {
   hookService: HookService;
   instructionService: InstructionService;
   sessionService: SessionService;
+  workspaceService: WorkspaceService;
+  switchActiveWorkspace: (id: string) => Promise<Workspace>;
   marketplaceService: MarketplaceService;
   healthService: HealthService;
   mcpService: McpService;
@@ -83,6 +88,8 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     hookService,
     instructionService,
     sessionService,
+    workspaceService,
+    switchActiveWorkspace,
     marketplaceService,
     healthService,
     mcpService,
@@ -205,6 +212,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildHookHandlers(hookService),
     ...buildInstructionHandlers(instructionService, emitInstructionGenerateProgress),
     ...buildSessionHandlers(sessionService),
+    ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace),
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),

@@ -13,6 +13,10 @@ import type { AdapterManager } from '../../../src/main/application/services/adap
 import { FakeClaudeCliPort } from '../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import { WORKSPACE_SOURCE, type Skill, type Agent, type Instruction } from '../../../src/shared/entity.js';
+import { buildWorkspaceHandlers } from '../../../src/main/ipc/workspace-handlers.js';
+import { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
+import { InMemoryWorkspaceRegistry } from '../../../src/main/infrastructure/workspace/in-memory-workspace-registry.js';
+import type { Workspace } from '../../../src/shared/workspace.js';
 
 const skill = (name = 'foo'): Skill => ({
   urn: `urn:skill:${name}`,
@@ -248,5 +252,66 @@ describe('marketplace-handlers', () => {
     const h = buildMarketplaceHandlers(svc);
     await h['marketplace.refresh']!({ scope: 'personal', id: 'foo' });
     expect(svc.refresh).toHaveBeenCalledWith('personal', 'foo');
+  });
+});
+
+const setupWorkspaceService = () => {
+  const registry = new InMemoryWorkspaceRegistry();
+  const bootstrap = { create: vi.fn().mockResolvedValue(undefined) };
+  return new WorkspaceService(registry, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), bootstrap, '/home/u');
+};
+
+describe('workspace-handlers', () => {
+  it('workspace.list calls service.list', async () => {
+    const svc = setupWorkspaceService();
+    const spy = vi.spyOn(svc, 'list');
+    const h = buildWorkspaceHandlers(svc, vi.fn());
+    await h['workspace.list']!({});
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('workspace.getActive calls service.getActive', async () => {
+    const svc = setupWorkspaceService();
+    const spy = vi.spyOn(svc, 'getActive');
+    const h = buildWorkspaceHandlers(svc, vi.fn());
+    await h['workspace.getActive']!({});
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('workspace.create passes name and rootPath through', async () => {
+    const svc = setupWorkspaceService();
+    const spy = vi.spyOn(svc, 'create');
+    const h = buildWorkspaceHandlers(svc, vi.fn());
+    await h['workspace.create']!({ name: 'Acme', rootPath: '/repos/acme' });
+    expect(spy).toHaveBeenCalledWith({ name: 'Acme', rootPath: '/repos/acme' });
+  });
+
+  it('workspace.switchTo calls the injected switchActiveWorkspace, not service.switchTo directly', async () => {
+    const svc = setupWorkspaceService();
+    const serviceSpy = vi.spyOn(svc, 'switchTo');
+    const orchestrated: Workspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
+    const switchActiveWorkspace = vi.fn().mockResolvedValue(orchestrated);
+    const h = buildWorkspaceHandlers(svc, switchActiveWorkspace);
+    const result = await h['workspace.switchTo']!({ id: 'w1' });
+    expect(switchActiveWorkspace).toHaveBeenCalledWith('w1');
+    expect(serviceSpy).not.toHaveBeenCalled();
+    expect(result).toEqual(orchestrated);
+  });
+
+  it('workspace.delete passes the id through', async () => {
+    const svc = setupWorkspaceService();
+    // Stubbed rather than a plain call-through spy: `service.delete` rejects with
+    // not_found for any id not already in the (freshly-seeded) registry, and
+    // `WorkspaceService.create` only ever assigns random UUIDs, so a known id like
+    // 'w1' can't be pre-created. This test only cares that the id is forwarded.
+    const spy = vi.spyOn(svc, 'delete').mockResolvedValue(undefined);
+    const h = buildWorkspaceHandlers(svc, vi.fn());
+    await h['workspace.delete']!({ id: 'w1' });
+    expect(spy).toHaveBeenCalledWith('w1');
+  });
+
+  it('workspace.create rejects a missing name', async () => {
+    const h = buildWorkspaceHandlers(setupWorkspaceService(), vi.fn());
+    await expect(h['workspace.create']!({ rootPath: '/repos/acme' })).rejects.toMatchObject({ kind: 'validation' });
   });
 });
