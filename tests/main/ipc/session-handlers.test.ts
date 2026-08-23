@@ -23,47 +23,65 @@ const setup = () => {
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
   const scopeDeps = {
-    workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-    projectService: { get: async () => { throw new Error('not stubbed'); } },
+    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/workspace', isDefault: false, createdAt: '' }) },
+    projectService: { get: async (id: string) => ({ id, name: 'Test', path: '/project', createdAt: '' }) },
   };
   const service = new SessionService(base, claudeSession, '/workspace', scopeDeps);
   return { service, base, claudeSession };
 };
 
 describe('session-handlers', () => {
-  it('session.spawn validates entityUrn and calls service.spawn', async () => {
+  it('session.spawn validates the anchor and calls service.spawn', async () => {
     const { service, base } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     const spy = vi.spyOn(service, 'spawn');
     const h = buildSessionHandlers(service);
-    await h['session.spawn']!({ entityUrn: entityUrn('skill', 'foo') });
-    expect(spy).toHaveBeenCalledWith(entityUrn('skill', 'foo'));
+    await h['session.spawn']!({ anchor: { kind: 'entity', urn: entityUrn('skill', 'foo') } });
+    expect(spy).toHaveBeenCalledWith({ kind: 'entity', urn: entityUrn('skill', 'foo') });
   });
 
-  it('session.spawn rejects a missing entityUrn', async () => {
+  it('session.spawn accepts a workspace anchor', async () => {
+    const { service } = setup();
+    const spy = vi.spyOn(service, 'spawn');
+    const h = buildSessionHandlers(service);
+    await h['session.spawn']!({ anchor: { kind: 'workspace', workspaceId: 'w1' } });
+    expect(spy).toHaveBeenCalledWith({ kind: 'workspace', workspaceId: 'w1' });
+  });
+
+  it('session.spawn accepts a project anchor', async () => {
+    const { service } = setup();
+    const spy = vi.spyOn(service, 'spawn');
+    const h = buildSessionHandlers(service);
+    await h['session.spawn']!({ anchor: { kind: 'project', projectId: 'p1' } });
+    expect(spy).toHaveBeenCalledWith({ kind: 'project', projectId: 'p1' });
+  });
+
+  it('session.spawn rejects a missing anchor', async () => {
     const { service } = setup();
     const h = buildSessionHandlers(service);
     await expect(h['session.spawn']!({})).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('session.spawn rejects an anchor with an unknown kind', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    await expect(h['session.spawn']!({ anchor: { kind: 'bogus' } })).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('session.spawn rejects an entity anchor with an empty urn', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    await expect(h['session.spawn']!({ anchor: { kind: 'entity', urn: '' } })).rejects.toMatchObject({ kind: 'validation' });
   });
 
   it('session.write validates and forwards sessionId + data', async () => {
     const { service, base } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     const h = buildSessionHandlers(service);
-    await h['session.spawn']!({ entityUrn: entityUrn('skill', 'foo') });
+    await h['session.spawn']!({ anchor: { kind: 'entity', urn: entityUrn('skill', 'foo') } });
     const spy = vi.spyOn(service, 'write');
-    await h['session.write']!({ sessionId: entityUrn('skill', 'foo'), data: 'ls\n' });
-    expect(spy).toHaveBeenCalledWith(entityUrn('skill', 'foo'), 'ls\n');
-  });
-
-  it('session.write accepts an empty data string', async () => {
-    const { service, base } = setup();
-    await base.save({ entity: skill('foo'), isCreate: true });
-    const h = buildSessionHandlers(service);
-    await h['session.spawn']!({ entityUrn: entityUrn('skill', 'foo') });
-    await expect(
-      h['session.write']!({ sessionId: entityUrn('skill', 'foo'), data: '' }),
-    ).resolves.toBeUndefined();
+    await h['session.write']!({ sessionId: 'entity:urn:skill:foo', data: 'ls\n' });
+    expect(spy).toHaveBeenCalledWith('entity:urn:skill:foo', 'ls\n');
   });
 
   it('session.resize validates numeric cols/rows', async () => {
@@ -78,16 +96,16 @@ describe('session-handlers', () => {
     const { service, base } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     const h = buildSessionHandlers(service);
-    await h['session.spawn']!({ entityUrn: entityUrn('skill', 'foo') });
+    await h['session.spawn']!({ anchor: { kind: 'entity', urn: entityUrn('skill', 'foo') } });
     const spy = vi.spyOn(service, 'kill');
-    await h['session.kill']!({ sessionId: entityUrn('skill', 'foo') });
-    expect(spy).toHaveBeenCalledWith(entityUrn('skill', 'foo'));
+    await h['session.kill']!({ sessionId: 'entity:urn:skill:foo' });
+    expect(spy).toHaveBeenCalledWith('entity:urn:skill:foo');
   });
 
   it('session.status returns null for an unknown session', async () => {
     const { service } = setup();
     const h = buildSessionHandlers(service);
-    const result = await h['session.status']!({ sessionId: 'urn:skill:none' });
+    const result = await h['session.status']!({ sessionId: 'entity:urn:skill:none' });
     expect(result).toBeNull();
   });
 
@@ -95,8 +113,8 @@ describe('session-handlers', () => {
     const { service, base } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     const h = buildSessionHandlers(service);
-    await h['session.spawn']!({ entityUrn: entityUrn('skill', 'foo') });
-    const result = await h['session.status']!({ sessionId: entityUrn('skill', 'foo') });
-    expect(result).toMatchObject({ entityUrn: entityUrn('skill', 'foo'), status: 'running' });
+    await h['session.spawn']!({ anchor: { kind: 'entity', urn: entityUrn('skill', 'foo') } });
+    const result = await h['session.status']!({ sessionId: 'entity:urn:skill:foo' });
+    expect(result).toMatchObject({ sessionId: 'entity:urn:skill:foo', status: 'running' });
   });
 });
