@@ -361,4 +361,12 @@ describe('project-handlers', () => {
     const h = buildProjectHandlers(setupProjectService());
     await expect(h['project.create']!({ name: 'acme' })).rejects.toMatchObject({ kind: 'validation' });
   });
+
+  it('project.findOrCreateByPath passes the path through', async () => {
+    const svc = setupProjectService();
+    const spy = vi.spyOn(svc, 'findOrCreateByPath');
+    const h = buildProjectHandlers(svc);
+    await h['project.findOrCreateByPath']!({ path: '/repos/acme' });
+    expect(spy).toHaveBeenCalledWith('/repos/acme');
+  });
 });

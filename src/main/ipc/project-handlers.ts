@@ -12,6 +12,10 @@ export function buildProjectHandlers(service: ProjectService): IpcHandlers {
         path: asString(raw['path'], 'path'),
       });
     },
+    'project.findOrCreateByPath': async (params) => {
+      const raw = asObject(params, 'project.findOrCreateByPath');
+      return service.findOrCreateByPath(asString(raw['path'], 'path'));
+    },
     'project.update': async (params) => {
       const raw = asObject(params, 'project.update');
       const name = typeof raw['name'] === 'string' ? raw['name'] : undefined;
