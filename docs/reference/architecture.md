@@ -114,9 +114,9 @@ materialized to `~/.claude/` or `~/.cursor/`. Both are flat JSON registries foll
 Only one workspace is "active" at a time. `workspace.switchTo` kills the outgoing workspace's live
 `claude` sessions, then rebuilds the Entity-backed service graph (`FsEntityRepository`, `AdapterManager`,
 `SymlinkManager`, `FileMaterializer`, `EntityService`, `SkillService`, `AgentService`,
-`InstructionService`, `SessionService`, `ProjectService`, `HealthService`) against the new workspace's
-data dir via `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`) — see
-`src/main/index.ts`'s `switchActiveWorkspace`. Plugin installs, marketplaces, MCP config, and adapter
+`InstructionService`, `SessionService`, `ProjectService`, `HealthService`, `WorkspaceTeardownService`)
+against the new workspace's data dir via `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`)
+— see `src/main/index.ts`'s `switchActiveWorkspace`. Plugin installs, marketplaces, MCP config, and adapter
 on/off settings stay anchored to the workspace active at app startup; they are not (yet) per-workspace.
 
 ## Renderer structure

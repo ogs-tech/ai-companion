@@ -107,8 +107,8 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 
 | Method | Params | Result |
 |---|---|---|
-| `workspace.list` | – | `Workspace[]` |
-| `workspace.getActive` | – | `Workspace` |
+| `workspace.list` | — | `Workspace[]` |
+| `workspace.getActive` | — | `Workspace` |
 | `workspace.create` | `{ name: string; rootPath: string }` | `Workspace` |
 | `workspace.switchTo` | `{ id: string }` | `Workspace` |
 | `workspace.delete` | `{ id: string }` | `void` |
@@ -119,7 +119,7 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 
 | Method | Params | Result |
 |---|---|---|
-| `project.list` | – | `Project[]` |
+| `project.list` | — | `Project[]` |
 | `project.create` | `{ name: string; path: string }` | `Project` |
 | `project.update` | `{ id: string; name?: string; path?: string }` | `Project` |
 | `project.delete` | `{ id: string }` | `void` |
