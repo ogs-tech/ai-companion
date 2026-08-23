@@ -73,21 +73,21 @@ describe('FsEntityRepository — list & delete', () => {
 });
 
 describe('FsEntityRepository — project instruction storage', () => {
-  const projectInstruction = (name = 'acme', repoPath = '/repos/acme'): Instruction => ({
+  const projectInstruction = (name = 'acme', scopeId = 'proj-1'): Instruction => ({
     urn: `urn:instruction:${name}`,
     kind: 'instruction',
     name,
     description: `${name} rules`,
     scopes: ['project'],
+    scopeId,
     metadata: meta,
     source: WORKSPACE_SOURCE,
     content: `# ${name}\n\nProject-only rules.\n`,
-    repoPath,
-  } as Instruction);
+  });
 
-  it('save writes body under project/<slug>/INSTRUCTION.md and meta.json alongside it', async () => {
+  it('save writes body under project/<slug>/INSTRUCTION.md and meta.json with scope+scopeId', async () => {
     const repo = new FsEntityRepository(ws);
-    await repo.save(projectInstruction('acme', '/repos/acme'));
+    await repo.save(projectInstruction('acme', 'proj-1'));
 
     const body = await readFile(join(ws, 'instructions', 'project', 'acme', 'INSTRUCTION.md'), 'utf8');
     expect(body.startsWith('---')).toBe(false);
@@ -99,19 +99,40 @@ describe('FsEntityRepository — project instruction storage', () => {
     expect(metaJson).toMatchObject({
       description: 'acme rules',
       version: '0.1.0',
-      repoPath: '/repos/acme',
+      scope: 'project',
+      scopeId: 'proj-1',
     });
+    expect(metaJson.repoPath).toBeUndefined();
   });
 
-  it('get rehydrates repoPath, description and version from meta.json', async () => {
+  it('get rehydrates scopeId, description and version from meta.json', async () => {
     const repo = new FsEntityRepository(ws);
-    await repo.save(projectInstruction('bravo', '/repos/bravo'));
-    const back = (await repo.get('urn:instruction:bravo')) as Extract<Instruction, { scopes: ['project'] }>;
+    await repo.save(projectInstruction('bravo', 'proj-2'));
+    const back = (await repo.get('urn:instruction:bravo')) as Instruction;
     expect(back.name).toBe('bravo');
-    expect(back.repoPath).toBe('/repos/bravo');
+    expect(back.scopeId).toBe('proj-2');
+    expect(back.scopes).toEqual(['project']);
     expect(back.description).toBe('bravo rules');
     expect(back.metadata.version).toBe('0.1.0');
     expect(back.content).toContain('Project-only rules.');
+  });
+
+  it('get surfaces a legacy repoPath-only meta.json as legacyRepoPath with no scopeId', async () => {
+    const dir = join(ws, 'instructions', 'project', 'legacy-acme');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'INSTRUCTION.md'), '# Legacy project rules\n', 'utf8');
+    await writeFile(
+      join(dir, 'meta.json'),
+      `${JSON.stringify({
+        description: 'legacy rules', version: '0.1.0', createdAt: '', updatedAt: '',
+        repoPath: '/repos/legacy-acme',
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    const repo = new FsEntityRepository(ws);
+    const back = (await repo.get('urn:instruction:legacy-acme')) as Instruction;
+    expect(back.scopeId).toBeUndefined();
+    expect(back.legacyRepoPath).toBe('/repos/legacy-acme');
   });
 
   it('get rejects with not_found when the body is present but meta.json is missing', async () => {

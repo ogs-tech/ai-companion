@@ -216,17 +216,19 @@ export class FsEntityRepository implements EntityRepository {
       await writeFileAtomic(path, body);
       return entity;
     }
-    // Project: write body + meta.json atomically-per-file.
+    // Project/workspace: write body + meta.json atomically-per-file.
     const paths = await this.projectInstructionPaths(entity.name);
     await mkdir(paths.dir, { recursive: true });
     const body = renderEntityFile(entity);
+    const scope = entity.scopes[0];
     const sidecar: InstructionSidecar = {
       description: entity.description,
       version: entity.metadata.version,
       ...(entity.metadata.tags !== undefined ? { tags: entity.metadata.tags } : {}),
       createdAt: entity.metadata.createdAt,
       updatedAt: entity.metadata.updatedAt,
-      repoPath: (entity as Extract<Instruction, { scopes: ['project'] }>).repoPath,
+      ...(scope === 'project' || scope === 'workspace' ? { scope } : {}),
+      ...(entity.scopeId !== undefined ? { scopeId: entity.scopeId } : {}),
     };
     await writeFileAtomic(paths.body, body);
     await writeFileAtomic(paths.meta, `${JSON.stringify(sidecar, null, 2)}\n`);
@@ -336,12 +338,15 @@ function parseSidecar(raw: string, urn: string): InstructionSidecar {
   const obj = parsed as Record<string, unknown>;
   const str = (key: string, def = ''): string =>
     typeof obj[key] === 'string' ? (obj[key] as string) : def;
+  const scopeRaw = obj['scope'];
   const sidecar: InstructionSidecar = {
     description: str('description'),
     version: str('version', '0.0.0'),
     createdAt: str('createdAt'),
     updatedAt: str('updatedAt'),
     ...(Array.isArray(obj['tags']) ? { tags: obj['tags'] as string[] } : {}),
+    ...(scopeRaw === 'project' || scopeRaw === 'workspace' ? { scope: scopeRaw } : {}),
+    ...(typeof obj['scopeId'] === 'string' ? { scopeId: obj['scopeId'] } : {}),
     ...(typeof obj['repoPath'] === 'string' ? { repoPath: obj['repoPath'] } : {}),
   };
   return sidecar;
