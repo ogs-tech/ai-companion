@@ -1,6 +1,6 @@
 export type EntityKind = 'skill' | 'agent' | 'mcp' | 'instruction' | 'hook';
 
-export type Scope = 'personal' | 'project';
+export type Scope = 'personal' | 'project' | 'workspace';
 
 export type EntityProvenance = 'workspace-managed' | 'claude-code';
 
@@ -33,6 +33,7 @@ export interface Entity {
   name: string;
   description: string;
   scopes: Scope[];
+  scopeId?: string;
   metadata: EntityMetadata;
   source: EntitySource;
   ext?: Record<string, unknown>;
@@ -52,30 +53,25 @@ export interface Agent extends Entity {
   deniedTools?: string[];
 }
 
-// The Personal instruction is a singleton (name === 'default', scopes === ['personal']).
-// A Project instruction is created per-repo — the entity itself carries the
-// absolute path of the repo it belongs to via `repoPath`.
-export interface PersonalInstruction extends Entity {
+/**
+ * `name === 'default'` and `scopes === ['personal']` identify the personal
+ * singleton; any other instruction carries `scopes[0] === 'project' | 'workspace'`
+ * and a `scopeId` resolved against `Project.id` / `Workspace.id` (see
+ * `resolveScopePath`). `legacyRepoPath` is set only on read, only for
+ * pre-migration on-disk data that predates `scopeId` — see
+ * `InstructionService.get`/`.list`.
+ */
+export interface Instruction extends Entity {
   kind: 'instruction';
-  name: 'default';
-  scopes: ['personal'];
   content: string;
+  legacyRepoPath?: string;
 }
 
-export interface ProjectInstruction extends Entity {
-  kind: 'instruction';
-  scopes: ['project'];
-  content: string;
-  repoPath: string;
-}
-
-export type Instruction = PersonalInstruction | ProjectInstruction;
-
-export function isPersonalInstruction(entity: Instruction): entity is PersonalInstruction {
+export function isPersonalInstruction(entity: Instruction): boolean {
   return entity.scopes[0] === 'personal';
 }
 
-export function isProjectInstruction(entity: Instruction): entity is ProjectInstruction {
+export function isProjectInstruction(entity: Instruction): boolean {
   return entity.scopes[0] === 'project';
 }
 
@@ -92,6 +88,10 @@ export interface InstructionSidecar {
   tags?: string[];
   createdAt: string;
   updatedAt: string;
+  /** Current shape (post scopeId migration). */
+  scope?: 'project' | 'workspace';
+  scopeId?: string;
+  /** Legacy shape — read-only. Never written again after the scopeId migration lands. */
   repoPath?: string;
 }
 

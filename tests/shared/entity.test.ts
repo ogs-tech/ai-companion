@@ -4,7 +4,10 @@ import {
   parseUrn,
   isPluginSource,
   isWorkspaceSource,
+  isPersonalInstruction,
+  isProjectInstruction,
   WORKSPACE_SOURCE,
+  type Instruction,
   type Skill,
 } from '../../src/shared/entity.js';
 
@@ -49,5 +52,41 @@ describe('Skill type', () => {
       content: '# Demo\n',
     };
     expect(skill.kind).toBe('skill');
+  });
+});
+
+describe('Instruction scoping', () => {
+  const base = {
+    urn: 'urn:instruction:x',
+    kind: 'instruction' as const,
+    description: '',
+    metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+    source: WORKSPACE_SOURCE,
+    content: '# Body\n',
+  };
+
+  it('isPersonalInstruction / isProjectInstruction read scopes[0]', () => {
+    const personal: Instruction = { ...base, name: 'default', scopes: ['personal'] };
+    const project: Instruction = { ...base, name: 'acme', scopes: ['project'], scopeId: 'proj-1' };
+    expect(isPersonalInstruction(personal)).toBe(true);
+    expect(isProjectInstruction(personal)).toBe(false);
+    expect(isProjectInstruction(project)).toBe(true);
+    expect(isPersonalInstruction(project)).toBe(false);
+  });
+
+  it('accepts a workspace-scoped instruction with scopeId', () => {
+    const workspaceScoped: Instruction = {
+      ...base, name: 'ws-wide', scopes: ['workspace'], scopeId: 'ws-1',
+    };
+    expect(workspaceScoped.scopes[0]).toBe('workspace');
+    expect(workspaceScoped.scopeId).toBe('ws-1');
+  });
+
+  it('carries legacyRepoPath instead of scopeId for pre-migration data', () => {
+    const legacy: Instruction = {
+      ...base, name: 'legacy-acme', scopes: ['project'], legacyRepoPath: '/repos/legacy-acme',
+    };
+    expect(legacy.scopeId).toBeUndefined();
+    expect(legacy.legacyRepoPath).toBe('/repos/legacy-acme');
   });
 });
