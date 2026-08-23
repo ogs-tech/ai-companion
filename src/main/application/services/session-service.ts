@@ -1,5 +1,6 @@
-import type { Entity, Instruction } from '../../../shared/entity.js';
-import type { SessionSnapshot, SessionStatus } from '../../../shared/session.js';
+import type { Instruction } from '../../../shared/entity.js';
+import type { SessionAnchor, SessionSnapshot, SessionStatus } from '../../../shared/session.js';
+import { sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
 import type { ClaudeSessionPort } from '../ports/claude-session-port.js';
 import type { WorkspaceService } from './workspace-service.js';
@@ -14,9 +15,9 @@ export type SessionOutputListener = (sessionId: string, chunk: string) => void;
 export type SessionStatusListener = (sessionId: string, status: SessionStatus, exitCode: number) => void;
 
 /**
- * Owns the one-live-session-per-entity invariant. `sessionId` is always the
- * entity's own urn — since only one session can be live per entity, there's
- * no need for a separate generated id.
+ * Owns the one-live-session-per-anchor invariant. `sessionId` is always
+ * `sessionAnchorKey(anchor)` — since only one session can be live per
+ * anchor, there's no need for a separate generated id.
  */
 export class SessionService {
   private readonly sessions = new Map<string, SessionSnapshot>();
@@ -43,19 +44,19 @@ export class SessionService {
     });
   }
 
-  async spawn(entityUrn: string): Promise<SessionSnapshot> {
-    const existing = this.sessions.get(entityUrn);
+  async spawn(anchor: SessionAnchor): Promise<SessionSnapshot> {
+    const sessionId = sessionAnchorKey(anchor);
+    const existing = this.sessions.get(sessionId);
     if (existing && existing.status === 'running') return existing;
 
-    const pendingSpawn = this.pending.get(entityUrn);
+    const pendingSpawn = this.pending.get(sessionId);
     if (pendingSpawn) return pendingSpawn;
 
     const spawnPromise = (async () => {
-      const entity = await this.entityService.get(entityUrn);
-      const cwd = await this.resolveCwd(entity);
+      const cwd = await this.resolveCwd(anchor);
 
       try {
-        await this.claudeSession.spawn(entityUrn, cwd, { cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
+        await this.claudeSession.spawn(sessionId, cwd, { cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
       } catch (err) {
         throw ioError({
           message: `Failed to start a claude session: ${(err as Error).message}`,
@@ -63,14 +64,14 @@ export class SessionService {
         });
       }
 
-      const session: SessionSnapshot = { entityUrn, cwd, status: 'running' };
-      this.sessions.set(entityUrn, session);
+      const session: SessionSnapshot = { sessionId, anchor, cwd, status: 'running' };
+      this.sessions.set(sessionId, session);
       return session;
     })().finally(() => {
-      this.pending.delete(entityUrn);
+      this.pending.delete(sessionId);
     });
 
-    this.pending.set(entityUrn, spawnPromise);
+    this.pending.set(sessionId, spawnPromise);
     return spawnPromise;
   }
 
@@ -114,7 +115,14 @@ export class SessionService {
     this.exitListeners.push(listener);
   }
 
-  private async resolveCwd(entity: Entity): Promise<string> {
+  private async resolveCwd(anchor: SessionAnchor): Promise<string> {
+    if (anchor.kind === 'workspace') {
+      return (await this.scopeDeps.workspaceService.get(anchor.workspaceId)).rootPath;
+    }
+    if (anchor.kind === 'project') {
+      return (await this.scopeDeps.projectService.get(anchor.projectId)).path;
+    }
+    const entity = await this.entityService.get(anchor.urn);
     if (entity.kind === 'instruction') {
       const instruction = entity as Instruction;
       if (instruction.scopes[0] !== 'personal') {

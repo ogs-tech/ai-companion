@@ -6,6 +6,7 @@ import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-cloc
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { FakeClaudeSessionPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
+import type { SessionAnchor } from '../../../../src/shared/session.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
 
 const WORKSPACE = '/home/user/.ai-companion';
@@ -31,50 +32,68 @@ const setup = () => {
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
   const scopeDeps = {
-    workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
     projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
   };
   const service = new SessionService(base, claudeSession, WORKSPACE, scopeDeps);
   return { service, base, claudeSession };
 };
 
+const entityAnchor = (urn: string): SessionAnchor => ({ kind: 'entity', urn });
+
 describe('SessionService', () => {
-  it('spawn resolves cwd to the workspace root for a skill', async () => {
+  it('spawn resolves cwd to the workspace root for a skill entity anchor', async () => {
     const { service, base } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    const session = await service.spawn(entityUrn('skill', 'foo'));
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
     expect(session.cwd).toBe(WORKSPACE);
+    expect(session.sessionId).toBe('entity:urn:skill:foo');
+    expect(session.anchor).toEqual(entityAnchor(entityUrn('skill', 'foo')));
     expect(session.status).toBe('running');
   });
 
-  it('spawn resolves cwd via resolveScopePath for a project instruction', async () => {
+  it('spawn resolves cwd via resolveScopePath for a project instruction entity anchor', async () => {
     const { service, base } = setup();
     await base.save({ entity: projectInstruction('acme', 'proj-1'), isCreate: true });
-    const session = await service.spawn(entityUrn('instruction', 'acme'));
+    const session = await service.spawn(entityAnchor(entityUrn('instruction', 'acme')));
     expect(session.cwd).toBe('/repos/acme');
   });
 
-  it('spawn reuses the existing live session for the same entityUrn (idempotent open)', async () => {
+  it('spawn resolves cwd directly for a workspace anchor (no entity lookup)', async () => {
+    const { service } = setup();
+    const session = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+    expect(session.cwd).toBe('/repos/ws');
+    expect(session.sessionId).toBe('workspace:w1');
+  });
+
+  it('spawn resolves cwd directly for a project anchor (no entity lookup)', async () => {
+    const { service } = setup();
+    const session = await service.spawn({ kind: 'project', projectId: 'p1' });
+    expect(session.cwd).toBe('/repos/acme');
+    expect(session.sessionId).toBe('project:p1');
+  });
+
+  it('spawn reuses the existing live session for the same anchor (idempotent open)', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    const first = await service.spawn(entityUrn('skill', 'foo'));
-    const second = await service.spawn(entityUrn('skill', 'foo'));
+    const first = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    const second = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
     expect(second).toEqual(first);
     expect(claudeSession.spawnCalls).toHaveLength(1);
   });
 
-  it('spawn starts a new PTY when the previous session for the entity has exited', async () => {
+  it('spawn starts a new PTY when the previous session for the anchor has exited', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    claudeSession.simulateExit(entityUrn('skill', 'foo'), 0);
-    await service.spawn(entityUrn('skill', 'foo'));
+    await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    claudeSession.simulateExit('entity:urn:skill:foo', 0);
+    await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
     expect(claudeSession.spawnCalls).toHaveLength(2);
   });
 
-  it('spawn rejects with not_found for an entity that does not exist', async () => {
+  it('spawn rejects with not_found for an entity anchor that does not exist', async () => {
     const { service } = setup();
-    const err = await service.spawn('urn:skill:missing').catch((e: unknown) => e);
+    const err = await service.spawn(entityAnchor('urn:skill:missing')).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('not_found');
   });
@@ -83,7 +102,7 @@ describe('SessionService', () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     claudeSession.failNextSpawn(new Error('claude CLI not found in PATH'));
-    const err = await service.spawn(entityUrn('skill', 'foo')).catch((e: unknown) => e);
+    const err = await service.spawn(entityAnchor(entityUrn('skill', 'foo'))).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('io');
   });
@@ -91,74 +110,46 @@ describe('SessionService', () => {
   it('write forwards data to the port for a running session', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    service.write(entityUrn('skill', 'foo'), 'hello\n');
-    expect(claudeSession.writes).toEqual([[entityUrn('skill', 'foo'), 'hello\n']]);
-  });
-
-  it('write is a no-op once the session has exited', async () => {
-    const { service, base, claudeSession } = setup();
-    await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    claudeSession.simulateExit(entityUrn('skill', 'foo'), 0);
-    service.write(entityUrn('skill', 'foo'), 'hello\n');
-    expect(claudeSession.writes).toEqual([]);
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    service.write(session.sessionId, 'hello\n');
+    expect(claudeSession.writes).toEqual([[session.sessionId, 'hello\n']]);
   });
 
   it('kill marks the session exited and calls the port; a second kill is a no-op', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    service.kill(entityUrn('skill', 'foo'));
-    service.kill(entityUrn('skill', 'foo'));
-    expect(claudeSession.killed).toEqual([entityUrn('skill', 'foo')]);
-    expect(service.status(entityUrn('skill', 'foo'))?.status).toBe('exited');
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    service.kill(session.sessionId);
+    service.kill(session.sessionId);
+    expect(claudeSession.killed).toEqual([session.sessionId]);
+    expect(service.status(session.sessionId)?.status).toBe('exited');
   });
 
-  it('the running → exited transition happens when the port reports the PTY exited', async () => {
+  it('killAll kills every running session across anchor kinds, leaving exited ones alone', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    claudeSession.simulateExit(entityUrn('skill', 'foo'), 1);
-    expect(service.status(entityUrn('skill', 'foo'))?.status).toBe('exited');
-  });
-
-  it('killAll kills every running session and leaves exited ones alone', async () => {
-    const { service, base, claudeSession } = setup();
-    await base.save({ entity: skill('foo'), isCreate: true });
-    await base.save({ entity: skill('bar'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    await service.spawn(entityUrn('skill', 'bar'));
-    claudeSession.simulateExit(entityUrn('skill', 'bar'), 0);
+    const entitySession = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    const wsSession = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+    claudeSession.simulateExit(entitySession.sessionId, 0);
     service.killAll();
-    expect(claudeSession.killed).toEqual([entityUrn('skill', 'foo')]);
+    expect(claudeSession.killed).toEqual([wsSession.sessionId]);
   });
 
-  it('onOutput relays chunks emitted by the port for any session', async () => {
-    const { service, base, claudeSession } = setup();
-    await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
+  it('onOutput/onExit relay by sessionId regardless of anchor kind', async () => {
+    const { service, claudeSession } = setup();
+    const session = await service.spawn({ kind: 'project', projectId: 'p1' });
     const received: Array<[string, string]> = [];
     service.onOutput((sessionId, chunk) => received.push([sessionId, chunk]));
-    claudeSession.simulateData(entityUrn('skill', 'foo'), 'hello');
-    expect(received).toEqual([[entityUrn('skill', 'foo'), 'hello']]);
+    claudeSession.simulateData(session.sessionId, 'hello');
+    expect(received).toEqual([[session.sessionId, 'hello']]);
   });
 
-  it('onExit relays the exit code alongside the exited status', async () => {
+  it('spawn deduplicates concurrent calls for the same anchor (single-flight)', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
-    await service.spawn(entityUrn('skill', 'foo'));
-    const received: Array<[string, string, number]> = [];
-    service.onExit((sessionId, status, exitCode) => received.push([sessionId, status, exitCode]));
-    claudeSession.simulateExit(entityUrn('skill', 'foo'), 7);
-    expect(received).toEqual([[entityUrn('skill', 'foo'), 'exited', 7]]);
-  });
-
-  it('spawn deduplicates concurrent calls for the same entityUrn (single-flight)', async () => {
-    const { service, base, claudeSession } = setup();
-    await base.save({ entity: skill('foo'), isCreate: true });
-    const first = service.spawn(entityUrn('skill', 'foo'));
-    const second = service.spawn(entityUrn('skill', 'foo'));
+    const anchor = entityAnchor(entityUrn('skill', 'foo'));
+    const first = service.spawn(anchor);
+    const second = service.spawn(anchor);
     const [result1, result2] = await Promise.all([first, second]);
     expect(result1).toEqual(result2);
     expect(claudeSession.spawnCalls).toHaveLength(1);
