@@ -6,6 +6,7 @@ import { Icon } from '../ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from '../ds/StatusPill.js';
 import { useThemeMode } from '../../lib/theme-mode-context.js';
 import { NAV_AREAS, type Area } from './nav.js';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 
 interface TopNavProps {
   active: Area;
@@ -100,6 +101,8 @@ export function TopNav({
               ⌘K
             </Button>
           </Tooltip>
+
+          <WorkspaceSwitcher />
 
           {healthSeverity !== undefined && (
             <StatusPill
