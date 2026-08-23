@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { basename } from 'node:path';
+import { basename, isAbsolute } from 'node:path';
 import type { Project, ProjectRegistryFile } from '../../../shared/project.js';
 import type { ProjectRegistry } from '../ports/project-registry.js';
 import type { ClockPort } from '../ports/clock-port.js';
@@ -26,6 +26,11 @@ export class ProjectService {
   }
 
   async create(input: { name: string; path: string }): Promise<Project> {
+    if (!isAbsolute(input.path)) {
+      throw new DomainError('validation', `Project path must be absolute: ${input.path}`, {
+        reason: 'relative-path',
+      });
+    }
     const registry = await this.load();
     const project: Project = {
       id: randomUUID(),
@@ -38,6 +43,11 @@ export class ProjectService {
   }
 
   async update(input: { id: string; name?: string; path?: string }): Promise<Project> {
+    if (input.path !== undefined && !isAbsolute(input.path)) {
+      throw new DomainError('validation', `Project path must be absolute: ${input.path}`, {
+        reason: 'relative-path',
+      });
+    }
     const registry = await this.load();
     const index = registry.projects.findIndex((p) => p.id === input.id);
     const current = index === -1 ? undefined : registry.projects[index];

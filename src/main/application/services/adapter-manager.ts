@@ -71,7 +71,15 @@ export class AdapterManager {
     const results: SyncResult[] = [];
     for (const entity of entities) {
       for (const adapter of enabledAdapters) {
-        const destinations = await adapter.resolveEntityDestinations({ entity });
+        let destinations: AdapterDestination[];
+        try {
+          destinations = await adapter.resolveEntityDestinations({ entity });
+        } catch (err) {
+          // One entity's resolution failure (e.g. a dangling scopeId) must not
+          // abort sync for every other entity — degrade to a per-entity error.
+          results.push(this.symlinkError(adapter.adapterId, entity.urn, err));
+          continue;
+        }
         for (const destination of destinations) {
           results.push(
             await this.syncDestination(
@@ -139,7 +147,20 @@ export class AdapterManager {
     const errors: SymlinkError[] = [];
 
     for (const entity of entities) {
-      const destinations = await adapter.resolveEntityDestinations({ entity });
+      let destinations: AdapterDestination[];
+      try {
+        destinations = await adapter.resolveEntityDestinations({ entity });
+      } catch (err) {
+        // One entity's resolution failure must not abort removal for every
+        // other entity — degrade to a per-entity error, same shape as the
+        // per-destination catch below.
+        errors.push({
+          destination: entity.urn,
+          kind: err instanceof DomainError ? err.kind : 'internal',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+        continue;
+      }
       for (const dest of destinations) {
         if (dest.strategy !== 'symlink') continue;
         try {
@@ -189,7 +210,20 @@ export class AdapterManager {
     const errors: SymlinkError[] = [];
 
     for (const entity of entities) {
-      const destinations = await adapter.resolveEntityDestinations({ entity });
+      let destinations: AdapterDestination[];
+      try {
+        destinations = await adapter.resolveEntityDestinations({ entity });
+      } catch (err) {
+        // One entity's resolution failure must not abort removal for every
+        // other entity — degrade to a per-entity error, same shape as the
+        // per-destination catch below.
+        errors.push({
+          destination: entity.urn,
+          kind: err instanceof DomainError ? err.kind : 'internal',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+        continue;
+      }
       for (const dest of destinations) {
         if (dest.strategy !== 'write') continue;
         try {
@@ -234,7 +268,15 @@ export class AdapterManager {
     let count = 0;
 
     for (const entity of entities) {
-      const destinations = await adapter.resolveEntityDestinations({ entity });
+      let destinations: AdapterDestination[];
+      try {
+        destinations = await adapter.resolveEntityDestinations({ entity });
+      } catch {
+        // One entity's resolution failure must not abort counting for every
+        // other entity — skip it, matching the silent per-destination skip
+        // used just below for the same reason.
+        continue;
+      }
       for (const dest of destinations) {
         try {
           if (dest.strategy === 'symlink') {

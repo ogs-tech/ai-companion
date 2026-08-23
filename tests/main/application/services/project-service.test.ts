@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ProjectService } from '../../../../src/main/application/services/project-service.js';
+import { DomainError } from '../../../../src/main/domain/errors.js';
 import { InMemoryProjectRegistry } from '../../../../src/main/infrastructure/project/in-memory-project-registry.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 
@@ -70,5 +71,48 @@ describe('ProjectService', () => {
     const { service } = setup();
     const project = await service.findOrCreateByPath('/repos/My Repo');
     expect(project.name).toBe('My Repo');
+  });
+
+  it('create rejects a relative path with a validation DomainError', async () => {
+    const { service } = setup();
+    const err = await service.create({ name: 'acme', path: 'repos/acme' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect((err as DomainError).kind).toBe('validation');
+    expect(await service.list()).toEqual([]);
+  });
+
+  it('create accepts an absolute path', async () => {
+    const { service } = setup();
+    const project = await service.create({ name: 'acme', path: '/repos/acme' });
+    expect(project.path).toBe('/repos/acme');
+  });
+
+  it('findOrCreateByPath rejects a relative path with a validation DomainError', async () => {
+    const { service } = setup();
+    const err = await service.findOrCreateByPath('repos/acme').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect((err as DomainError).kind).toBe('validation');
+  });
+
+  it('findOrCreateByPath accepts an absolute path', async () => {
+    const { service } = setup();
+    const project = await service.findOrCreateByPath('/repos/acme');
+    expect(project.path).toBe('/repos/acme');
+  });
+
+  it('update rejects a relative path with a validation DomainError, leaving the project unchanged', async () => {
+    const { service } = setup();
+    const created = await service.create({ name: 'acme', path: '/repos/acme' });
+    const err = await service.update({ id: created.id, path: 'repos/elsewhere' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect((err as DomainError).kind).toBe('validation');
+    expect(await service.get(created.id)).toEqual(created);
+  });
+
+  it('update accepts an absolute path', async () => {
+    const { service } = setup();
+    const created = await service.create({ name: 'acme', path: '/repos/acme' });
+    const updated = await service.update({ id: created.id, path: '/repos/acme-moved' });
+    expect(updated.path).toBe('/repos/acme-moved');
   });
 });

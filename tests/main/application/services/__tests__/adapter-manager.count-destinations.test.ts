@@ -9,7 +9,8 @@ import { FileMaterializer } from '../../../../../src/main/application/services/f
 import { AdapterManager } from '../../../../../src/main/application/services/adapter-manager.js';
 import { SettingsService } from '../../../../../src/main/application/services/settings-service.js';
 import { ClaudeAdapter } from '../../../../../src/main/infrastructure/adapters/claude-adapter.js';
-import { WORKSPACE_SOURCE, type Skill } from '../../../../../src/shared/entity.js';
+import { DomainError } from '../../../../../src/main/domain/errors.js';
+import { WORKSPACE_SOURCE, type Instruction, type Skill } from '../../../../../src/shared/entity.js';
 import type { Settings } from '../../../../../src/shared/settings.js';
 
 const HOMEDIR = '/home/alice';
@@ -67,5 +68,56 @@ describe('AdapterManager.countDestinations (AC#17)', () => {
 
     const count = await manager.countDestinations('claude');
     expect(count).toBe(2);
+  });
+
+  it('skips an entity whose resolveEntityDestinations throws, still counting the others (per-entity error isolation)', async () => {
+    const settingsRepo = new InMemorySettingsRepository();
+    await settingsRepo.save(baseSettings);
+    const settingsService = new SettingsService(settingsRepo);
+    const entityRepository = new InMemoryEntityRepository();
+    await entityRepository.save(makeSkillEntity('art1'));
+    // A project instruction with a dangling scopeId — projectService.get throws
+    // not_found, so resolveScopePath (and therefore resolveEntityDestinations)
+    // throws for this entity.
+    const brokenInstruction: Instruction = {
+      urn: 'urn:instruction:broken',
+      kind: 'instruction',
+      name: 'broken',
+      description: '',
+      scopes: ['project'],
+      scopeId: 'gone',
+      metadata: meta,
+      source: WORKSPACE_SOURCE,
+      content: 'body',
+    };
+    await entityRepository.save(brokenInstruction);
+
+    const fs = new InMemoryFileSystem();
+    const dest1 = join(HOMEDIR, '.claude/skills/art1');
+    await fs.symlink({ target: join(WORKSPACE, 'skills/art1/SKILL.md'), path: dest1 });
+
+    const sm = new SymlinkManager(fs, new FixedClock(new Date()), WORKSPACE);
+    const fileMaterializer = new FileMaterializer(fs, new FixedClock(new Date()), WORKSPACE);
+    const throwingProjectService = {
+      get: async () => {
+        throw new DomainError('not_found', 'Project not found: gone');
+      },
+    };
+    const claudeAdapter = new ClaudeAdapter({
+      homedir: HOMEDIR,
+      workspaceService: scopeDeps.workspaceService,
+      projectService: throwingProjectService,
+    });
+    const manager = new AdapterManager({
+      settingsService,
+      entityRepository,
+      symlinkManager: sm,
+      fileMaterializer,
+      workspacePath: WORKSPACE,
+      adapters: new Map([['claude', claudeAdapter]]),
+    });
+
+    const count = await manager.countDestinations('claude');
+    expect(count).toBe(1);
   });
 });

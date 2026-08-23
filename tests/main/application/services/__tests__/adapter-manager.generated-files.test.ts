@@ -16,6 +16,7 @@ import {
   CURSOR_PLUGIN_RULES_SUBPATH,
 } from '../../../../../src/main/application/entity/cursor-plugin-manifest.js';
 import type { Adapter } from '../../../../../src/main/application/ports/adapter.js';
+import { DomainError } from '../../../../../src/main/domain/errors.js';
 import type { Settings } from '../../../../../src/shared/settings.js';
 import { WORKSPACE_SOURCE, type Entity, type Instruction } from '../../../../../src/shared/entity.js';
 
@@ -75,6 +76,60 @@ describe('AdapterManager generated-file lifecycle', () => {
     await manager.syncAll({ adapterId: 'cursor' });
     const result = await manager.removeAllGeneratedFiles();
     expect(result.removed).toBe(2);
+    expect(await fs.pathExists(manifestPath)).toBe(false);
+    expect(await fs.pathExists(rulePath)).toBe(false);
+  });
+
+  it('removeAdapterGeneratedFiles isolates a per-entity resolveEntityDestinations failure without aborting removal for other entities', async () => {
+    const settingsRepo = new InMemorySettingsRepository();
+    await settingsRepo.save(settings);
+    const settingsService = new SettingsService(settingsRepo);
+    const entityRepository = new InMemoryEntityRepository();
+    await entityRepository.save(instruction as Entity);
+    // A project instruction with a dangling scopeId — projectService.get throws
+    // not_found, so resolveScopePath (and therefore resolveEntityDestinations)
+    // throws for this entity.
+    const brokenProjectInstruction: Instruction = {
+      urn: 'urn:instruction:broken',
+      kind: 'instruction',
+      name: 'broken',
+      description: '',
+      scopes: ['project'],
+      scopeId: 'gone',
+      metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
+      source: WORKSPACE_SOURCE,
+      content: 'body',
+    };
+    await entityRepository.save(brokenProjectInstruction as Entity);
+    const fs = new InMemoryFileSystem();
+    const clock = new FixedClock(new Date('2026-07-02T10:00:00.000Z'));
+    const throwingProjectService = {
+      get: async () => {
+        throw new DomainError('not_found', 'Project not found: gone');
+      },
+    };
+    const manager = new AdapterManager({
+      settingsService,
+      entityRepository,
+      symlinkManager: new SymlinkManager(fs, clock, '/workspace'),
+      fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
+      workspacePath: '/workspace',
+      adapters: new Map<string, Adapter>([
+        ['cursor', new CursorAdapter({ homedir: '/home/u', workspaceService: scopeDeps.workspaceService, projectService: throwingProjectService })],
+      ]),
+    });
+
+    // syncAll must also not abort on the broken entity (Finding 2 covers this
+    // method too); the personal instruction's 2 files still get materialized.
+    await manager.syncAll({ adapterId: 'cursor' });
+    expect(await fs.pathExists(manifestPath)).toBe(true);
+    expect(await fs.pathExists(rulePath)).toBe(true);
+
+    const result = await manager.removeAdapterGeneratedFiles('cursor');
+
+    expect(result.removed).toBe(2);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({ destination: 'urn:instruction:broken' });
     expect(await fs.pathExists(manifestPath)).toBe(false);
     expect(await fs.pathExists(rulePath)).toBe(false);
   });

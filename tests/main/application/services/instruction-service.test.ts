@@ -156,4 +156,51 @@ describe('InstructionService', () => {
     expect(migrated?.scopeId).toBe('proj-1');
     expect(migrated?.legacyRepoPath).toBeUndefined();
   });
+
+  it('list migrates legacy instructions sequentially so concurrent registry writes cannot race and lose a Project (regression for the migration data-race)', async () => {
+    const repo = new InMemoryEntityRepository();
+    const adapterManager = {
+      syncEntity: vi.fn().mockResolvedValue([]),
+      removeEntity: vi.fn().mockResolvedValue([]),
+    } as unknown as AdapterManager;
+    const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
+    const claudeCli = new FakeClaudeCliPort();
+
+    // Mirrors the REAL ProjectService.create's non-atomic read-modify-write
+    // shape: findOrCreateByPath snapshots the current array, yields a
+    // microtask tick (standing in for async registry I/O), then writes back
+    // `[...snapshot, created]`. Two calls that both read the same snapshot
+    // before either writes will race — the second write clobbers the first's
+    // newly-created Project. A Map-backed stub (synchronous, no yield) can't
+    // reproduce this; this one deliberately can.
+    let projects: Array<{ id: string; name: string; path: string; createdAt: string }> = [];
+    let counter = 0;
+    const racyProjectService = {
+      findOrCreateByPath: async (path: string) => {
+        const snapshot = projects;
+        const existing = snapshot.find((p) => p.path === path);
+        if (existing) return existing;
+        await Promise.resolve();
+        counter += 1;
+        const created = { id: `proj-${counter}`, name: path.split('/').pop() ?? path, path, createdAt: '' };
+        projects = [...snapshot, created];
+        return created;
+      },
+    };
+
+    const service = new InstructionService(base, claudeCli, racyProjectService);
+    await service.save({ instruction: legacyProject('legacy-a', '/repos/legacy-a'), isCreate: true });
+    await service.save({ instruction: legacyProject('legacy-b', '/repos/legacy-b'), isCreate: true });
+    await service.save({ instruction: legacyProject('legacy-c', '/repos/legacy-c'), isCreate: true });
+
+    const list = await service.list();
+    const migratedNames = list.filter((i) => i.name.startsWith('legacy-')).map((i) => i.name);
+    expect(migratedNames).toEqual(expect.arrayContaining(['legacy-a', 'legacy-b', 'legacy-c']));
+    expect(list.every((i) => i.scopeId !== undefined)).toBe(true);
+
+    // The real assertion: every migrated Project must actually persist in the
+    // registry, not just be returned in-memory to the instruction that raced
+    // its way to creating it.
+    expect(projects).toHaveLength(3);
+  });
 });

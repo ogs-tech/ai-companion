@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { resolveScopePath } from '../../../src/main/application/resolve-scope-path.js';
 import { DomainError } from '../../../src/main/domain/errors.js';
 import { WORKSPACE_SOURCE, type Instruction } from '../../../src/shared/entity.js';
@@ -9,22 +9,28 @@ const base = {
 };
 
 describe('resolveScopePath', () => {
-  it('resolves a project scope via projectService.get', async () => {
+  it('resolves a project scope via projectService.get, called with the entity scopeId (not urn or anything else)', async () => {
     const entity: Instruction = { ...base, scopes: ['project'], scopeId: 'proj-1' };
+    const getSpy = vi.fn(async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }));
     const deps = {
       workspaceService: { get: async () => { throw new Error('should not be called'); } },
-      projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
+      projectService: { get: getSpy },
     };
     expect(await resolveScopePath(entity, deps)).toBe('/repos/acme');
+    expect(getSpy).toHaveBeenCalledWith('proj-1');
+    expect(getSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves a workspace scope via workspaceService.get', async () => {
+  it('resolves a workspace scope via workspaceService.get, called with the entity scopeId (not urn or anything else)', async () => {
     const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'ws-1' };
+    const getSpy = vi.fn(async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }));
     const deps = {
-      workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
+      workspaceService: { get: getSpy },
       projectService: { get: async () => { throw new Error('should not be called'); } },
     };
     expect(await resolveScopePath(entity, deps)).toBe('/repos/ws');
+    expect(getSpy).toHaveBeenCalledWith('ws-1');
+    expect(getSpy).toHaveBeenCalledTimes(1);
   });
 
   it('throws validation when scope is project but scopeId is missing', async () => {

@@ -47,10 +47,24 @@ export class InstructionService {
   /**
    * List every instruction — the personal singleton (when present) followed by
    * any project instructions found under `instructions/project/*`.
+   *
+   * Migration is sequential (not `Promise.all`) on purpose: `migrateIfLegacy`
+   * calls `ProjectService.findOrCreateByPath`, which does a non-atomic
+   * read-modify-write over the whole `projects.json` registry file (`load()`
+   * then `save()`, no lock). Running migrations concurrently lets two
+   * `save()`s race — the second overwrites the first's newly-created
+   * `Project`, silently and permanently losing it (the instruction's own
+   * `meta.json` has already been persisted with the now-dangling `scopeId` by
+   * then). Sequential awaits make each migration's read-modify-write land
+   * before the next one starts.
    */
   async list(): Promise<Instruction[]> {
     const entities = (await this.base.list('instruction')) as Instruction[];
-    return Promise.all(entities.map((i) => this.migrateIfLegacy(i)));
+    const migrated: Instruction[] = [];
+    for (const entity of entities) {
+      migrated.push(await this.migrateIfLegacy(entity));
+    }
+    return migrated;
   }
 
   /**

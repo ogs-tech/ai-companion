@@ -99,6 +99,31 @@ describe('AdapterManager.syncAll', () => {
     expect(await fs.readlink('/home/u/.claude/CLAUDE.md')).toBe('/workspace/instructions/default.md');
     expect(await fs.readlink('/home/u/AGENTS.md')).toBe('/workspace/instructions/default.md');
   });
+
+  it('isolates a per-entity resolveEntityDestinations failure without aborting sync for other entities', async () => {
+    const failingAdapter = new FakeAdapter(
+      'claude',
+      '/personal/claude',
+      undefined,
+      (entity) => entity.name === 'broken',
+    );
+    const { manager, registerEntity } = await setupAdapterManager([failingAdapter]);
+    await registerEntity(skillEntity('alpha'));
+    await registerEntity(skillEntity('broken'));
+
+    const results = await manager.syncAll({});
+
+    expect(results).toHaveLength(2);
+    const okResults = results.filter((r) => r.status === 'ok');
+    const errorResults = results.filter((r) => r.status === 'error');
+    expect(okResults).toHaveLength(1);
+    expect(errorResults).toHaveLength(1);
+    expect(errorResults[0]).toMatchObject({
+      adapter: 'claude',
+      destination: 'urn:skill:broken',
+      status: 'error',
+    });
+  });
 });
 
 describe('AdapterManager error mapping', () => {

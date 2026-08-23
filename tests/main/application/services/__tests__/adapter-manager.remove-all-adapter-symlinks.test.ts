@@ -55,3 +55,27 @@ describe('AdapterManager.removeAllAdapterSymlinks', () => {
     expect(result).toEqual({ removed: 0, skipped: 0, errors: [] });
   });
 });
+
+describe('AdapterManager.removeAdapterSymlinks per-entity error isolation', () => {
+  it('surfaces a per-entity resolveEntityDestinations failure as an error without aborting removal for other entities', async () => {
+    const claude = new FakeAdapter(
+      'claude',
+      '/personal/claude/skills/alpha',
+      undefined,
+      (entity) => entity.name === 'broken',
+    );
+    const { manager, registerEntity, fs } = await setupAdapterManager([claude]);
+
+    await registerEntity(skillEntity('alpha'));
+    await registerEntity(skillEntity('broken'));
+    await fs.symlink({ target: '/workspace/skills/alpha', path: '/personal/claude/skills/alpha' });
+
+    const result = await manager.removeAdapterSymlinks('claude');
+
+    expect(result.removed).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({ destination: 'urn:skill:broken' });
+    expect(await fs.pathExists('/personal/claude/skills/alpha')).toBe(false);
+  });
+});
