@@ -11,6 +11,9 @@ import type { SkillService } from '../../../src/main/application/services/skill-
 import type { AgentService } from '../../../src/main/application/services/agent-service.js';
 import type { InstructionService } from '../../../src/main/application/services/instruction-service.js';
 import type { SessionService } from '../../../src/main/application/services/session-service.js';
+import type { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
+import type { ProjectService } from '../../../src/main/application/services/project-service.js';
+import type { Workspace } from '../../../src/shared/workspace.js';
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import type { HookService } from '../../../src/main/application/services/hook-service.js';
 import type { CredentialStorePort } from '../../../src/main/application/ports/credential-store-port.js';
@@ -40,6 +43,9 @@ interface Deps {
   agentService: AgentService;
   instructionService: InstructionService;
   sessionService: SessionService;
+  workspaceService: WorkspaceService;
+  switchActiveWorkspace: (id: string) => Promise<Workspace>;
+  projectService: ProjectService;
   marketplaceService: MarketplaceService;
   hookService: HookService;
   healthService: HealthService;
@@ -98,6 +104,9 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const agentService = null as unknown as AgentService;
   const instructionService = null as unknown as InstructionService;
   const sessionService = null as unknown as SessionService;
+  const workspaceService = null as unknown as WorkspaceService;
+  const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
+  const projectService = null as unknown as ProjectService;
   const marketplaceService = null as unknown as MarketplaceService;
   const hookService = null as unknown as HookService;
   const healthService = null as unknown as HealthService;
@@ -124,6 +133,9 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     agentService,
     instructionService,
     sessionService,
+    workspaceService,
+    switchActiveWorkspace,
+    projectService,
     marketplaceService,
     hookService,
     healthService,
