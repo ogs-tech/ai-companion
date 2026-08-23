@@ -52,7 +52,17 @@ export class WorkspaceService {
 
   async getActive(): Promise<Workspace> {
     const registry = await this.loadOrSeed();
-    return this.get(registry.activeWorkspaceId);
+    const active = registry.workspaces.find((w) => w.id === registry.activeWorkspaceId);
+    if (active) return active;
+
+    // activeWorkspaceId doesn't resolve to a known workspace (e.g. hand-edited
+    // workspaces.json) — self-heal by falling back to the default workspace and
+    // persisting the correction so subsequent calls don't need to fall back again.
+    const fallback = registry.workspaces.find((w) => w.isDefault) ?? registry.workspaces[0];
+    if (!fallback) throw new DomainError('not_found', 'No workspace available');
+
+    await this.registry.save({ ...registry, activeWorkspaceId: fallback.id });
+    return fallback;
   }
 
   async create(input: { name: string; rootPath: string }): Promise<Workspace> {

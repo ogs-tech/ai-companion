@@ -63,6 +63,20 @@ describe('WorkspaceService', () => {
     await expect(service.get('nope')).rejects.toBeInstanceOf(DomainError);
   });
 
+  it('getActive falls back to the default workspace and repairs the registry when activeWorkspaceId does not resolve', async () => {
+    const { service, registry } = setup();
+    await service.list();
+    const seeded = await registry.load();
+    await registry.save({ ...seeded!, activeWorkspaceId: 'ghost' });
+
+    const active = await service.getActive();
+    expect(active).toMatchObject({ id: 'default', isDefault: true });
+
+    const repaired = await registry.load();
+    expect(repaired?.activeWorkspaceId).toBe('default');
+    expect(await service.getActive()).toMatchObject({ id: 'default', isDefault: true });
+  });
+
   it('delete removes a non-active workspace', async () => {
     const { service } = setup();
     const created = await service.create({ name: 'Acme', rootPath: '/repos/acme' });

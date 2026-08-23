@@ -59,7 +59,7 @@ Coverage targets `application/`, `ipc/`, `infrastructure/`, and `renderer/screen
 - **No `react-router`** — `App.tsx` uses a `View` discriminated union (`'loading' | 'main' | 'settings' | 'io-error'`) with `useState`. Renderer screens for individual entities are reached via `Main.tsx`'s left-rail navigation.
 - **react-query** is the data layer in the renderer — `src/renderer/lib/query-client.ts` configures it; `src/renderer/hooks/use-customization-list.ts` is the canonical example.
 - **MUI + Emotion** — design tokens in `src/renderer/theme.ts`. Roboto via `@fontsource/roboto`.
-- **Workspace path is fixed** — `~/.ai-companion/` (set in `src/main/index.ts`). `WorkspaceBootstrapService` creates the dir tree on first run.
+- **Workspace path is per-workspace, not fixed** — `<workspace.rootPath>/.ai-companion/` (the default workspace's `rootPath` is the user's home dir, so its data dir is still `~/.ai-companion/`). Resolved at runtime and rebuilt on `workspace.switchTo` — see `docs/reference/architecture.md`'s "Workspace / Project" section. `WorkspaceBootstrapService` creates the dir tree for whichever workspace is being bootstrapped.
 - **Git ops** go through `SimpleGitClient` (`simple-git`); GitHub API through `OctokitClient` (`@octokit/rest`); GitHub PAT is stored encrypted via Electron `safeStorage` (`SafeStorageCredentials`) — **never** returned by any IPC method.
 
 ## Project state

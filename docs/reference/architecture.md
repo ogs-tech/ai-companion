@@ -68,7 +68,9 @@ Cross-cutting:
 - `file-materializer` — write-side twin of `symlink-manager` for **generated** files (e.g. Cursor's per-repo `AGENTS.md`): ownership is signalled by a marker comment on the file's first line (`GENERATED_FILE_MARKER`), so the app only overwrites/removes files it owns; a foreign file (no marker) is backed up before overwrite and never deleted. Backup scheme mirrors `symlink-manager`'s (`<workspace>/_backups/<ts>/<rel-path>`).
 - `repo-service` — small git helpers (`detectGit`, `getCurrentBranch`) used when creating a new project instruction. The old global `settings.linkedRepos` list is gone, and the `repo.link` / `repo.unlink` / `repo.list` IPC methods were removed with it — a project entity now carries its own `repoPath` directly.
 - `settings-service` — load/merge/persist settings.
-- `workspace-bootstrap` — creates the `~/.ai-companion/` directory tree on first run (called at startup, not via IPC).
+- `workspace-bootstrap` — creates the `.ai-companion/` directory tree for the default workspace at startup, and again for every workspace as it's created (see `WorkspaceService.create()`).
+- `workspace-service` — CRUD over `Workspace` registry entries plus `getActive`/`switchTo`; self-heals a dangling `activeWorkspaceId` (falls back to the default workspace and persists the correction) rather than throwing on `getActive()`.
+- `project-service` — CRUD over `Project` registry entries scoped to the active workspace's data dir.
 - `health-service` — aggregates `HealthCheck` results from collectors (MCP auth, MCP runtime, config-drift, symlink, generated-file) into a `HealthReport`; exposed via the `health.*` IPC namespace.
 - **MCP (live-config broker):** `mcp-service` is NOT an `Entity`-backed facade. It reads/writes MCP
   servers directly in the real Claude files (`~/.claude.json` `mcpServers` and
@@ -118,6 +120,16 @@ Only one workspace is "active" at a time. `workspace.switchTo` kills the outgoin
 against the new workspace's data dir via `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`)
 — see `src/main/index.ts`'s `switchActiveWorkspace`. Plugin installs, marketplaces, MCP config, and adapter
 on/off settings stay anchored to the workspace active at app startup; they are not (yet) per-workspace.
+
+**Known gap — adapter targets are not reconciled on switch.** `workspace.switchTo` rebuilds the
+Entity-backed service graph but does not touch the adapter sync targets (`~/.claude/`,
+`~/.cursor/`). `AdapterManager.syncAll()` only operates on the currently active workspace's
+entities and does no pruning of stale symlinks/generated files left behind by a previously active
+workspace. Concretely: after switching from workspace A to workspace B, `~/.claude/` keeps
+pointing at A's entities until each entity is individually re-saved (or otherwise re-synced) under
+B — there is no automatic cleanup, and `~/.claude/` can end up reflecting a union of every
+workspace ever synced rather than only the currently active one. This is a known limitation, left
+for a future plan to address.
 
 ## Renderer structure
 
