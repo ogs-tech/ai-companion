@@ -1,7 +1,19 @@
 export type SessionStatus = 'running' | 'exited';
 
+export type SessionAnchor =
+  | { kind: 'entity'; urn: string }
+  | { kind: 'workspace'; workspaceId: string }
+  | { kind: 'project'; projectId: string };
+
+export function sessionAnchorKey(anchor: SessionAnchor): string {
+  if (anchor.kind === 'entity') return `entity:${anchor.urn}`;
+  if (anchor.kind === 'workspace') return `workspace:${anchor.workspaceId}`;
+  return `project:${anchor.projectId}`;
+}
+
 export interface SessionSnapshot {
-  entityUrn: string;
+  sessionId: string;
+  anchor: SessionAnchor;
   cwd: string;
   status: SessionStatus;
 }
