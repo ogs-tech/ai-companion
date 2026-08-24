@@ -137,6 +137,22 @@ B — there is no automatic cleanup, and `~/.claude/` can end up reflecting a un
 workspace ever synced rather than only the currently active one. This is a known limitation, left
 for a future plan to address.
 
+### Workspace file browser and session anchoring
+
+`FileBrowserPort` (`listDir`/`readFile`/`realpath`, implemented by `NodeFileBrowserAdapter` via
+`node:fs/promises`) is wrapped by `FileBrowserService`, which resolves a caller-supplied path relative to
+the active workspace's `rootPath` and rejects anything escaping it (`..`, an absolute path, or a symlink
+resolving outside the root) before touching the filesystem. Read-only: no write/rename/delete/move
+support. Re-created on every workspace switch, alongside the Entity-backed graph, but rooted at the raw
+`rootPath` rather than `<rootPath>/.ai-companion` — it browses the author's real files, not the app's own
+data.
+
+`Session`s can now anchor on an entity, a workspace, or a project (`SessionAnchor` in
+`src/shared/session.ts`) — `SessionService` keys live sessions by `sessionAnchorKey(anchor)` instead of by
+entity urn alone, so "one live session per anchor" replaces "one live session per entity". The Workspace
+screen's "Abrir sessão" actions (workspace-root and per-`Project`) and the entity-anchored flow from the
+Customization editor both go through the same `SessionService`/`session.spawn` surface.
+
 ## Renderer structure
 
 ```

@@ -14,6 +14,11 @@
 
 - The embedded PTY only ever runs `claude` (interactively) — never a general shell. No git/npm/arbitrary command support (spec §2.1).
 - A session is anchored to a single customization entity (Skill, Agent, or Instruction — all kinds, uniformly) keyed by its `urn`, not to a "project" registry (spec §2.2).
+  > **Superseded (2026-08-22):** `SessionAnchor` generalizes this — see
+  > `docs/superpowers/specs/2026-08-22-workspace-project-scope-design.md` §2.12/§3. A session can now
+  > anchor on a workspace or project, not only a customization entity.
+  > **Implemented:** see `docs/superpowers/plans/2026-08-22-workspace-filebrowser-sessions.md` (plan 3 of the
+  > Workspace/Project scoping spec) — `session.spawn` now takes a `SessionAnchor`, as anticipated here.
 - Working directory: `ProjectInstruction` → its own `repoPath`; every other entity (`Skill`, `Agent`, `PersonalInstruction`) → the app's workspace root (spec §2.3).
 - No background daemon. All live sessions are SIGTERM'd on `before-quit` (spec §2.4).
 - One live session per entity — reopening an entity that already has a live session reconnects to it instead of spawning a second PTY (spec §2.5).

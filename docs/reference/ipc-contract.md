@@ -112,6 +112,9 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 | `workspace.create` | `{ name: string; rootPath: string }` | `Workspace` |
 | `workspace.switchTo` | `{ id: string }` | `Workspace` |
 | `workspace.delete` | `{ id: string }` | `void` |
+| `workspace.listDir` | `{ path?: string }` | `FileBrowserEntry[]` | Lists a directory relative to the active workspace's root (`path` defaults to `''`, the root itself). Rejects paths escaping the root. |
+| `workspace.readFile` | `{ path: string }` | `FilePreview` | Reads a file for preview. `{previewable:false, reason}` for binary/oversized files instead of an error. |
+| `workspace.resolvePath` | `{ path: string }` | `{ absolutePath: string }` | Resolves a workspace-relative path to an absolute one (used by "Use as Project"), applying the same containment guard. |
 
 `workspace.list` returns every registered workspace. `workspace.getActive` returns the currently active workspace. `workspace.create` registers a new workspace and bootstraps its `.ai-companion` data dir (does not switch to it). `workspace.switchTo` kills the outgoing workspace's live sessions and rebuilds the Entity-backed service graph against the target workspace. `workspace.delete` rejects (`validation`) if `id` is the active workspace.
 
@@ -172,7 +175,7 @@ Saving or deleting a plugin-provided skill (`source.kind === 'plugin'`) raises `
 
 | Method | Params | Result |
 |---|---|---|
-| `session.spawn` | `{ entityUrn: string }` | `SessionSnapshot` |
+| `session.spawn` | `{ anchor: SessionAnchor }` | `SessionSnapshot` | `SessionAnchor = {kind:'entity',urn} \| {kind:'workspace',workspaceId} \| {kind:'project',projectId}`. One live session per anchor. |
 | `session.write` | `{ sessionId: string; data: string }` | `void` |
 | `session.resize` | `{ sessionId: string; cols: number; rows: number }` | `void` |
 | `session.kill` | `{ sessionId: string }` | `void` |
