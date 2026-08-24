@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppShell } from '../components/shell/AppShell.js';
 import { defaultNav, type Nav } from '../components/shell/nav.js';
+import { WorkspaceScreen } from './workspace/WorkspaceScreen.js';
 import { SkillList } from './skills/SkillList.js';
 import { AgentList } from './agents/AgentList.js';
 import { HookList } from './hooks/HookList.js';
@@ -21,6 +22,8 @@ function screenFor(nav: Nav, navigate: (n: Nav) => void): React.ReactElement {
   switch (nav.area) {
     case 'inicio':
       return <StarterPackScreen onNavigate={navigate} />;
+    case 'workspace':
+      return <WorkspaceScreen />;
     case 'diagnostico':
       return <HealthScreen />;
     case 'plugins':

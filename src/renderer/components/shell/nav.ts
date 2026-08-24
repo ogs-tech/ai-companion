@@ -1,14 +1,15 @@
 import {
   House, SlidersHorizontal, Puzzle, Activity, Sparkles, Bot,
-  Webhook, NotebookPen, Store, Plug, type LucideIcon,
+  Webhook, NotebookPen, Store, Plug, FolderTree as FolderTreeIcon, type LucideIcon,
 } from 'lucide-react';
 
-export type Area = 'inicio' | 'biblioteca' | 'plugins' | 'diagnostico';
+export type Area = 'inicio' | 'workspace' | 'biblioteca' | 'plugins' | 'diagnostico';
 export type LibrarySub = 'skills' | 'agents' | 'hooks' | 'instructions' | 'mcps';
 export type PluginsSub = 'plugins' | 'marketplaces';
 
 export type Nav =
   | { area: 'inicio' }
+  | { area: 'workspace' }
   | { area: 'biblioteca'; sub: LibrarySub }
   | { area: 'plugins'; sub: PluginsSub }
   | { area: 'diagnostico' };
@@ -18,6 +19,7 @@ export interface SubDef<S> { sub: S; label: string; glyph: LucideIcon; }
 
 export const NAV_AREAS: ReadonlyArray<AreaDef> = [
   { area: 'inicio', label: 'Início', glyph: House },
+  { area: 'workspace', label: 'Workspace', glyph: FolderTreeIcon },
   { area: 'biblioteca', label: 'Biblioteca', glyph: SlidersHorizontal },
   { area: 'plugins', label: 'Plugins', glyph: Puzzle },
   { area: 'diagnostico', label: 'Diagnóstico', glyph: Activity },
