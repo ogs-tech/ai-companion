@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../src/renderer/lib/ipc.js';
-import { useProjects, useFindOrCreateProjectByPath } from '../../../src/renderer/hooks/use-projects.js';
+import { useProjects, useFindOrCreateProjectByPath, useDeleteProject } from '../../../src/renderer/hooks/use-projects.js';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -30,6 +30,15 @@ describe('use-projects', () => {
     const { result } = renderHook(() => useFindOrCreateProjectByPath(), { wrapper });
     await result.current.mutateAsync('/repos/acme');
     expect(spy).toHaveBeenCalledWith('project.findOrCreateByPath', { path: '/repos/acme' });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'list'] });
+  });
+
+  it('useDeleteProject calls project.delete and invalidates the list', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useDeleteProject(), { wrapper });
+    await result.current.mutateAsync('p1');
+    expect(spy).toHaveBeenCalledWith('project.delete', { id: 'p1' });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'list'] });
   });
 });

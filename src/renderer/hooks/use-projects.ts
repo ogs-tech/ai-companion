@@ -20,3 +20,12 @@ export function useFindOrCreateProjectByPath() {
     },
   });
 }
+
+export function useDeleteProject() {
+  return useMutation({
+    mutationFn: (id: string) => callIpc<void>('project.delete', { id }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: listKey });
+    },
+  });
+}
