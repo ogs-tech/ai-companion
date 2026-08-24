@@ -14,6 +14,7 @@ import { FakeClaudeCliPort } from '../../../src/main/application/services/__fixt
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import { WORKSPACE_SOURCE, type Skill, type Agent, type Instruction } from '../../../src/shared/entity.js';
 import { buildWorkspaceHandlers } from '../../../src/main/ipc/workspace-handlers.js';
+import { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
 import { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
 import { InMemoryWorkspaceRegistry } from '../../../src/main/infrastructure/workspace/in-memory-workspace-registry.js';
 import type { Workspace } from '../../../src/shared/workspace.js';
@@ -264,11 +265,21 @@ const setupWorkspaceService = () => {
   return new WorkspaceService(registry, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), bootstrap, '/home/u');
 };
 
+const setupFileBrowserService = () =>
+  new FileBrowserService(
+    {
+      listDir: vi.fn().mockResolvedValue([]),
+      readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'x', truncated: false }),
+      realpath: vi.fn(async (p: string) => p),
+    },
+    '/repos/acme',
+  );
+
 describe('workspace-handlers', () => {
   it('workspace.list calls service.list', async () => {
     const svc = setupWorkspaceService();
     const spy = vi.spyOn(svc, 'list');
-    const h = buildWorkspaceHandlers(svc, vi.fn());
+    const h = buildWorkspaceHandlers(svc, vi.fn(), setupFileBrowserService());
     await h['workspace.list']!({});
     expect(spy).toHaveBeenCalled();
   });
@@ -276,7 +287,7 @@ describe('workspace-handlers', () => {
   it('workspace.getActive calls service.getActive', async () => {
     const svc = setupWorkspaceService();
     const spy = vi.spyOn(svc, 'getActive');
-    const h = buildWorkspaceHandlers(svc, vi.fn());
+    const h = buildWorkspaceHandlers(svc, vi.fn(), setupFileBrowserService());
     await h['workspace.getActive']!({});
     expect(spy).toHaveBeenCalled();
   });
@@ -284,7 +295,7 @@ describe('workspace-handlers', () => {
   it('workspace.create passes name and rootPath through', async () => {
     const svc = setupWorkspaceService();
     const spy = vi.spyOn(svc, 'create');
-    const h = buildWorkspaceHandlers(svc, vi.fn());
+    const h = buildWorkspaceHandlers(svc, vi.fn(), setupFileBrowserService());
     await h['workspace.create']!({ name: 'Acme', rootPath: '/repos/acme' });
     expect(spy).toHaveBeenCalledWith({ name: 'Acme', rootPath: '/repos/acme' });
   });
@@ -294,7 +305,7 @@ describe('workspace-handlers', () => {
     const serviceSpy = vi.spyOn(svc, 'switchTo');
     const orchestrated: Workspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
     const switchActiveWorkspace = vi.fn().mockResolvedValue(orchestrated);
-    const h = buildWorkspaceHandlers(svc, switchActiveWorkspace);
+    const h = buildWorkspaceHandlers(svc, switchActiveWorkspace, setupFileBrowserService());
     const result = await h['workspace.switchTo']!({ id: 'w1' });
     expect(switchActiveWorkspace).toHaveBeenCalledWith('w1');
     expect(serviceSpy).not.toHaveBeenCalled();
@@ -308,14 +319,57 @@ describe('workspace-handlers', () => {
     // `WorkspaceService.create` only ever assigns random UUIDs, so a known id like
     // 'w1' can't be pre-created. This test only cares that the id is forwarded.
     const spy = vi.spyOn(svc, 'delete').mockResolvedValue(undefined);
-    const h = buildWorkspaceHandlers(svc, vi.fn());
+    const h = buildWorkspaceHandlers(svc, vi.fn(), setupFileBrowserService());
     await h['workspace.delete']!({ id: 'w1' });
     expect(spy).toHaveBeenCalledWith('w1');
   });
 
   it('workspace.create rejects a missing name', async () => {
-    const h = buildWorkspaceHandlers(setupWorkspaceService(), vi.fn());
+    const h = buildWorkspaceHandlers(setupWorkspaceService(), vi.fn(), setupFileBrowserService());
     await expect(h['workspace.create']!({ rootPath: '/repos/acme' })).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('workspace.listDir delegates to fileBrowserService.listDir', async () => {
+    const svc = setupWorkspaceService();
+    const fileBrowserService = new FileBrowserService(
+      { listDir: vi.fn().mockResolvedValue([{ name: 'a.txt', kind: 'file' }]), readFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
+      '/repos/acme',
+    );
+    const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
+    const result = await h['workspace.listDir']!({ path: 'sub' });
+    expect(result).toEqual([{ name: 'a.txt', kind: 'file' }]);
+  });
+
+  it('workspace.readFile delegates to fileBrowserService.readFile', async () => {
+    const svc = setupWorkspaceService();
+    const fileBrowserService = new FileBrowserService(
+      { listDir: vi.fn(), readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'hi', truncated: false }), realpath: vi.fn(async (p: string) => p) },
+      '/repos/acme',
+    );
+    const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
+    const result = await h['workspace.readFile']!({ path: 'a.txt' });
+    expect(result).toEqual({ previewable: true, content: 'hi', truncated: false });
+  });
+
+  it('workspace.resolvePath returns the resolved absolute path', async () => {
+    const svc = setupWorkspaceService();
+    const fileBrowserService = new FileBrowserService(
+      { listDir: vi.fn(), readFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
+      '/repos/acme',
+    );
+    const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
+    const result = await h['workspace.resolvePath']!({ path: 'sub' });
+    expect(result).toEqual({ absolutePath: '/repos/acme/sub' });
+  });
+
+  it('workspace.listDir rejects a path escaping the root', async () => {
+    const svc = setupWorkspaceService();
+    const fileBrowserService = new FileBrowserService(
+      { listDir: vi.fn(), readFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
+      '/repos/acme',
+    );
+    const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
+    await expect(h['workspace.listDir']!({ path: '../etc' })).rejects.toMatchObject({ kind: 'validation' });
   });
 });
 

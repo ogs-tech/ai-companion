@@ -21,6 +21,7 @@ import type { HealthService } from '../../../src/main/application/services/healt
 import type { NotificationPort } from '../../../src/main/application/ports/notification-port.js';
 import type { WorkspaceTeardownService } from '../../../src/main/application/services/workspace-teardown.js';
 import type { McpService } from '../../../src/main/application/services/mcp-service.js';
+import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
 import type { Settings } from '../../../src/shared/settings.js';
 
 const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
@@ -45,6 +46,7 @@ interface Deps {
   sessionService: SessionService;
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
+  fileBrowserService: FileBrowserService;
   projectService: ProjectService;
   marketplaceService: MarketplaceService;
   hookService: HookService;
@@ -106,6 +108,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const sessionService = null as unknown as SessionService;
   const workspaceService = null as unknown as WorkspaceService;
   const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
+  const fileBrowserService = null as unknown as FileBrowserService;
   const projectService = null as unknown as ProjectService;
   const marketplaceService = null as unknown as MarketplaceService;
   const hookService = null as unknown as HookService;
@@ -135,6 +138,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     sessionService,
     workspaceService,
     switchActiveWorkspace,
+    fileBrowserService,
     projectService,
     marketplaceService,
     hookService,

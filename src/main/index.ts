@@ -33,6 +33,8 @@ import { FsWorkspaceRegistry } from './infrastructure/workspace/fs-workspace-reg
 import { SystemClock } from './infrastructure/clock/system-clock.js';
 import { ElectronDialogAdapter } from './infrastructure/dialog/electron-dialog-adapter.js';
 import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
+import { NodeFileBrowserAdapter } from './infrastructure/filesystem/node-file-browser-adapter.js';
+import { FileBrowserService } from './application/services/file-browser-service.js';
 import type { CredentialStorePort } from './application/ports/credential-store-port.js';
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
@@ -156,7 +158,8 @@ async function wireIpc(): Promise<void> {
    */
   const dataDirFor = (workspace: Workspace): string =>
     workspace.rootPath === home ? workspacePath : workspaceDataDir(workspace.rootPath);
-  const activeDataDir = dataDirFor(await workspaceService.getActive());
+  const activeWorkspace = await workspaceService.getActive();
+  const activeDataDir = dataDirFor(activeWorkspace);
 
   const settingsService = new SettingsService(
     new FsSettingsRepository(join(workspacePath, 'settings.json')),
@@ -304,6 +307,9 @@ async function wireIpc(): Promise<void> {
     sharedDeps,
   );
 
+  const fileBrowserPort = new NodeFileBrowserAdapter();
+  let fileBrowserService = new FileBrowserService(fileBrowserPort, activeWorkspace.rootPath);
+
   const attachSessionBridges = (services: WorkspaceScopedServices): void => {
     services.sessionService.onOutput((sessionId, chunk) => {
       mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
@@ -335,6 +341,7 @@ async function wireIpc(): Promise<void> {
     workspaceService,
     projectService: workspaceScoped.projectService,
     switchActiveWorkspace,
+    fileBrowserService,
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
@@ -361,6 +368,7 @@ async function wireIpc(): Promise<void> {
       workspaceScoped.sessionService.killAll();
       const target = await workspaceService.switchTo(id);
       workspaceScoped = buildWorkspaceScopedServices(dataDirFor(target), sharedDeps);
+      fileBrowserService = new FileBrowserService(fileBrowserPort, target.rootPath);
       attachSessionBridges(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));
       return target;

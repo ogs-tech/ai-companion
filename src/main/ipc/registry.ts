@@ -7,6 +7,7 @@ import type { SkillService } from '../application/services/skill-service.js';
 import type { AgentService } from '../application/services/agent-service.js';
 import type { InstructionService } from '../application/services/instruction-service.js';
 import type { SessionService } from '../application/services/session-service.js';
+import type { FileBrowserService } from '../application/services/file-browser-service.js';
 import { buildSessionHandlers } from './session-handlers.js';
 import { buildWorkspaceHandlers } from './workspace-handlers.js';
 import type { WorkspaceService } from '../application/services/workspace-service.js';
@@ -50,6 +51,7 @@ export interface IpcDeps {
   sessionService: SessionService;
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
+  fileBrowserService: FileBrowserService;
   projectService: ProjectService;
   marketplaceService: MarketplaceService;
   healthService: HealthService;
@@ -93,6 +95,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     sessionService,
     workspaceService,
     switchActiveWorkspace,
+    fileBrowserService,
     projectService,
     marketplaceService,
     healthService,
@@ -216,7 +219,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildHookHandlers(hookService),
     ...buildInstructionHandlers(instructionService, emitInstructionGenerateProgress),
     ...buildSessionHandlers(sessionService),
-    ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace),
+    ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace, fileBrowserService),
     ...buildProjectHandlers(projectService),
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
