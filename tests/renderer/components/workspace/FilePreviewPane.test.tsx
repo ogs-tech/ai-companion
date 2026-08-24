@@ -18,6 +18,7 @@ const renderPane = (path: string | null) =>
 
 beforeEach(() => {
   queryClient.clear();
+  queryClient.setDefaultOptions({ queries: { retry: false } });
   vi.restoreAllMocks();
 });
 
@@ -43,5 +44,12 @@ describe('FilePreviewPane', () => {
     vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: false, reason: 'File appears to be binary' });
     renderPane('image.png');
     expect(await screen.findByText('File appears to be binary')).toBeInTheDocument();
+  });
+
+  it('shows an error state when the preview query fails', async () => {
+    vi.spyOn(ipc, 'callIpc').mockRejectedValue(new Error('Permission denied'));
+    renderPane('secret.txt');
+    expect(await screen.findByTestId('file-preview-error')).toBeInTheDocument();
+    expect(screen.getByText('Permission denied')).toBeInTheDocument();
   });
 });

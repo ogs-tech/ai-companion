@@ -86,4 +86,36 @@ describe('WorkspaceScreen', () => {
     await user.click(await screen.findByTestId('project-delete-p1'));
     await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('project.delete', { id: 'p1' }));
   });
+
+  it('shows an error toast when deleting a project fails', async () => {
+    const user = userEvent.setup();
+    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+      if (method === 'workspace.getActive') return activeWorkspace;
+      if (method === 'project.list') return projects;
+      if (method === 'workspace.listDir') return [];
+      if (method === 'project.delete') throw new Error('Project not found');
+      return undefined;
+    });
+    renderScreen();
+    await user.click(await screen.findByTestId('project-delete-p1'));
+    expect(await screen.findByTestId('toast')).toHaveTextContent('Project not found');
+  });
+
+  it('shows an error toast when "Use as Project" fails', async () => {
+    const user = userEvent.setup();
+    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.getActive') return activeWorkspace;
+      if (method === 'project.list') return projects;
+      if (method === 'workspace.listDir') {
+        const path = (params as { path?: string } | undefined)?.path;
+        return path ? [] : [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'workspace.resolvePath') return { absolutePath: '/repos/apps' };
+      if (method === 'project.findOrCreateByPath') throw new Error('boom');
+      return undefined;
+    });
+    renderScreen();
+    await user.click(await screen.findByTestId('tree-node-use-as-project-apps'));
+    expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
+  });
 });

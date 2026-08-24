@@ -3,7 +3,7 @@ import { Dialog, List, ListItemButton, ListItemIcon, ListItemText, TextField } f
 import type { PaperProps } from '@mui/material';
 import { Search, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { LIBRARY_SUBS, NAV_AREAS, PLUGINS_SUBS, type LibrarySub, type Nav } from './nav.js';
+import { areaHasSub, LIBRARY_SUBS, NAV_AREAS, PLUGINS_SUBS, type LibrarySub, type Nav } from './nav.js';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -40,7 +40,7 @@ export function CommandPalette({
     };
 
     const jumps: Command[] = [
-      ...NAV_AREAS.filter((a) => a.area === 'inicio' || a.area === 'workspace' || a.area === 'diagnostico').map((a) => ({
+      ...NAV_AREAS.filter((a) => !areaHasSub(a.area)).map((a) => ({
         id: `go-${a.area}`,
         label: a.label,
         glyph: a.glyph,

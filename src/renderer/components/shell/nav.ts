@@ -38,6 +38,23 @@ export const PLUGINS_SUBS: ReadonlyArray<SubDef<PluginsSub>> = [
   { sub: 'marketplaces', label: 'Marketplaces', glyph: Store },
 ];
 
+/**
+ * Areas whose `Nav` variant carries a `sub` field, keyed to the sub list that
+ * backs it. Any `Area` not present here has no `sub` on its `Nav` variant.
+ * Single source of truth for "does this area have subs" — derive from this
+ * (or from `'sub' in nav` when a `Nav` value, not just an `Area`, is in hand)
+ * instead of re-hardcoding the sub-less area list.
+ */
+const AREA_SUBS: Partial<Record<Area, ReadonlyArray<SubDef<string>>>> = {
+  biblioteca: LIBRARY_SUBS,
+  plugins: PLUGINS_SUBS,
+};
+
+/** True when `area`'s `Nav` variant carries a `sub` field. */
+export function areaHasSub(area: Area): boolean {
+  return area in AREA_SUBS;
+}
+
 export const defaultNav: Nav = { area: 'inicio' };
 
 /** Stable `nav-<id>` testid: the sub id when present, else the area id. */

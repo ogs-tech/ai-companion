@@ -11,7 +11,7 @@ interface SubRailProps {
 export const SUBRAIL_WIDTH = 220;
 
 export function SubRail({ nav, onSelect }: SubRailProps): React.ReactElement | null {
-  if (nav.area === 'inicio' || nav.area === 'workspace' || nav.area === 'diagnostico') return null;
+  if (!('sub' in nav)) return null;
 
   const section = nav.area === 'biblioteca' ? 'Biblioteca' : 'Plugins';
   const items: ReadonlyArray<SubDef<string>> = nav.area === 'biblioteca' ? LIBRARY_SUBS : PLUGINS_SUBS;

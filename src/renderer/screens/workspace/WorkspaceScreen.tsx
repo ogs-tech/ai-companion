@@ -8,9 +8,14 @@ import { ScreenHeader } from '../../components/ds/ScreenHeader.js';
 import { FolderTree } from '../../components/workspace/FolderTree.js';
 import { FilePreviewPane } from '../../components/workspace/FilePreviewPane.js';
 import { SessionDialog } from '../../components/workspace/SessionDialog.js';
+import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { useActiveWorkspace } from '../../hooks/use-workspaces.js';
 import { useDeleteProject, useFindOrCreateProjectByPath, useProjects } from '../../hooks/use-projects.js';
 import type { SessionAnchor } from '../../../shared/session.js';
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export function WorkspaceScreen(): React.ReactElement {
   const { data: activeWorkspace } = useActiveWorkspace();
@@ -21,10 +26,27 @@ export function WorkspaceScreen(): React.ReactElement {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [sessionAnchor, setSessionAnchor] = useState<SessionAnchor | null>(null);
   const [sessionTitle, setSessionTitle] = useState('');
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const openSession = (anchor: SessionAnchor, title: string): void => {
     setSessionAnchor(anchor);
     setSessionTitle(title);
+  };
+
+  const handleDeleteProject = async (id: string): Promise<void> => {
+    try {
+      await deleteProject.mutateAsync(id);
+    } catch (err) {
+      setToast({ variant: 'error', message: errorMessage(err) });
+    }
+  };
+
+  const handleUseAsProject = async (absolutePath: string): Promise<void> => {
+    try {
+      await findOrCreateProject.mutateAsync(absolutePath);
+    } catch (err) {
+      setToast({ variant: 'error', message: errorMessage(err) });
+    }
   };
 
   return (
@@ -76,7 +98,7 @@ export function WorkspaceScreen(): React.ReactElement {
                       edge="end"
                       size="small"
                       data-testid={`project-delete-${p.id}`}
-                      onClick={() => void deleteProject.mutateAsync(p.id)}
+                      onClick={() => void handleDeleteProject(p.id)}
                     >
                       <Icon glyph={Trash2} size={16} />
                     </IconButton>
@@ -97,7 +119,7 @@ export function WorkspaceScreen(): React.ReactElement {
         <Box sx={{ width: 320, borderRight: 1, borderColor: 'divider', overflowY: 'auto' }}>
           <FolderTree
             onSelectFile={setSelectedFile}
-            onUseAsProject={(absolutePath) => void findOrCreateProject.mutateAsync(absolutePath)}
+            onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
           />
         </Box>
         <Divider orientation="vertical" flexItem />
@@ -112,6 +134,7 @@ export function WorkspaceScreen(): React.ReactElement {
         title={sessionTitle}
         onClose={() => setSessionAnchor(null)}
       />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Container>
   );
 }

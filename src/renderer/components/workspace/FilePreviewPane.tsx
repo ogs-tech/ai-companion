@@ -9,12 +9,25 @@ interface FilePreviewPaneProps {
 }
 
 export function FilePreviewPane({ path }: FilePreviewPaneProps): React.ReactElement {
-  const { data: preview, isLoading } = useFilePreview(path);
+  const { data: preview, isLoading, isError, error } = useFilePreview(path);
 
   if (path === null) {
     return (
       <Box data-testid="file-preview-empty">
         <EmptyState glyph={FileX} title="Nenhum arquivo selecionado" description="Escolha um arquivo na árvore para visualizar o conteúdo." testId="file-preview-empty-state" />
+      </Box>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Box data-testid="file-preview-error" sx={{ p: 2 }}>
+        <EmptyState
+          glyph={FileX}
+          title="Não foi possível carregar o arquivo"
+          description={error instanceof Error ? error.message : 'Tente novamente.'}
+          testId="file-preview-error"
+        />
       </Box>
     );
   }

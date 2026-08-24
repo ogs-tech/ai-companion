@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  NAV_AREAS, LIBRARY_SUBS, PLUGINS_SUBS, navTestId, defaultNav, type Nav,
+  NAV_AREAS, LIBRARY_SUBS, PLUGINS_SUBS, navTestId, defaultNav, areaHasSub, type Nav,
 } from '../../../../src/renderer/components/shell/nav.js';
 
 describe('nav model', () => {
@@ -18,5 +18,14 @@ describe('nav model', () => {
   });
   it('lands on início by default', () => {
     expect(defaultNav).toEqual<Nav>({ area: 'inicio' });
+  });
+  it('reports sub-having areas via areaHasSub, matching NAV_AREAS', () => {
+    expect(NAV_AREAS.map((a) => ({ area: a.area, hasSub: areaHasSub(a.area) }))).toEqual([
+      { area: 'inicio', hasSub: false },
+      { area: 'workspace', hasSub: false },
+      { area: 'biblioteca', hasSub: true },
+      { area: 'plugins', hasSub: true },
+      { area: 'diagnostico', hasSub: false },
+    ]);
   });
 });
