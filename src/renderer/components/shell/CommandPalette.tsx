@@ -40,7 +40,7 @@ export function CommandPalette({
     };
 
     const jumps: Command[] = [
-      ...NAV_AREAS.filter((a) => a.area === 'inicio' || a.area === 'diagnostico').map((a) => ({
+      ...NAV_AREAS.filter((a) => a.area === 'inicio' || a.area === 'workspace' || a.area === 'diagnostico').map((a) => ({
         id: `go-${a.area}`,
         label: a.label,
         glyph: a.glyph,

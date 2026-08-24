@@ -21,6 +21,13 @@ describe('CommandPalette', () => {
     expect(onNavigate).toHaveBeenCalledWith({ area: 'biblioteca', sub: 'instructions' });
     expect(onClose).toHaveBeenCalled();
   });
+  it('includes the Workspace area in the quick-jump list', async () => {
+    const onNavigate = vi.fn();
+    renderWithShell(<CommandPalette open onClose={noop} onNavigate={onNavigate} onCreate={noop} />);
+    await userEvent.type(screen.getByTestId('command-palette-input'), 'Workspace');
+    await userEvent.click(screen.getByText('Workspace'));
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
+  });
   it('offers create actions for editable entities', async () => {
     const onCreate = vi.fn();
     renderWithShell(<CommandPalette open onClose={noop} onNavigate={noop} onCreate={onCreate} />);
