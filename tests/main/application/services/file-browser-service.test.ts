@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FileBrowserService } from '../../../../src/main/application/services/file-browser-service.js';
 import type { FileBrowserPort } from '../../../../src/main/application/ports/file-browser-port.js';
+import { DomainError } from '../../../../src/main/domain/errors.js';
 
 const ROOT = '/repos/acme';
 
@@ -58,8 +59,7 @@ describe('FileBrowserService', () => {
     const port = fakePort({
       realpath: vi.fn(async (p: string) => {
         if (p === ROOT) return ROOT;
-        const err = Object.assign(new Error('not found'), { kind: 'not_found' });
-        throw err;
+        throw new DomainError('not_found', 'not found');
       }),
     });
     const service = new FileBrowserService(port, ROOT);

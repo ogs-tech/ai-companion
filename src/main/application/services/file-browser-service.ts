@@ -6,13 +6,6 @@ function withSep(p: string): string {
   return p.endsWith(sep) ? p : `${p}${sep}`;
 }
 
-// Duck-typed on `kind` rather than `instanceof DomainError`: the real port (NodeFileBrowserAdapter)
-// throws actual DomainError instances, but any FileBrowserPort implementation only needs to expose
-// a `kind: 'not_found'` marker on the thrown error for this "target doesn't exist yet" path to work.
-function isNotFoundError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { kind?: unknown }).kind === 'not_found';
-}
-
 export class FileBrowserService {
   constructor(
     private readonly port: FileBrowserPort,
@@ -44,7 +37,7 @@ export class FileBrowserService {
     try {
       real = await this.port.realpath(candidate);
     } catch (err) {
-      if (isNotFoundError(err)) return candidate;
+      if (err instanceof DomainError && err.kind === 'not_found') return candidate;
       throw err;
     }
     const realRoot = await this.port.realpath(this.rootPath).catch(() => this.rootPath);
