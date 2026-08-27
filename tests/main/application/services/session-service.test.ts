@@ -17,6 +17,12 @@ const skill = (name = 'foo'): Skill => ({
   source: WORKSPACE_SOURCE, content: 'body',
 });
 
+const projectScopedSkill = (name = 'acme', scopeId = 'proj-1'): Skill => ({
+  urn: entityUrn('skill', name), kind: 'skill', name, description: '',
+  scopes: ['project'], scopeId, metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE, content: 'body',
+});
+
 const projectInstruction = (name = 'acme', scopeId = 'proj-1'): Instruction => ({
   urn: entityUrn('instruction', name), kind: 'instruction', name, description: '',
   scopes: ['project'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
@@ -56,6 +62,13 @@ describe('SessionService', () => {
     const { service, base } = setup();
     await base.save({ entity: projectInstruction('acme', 'proj-1'), isCreate: true });
     const session = await service.spawn(entityAnchor(entityUrn('instruction', 'acme')));
+    expect(session.cwd).toBe('/repos/acme');
+  });
+
+  it('spawn resolves cwd via resolveScopePath for a project-scoped skill entity anchor', async () => {
+    const { service, base } = setup();
+    await base.save({ entity: projectScopedSkill('acme', 'proj-1'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'acme')));
     expect(session.cwd).toBe('/repos/acme');
   });
 

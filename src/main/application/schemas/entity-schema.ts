@@ -19,19 +19,36 @@ const entityBase = z.object({
   name: slug,
   description: z.string().max(1024),
   scopes,
+  scopeId: z.string().optional(),
   metadata,
   source,
 });
 
-// TODO(follow-up): while linkedRepos is being replaced, skill/agent are
-// temporarily restricted to `scopes: ['personal']`. When we introduce a
-// per-entity repoPath for skill/agent (mirroring ProjectInstruction), lift this
-// constraint and let scopes accept `['project']` / `['personal', 'project']`
-// again — the shared `scopes` schema above still supports multi-scope arrays.
-const skillAgentScopes = z
-  .tuple([z.literal('personal')], {
-    message: 'skill/agent scopes are temporarily limited to ["personal"]',
+type SingleScope = 'personal' | 'project' | 'workspace';
+
+const scopeTuple = (kindLabel: string) =>
+  z.tuple([z.enum(['personal', 'project', 'workspace'])], {
+    message: `${kindLabel} scopes must be exactly ["personal"], ["project"] or ["workspace"]`,
   });
+
+/**
+ * Shared by skill/agent/instruction: `scopeId` is required for 'project'/
+ * 'workspace' and forbidden for 'personal'. Storage location never depends on
+ * scope — only the adapter sync destination does (resolveScopePath).
+ */
+function requireScopeIdWhenScoped(scope: SingleScope, scopeId: string | undefined, ctx: z.RefinementCtx): void {
+  if (scope === 'personal') {
+    if (scopeId !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['scopeId'], message: 'personal scope must not carry scopeId' });
+    }
+    return;
+  }
+  if (typeof scopeId !== 'string' || scopeId.trim() === '') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['scopeId'], message: `${scope} scope requires a non-empty scopeId` });
+  }
+}
+
+const skillAgentScopes = scopeTuple('skill/agent');
 
 export const skillEntitySchema = entityBase
   .extend({
@@ -41,7 +58,8 @@ export const skillEntitySchema = entityBase
     explicitOnly: z.boolean().optional(),
     scopes: skillAgentScopes,
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((val, ctx) => requireScopeIdWhenScoped(val.scopes[0], val.scopeId, ctx));
 
 export const agentEntitySchema = entityBase
   .extend({
@@ -50,7 +68,8 @@ export const agentEntitySchema = entityBase
     systemPrompt: z.string(),
     scopes: skillAgentScopes,
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((val, ctx) => requireScopeIdWhenScoped(val.scopes[0], val.scopeId, ctx));
 
 // Instruction: discriminated by scopes[0]. Because Zod's discriminatedUnion
 // requires a top-level literal discriminator (and 'scopes' is a tuple, not a
@@ -59,43 +78,24 @@ export const instructionEntitySchema = entityBase
   .extend({
     kind: z.literal('instruction'),
     content: z.string(),
-    scopes: z.tuple([z.enum(['personal', 'project', 'workspace'])], {
-      message: 'instruction scopes must be exactly ["personal"], ["project"] or ["workspace"]',
-    }),
-    scopeId: z.string().optional(),
+    scopes: scopeTuple('instruction'),
   })
   .passthrough()
   .superRefine((val, ctx) => {
     const scope = val.scopes[0];
-    if (scope === 'personal') {
-      if (val.name !== 'default') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['name'],
-          message: 'personal instruction name must be "default"',
-        });
-      }
-      if (val.scopeId !== undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['scopeId'],
-          message: 'personal instruction must not carry scopeId',
-        });
-      }
-    } else {
-      if (val.name === 'default') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['name'],
-          message: 'non-personal instruction name cannot be "default" (reserved for personal singleton)',
-        });
-      }
-      if (typeof val.scopeId !== 'string' || val.scopeId.trim() === '') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['scopeId'],
-          message: `${scope} instruction requires a non-empty scopeId`,
-        });
-      }
+    if (scope === 'personal' && val.name !== 'default') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['name'],
+        message: 'personal instruction name must be "default"',
+      });
     }
+    if (scope !== 'personal' && val.name === 'default') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['name'],
+        message: 'non-personal instruction name cannot be "default" (reserved for personal singleton)',
+      });
+    }
+    requireScopeIdWhenScoped(scope, val.scopeId, ctx);
   });

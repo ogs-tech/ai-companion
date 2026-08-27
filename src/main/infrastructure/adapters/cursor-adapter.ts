@@ -78,16 +78,17 @@ export class CursorAdapter implements Adapter {
       return [];
     }
 
-    // TODO(follow-up): skill/agent scope 'project'/'workspace' is temporarily
-    // blocked at the schema level while linkedRepos is removed.
     const subfolder = kind === 'skill' ? '.cursor/skills' : '.cursor/agents';
     const fileName = kind === 'skill' ? name : `${name}.md`;
-    const out: AdapterDestination[] = [];
-
-    if (scopes.includes('personal')) {
-      out.push({ scope: 'personal', destination: join(this.homedir, subfolder, fileName), strategy: 'symlink' });
+    const scope = scopes[0];
+    if (scope === undefined) {
+      throw new DomainError('internal', `${kind} ${args.entity.urn} has no scope`, { reason: 'missing-scope' });
     }
-    return out;
+    if (scope === 'personal') {
+      return [{ scope: 'personal', destination: join(this.homedir, subfolder, fileName), strategy: 'symlink' }];
+    }
+    const basePath = await resolveScopePath(args.entity, this.scopeDeps);
+    return [{ scope, destination: join(basePath, subfolder, fileName), strategy: 'symlink' }];
   }
 
   private personalInstructionDestinations(instruction: Instruction): AdapterDestination[] {

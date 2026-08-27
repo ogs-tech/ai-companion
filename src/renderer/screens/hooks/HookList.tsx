@@ -127,8 +127,9 @@ export function HookList(): React.ReactElement {
         Hooks
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Hooks disparam em eventos do ciclo de vida do Claude Code. Hooks de workspace ficam em
-        <code> ~/.claude/settings.json</code>; hooks de plugin vêm empacotados com os plugins instalados.
+        Hooks disparam em eventos do ciclo de vida do Claude Code. São pessoais — aparecem em todos os
+        workspaces. Os criados aqui ficam em <code>~/.claude/settings.json</code>; os de plugin vêm
+        empacotados com os plugins instalados.
       </Typography>
 
       <EntityDataGrid<Hook>

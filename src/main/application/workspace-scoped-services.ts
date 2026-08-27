@@ -12,6 +12,7 @@ import type { ClaudeSessionPort } from './ports/claude-session-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
+import { workspaceIndexMarkerPath } from '../../shared/brand-paths.js';
 import { FsEntityRepository } from '../infrastructure/entity/fs-entity-repository.js';
 import { AdapterManager } from './services/adapter-manager.js';
 import { EntityService } from './services/entity-service.js';
@@ -73,13 +74,18 @@ export function buildWorkspaceScopedServices(
     claudeCli, claudeSessionPort,
   } = shared;
 
-  const projectService = new ProjectService(new FsProjectRegistry(join(dataDir, 'projects.json')), clock);
+  const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
+  const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, dataDir);
+
+  const projectService = new ProjectService(
+    new FsProjectRegistry(join(dataDir, 'projects.json')),
+    clock,
+    { symlinkManager, sourcePath: workspaceIndexMarkerPath(dataDir), dataDir },
+  );
 
   const claudeAdapter = new ClaudeAdapter({ homedir, workspaceService, projectService });
   const cursorAdapter = new CursorAdapter({ homedir, workspaceService, projectService });
 
-  const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
-  const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, dataDir);
   const entityRepository = new FsEntityRepository(dataDir);
   const adapterManager = new AdapterManager({
     settingsService,
@@ -118,6 +124,8 @@ export function buildWorkspaceScopedServices(
     nodeFsAdapter,
     dataDir,
     claudeSettingsFile,
+    projectService,
+    symlinkManager,
   );
 
   return {

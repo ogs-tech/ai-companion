@@ -5,7 +5,6 @@ import { WorkspaceScreen } from './workspace/WorkspaceScreen.js';
 import { SkillList } from './skills/SkillList.js';
 import { AgentList } from './agents/AgentList.js';
 import { HookList } from './hooks/HookList.js';
-import { InstructionsScreen } from './instructions/InstructionsScreen.js';
 import { McpList } from './mcps/McpList.js';
 import { MarketplaceList } from './marketplaces/MarketplaceList.js';
 import { PluginList } from './plugins/PluginList.js';
@@ -20,24 +19,22 @@ interface MainProps {
 
 function screenFor(nav: Nav, navigate: (n: Nav) => void): React.ReactElement {
   switch (nav.area) {
-    case 'inicio':
+    case 'starter-pack':
       return <StarterPackScreen onNavigate={navigate} />;
-    case 'workspace':
-      return <WorkspaceScreen />;
     case 'diagnostico':
       return <HealthScreen />;
     case 'plugins':
       return nav.sub === 'plugins' ? <PluginList scope="personal" /> : <MarketplaceList />;
-    case 'biblioteca':
+    case 'workspace':
       switch (nav.sub) {
+        case 'visao-geral':
+          return <WorkspaceScreen />;
         case 'skills':
           return <SkillList />;
         case 'agents':
           return <AgentList />;
         case 'hooks':
           return <HookList />;
-        case 'instructions':
-          return <InstructionsScreen />;
         case 'mcps':
           return <McpList />;
       }

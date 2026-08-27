@@ -1,35 +1,42 @@
 import {
-  House, SlidersHorizontal, Puzzle, Activity, Sparkles, Bot,
-  Webhook, NotebookPen, Store, Plug, FolderTree as FolderTreeIcon, type LucideIcon,
+  House, Rocket, LayoutDashboard, Puzzle, Activity, Sparkles, Bot,
+  Webhook, Store, Plug, type LucideIcon,
 } from 'lucide-react';
 
-export type Area = 'inicio' | 'workspace' | 'biblioteca' | 'plugins' | 'diagnostico';
-export type LibrarySub = 'skills' | 'agents' | 'hooks' | 'instructions' | 'mcps';
+export type Area = 'workspace' | 'starter-pack' | 'plugins' | 'diagnostico';
+export type WorkspaceSub = 'visao-geral' | 'skills' | 'agents' | 'hooks' | 'mcps';
 export type PluginsSub = 'plugins' | 'marketplaces';
 
 export type Nav =
-  | { area: 'inicio' }
-  | { area: 'workspace' }
-  | { area: 'biblioteca'; sub: LibrarySub }
+  | { area: 'workspace'; sub: WorkspaceSub }
+  | { area: 'starter-pack' }
   | { area: 'plugins'; sub: PluginsSub }
   | { area: 'diagnostico' };
 
 export interface AreaDef { area: Area; label: string; glyph: LucideIcon; }
 export interface SubDef<S> { sub: S; label: string; glyph: LucideIcon; }
 
+// The 'workspace' area leads and is labeled "Início" — it's the landing area
+// (see `defaultNav` below) — with Starter Pack demoted to an ordinary page
+// reached from the tab bar instead of doubling as home. The area key stays
+// `workspace` (routing, SubRail's "Workspace" section, etc. are unaffected);
+// only this tab's display label/icon read as "home".
 export const NAV_AREAS: ReadonlyArray<AreaDef> = [
-  { area: 'inicio', label: 'Início', glyph: House },
-  { area: 'workspace', label: 'Workspace', glyph: FolderTreeIcon },
-  { area: 'biblioteca', label: 'Biblioteca', glyph: SlidersHorizontal },
+  { area: 'workspace', label: 'Início', glyph: House },
+  { area: 'starter-pack', label: 'Starter Pack', glyph: Rocket },
   { area: 'plugins', label: 'Plugins', glyph: Puzzle },
   { area: 'diagnostico', label: 'Diagnóstico', glyph: Activity },
 ];
 
-export const LIBRARY_SUBS: ReadonlyArray<SubDef<LibrarySub>> = [
+// Skills/Agents/Hooks/MCP live under the active workspace — its data (which
+// entities exist) already changes per workspace on the backend, this just
+// makes that ownership legible in the nav. Instructions is managed inline on
+// Visão geral instead of as its own sub — see WorkspaceScreen.
+export const WORKSPACE_SUBS: ReadonlyArray<SubDef<WorkspaceSub>> = [
+  { sub: 'visao-geral', label: 'Visão geral', glyph: LayoutDashboard },
   { sub: 'skills', label: 'Skills', glyph: Sparkles },
   { sub: 'agents', label: 'Agents', glyph: Bot },
   { sub: 'hooks', label: 'Hooks', glyph: Webhook },
-  { sub: 'instructions', label: 'Instructions', glyph: NotebookPen },
   { sub: 'mcps', label: 'MCP', glyph: Plug },
 ];
 
@@ -46,7 +53,7 @@ export const PLUGINS_SUBS: ReadonlyArray<SubDef<PluginsSub>> = [
  * instead of re-hardcoding the sub-less area list.
  */
 const AREA_SUBS: Partial<Record<Area, ReadonlyArray<SubDef<string>>>> = {
-  biblioteca: LIBRARY_SUBS,
+  workspace: WORKSPACE_SUBS,
   plugins: PLUGINS_SUBS,
 };
 
@@ -55,7 +62,7 @@ export function areaHasSub(area: Area): boolean {
   return area in AREA_SUBS;
 }
 
-export const defaultNav: Nav = { area: 'inicio' };
+export const defaultNav: Nav = { area: 'workspace', sub: 'visao-geral' };
 
 /** Stable `nav-<id>` testid: the sub id when present, else the area id. */
 export function navTestId(nav: Nav): string {
@@ -64,7 +71,7 @@ export function navTestId(nav: Nav): string {
 
 /** Default sub when an area with subs is first entered. */
 export function defaultSubFor(area: Area): Nav {
-  if (area === 'biblioteca') return { area, sub: 'skills' };
+  if (area === 'workspace') return { area, sub: 'visao-geral' };
   if (area === 'plugins') return { area, sub: 'plugins' };
   return { area } as Nav;
 }

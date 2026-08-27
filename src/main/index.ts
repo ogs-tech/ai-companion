@@ -160,6 +160,10 @@ async function wireIpc(): Promise<void> {
     workspace.rootPath === home ? workspacePath : workspaceDataDir(workspace.rootPath);
   const activeWorkspace = await workspaceService.getActive();
   const activeDataDir = dataDirFor(activeWorkspace);
+  // Self-heals a non-default active workspace bootstrapped before a later addition (e.g. index.md) existed.
+  if (activeDataDir !== workspacePath) {
+    await workspaceBootstrap.create(activeDataDir);
+  }
 
   const settingsService = new SettingsService(
     new FsSettingsRepository(join(workspacePath, 'settings.json')),
@@ -342,6 +346,7 @@ async function wireIpc(): Promise<void> {
     projectService: workspaceScoped.projectService,
     switchActiveWorkspace,
     fileBrowserService,
+    fileBrowserPort,
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
@@ -367,7 +372,9 @@ async function wireIpc(): Promise<void> {
     return switchQueue(async () => {
       workspaceScoped.sessionService.killAll();
       const target = await workspaceService.switchTo(id);
-      workspaceScoped = buildWorkspaceScopedServices(dataDirFor(target), sharedDeps);
+      const targetDataDir = dataDirFor(target);
+      await workspaceBootstrap.create(targetDataDir); // same self-heal as at startup
+      workspaceScoped = buildWorkspaceScopedServices(targetDataDir, sharedDeps);
       fileBrowserService = new FileBrowserService(fileBrowserPort, target.rootPath);
       attachSessionBridges(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));

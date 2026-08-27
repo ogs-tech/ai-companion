@@ -28,6 +28,32 @@ describe('renderEntityFile — skill', () => {
 });
 
 describe('parseEntityFile — skill round-trip', () => {
+  it('round-trips scopeId through frontmatter for a project-scoped skill', () => {
+    const skill: Skill = {
+      urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'project skill',
+      scopes: ['project'], scopeId: 'proj-1', metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body',
+    };
+    const raw = renderEntityFile(skill);
+    expect(raw).toContain('scopeId: proj-1');
+
+    const parsed = parseEntityFile({ kind: 'skill', name: 'acme', raw, source: WORKSPACE_SOURCE }) as Skill;
+    expect(parsed.scopes).toEqual(['project']);
+    expect(parsed.scopeId).toBe('proj-1');
+    // scopeId must not also leak into ext (it's a known key, not passthrough).
+    expect(parsed.ext).toBeUndefined();
+  });
+
+  it('emits no scopeId for a personal skill and parses none back', () => {
+    const skill: Skill = {
+      urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'a demo',
+      scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body',
+    };
+    const raw = renderEntityFile(skill);
+    expect(raw).not.toContain('scopeId');
+    const parsed = parseEntityFile({ kind: 'skill', name: 'demo', raw, source: WORKSPACE_SOURCE }) as Skill;
+    expect(parsed.scopeId).toBeUndefined();
+  });
+
   it('parses frontmatter back into a canonical skill with ext passthrough', () => {
     const raw = [
       '---', 'name: demo', 'type: skill', 'description: a demo',
@@ -60,6 +86,19 @@ describe('agent', () => {
     expect(parsed.systemPrompt.trim()).toBe('You review code.');
     expect(parsed.model).toBe('inherit');
     expect(parsed.tools).toEqual(['Read', 'Grep']);
+  });
+
+  it('round-trips scopeId through frontmatter for a workspace-scoped agent', () => {
+    const agent: Agent = {
+      urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'triage agent',
+      scopes: ['workspace'], scopeId: 'ws-1', metadata: baseMeta, source: WORKSPACE_SOURCE,
+      systemPrompt: 'Triage incoming issues.',
+    };
+    const raw = renderEntityFile(agent);
+    expect(raw).toContain('scopeId: ws-1');
+    const parsed = parseEntityFile({ kind: 'agent', name: 'triage', raw, source: WORKSPACE_SOURCE }) as Agent;
+    expect(parsed.scopes).toEqual(['workspace']);
+    expect(parsed.scopeId).toBe('ws-1');
   });
 });
 

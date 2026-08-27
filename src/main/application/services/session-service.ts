@@ -1,4 +1,3 @@
-import type { Instruction } from '../../../shared/entity.js';
 import type { SessionAnchor, SessionSnapshot, SessionStatus } from '../../../shared/session.js';
 import { sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
@@ -123,11 +122,8 @@ export class SessionService {
       return (await this.scopeDeps.projectService.get(anchor.projectId)).path;
     }
     const entity = await this.entityService.get(anchor.urn);
-    if (entity.kind === 'instruction') {
-      const instruction = entity as Instruction;
-      if (instruction.scopes[0] !== 'personal') {
-        return resolveScopePath(instruction, this.scopeDeps);
-      }
+    if (entity.scopes[0] !== 'personal') {
+      return resolveScopePath(entity, this.scopeDeps);
     }
     return this.workspacePath;
   }

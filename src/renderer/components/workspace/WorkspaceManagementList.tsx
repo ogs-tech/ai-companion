@@ -1,16 +1,10 @@
 import { useState } from 'react';
-import { Box, Button, ListItemText, Menu, MenuItem, Typography } from '@mui/material';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { Box, Button, List, ListItemButton, ListItemText, Stack, Tooltip } from '@mui/material';
+import { Folder, FolderPlus, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { callIpc } from '../../lib/ipc.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import {
-  useActiveWorkspace,
-  useCreateWorkspace,
-  useDeleteWorkspace,
-  useSwitchWorkspace,
-  useWorkspaces,
-} from '../../hooks/use-workspaces.js';
+import { useCreateWorkspace, useDeleteWorkspace, useSwitchWorkspace, useWorkspaces } from '../../hooks/use-workspaces.js';
 import type { Workspace } from '../../../shared/workspace.js';
 
 function basename(path: string): string {
@@ -22,19 +16,24 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function WorkspaceSwitcher(): React.ReactElement {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+/**
+ * Other project workspaces you can jump into or remove. This only ever
+ * renders from the Global overview, so the active workspace is always
+ * Default itself — already named by the screen around this list — and is
+ * left out here rather than repeated as an unswitchable, undeletable row.
+ * Rows are styled identically to a FolderTree folder row (same icon size,
+ * same trailing action-icon treatment) so it reads as one tree, not a card.
+ */
+export function WorkspaceManagementList(): React.ReactElement {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const { data: workspaces = [] } = useWorkspaces();
-  const { data: active } = useActiveWorkspace();
   const switchWorkspace = useSwitchWorkspace();
   const createWorkspace = useCreateWorkspace();
   const deleteWorkspace = useDeleteWorkspace();
 
-  const close = (): void => setAnchor(null);
+  const otherWorkspaces = workspaces.filter((w) => !w.isDefault);
 
   const handleSwitch = async (w: Workspace): Promise<void> => {
-    close();
     try {
       await switchWorkspace.mutateAsync(w.id);
       setToast({ variant: 'success', message: `Workspace alterado para ${w.name}` });
@@ -44,7 +43,6 @@ export function WorkspaceSwitcher(): React.ReactElement {
   };
 
   const handleDelete = async (w: Workspace): Promise<void> => {
-    close();
     try {
       await deleteWorkspace.mutateAsync(w.id);
       setToast({ variant: 'success', message: `${w.name} removido` });
@@ -54,7 +52,6 @@ export function WorkspaceSwitcher(): React.ReactElement {
   };
 
   const handleNew = async (): Promise<void> => {
-    close();
     try {
       const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
       if (picked.canceled || !picked.path) return;
@@ -67,32 +64,29 @@ export function WorkspaceSwitcher(): React.ReactElement {
   };
 
   return (
-    <Box>
-      <Button
-        data-testid="workspace-switcher-trigger"
-        onClick={(e) => setAnchor(e.currentTarget)}
-        color="inherit"
-        size="small"
-        endIcon={<Icon glyph={ChevronDown} size={14} />}
-      >
-        {active?.name ?? '…'}
-      </Button>
-      <Menu anchorEl={anchor} open={anchor !== null} onClose={close}>
-        {workspaces
-          .filter((w) => w.id !== active?.id)
-          .map((w) => (
-            <MenuItem
-              key={w.id}
-              data-testid={`workspace-switch-${w.id}`}
+    <Box data-testid="workspace-management-list">
+      <List disablePadding>
+        {otherWorkspaces.map((w) => (
+          <Tooltip key={w.id} title={w.rootPath} placement="top">
+            <ListItemButton
+              dense
+              data-testid={`workspace-list-row-${w.id}`}
               onClick={() => void handleSwitch(w)}
+              sx={{ pl: 1.5 }}
             >
-              <ListItemText primary={w.name} secondary={w.rootPath} />
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
+                <Icon glyph={Folder} size={14} />
+                <ListItemText
+                  primary={w.name}
+                  slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }}
+                />
+              </Stack>
               <Box
                 component="span"
-                data-testid={`workspace-delete-${w.id}`}
                 role="button"
                 tabIndex={0}
-                aria-label={`Excluir ${w.name}`}
+                aria-label={`Remover ${w.name}`}
+                data-testid={`workspace-list-delete-${w.id}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   void handleDelete(w);
@@ -103,17 +97,24 @@ export function WorkspaceSwitcher(): React.ReactElement {
                   e.stopPropagation();
                   void handleDelete(w);
                 }}
-                sx={{ display: 'inline-flex', ml: 1, cursor: 'pointer' }}
+                sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
               >
                 <Icon glyph={Trash2} size={14} />
               </Box>
-            </MenuItem>
-          ))}
-        <MenuItem data-testid="workspace-new" onClick={() => void handleNew()}>
-          <Icon glyph={Plus} size={14} />
-          <Typography sx={{ ml: 1 }}>Novo workspace</Typography>
-        </MenuItem>
-      </Menu>
+            </ListItemButton>
+          </Tooltip>
+        ))}
+      </List>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<Icon glyph={FolderPlus} size={16} />}
+        data-testid="workspace-list-new"
+        sx={{ m: 1.5 }}
+        onClick={() => void handleNew()}
+      >
+        Novo workspace
+      </Button>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );

@@ -4,7 +4,8 @@ import { TopNav } from './TopNav.js';
 import { SubRail } from './SubRail.js';
 import { AppFooter } from './AppFooter.js';
 import { CommandPalette } from './CommandPalette.js';
-import { defaultSubFor, type Area, type LibrarySub, type Nav } from './nav.js';
+import { defaultSubFor, type Area, type WorkspaceSub, type Nav } from './nav.js';
+import { useActiveWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 
 interface AppShellProps {
   nav: Nav;
@@ -22,6 +23,8 @@ export function AppShell({
   children,
 }: AppShellProps): React.ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const { data: activeWorkspace } = useActiveWorkspace();
+  const switchWorkspace = useSwitchWorkspace();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -34,8 +37,17 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const selectArea = (area: Area): void => onNavigate(defaultSubFor(area));
-  const createEntity = (sub: LibrarySub): void => onNavigate({ area: 'biblioteca', sub });
+  // The "Início" tab (area: 'workspace') doubles as a "go home" gesture:
+  // leaving a project workspace's own screens always lands back on the
+  // Global workspace, whose Visão Geral is now the single place to
+  // switch/create/remove workspaces.
+  const selectArea = (area: Area): void => {
+    if (area === 'workspace' && activeWorkspace && !activeWorkspace.isDefault) {
+      void switchWorkspace.mutateAsync('default');
+    }
+    onNavigate(defaultSubFor(area));
+  };
+  const createEntity = (sub: WorkspaceSub): void => onNavigate({ area: 'workspace', sub });
 
   return (
     <Box

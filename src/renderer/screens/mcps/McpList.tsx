@@ -48,7 +48,7 @@ export function McpList(): React.ReactElement {
   return (
     <Container component="main" data-testid="mcp-screen" maxWidth="lg" sx={{ py: 2.5 }}>
       <ScreenHeader
-        kicker="Biblioteca"
+        kicker="Workspace"
         title="MCP"
         {...(data !== undefined ? { subtitle: `${servers.length} server(s)` } : {})}
         actions={

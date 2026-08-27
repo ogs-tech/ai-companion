@@ -6,7 +6,6 @@ import { Icon } from '../ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from '../ds/StatusPill.js';
 import { useThemeMode } from '../../lib/theme-mode-context.js';
 import { NAV_AREAS, type Area } from './nav.js';
-import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 
 interface TopNavProps {
   active: Area;
@@ -62,7 +61,6 @@ export function TopNav({
             font-load/reflow and could fail to slide back (e.g. to Início). */}
         <Tabs
           value={active}
-          onChange={(_, v) => onSelectArea(v as Area)}
           textColor="inherit"
           slotProps={{ indicator: { sx: { display: 'none' } } }}
           sx={{ ml: 2, flexGrow: 1, minHeight: 'auto' }}
@@ -75,6 +73,11 @@ export function TopNav({
               data-testid={`nav-${a.area}`}
               icon={<Icon glyph={a.glyph} size={16} />}
               iconPosition="start"
+              // MUI's Tab only calls Tabs' onChange when the clicked tab isn't
+              // already selected — so an explicit onClick here (always fired)
+              // is what lets re-clicking "Workspace" act as a "go home" jump
+              // while already browsing one of its sub-screens.
+              onClick={() => onSelectArea(a.area)}
               sx={(theme) => ({
                 minHeight: 56,
                 opacity: 1,
@@ -101,8 +104,6 @@ export function TopNav({
               ⌘K
             </Button>
           </Tooltip>
-
-          <WorkspaceSwitcher />
 
           {healthSeverity !== undefined && (
             <StatusPill

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CursorAdapter } from '../../../../../src/main/infrastructure/adapters/cursor-adapter.js';
+import { DomainError } from '../../../../../src/main/domain/errors.js';
 import {
   WORKSPACE_SOURCE,
   type Agent,
@@ -38,20 +39,36 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     ]);
   });
 
-  it('drops project-scoped skill/agent destinations while linkedRepos is being replaced', async () => {
-    // Skill/agent scope 'project' is temporarily a no-op — see the TODO in
-    // CursorAdapter.resolveEntityDestinations.
-    const skill: Skill = { urn: 'urn:skill:multi', kind: 'skill', name: 'multi', description: 'd',
-      scopes: ['personal', 'project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
+  it('routes a project-scoped skill to <resolved project path>/.cursor/skills/<name>', async () => {
+    const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd',
+      scopes: ['project'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
-      { scope: 'personal', destination: '/home/u/.cursor/skills/multi', strategy: 'symlink' },
+      { scope: 'project', destination: '/repos/acme/.cursor/skills/acme', strategy: 'symlink' },
     ]);
   });
 
-  it('returns [] for a project-only agent (linkedRepos gone; no per-agent repoPath yet)', async () => {
+  it('routes a workspace-scoped agent to <resolved workspace root>/.cursor/agents/<name>.md', async () => {
+    const wsAdapter = new CursorAdapter({
+      homedir: '/home/u',
+      workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
+      projectService: { get: async () => { throw new Error('not stubbed'); } },
+    });
     const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'd',
-      scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
-    expect(await adapter.resolveEntityDestinations({ entity: agent })).toEqual([]);
+      scopes: ['workspace'], scopeId: 'ws-1', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
+    expect(await wsAdapter.resolveEntityDestinations({ entity: agent })).toEqual([
+      { scope: 'workspace', destination: '/repos/ws/.cursor/agents/triage.md', strategy: 'symlink' },
+    ]);
+  });
+
+  it('rejects a project-scoped agent when the referenced project no longer exists', async () => {
+    const goneAdapter = new CursorAdapter({
+      homedir: '/home/u',
+      workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+      projectService: { get: async () => { throw new DomainError('not_found', 'Project not found'); } },
+    });
+    const agent: Agent = { urn: 'urn:agent:gone', kind: 'agent', name: 'gone', description: 'd',
+      scopes: ['project'], scopeId: 'gone', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
+    await expect(goneAdapter.resolveEntityDestinations({ entity: agent })).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('materializes the personal instruction as a Cursor plugin (manifest + rule)', async () => {

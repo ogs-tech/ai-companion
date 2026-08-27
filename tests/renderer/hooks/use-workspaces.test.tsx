@@ -46,13 +46,32 @@ describe('use-workspaces', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['workspace', 'list'] });
   });
 
-  it('useSwitchWorkspace calls workspace.switchTo and clears the whole cache', async () => {
+  it('useSwitchWorkspace calls workspace.switchTo and invalidates every cached query', async () => {
     const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(workspace());
-    const clearSpy = vi.spyOn(queryClient, 'clear');
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useSwitchWorkspace(), { wrapper });
     await result.current.mutateAsync('w1');
     expect(spy).toHaveBeenCalledWith('workspace.switchTo', { id: 'w1' });
-    expect(clearSpy).toHaveBeenCalled();
+    expect(invalidateSpy).toHaveBeenCalledWith();
+  });
+
+  it('a mounted useActiveWorkspace query refetches on its own after switching, with no remount needed', async () => {
+    let current = workspace('default');
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
+      if (method === 'workspace.getActive') return current;
+      if (method === 'workspace.switchTo') {
+        current = workspace('w1');
+        return current;
+      }
+      return undefined;
+    });
+    const { result: activeResult } = renderHook(() => useActiveWorkspace(), { wrapper });
+    await waitFor(() => expect(activeResult.current.data?.id).toBe('default'));
+
+    const { result: switchResult } = renderHook(() => useSwitchWorkspace(), { wrapper });
+    await switchResult.current.mutateAsync('w1');
+
+    await waitFor(() => expect(activeResult.current.data?.id).toBe('w1'));
   });
 
   it('useDeleteWorkspace calls workspace.delete and invalidates the list', async () => {

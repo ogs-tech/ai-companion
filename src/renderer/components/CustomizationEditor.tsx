@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
-  Alert, Box, Button, Checkbox, CircularProgress, Container, FormControlLabel,
-  FormGroup, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
+  Alert, Box, Button, Checkbox, CircularProgress, Container, FormControl, FormControlLabel,
+  FormGroup, InputLabel, MenuItem, Paper, Select, Stack, TextField, ToggleButton,
+  ToggleButtonGroup, Typography,
 } from '@mui/material';
 import { WandSparkles } from 'lucide-react';
 import { Kicker } from './ds/Kicker.js';
@@ -17,6 +18,8 @@ import { entityUrn } from '../../shared/entity.js';
 import type { SyncResult } from '../../shared/sync-result.js';
 import { entityBody, withEntityBody } from '../lib/entity-body.js';
 import type { GenerateDraftPhase } from '../../shared/instruction-generation.js';
+import { useFindOrCreateProjectByPath, useProjects } from '../hooks/use-projects.js';
+import { useActiveWorkspace } from '../hooks/use-workspaces.js';
 
 const GENERATE_PHASE_LABEL: Record<GenerateDraftPhase, string> = {
   starting: 'Iniciando sessão…',
@@ -33,11 +36,16 @@ const SAVE_BY_KIND: Record<EditableEntity['kind'], { method: string; payloadKey:
   instruction: { method: 'instruction.save', payloadKey: 'instruction', resultKey: 'instruction' },
 };
 
-// TODO(follow-up): reintroduce 'project' for skill/agent once each carries its
-// own repoPath (mirroring ProjectInstruction). Blocked at the schema level
-// today after settings.linkedRepos was removed.
 const scopeOptionsFor = (kind: EditableEntity['kind']): readonly Scope[] =>
-  kind === 'instruction' ? (['personal', 'project'] as const) : (['personal'] as const);
+  kind === 'instruction' ? (['personal', 'project'] as const) : (['personal', 'workspace', 'project'] as const);
+
+const SCOPE_LABEL: Record<Scope, string> = { personal: 'Personal', workspace: 'Workspace', project: 'Project' };
+const NEW_PROJECT_OPTION = '__new_project__';
+
+function clearScopeId<T extends { scopeId?: string }>(entity: T): T {
+  const { scopeId: _drop, ...rest } = entity;
+  return rest as T;
+}
 
 export type EditorHiddenField = 'name' | 'scope' | 'description' | 'version';
 
@@ -89,6 +97,38 @@ export function CustomizationEditor({
   const [generating, setGenerating] = useState(false);
   const [generatePhase, setGeneratePhase] = useState<GenerateDraftPhase | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const { data: projects = [] } = useProjects();
+  const activeWorkspace = useActiveWorkspace();
+  const findOrCreateProject = useFindOrCreateProjectByPath();
+  const [projectPickerError, setProjectPickerError] = useState<string | null>(null);
+
+  const handleScopeChange = (value: Scope | null): void => {
+    if (!value) return;
+    const scopeId = value === 'workspace' ? activeWorkspace.data?.id : undefined;
+    setEntity((prev) => {
+      const cleared = clearScopeId(prev);
+      return (scopeId !== undefined
+        ? { ...cleared, scopes: [value], scopeId }
+        : { ...cleared, scopes: [value] }) as EditableEntity;
+    });
+  };
+
+  const handleProjectSelectChange = async (value: string): Promise<void> => {
+    if (value === NEW_PROJECT_OPTION) {
+      setProjectPickerError(null);
+      try {
+        const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
+        if (picked.canceled || !picked.path) return;
+        const project = await findOrCreateProject.mutateAsync(picked.path);
+        setEntity((prev) => ({ ...prev, scopes: ['project'], scopeId: project.id } as EditableEntity));
+      } catch (err) {
+        setProjectPickerError(err instanceof Error ? err.message : 'Erro ao abrir o seletor');
+      }
+      return;
+    }
+    setEntity((prev) => ({ ...prev, scopes: ['project'], scopeId: value } as EditableEntity));
+  };
 
   const handleGenerate = async (): Promise<void> => {
     setGenerateError(null);
@@ -203,26 +243,60 @@ export function CustomizationEditor({
             {!isHidden('scope') && (
               <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Scope</Typography>
-                <FormGroup row>
-                  {(scopeOptionsFor(entity.kind)).map((value) => (
-                    <FormControlLabel
-                      key={value}
-                      control={
-                        <Checkbox
-                          checked={(entity.scopes as Scope[]).includes(value)}
-                          onChange={(e) => {
-                            const scopesArr = entity.scopes as Scope[];
-                            const next: Scope[] = e.target.checked
-                              ? Array.from(new Set([...scopesArr, value]))
-                              : scopesArr.filter((s) => s !== value);
-                            setEntity((prev) => ({ ...prev, scopes: next } as unknown as EditableEntity));
-                          }}
-                        />
-                      }
-                      label={value}
-                    />
-                  ))}
-                </FormGroup>
+                {entity.kind === 'skill' || entity.kind === 'agent' ? (
+                  <>
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={entity.scopes[0] ?? 'personal'}
+                      onChange={(_, value: Scope | null) => handleScopeChange(value)}
+                    >
+                      {scopeOptionsFor(entity.kind).map((value) => (
+                        <ToggleButton key={value} value={value}>{SCOPE_LABEL[value]}</ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
+                    {entity.scopes[0] === 'project' && (
+                      <FormControl size="small" sx={{ mt: 1.5, minWidth: 260, display: 'block' }}>
+                        <InputLabel id="scope-project-select-label">Project</InputLabel>
+                        <Select
+                          labelId="scope-project-select-label"
+                          label="Project"
+                          value={entity.scopeId ?? ''}
+                          onChange={(e) => void handleProjectSelectChange(e.target.value)}
+                        >
+                          {projects.map((p) => (
+                            <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                          ))}
+                          <MenuItem value={NEW_PROJECT_OPTION}>+ Novo project…</MenuItem>
+                        </Select>
+                      </FormControl>
+                    )}
+                    {projectPickerError && (
+                      <Alert severity="error" sx={{ mt: 1 }}>{projectPickerError}</Alert>
+                    )}
+                  </>
+                ) : (
+                  <FormGroup row>
+                    {(scopeOptionsFor(entity.kind)).map((value) => (
+                      <FormControlLabel
+                        key={value}
+                        control={
+                          <Checkbox
+                            checked={(entity.scopes as Scope[]).includes(value)}
+                            onChange={(e) => {
+                              const scopesArr = entity.scopes as Scope[];
+                              const next: Scope[] = e.target.checked
+                                ? Array.from(new Set([...scopesArr, value]))
+                                : scopesArr.filter((s) => s !== value);
+                              setEntity((prev) => ({ ...prev, scopes: next } as unknown as EditableEntity));
+                            }}
+                          />
+                        }
+                        label={value}
+                      />
+                    ))}
+                  </FormGroup>
+                )}
               </Box>
             )}
           </Stack>

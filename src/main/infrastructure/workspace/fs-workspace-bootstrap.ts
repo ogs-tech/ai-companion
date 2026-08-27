@@ -21,4 +21,16 @@ export class FsWorkspaceBootstrap implements FileSystemMutator {
       throw err;
     }
   }
+
+  async writeFile(path: string, content: string): Promise<void> {
+    try {
+      await fs.writeFile(path, content, 'utf8');
+    } catch (err) {
+      const code = errnoCode(err);
+      if (code !== undefined && IO_ERRNO_CODES.has(code)) {
+        throw new DomainError('io', `Failed to write file: ${path}`, { code, path });
+      }
+      throw err;
+    }
+  }
 }

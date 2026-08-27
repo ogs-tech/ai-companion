@@ -7,11 +7,11 @@ import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { FilePreviewPane } from '../../../../src/renderer/components/workspace/FilePreviewPane.js';
 
-const renderPane = (path: string | null) =>
+const renderPane = (path: string | null, projectId?: string) =>
   render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createAppTheme('light')}>
-        <FilePreviewPane path={path} />
+        <FilePreviewPane path={path} {...(projectId ? { projectId } : {})} />
       </ThemeProvider>
     </QueryClientProvider>,
   );
@@ -51,5 +51,12 @@ describe('FilePreviewPane', () => {
     renderPane('secret.txt');
     expect(await screen.findByTestId('file-preview-error')).toBeInTheDocument();
     expect(screen.getByText('Permission denied')).toBeInTheDocument();
+  });
+
+  it('fetches via project.readFile when scoped to a projectId', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, content: 'hi', truncated: false });
+    renderPane('a.txt', 'p1');
+    expect(await screen.findByText('hi')).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.txt' });
   });
 });

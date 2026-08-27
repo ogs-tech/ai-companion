@@ -23,3 +23,15 @@ export function cursorPluginPath(home: string): string {
 export function legacyCursorPluginPath(home: string): string {
   return `${home}/.cursor/plugins/${brand.legacy.cursorPluginId}`;
 }
+
+const INDEX_MARKER_FILE = 'index.md';
+
+/** Canonical `<dataDir>/index.md`, written once per workspace by WorkspaceBootstrapService. */
+export function workspaceIndexMarkerPath(dataDir: string): string {
+  return `${dataDir}/${INDEX_MARKER_FILE}`;
+}
+
+/** `<projectPath>/.ai-companion/index.md` — a symlink back to workspaceIndexMarkerPath. */
+export function projectIndexMarkerPath(projectPath: string): string {
+  return `${projectPath}/${brand.workspaceDirName}/${INDEX_MARKER_FILE}`;
+}

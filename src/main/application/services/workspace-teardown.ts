@@ -1,6 +1,9 @@
 import type { AdapterManager } from './adapter-manager.js';
+import type { ProjectService } from './project-service.js';
+import type { SymlinkManager } from './symlink-manager.js';
 import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import type { ClaudeSettingsPort } from '../ports/claude-settings-port.js';
+import { projectIndexMarkerPath } from '../../../shared/brand-paths.js';
 
 /**
  * "Restore to initial state" (factory reset). Undoes only this app's footprint:
@@ -15,6 +18,8 @@ export class WorkspaceTeardownService {
     private readonly fs: Pick<WritableFileSystemPort, 'remove'>,
     private readonly workspacePath: string,
     private readonly settings: Pick<ClaudeSettingsPort, 'mutate'>,
+    private readonly projectService: Pick<ProjectService, 'list'>,
+    private readonly symlinkManager: Pick<SymlinkManager, 'removeIfPointsToWorkspace'>,
   ) {}
 
   async restore(): Promise<void> {
@@ -23,6 +28,7 @@ export class WorkspaceTeardownService {
     // directory is deleted.
     await this.adapterManager.removeAllAdapterSymlinks();
     await this.adapterManager.removeAllGeneratedFiles();
+    await this.removeProjectIndexMarkers();
     await this.fs.remove(this.workspacePath);
     // Clear the registry this app owns in settings.json. Deleting the workspace
     // (above) wipes the marketplace clone cache, so leaving these entries behind
@@ -34,5 +40,20 @@ export class WorkspaceTeardownService {
       extraKnownMarketplaces: {},
       enabledPlugins: {},
     }));
+  }
+
+  private async removeProjectIndexMarkers(): Promise<void> {
+    // A corrupt/unreadable projects.json must not abort the rest of restore() — degrade to [].
+    const projects = await this.projectService.list().catch(() => []);
+    for (const project of projects) {
+      try {
+        await this.symlinkManager.removeIfPointsToWorkspace(
+          projectIndexMarkerPath(project.path),
+          this.workspacePath,
+        );
+      } catch {
+        // Best-effort — one unreachable project path must not block the rest of the reset.
+      }
+    }
   }
 }

@@ -75,6 +75,10 @@ export function isProjectInstruction(entity: Instruction): boolean {
   return entity.scopes[0] === 'project';
 }
 
+export function isWorkspaceInstruction(entity: Instruction): boolean {
+  return entity.scopes[0] === 'workspace';
+}
+
 /**
  * Sidecar metadata for instructions. Instructions are stored frontmatter-free
  * on disk so the sync target (AGENTS.md, CLAUDE.md) is a clean body — this

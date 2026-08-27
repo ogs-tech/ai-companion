@@ -6,6 +6,7 @@ import {
   isWorkspaceSource,
   isPersonalInstruction,
   isProjectInstruction,
+  isWorkspaceInstruction,
   WORKSPACE_SOURCE,
   type Instruction,
   type Skill,
@@ -80,6 +81,15 @@ describe('Instruction scoping', () => {
     };
     expect(workspaceScoped.scopes[0]).toBe('workspace');
     expect(workspaceScoped.scopeId).toBe('ws-1');
+  });
+
+  it('isWorkspaceInstruction reads scopes[0], distinct from personal/project', () => {
+    const personal: Instruction = { ...base, name: 'default', scopes: ['personal'] };
+    const project: Instruction = { ...base, name: 'acme', scopes: ['project'], scopeId: 'proj-1' };
+    const workspaceScoped: Instruction = { ...base, name: 'ws-wide', scopes: ['workspace'], scopeId: 'ws-1' };
+    expect(isWorkspaceInstruction(workspaceScoped)).toBe(true);
+    expect(isWorkspaceInstruction(personal)).toBe(false);
+    expect(isWorkspaceInstruction(project)).toBe(false);
   });
 
   it('carries legacyRepoPath instead of scopeId for pre-migration data', () => {

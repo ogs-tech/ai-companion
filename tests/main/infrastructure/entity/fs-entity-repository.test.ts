@@ -24,6 +24,18 @@ describe('FsEntityRepository — skill', () => {
     const back = (await repo.get('urn:skill:demo')) as Skill;
     expect(back.content.trim()).toBe('# Demo');
   });
+
+  it('round-trips scopes/scopeId for a project-scoped skill through disk', async () => {
+    const repo = new FsEntityRepository(ws);
+    const skill: Skill = {
+      urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd', scopes: ['project'],
+      scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: '# Acme\n',
+    };
+    await repo.save(skill);
+    const back = (await repo.get('urn:skill:acme')) as Skill;
+    expect(back.scopes).toEqual(['project']);
+    expect(back.scopeId).toBe('proj-1');
+  });
 });
 
 describe('FsEntityRepository — instruction', () => {

@@ -134,7 +134,7 @@ describe('useStarterPack', () => {
       expect(first.result.current.stateFor('feature-dev')).toBe('done'),
     );
 
-    // Navigate away (Início -> Plugins) then back: the screen is a different
+    // Navigate away (Starter Pack -> Plugins) then back: the screen is a different
     // component type, so React unmounts and remounts StarterPackScreen.
     first.unmount();
     const second = renderHook(() => useStarterPack(), { wrapper });

@@ -22,6 +22,7 @@ import type { NotificationPort } from '../../../src/main/application/ports/notif
 import type { WorkspaceTeardownService } from '../../../src/main/application/services/workspace-teardown.js';
 import type { McpService } from '../../../src/main/application/services/mcp-service.js';
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
+import type { FileBrowserPort } from '../../../src/main/application/ports/file-browser-port.js';
 import type { Settings } from '../../../src/shared/settings.js';
 
 const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
@@ -47,6 +48,7 @@ interface Deps {
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
   fileBrowserService: FileBrowserService;
+  fileBrowserPort: FileBrowserPort;
   projectService: ProjectService;
   marketplaceService: MarketplaceService;
   hookService: HookService;
@@ -109,6 +111,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const workspaceService = null as unknown as WorkspaceService;
   const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
   const fileBrowserService = null as unknown as FileBrowserService;
+  const fileBrowserPort = null as unknown as FileBrowserPort;
   const projectService = null as unknown as ProjectService;
   const marketplaceService = null as unknown as MarketplaceService;
   const hookService = null as unknown as HookService;
@@ -139,6 +142,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     workspaceService,
     switchActiveWorkspace,
     fileBrowserService,
+    fileBrowserPort,
     projectService,
     marketplaceService,
     hookService,

@@ -34,6 +34,7 @@ const baseDeps = (): IpcDeps => {
     workspaceService: {} as IpcDeps['workspaceService'],
     switchActiveWorkspace: vi.fn(),
     fileBrowserService: {} as IpcDeps['fileBrowserService'],
+    fileBrowserPort: {} as IpcDeps['fileBrowserPort'],
     projectService: {} as IpcDeps['projectService'],
     repoService: {} as IpcDeps['repoService'],
     adapterManager: {} as IpcDeps['adapterManager'],

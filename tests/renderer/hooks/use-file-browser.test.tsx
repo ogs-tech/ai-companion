@@ -50,4 +50,18 @@ describe('use-file-browser', () => {
     expect(spy).toHaveBeenCalledWith('workspace.resolvePath', { path: 'sub' });
     expect(res).toBe('/repos/acme/sub');
   });
+
+  it('useDirListing fetches via project.listDir when scoped to a projectId', async () => {
+    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'a.txt', kind: 'file' }]);
+    const { result } = renderHook(() => useDirListing('sub', { projectId: 'p1' }), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual([{ name: 'a.txt', kind: 'file' }]));
+    expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: 'sub' });
+  });
+
+  it('useFilePreview fetches via project.readFile when scoped to a projectId', async () => {
+    vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, content: 'hi', truncated: false });
+    const { result } = renderHook(() => useFilePreview('a.txt', { projectId: 'p1' }), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual({ previewable: true, content: 'hi', truncated: false }));
+    expect(ipc.callIpc).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.txt' });
+  });
 });

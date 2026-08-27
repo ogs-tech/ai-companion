@@ -34,7 +34,12 @@ export function useSwitchWorkspace() {
   return useMutation({
     mutationFn: (id: string) => callIpc<Workspace>('workspace.switchTo', { id }),
     onSuccess: () => {
-      queryClient.clear();
+      // Every query is scoped to the active workspace (projects, skills,
+      // agents, folder tree, ...) — invalidate everything so mounted screens
+      // refresh in place. `clear()` used to be called here, but it destroys
+      // queries without telling their still-mounted observers to refetch,
+      // leaving stale data on screen until the component happened to remount.
+      void queryClient.invalidateQueries();
     },
   });
 }

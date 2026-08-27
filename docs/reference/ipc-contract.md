@@ -79,7 +79,7 @@ Grouped by namespace. Source: [`src/main/ipc/registry.ts`](../../src/main/ipc/re
 |---|---|---|
 | `app.restore` | — | `void` |
 
-> **Destructive (scoped).** `app.restore` restores the app to its initial state: it removes the app-created symlinks under adapter targets (those pointing into the workspace, via `AdapterManager.removeAllAdapterSymlinks`) and deletes the workspace directory `~/.ai-companion/`, then quits. It does **not** delete the rest of `~/.claude/` or any `.env.local` — only this app's own footprint. Orchestrated by `WorkspaceTeardownService`; no raw filesystem access lives in the IPC layer.
+> **Destructive (scoped).** `app.restore` restores the app to its initial state: it removes the app-created symlinks under adapter targets (those pointing into the workspace, via `AdapterManager.removeAllAdapterSymlinks`), removes every registered `Project`'s `.ai-companion/index.md` marker symlink, and deletes the workspace directory `~/.ai-companion/`, then quits. It does **not** delete the rest of `~/.claude/` or any `.env.local` — only this app's own footprint. Orchestrated by `WorkspaceTeardownService`; no raw filesystem access lives in the IPC layer.
 
 ### `settings`
 
@@ -101,7 +101,7 @@ Grouped by namespace. Source: [`src/main/ipc/registry.ts`](../../src/main/ipc/re
 | `repo.detectGit` | `{ path: string }` | `boolean` |
 | `repo.getCurrentBranch` | `{ path: string }` | `string` |
 
-Small helpers used by the InstructionsScreen folder picker. The old `repo.link` / `repo.unlink` / `repo.list` methods and their `LinkedRepoView` type were **removed** with `settings.linkedRepos` — project scope now lives on each entity's own `repoPath` (see the `instruction` namespace below).
+Git helpers (branch/repo detection) — not currently called from the renderer. The old `repo.link` / `repo.unlink` / `repo.list` methods and their `LinkedRepoView` type were **removed** with `settings.linkedRepos` — project/workspace scope now lives on each entity's own `scopes`/`scopeId` (see the `instruction` namespace below).
 
 ### `workspace`
 
@@ -127,8 +127,13 @@ Small helpers used by the InstructionsScreen folder picker. The old `repo.link` 
 | `project.findOrCreateByPath` | `{ path: string }` | `Project` |
 | `project.update` | `{ id: string; name?: string; path?: string }` | `Project` |
 | `project.delete` | `{ id: string }` | `void` |
+| `project.listDir` | `{ projectId: string; path?: string }` | `FileBrowserEntry[]` |
+| `project.readFile` | `{ projectId: string; path: string }` | `FilePreview` |
+| `project.resolvePath` | `{ projectId: string; path: string }` | `{ absolutePath: string }` |
 
-`project.list` returns every project registered under the active workspace.
+`project.list` returns every project registered under the active workspace. `project.listDir`/`readFile`/`resolvePath` mirror the `workspace.*` file-browser methods but root the containment guard at the given `Project`'s own `path` instead of the active workspace's root — each call resolves `projectId` via `ProjectService.get` and delegates to a `FileBrowserService` built on demand for that root, so browsing a project can never escape its own folder. Used by the Workspace screen to scope the folder tree/preview to one selected `Project` instead of the whole workspace.
+
+`project.create`/`update` (when `path` changes)/`delete` each also best-effort create/re-link/remove a `<project.path>/.ai-companion/index.md` symlink pointing at the owning workspace's canonical marker file — see [architecture.md](architecture.md#workspace--project). This is not reflected in the `Project` result shape; it's a filesystem side effect, not a field.
 
 ### `dialog`
 
@@ -164,12 +169,17 @@ Saving or deleting a plugin-provided skill (`source.kind === 'plugin'`) raises `
 
 | Method | Params | Result |
 |---|---|---|
-| `instruction.list` | `{}` | `Instruction[]` (personal singleton first when present, then every project instruction) |
+| `instruction.list` | `{}` | `Instruction[]` (personal singleton first when present, then every project/workspace instruction) |
 | `instruction.get` | `{ id: string }` (`'default'` for personal; slug otherwise) | `Instruction` |
 | `instruction.save` | `{ instruction: Instruction; isCreate?: boolean }` | `{ instruction: Instruction; syncReport: SyncResult[] }` |
 | `instruction.delete` | `{ name: string; removeSymlinks?: boolean }` | `{ ok: true; syncReport?: SyncResult[] }` |
 
-`Instruction` is a discriminated union: `PersonalInstruction` (`name === 'default'`, `scopes === ['personal']`) or `ProjectInstruction` (any slug except `'default'`, `scopes === ['project']`, absolute `repoPath: string`). Enforced by `personalInstructionId` / `projectInstructionSlug` (`src/main/domain/instruction-id.ts`) and by `instructionEntitySchema` (branch via `superRefine`). Storage is **frontmatter-free**; the personal singleton lives at `instructions/default.md`, project instructions at `instructions/project/<slug>/{INSTRUCTION.md,meta.json}` — see [Entity schema](customization-schema.md#instruction). `save`'s sync report fans out to Claude (`~/.claude/CLAUDE.md` + `~/AGENTS.md` for personal, `<repoPath>/.claude/CLAUDE.md` + `<repoPath>/AGENTS.md` for project) and — when Cursor is enabled — either the Cursor plugin files (personal) or `<repoPath>/AGENTS.md` (project). `delete` removes the entity plus its symlinks / generated files by default; pass `removeSymlinks: false` to keep the sync artefacts.
+`Instruction` is a discriminated union on `scopes[0]`: `PersonalInstruction` (`name === 'default'`, `scopes === ['personal']`), `ProjectInstruction` (any other slug, `scopes === ['project']`, `scopeId` resolving to a `Project.id`), or `WorkspaceInstruction` (same slug shape, `scopes === ['workspace']`, `scopeId` resolving to a `Workspace.id`). `scopeId` is resolved to an absolute path at point of use via `resolveScopePath` (`src/main/application/resolve-scope-path.ts`) — never persisted as a path on the entity itself; a legacy, read-only `repoPath` is tolerated on parse for pre-`scopeId` on-disk data. Enforced by `personalInstructionId` / `projectInstructionSlug` (`src/main/domain/instruction-id.ts`, the latter validates any non-personal slug regardless of scope) and by `instructionEntitySchema` (branch via `superRefine`). Storage is **frontmatter-free**; the personal singleton lives at `instructions/default.md`, project/workspace instructions at `instructions/project/<slug>/{INSTRUCTION.md,meta.json}` — see [Entity schema](customization-schema.md#instruction). `save`'s sync report fans out to Claude (`~/.claude/CLAUDE.md` + `~/AGENTS.md` for personal, `<resolved path>/.claude/CLAUDE.md` + `<resolved path>/AGENTS.md` for project/workspace) and — when Cursor is enabled — either the Cursor plugin files (personal) or `<resolved path>/AGENTS.md` (project/workspace). `delete` removes the entity plus its symlinks / generated files by default; pass `removeSymlinks: false` to keep the sync artefacts.
+
+The renderer never offers a folder picker for this — `instruction.*` is driven entirely from the Workspace
+screen (`WorkspaceScreen` → `PersonalInstructionCard` / `ScopedInstructionCard`, see
+[Architecture](architecture.md#instructions-on-visão-geral)), scoped to whichever workspace or project the
+user is currently viewing.
 
 ### `session`
 

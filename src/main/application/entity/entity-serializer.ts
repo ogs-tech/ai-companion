@@ -12,7 +12,7 @@ import type {
   Skill,
 } from '../../../shared/entity.js';
 
-const COMMON_KEYS = ['name', 'type', 'description', 'scopes', 'version', 'tags', 'createdAt', 'updatedAt'];
+const COMMON_KEYS = ['name', 'type', 'description', 'scopes', 'scopeId', 'version', 'tags', 'createdAt', 'updatedAt'];
 const SKILL_KEYS = [...COMMON_KEYS, 'disable-model-invocation'];
 const AGENT_KEYS = [...COMMON_KEYS, 'model', 'tools', 'deniedTools'];
 
@@ -30,6 +30,7 @@ function metaFrontmatter(entity: Entity): Record<string, unknown> {
     type: entity.kind,
     description: entity.description,
     scopes: entity.scopes,
+    ...(entity.scopeId !== undefined ? { scopeId: entity.scopeId } : {}),
     version: entity.metadata.version,
     ...(entity.metadata.tags !== undefined ? { tags: entity.metadata.tags } : {}),
     createdAt: entity.metadata.createdAt,
@@ -108,6 +109,7 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
     name,
     description: typeof frontmatter['description'] === 'string' ? frontmatter['description'] : '',
     scopes: readScopes(frontmatter),
+    ...(typeof frontmatter['scopeId'] === 'string' ? { scopeId: frontmatter['scopeId'] } : {}),
     metadata: readMetadata(frontmatter),
     source,
   };

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CustomizationEditor } from '../../../src/renderer/components/CustomizationEditor.js';
-import { mockApi, ok, fail, renderWithTheme, type CallSpy } from '../test-utils.js';
+import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../test-utils.js';
 import { WORKSPACE_SOURCE, type Instruction, type Skill } from '../../../src/shared/entity.js';
+import type { Project } from '../../../src/shared/project.js';
+import type { Workspace } from '../../../src/shared/workspace.js';
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
@@ -51,7 +53,7 @@ beforeEach(() => {
 
 describe('<CustomizationEditor>', () => {
   it('renders a textarea for the body', () => {
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={baseCustomization()}
         isCreate={true}
@@ -63,7 +65,7 @@ describe('<CustomizationEditor>', () => {
   });
 
   it('renders the markdown preview via react-markdown', () => {
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={baseCustomization()}
         isCreate={true}
@@ -87,7 +89,7 @@ describe('<CustomizationEditor>', () => {
       }),
     );
 
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={initial}
         isCreate={true}
@@ -109,10 +111,10 @@ describe('<CustomizationEditor>', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the personal scope checkbox reflecting scopes (project temporarily hidden for skill)', () => {
+  it('renders the skill/agent scope toggle with Personal selected by default', () => {
     const initial = baseCustomization();
     initial.scopes = ['personal'];
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={initial}
         isCreate={false}
@@ -120,22 +122,27 @@ describe('<CustomizationEditor>', () => {
         onCancel={vi.fn()}
       />,
     );
-    const personal = screen.getByRole('checkbox', { name: /personal/i });
-    expect(personal).toBeChecked();
-    expect(screen.queryByRole('checkbox', { name: /project/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Personal', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument();
+    // Old multi-select checkbox UI is gone for skill/agent.
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 
-  it('toggling the personal checkbox off leaves scopes empty on save', async () => {
+  it('clicking Workspace scopes the skill to the active workspace and saves scopeId', async () => {
     const user = userEvent.setup();
     const initial = baseCustomization();
-    call.mockResolvedValue(
-      ok({
-        skill: { ...initial, scopes: [] },
-        syncReport: [],
-      }),
-    );
+    const activeWorkspace: Workspace = { id: 'ws-1', name: 'W', rootPath: '/repos/ws', isDefault: true, createdAt: '' };
+    call.mockImplementation((method: string) => {
+      if (method === 'workspace.getActive') return Promise.resolve(ok(activeWorkspace));
+      if (method === 'project.list') return Promise.resolve(ok([]));
+      if (method === 'skill.save') {
+        return Promise.resolve(ok({ skill: { ...initial, scopes: ['workspace'], scopeId: 'ws-1' }, syncReport: [] }));
+      }
+      return Promise.resolve(ok(undefined));
+    });
 
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={initial}
         isCreate={true}
@@ -144,14 +151,15 @@ describe('<CustomizationEditor>', () => {
       />,
     );
 
-    await user.click(screen.getByRole('checkbox', { name: /personal/i }));
+    await user.click(await screen.findByRole('button', { name: 'Workspace' }));
+    expect(screen.getByRole('button', { name: 'Workspace', pressed: true })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /salvar/i }));
 
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith(
         'skill.save',
         expect.objectContaining({
-          skill: expect.objectContaining({ scopes: [] }),
+          skill: expect.objectContaining({ scopes: ['workspace'], scopeId: 'ws-1' }),
         }),
       ),
     );
@@ -162,7 +170,7 @@ describe('<CustomizationEditor>', () => {
     const initial = baseCustomization(); // urn 'urn:skill:foo', name 'foo'
     call.mockResolvedValue(ok({ skill: { ...initial, name: 'bar' }, syncReport: [] }));
 
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={initial}
         isCreate={false}
@@ -186,11 +194,22 @@ describe('<CustomizationEditor>', () => {
     );
   });
 
-  it('unchecking the only selected scope leaves scopes empty (validation handled by service)', async () => {
+  it('clicking Project reveals a picker populated from useProjects(), and picking one saves its id as scopeId', async () => {
     const user = userEvent.setup();
     const initial = baseCustomization();
+    const projects: Project[] = [
+      { id: 'proj-1', name: 'acme', path: '/repos/acme', createdAt: '' },
+      { id: 'proj-2', name: 'beta', path: '/repos/beta', createdAt: '' },
+    ];
+    call.mockImplementation((method: string) => {
+      if (method === 'project.list') return Promise.resolve(ok(projects));
+      if (method === 'skill.save') {
+        return Promise.resolve(ok({ skill: { ...initial, scopes: ['project'], scopeId: 'proj-2' }, syncReport: [] }));
+      }
+      return Promise.resolve(ok(undefined));
+    });
 
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={initial}
         isCreate={true}
@@ -199,22 +218,78 @@ describe('<CustomizationEditor>', () => {
       />,
     );
 
-    await user.click(screen.getByRole('checkbox', { name: /personal/i }));
-    expect(screen.getByRole('checkbox', { name: /personal/i })).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Project' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Project' }));
+    await user.click(await screen.findByRole('option', { name: 'beta' }));
+
+    await user.click(screen.getByRole('button', { name: /salvar/i }));
+
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith(
+        'skill.save',
+        expect.objectContaining({
+          skill: expect.objectContaining({ scopes: ['project'], scopeId: 'proj-2' }),
+        }),
+      ),
+    );
   });
 
-  // TODO(follow-up): remove when skill/agent regain a per-entity repoPath and
-  // 'project' scope is unblocked in the schema.
-  it('does not render the project scope toggle for skill/agent (temporary block)', () => {
-    renderWithTheme(
+  it('"+ Novo project…" opens the folder dialog, finds-or-creates the Project, and selects it', async () => {
+    const user = userEvent.setup();
+    const initial = baseCustomization();
+    const newProject: Project = { id: 'proj-new', name: 'gamma', path: '/repos/gamma', createdAt: '' };
+    call.mockImplementation((method: string) => {
+      if (method === 'project.list') return Promise.resolve(ok([]));
+      if (method === 'dialog.selectFolder') return Promise.resolve(ok({ canceled: false, path: '/repos/gamma' }));
+      if (method === 'project.findOrCreateByPath') return Promise.resolve(ok(newProject));
+      if (method === 'skill.save') {
+        return Promise.resolve(ok({ skill: { ...initial, scopes: ['project'], scopeId: 'proj-new' }, syncReport: [] }));
+      }
+      return Promise.resolve(ok(undefined));
+    });
+
+    renderWithQuery(
       <CustomizationEditor
-        initial={baseCustomization()}
+        initial={initial}
         isCreate={true}
         onSaved={vi.fn()}
         onCancel={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('checkbox', { name: /project/i })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Project' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Project' }));
+    await user.click(await screen.findByRole('option', { name: '+ Novo project…' }));
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith('dialog.selectFolder', {}));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('project.findOrCreateByPath', { path: '/repos/gamma' }),
+    );
+
+    await user.click(screen.getByRole('button', { name: /salvar/i }));
+
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith(
+        'skill.save',
+        expect.objectContaining({
+          skill: expect.objectContaining({ scopes: ['project'], scopeId: 'proj-new' }),
+        }),
+      ),
+    );
+  });
+
+  it('renders the instruction branch\'s Checkbox/FormGroup scope UI, not the ToggleButtonGroup, when scope is visible', () => {
+    renderWithQuery(
+      <CustomizationEditor
+        initial={basePersonalInstruction()}
+        isCreate={false}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: /personal/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /project/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Workspace' })).toBeNull();
   });
 
   // Personal instruction: name/scope are fixed AND description/version aren't
@@ -222,7 +297,7 @@ describe('<CustomizationEditor>', () => {
   // suppress the Frontmatter panel — otherwise the user sees empty widgets that
   // do nothing on save.
   it('hides the entire Frontmatter section when all frontmatter fields are hidden', () => {
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={basePersonalInstruction()}
         isCreate={false}
@@ -244,7 +319,7 @@ describe('<CustomizationEditor>', () => {
     const user = userEvent.setup();
     call.mockResolvedValue(fail('validation', 'slug inválido'));
 
-    renderWithTheme(
+    renderWithQuery(
       <CustomizationEditor
         initial={baseCustomization()}
         isCreate={true}
@@ -262,7 +337,7 @@ describe('<CustomizationEditor>', () => {
 
   describe('"Gerar com IA" (enableGenerate)', () => {
     it('is not shown when enableGenerate is not set', () => {
-      renderWithTheme(
+      renderWithQuery(
         <CustomizationEditor
           initial={baseCustomization()}
           isCreate={true}
@@ -275,7 +350,7 @@ describe('<CustomizationEditor>', () => {
 
     it('reveals a context field + submit button when opened', async () => {
       const user = userEvent.setup();
-      renderWithTheme(
+      renderWithQuery(
         <CustomizationEditor
           initial={basePersonalInstruction()}
           isCreate={false}
@@ -295,7 +370,7 @@ describe('<CustomizationEditor>', () => {
       let resolveCall: (value: unknown) => void = () => {};
       call.mockImplementation(() => new Promise((resolve) => { resolveCall = resolve; }));
 
-      renderWithTheme(
+      renderWithQuery(
         <CustomizationEditor
           initial={basePersonalInstruction()}
           isCreate={false}
@@ -331,7 +406,7 @@ describe('<CustomizationEditor>', () => {
       const user = userEvent.setup();
       call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
 
-      renderWithTheme(
+      renderWithQuery(
         <CustomizationEditor
           initial={basePersonalInstruction()}
           isCreate={false}
@@ -353,7 +428,7 @@ describe('<CustomizationEditor>', () => {
 
   describe('session panel', () => {
     it('shows a locked explanation instead of a live session while creating a new entity', () => {
-      renderWithTheme(
+      renderWithQuery(
         <CustomizationEditor initial={baseCustomization()} isCreate={true} onSaved={vi.fn()} onCancel={vi.fn()} />,
       );
       expect(screen.queryByTestId('session-open')).toBeNull();
@@ -361,7 +436,7 @@ describe('<CustomizationEditor>', () => {
     });
 
     it('is shown for an existing entity', () => {
-      renderWithTheme(
+      renderWithQuery(
         <CustomizationEditor initial={baseCustomization()} isCreate={false} onSaved={vi.fn()} onCancel={vi.fn()} />,
       );
       expect(screen.getByTestId('session-open')).toBeInTheDocument();

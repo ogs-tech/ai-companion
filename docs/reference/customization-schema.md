@@ -16,6 +16,7 @@ interface Entity {
   name: string;
   description: string;
   scopes: Scope[];
+  scopeId?: string;          // required for scopes[0] === 'project' | 'workspace'; absent for 'personal'
   metadata: EntityMetadata; // version, tags?, createdAt, updatedAt
   source: EntitySource;     // { kind: 'workspace' } | { kind: 'plugin'; pluginId; provenance }
   ext?: Record<string, unknown>;
@@ -25,10 +26,13 @@ interface Skill extends Entity { kind: 'skill'; content: string; explicitOnly?: 
 interface Agent extends Entity { kind: 'agent'; systemPrompt: string; model?: string; tools?: string[]; deniedTools?: string[]; }
 
 // Instruction is a discriminated union by scope. Personal is the singleton
-// (name === 'default'); Project is per-repo and carries the repoPath directly.
-type Instruction = PersonalInstruction | ProjectInstruction;
-interface PersonalInstruction extends Entity { kind: 'instruction'; name: 'default'; scopes: ['personal']; content: string; }
-interface ProjectInstruction  extends Entity { kind: 'instruction'; scopes: ['project'];  content: string; repoPath: string; }
+// (name === 'default'); Project/Workspace are keyed by a slugified name and
+// resolve their path from scopeId at point of use (see resolveScopePath) —
+// neither carries a path field directly.
+type Instruction = PersonalInstruction | ProjectInstruction | WorkspaceInstruction;
+interface PersonalInstruction  extends Entity { kind: 'instruction'; name: 'default'; scopes: ['personal']; content: string; }
+interface ProjectInstruction   extends Entity { kind: 'instruction'; scopes: ['project'];   scopeId: string; content: string; }
+interface WorkspaceInstruction extends Entity { kind: 'instruction'; scopes: ['workspace']; scopeId: string; content: string; }
 ```
 
 `skill` and `agent` are still stored as a Markdown file with a YAML frontmatter block followed by a body — `EntitySerializer` (`src/main/application/entity/entity-serializer.ts`) maps the flat fields to/from frontmatter:
@@ -39,8 +43,8 @@ name: my-skill
 type: skill
 description: Short, one-line summary of what this entity does.
 scopes:
-  - personal
   - project
+scopeId: 3f9a2b1c-...  # Project.id — omitted entirely for scopes: [personal]
 version: 1.0.0
 createdAt: 2026-05-04T12:00:00.000Z
 updatedAt: 2026-05-04T12:00:00.000Z
@@ -71,7 +75,8 @@ All three kinds share these fields (defined once in `entity-schema.ts`'s `entity
 | `name` | string | yes | Slug — must match `^[a-z0-9][a-z0-9-]*$` (lowercase, digits, hyphens; no leading hyphen). |
 | `kind` (frontmatter `type`) | enum | yes | One of `skill` · `agent` · `instruction`. |
 | `description` | string | yes for skill/agent | 1–1024 characters for `skill`/`agent` (empty string rejected); always `''` for `instruction` (frontmatter-free, see above). |
-| `scopes` | array | yes | At least 1 entry, no duplicates, each `personal`, `project`, or `workspace`. Per-kind: `instruction` is a discriminated union (exactly `['personal']`, `['project']`, or `['workspace']`); `skill`/`agent` are temporarily restricted to `['personal']` — see the TODO block in `entity-schema.ts`. |
+| `scopes` | array | yes | At least 1 entry, no duplicates, each `personal`, `project`, or `workspace`. All three kinds are single-scope: exactly `['personal']`, `['project']`, or `['workspace']` — enforced per-kind by a `superRefine` (see [Per-kind rules](#per-kind-rules)). |
+| `scopeId` | string | conditional | Required (non-empty) when `scopes[0]` is `project` or `workspace`; must be absent when `scopes[0]` is `personal`. References a `Project.id` or `Workspace.id` — resolved to a path at use time by `resolveScopePath` (see [Scope semantics](#scope-semantics)). |
 | `metadata.version` | string | yes | Semver `^\d+\.\d+\.\d+(-[\w.-]+)?$` (e.g. `1.2.3`, `1.2.3-rc.1`). |
 | `metadata.createdAt` | string | yes | ISO 8601 datetime (e.g. `2026-05-04T12:00:00.000Z`). |
 | `metadata.updatedAt` | string | yes | ISO 8601 datetime. |
@@ -88,13 +93,15 @@ Each kind's schema extends the common base. Only the differences are listed.
 
 - `content: string` (the Markdown body).
 - `explicitOnly?: boolean` — maps to frontmatter `disable-model-invocation: true` when set. A skill with `explicitOnly: true` is not offered for implicit model invocation — this is exactly what the removed `command` kind used to mean; commands are now expressed this way.
-- No additional constraints beyond the common fields. `kind` (frontmatter `type`) must be the literal `skill`.
+- `scopes`/`scopeId` follow the shared single-scope rule (see [Common fields](#common-fields)): `personal` | `project` | `workspace`, with `scopeId` required except for `personal`. Storage always stays under the active workspace's own `.ai-companion/skills/<name>/` regardless of scope — only the adapter sync destination changes (see [Scope semantics](#scope-semantics)).
+- `kind` (frontmatter `type`) must be the literal `skill`.
 
 ### `agent`
 
 - `systemPrompt: string` (the Markdown body — the old `body` field, renamed).
 - `model?: string`, `tools?: string[]`, `deniedTools?: string[]` — optional frontmatter fields, passed through verbatim.
-- No additional constraints beyond the common fields. `kind` (frontmatter `type`) must be the literal `agent`.
+- `scopes`/`scopeId` follow the same single-scope rule as `skill` (see above).
+- `kind` (frontmatter `type`) must be the literal `agent`.
 
 ### `instruction`
 
@@ -127,9 +134,9 @@ The Markdown body is unconstrained at the schema layer — `content: string` (sk
 
 | Scope | Meaning | Adapter target (typical) |
 |---|---|---|
-| `personal` | Applies machine-wide for the author. | `~/.claude/` (personal instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; and — when Cursor is enabled — the plugin under `~/.cursor/plugins/ai-companion/`). |
-| `project` | Applies to the `Project` the entity's `scopeId` references. | For a project instruction: `<resolved Project.path>/.claude/CLAUDE.md` + `<resolved Project.path>/AGENTS.md`. Skill/agent `project` scope is currently disallowed — a per-entity `scopeId` for skill/agent is a follow-up. |
-| `workspace` | Applies to the `Workspace` the entity's `scopeId` references. | For a workspace instruction: `<resolved Workspace.rootPath>/.claude/CLAUDE.md` + `<resolved Workspace.rootPath>/AGENTS.md`. Not yet exposed in any editor UI (schema/service-level only — see the Workspace/Project spec). |
+| `personal` | Applies machine-wide for the author. | `~/.claude/` (instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; skill/agent: `~/.claude/skills/<name>` / `~/.claude/agents/<name>.md`; and — when Cursor is enabled — the Cursor equivalents, personal instruction via the plugin under `~/.cursor/plugins/ai-companion/`). |
+| `project` | Applies to the `Project` the entity's `scopeId` references. | For a project instruction: `<resolved Project.path>/.claude/CLAUDE.md` + `<resolved Project.path>/AGENTS.md`. For a project skill/agent: `<resolved Project.path>/.claude/skills/<name>` / `.claude/agents/<name>.md` (and the Cursor equivalents). |
+| `workspace` | Applies to the `Workspace` the entity's `scopeId` references. | For a workspace instruction: `<resolved Workspace.rootPath>/.claude/CLAUDE.md` + `<resolved Workspace.rootPath>/AGENTS.md`. For a workspace skill/agent: `<resolved Workspace.rootPath>/.claude/skills/<name>` / `.claude/agents/<name>.md` (and the Cursor equivalents). |
 
 ## Validation result
 

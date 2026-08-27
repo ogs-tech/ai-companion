@@ -26,13 +26,20 @@ const report = (worst: HealthReport['worst']): HealthReport => ({
       : [],
 });
 
+const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
+
 const setupRoute = (worst: HealthReport['worst']) => {
   call.mockImplementation((method: string) => {
     if (method === 'health.getReport') return Promise.resolve(ok(report(worst)));
     if (method === 'instruction.get') {
       return Promise.resolve(fail('not_found', 'none'));
     }
-    return Promise.resolve(ok([]));
+    // Lands the Workspace landing screen on the Global/default branch — no
+    // active project, so no file browser (and its xterm session panel).
+    if (method === 'workspace.getActive') return Promise.resolve(ok(DEFAULT_WORKSPACE));
+    if (method === 'workspace.list') return Promise.resolve(ok([DEFAULT_WORKSPACE]));
+    if (method === 'project.list') return Promise.resolve(ok([]));
+    return Promise.resolve(ok(undefined));
   });
 };
 
@@ -53,7 +60,7 @@ describe('<Main> — sync status + diagnostics', () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('starter-pack-screen');
+    await screen.findByTestId('workspace-screen');
     await userEvent.click(screen.getByTestId('nav-diagnostico'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();

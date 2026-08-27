@@ -16,17 +16,17 @@ describe('CommandPalette', () => {
     const onClose = vi.fn();
     renderWithShell(<CommandPalette open onClose={onClose} onNavigate={onNavigate} onCreate={noop} />);
     const input = screen.getByTestId('command-palette-input');
-    await userEvent.type(input, 'instructions');
-    await userEvent.click(screen.getByText(/Instructions/i));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'biblioteca', sub: 'instructions' });
+    await userEvent.type(input, 'hooks');
+    await userEvent.click(screen.getByText(/Hooks/i));
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'hooks' });
     expect(onClose).toHaveBeenCalled();
   });
-  it('includes the Workspace area in the quick-jump list', async () => {
+  it('jumps to the Workspace overview via its "Visão geral" quick-jump entry', async () => {
     const onNavigate = vi.fn();
     renderWithShell(<CommandPalette open onClose={noop} onNavigate={onNavigate} onCreate={noop} />);
-    await userEvent.type(screen.getByTestId('command-palette-input'), 'Workspace');
-    await userEvent.click(screen.getByText('Workspace'));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
+    await userEvent.type(screen.getByTestId('command-palette-input'), 'Visão geral');
+    await userEvent.click(screen.getByText('Visão geral'));
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'visao-geral' });
   });
   it('offers create actions for editable entities', async () => {
     const onCreate = vi.fn();

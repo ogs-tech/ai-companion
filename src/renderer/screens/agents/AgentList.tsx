@@ -9,6 +9,7 @@ export function AgentList(): React.ReactElement {
       gender="m"
       listMethod="agent.list"
       deleteMethod="agent.delete"
+      subtitle="Pessoais — aparecem em todos os workspaces. Agents por projeto ainda não são suportados."
     />
   );
 }

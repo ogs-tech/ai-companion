@@ -9,6 +9,7 @@ export function SkillList(): React.ReactElement {
       gender="f"
       listMethod="skill.list"
       deleteMethod="skill.delete"
+      subtitle="Pessoais — aparecem em todos os workspaces. Skills por projeto ainda não são suportadas."
     />
   );
 }

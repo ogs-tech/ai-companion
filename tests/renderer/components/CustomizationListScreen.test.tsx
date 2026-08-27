@@ -50,6 +50,10 @@ const pluginSkill: Skill = {
   content: 'plugin body',
 };
 
+const projectScopedSkill: Skill = { ...skill('c'), scopes: ['project'], scopeId: 'proj-1' };
+const workspaceScopedSkill: Skill = { ...skill('d'), scopes: ['workspace'], scopeId: 'ws-1' };
+const orphanedProjectSkill: Skill = { ...skill('e'), scopes: ['project'], scopeId: 'missing-id' };
+
 function renderScreen() {
   return renderWithQuery(
     <CustomizationListScreen
@@ -145,5 +149,49 @@ describe('<CustomizationListScreen>', () => {
 
     expect(await screen.findByTestId('session-open')).toBeInTheDocument();
     expect(screen.getByTestId('customization-editor')).toBeInTheDocument();
+  });
+
+  it('shows a Personal badge for a personal-scope skill', async () => {
+    call.mockImplementation((method: string) => {
+      if (method === 'skill.list') return Promise.resolve(ok([workspaceSkill]));
+      return Promise.resolve(ok(undefined));
+    });
+    renderScreen();
+    const card = await screen.findByTestId('entity-grid-card-skill-workspace/urn:skill:a');
+    expect(within(card).getByText('Personal')).toBeInTheDocument();
+  });
+
+  it('shows a Workspace badge for a workspace-scope skill', async () => {
+    call.mockImplementation((method: string) => {
+      if (method === 'skill.list') return Promise.resolve(ok([workspaceScopedSkill]));
+      return Promise.resolve(ok(undefined));
+    });
+    renderScreen();
+    const card = await screen.findByTestId('entity-grid-card-skill-workspace/urn:skill:d');
+    expect(within(card).getByText('Workspace')).toBeInTheDocument();
+  });
+
+  it('shows the resolved Project name badge for a project-scope skill', async () => {
+    call.mockImplementation((method: string) => {
+      if (method === 'skill.list') return Promise.resolve(ok([projectScopedSkill]));
+      if (method === 'project.list') {
+        return Promise.resolve(ok([{ id: 'proj-1', name: 'acme', path: '/repos/acme', createdAt: '' }]));
+      }
+      return Promise.resolve(ok(undefined));
+    });
+    renderScreen();
+    const card = await screen.findByTestId('entity-grid-card-skill-workspace/urn:skill:c');
+    expect(await within(card).findByText('acme')).toBeInTheDocument();
+  });
+
+  it('falls back to the raw scopeId badge when the referenced project is not found', async () => {
+    call.mockImplementation((method: string) => {
+      if (method === 'skill.list') return Promise.resolve(ok([orphanedProjectSkill]));
+      if (method === 'project.list') return Promise.resolve(ok([]));
+      return Promise.resolve(ok(undefined));
+    });
+    renderScreen();
+    const card = await screen.findByTestId('entity-grid-card-skill-workspace/urn:skill:e');
+    expect(await within(card).findByText('missing-id')).toBeInTheDocument();
   });
 });

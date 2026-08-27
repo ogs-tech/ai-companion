@@ -374,13 +374,23 @@ describe('workspace-handlers', () => {
 });
 
 const setupProjectService = () =>
-  new ProjectService(new InMemoryProjectRegistry(), new FixedClock(new Date('2026-04-26T10:00:00.000Z')));
+  new ProjectService(new InMemoryProjectRegistry(), new FixedClock(new Date('2026-04-26T10:00:00.000Z')), {
+    symlinkManager: { create: vi.fn().mockResolvedValue({ status: 'ok' }), removeIfPointsToWorkspace: vi.fn().mockResolvedValue('removed') },
+    sourcePath: '/home/u/.ai-companion/index.md',
+    dataDir: '/home/u/.ai-companion',
+  });
+
+const fakeFileBrowserPort = () => ({
+  listDir: vi.fn().mockResolvedValue([{ name: 'a.txt', kind: 'file' }]),
+  readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'hi', truncated: false }),
+  realpath: vi.fn(async (p: string) => p),
+});
 
 describe('project-handlers', () => {
   it('project.list calls service.list', async () => {
     const svc = setupProjectService();
     const spy = vi.spyOn(svc, 'list');
-    const h = buildProjectHandlers(svc);
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
     await h['project.list']!({});
     expect(spy).toHaveBeenCalled();
   });
@@ -388,7 +398,7 @@ describe('project-handlers', () => {
   it('project.create passes name and path through', async () => {
     const svc = setupProjectService();
     const spy = vi.spyOn(svc, 'create');
-    const h = buildProjectHandlers(svc);
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
     await h['project.create']!({ name: 'acme', path: '/repos/acme' });
     expect(spy).toHaveBeenCalledWith({ name: 'acme', path: '/repos/acme' });
   });
@@ -397,7 +407,7 @@ describe('project-handlers', () => {
     const svc = setupProjectService();
     const created = await svc.create({ name: 'acme', path: '/repos/acme' });
     const spy = vi.spyOn(svc, 'update');
-    const h = buildProjectHandlers(svc);
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
     await h['project.update']!({ id: created.id, name: 'acme-renamed' });
     expect(spy).toHaveBeenCalledWith({ id: created.id, name: 'acme-renamed' });
   });
@@ -406,21 +416,63 @@ describe('project-handlers', () => {
     const svc = setupProjectService();
     const created = await svc.create({ name: 'acme', path: '/repos/acme' });
     const spy = vi.spyOn(svc, 'delete');
-    const h = buildProjectHandlers(svc);
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
     await h['project.delete']!({ id: created.id });
     expect(spy).toHaveBeenCalledWith(created.id);
   });
 
   it('project.create rejects a missing path', async () => {
-    const h = buildProjectHandlers(setupProjectService());
+    const h = buildProjectHandlers(setupProjectService(), fakeFileBrowserPort());
     await expect(h['project.create']!({ name: 'acme' })).rejects.toMatchObject({ kind: 'validation' });
   });
 
   it('project.findOrCreateByPath passes the path through', async () => {
     const svc = setupProjectService();
     const spy = vi.spyOn(svc, 'findOrCreateByPath');
-    const h = buildProjectHandlers(svc);
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
     await h['project.findOrCreateByPath']!({ path: '/repos/acme' });
     expect(spy).toHaveBeenCalledWith('/repos/acme');
+  });
+
+  it('project.listDir resolves the project root and delegates to the file browser port', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const port = fakeFileBrowserPort();
+    const h = buildProjectHandlers(svc, port);
+    const result = await h['project.listDir']!({ projectId: created.id, path: 'sub' });
+    expect(port.listDir).toHaveBeenCalledWith('/repos/acme/sub');
+    expect(result).toEqual([{ name: 'a.txt', kind: 'file' }]);
+  });
+
+  it('project.readFile resolves the project root and delegates to the file browser port', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const port = fakeFileBrowserPort();
+    const h = buildProjectHandlers(svc, port);
+    const result = await h['project.readFile']!({ projectId: created.id, path: 'a.txt' });
+    expect(port.readFile).toHaveBeenCalledWith('/repos/acme/a.txt');
+    expect(result).toEqual({ previewable: true, content: 'hi', truncated: false });
+  });
+
+  it('project.resolvePath returns the absolute path under the project root', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
+    const result = await h['project.resolvePath']!({ projectId: created.id, path: 'sub' });
+    expect(result).toEqual({ absolutePath: '/repos/acme/sub' });
+  });
+
+  it('project.listDir rejects a path escaping the project root', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const h = buildProjectHandlers(svc, fakeFileBrowserPort());
+    await expect(
+      h['project.listDir']!({ projectId: created.id, path: '../etc' }),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('project.listDir rejects an unknown projectId', async () => {
+    const h = buildProjectHandlers(setupProjectService(), fakeFileBrowserPort());
+    await expect(h['project.listDir']!({ projectId: 'nope', path: '' })).rejects.toMatchObject({ kind: 'not_found' });
   });
 });

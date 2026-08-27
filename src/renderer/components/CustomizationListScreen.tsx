@@ -15,7 +15,9 @@ import { CustomizationViewDrawer } from './CustomizationViewDrawer.js';
 import { EntityDataGrid } from './EntityDataGrid/index.js';
 import type { EntityDef, RowAction } from './EntityDataGrid/index.js';
 import { useCustomizationList, useInvalidateCustomization } from '../hooks/use-customization-list.js';
+import { useProjects } from '../hooks/use-projects.js';
 import type { Agent, Entity, Skill } from '../../shared/entity.js';
+import type { Project } from '../../shared/project.js';
 import { blankCustomization } from '../lib/blank-customization.js';
 
 interface CustomizationListScreenProps {
@@ -41,6 +43,7 @@ export function CustomizationListScreen({
 }: CustomizationListScreenProps): React.ReactElement {
   const { data, isLoading, error } = useCustomizationList(entityType, listMethod);
   const invalidate = useInvalidateCustomization();
+  const { data: projects = [] } = useProjects();
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [editor, setEditor] = useState<Editor>({ kind: 'closed' });
@@ -122,6 +125,12 @@ export function CustomizationListScreen({
             />
           ) : null,
       },
+      {
+        key: 'scope',
+        label: 'Scope',
+        badge: true,
+        render: (item) => scopeLabel(item, projects),
+      },
       { key: 'description', label: 'Description', secondary: true, searchable: true },
     ],
   };
@@ -153,7 +162,7 @@ export function CustomizationListScreen({
   return (
     <Container component="main" data-testid={`entity-list-${entityType}`} maxWidth="lg" sx={{ py: 2.5 }}>
       <ScreenHeader
-        kicker="Biblioteca"
+        kicker="Workspace"
         title={title}
         subtitle={subtitle}
         actions={
@@ -211,6 +220,15 @@ export function CustomizationListScreen({
       />
     </Container>
   );
+}
+
+function scopeLabel(item: Entity, projects: Project[]): string {
+  const scope = item.scopes[0];
+  if (scope === 'workspace') return 'Workspace';
+  if (scope === 'project') {
+    return projects.find((p) => p.id === item.scopeId)?.name ?? item.scopeId ?? 'Project';
+  }
+  return 'Personal';
 }
 
 function duplicateCustomization(source: Skill | Agent, siblings: Entity[]): Skill | Agent {

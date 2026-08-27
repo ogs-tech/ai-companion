@@ -6,10 +6,11 @@ import { fonts } from '../../tokens.js';
 
 interface FilePreviewPaneProps {
   path: string | null;
+  projectId?: string;
 }
 
-export function FilePreviewPane({ path }: FilePreviewPaneProps): React.ReactElement {
-  const { data: preview, isLoading, isError, error } = useFilePreview(path);
+export function FilePreviewPane({ path, projectId }: FilePreviewPaneProps): React.ReactElement {
+  const { data: preview, isLoading, isError, error } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
 
   if (path === null) {
     return (

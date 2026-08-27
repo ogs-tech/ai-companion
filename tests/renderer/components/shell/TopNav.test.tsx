@@ -18,22 +18,28 @@ const noop = () => undefined;
 
 describe('TopNav', () => {
   it('renders the four primary area tabs', () => {
-    renderWithShell(<TopNav active="inicio" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
-    expect(screen.getByTestId('nav-inicio')).toBeInTheDocument();
-    expect(screen.getByTestId('nav-biblioteca')).toBeInTheDocument();
+    renderWithShell(<TopNav active="starter-pack" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    expect(screen.getByTestId('nav-starter-pack')).toBeInTheDocument();
+    expect(screen.getByTestId('nav-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('nav-plugins')).toBeInTheDocument();
     expect(screen.getByTestId('nav-diagnostico')).toBeInTheDocument();
   });
   it('selects an area on click', async () => {
     const onSelectArea = vi.fn();
-    renderWithShell(<TopNav active="inicio" onSelectArea={onSelectArea} onOpenSettings={noop} onOpenCommandPalette={noop} />);
-    await userEvent.click(screen.getByTestId('nav-biblioteca'));
-    expect(onSelectArea).toHaveBeenCalledWith('biblioteca');
+    renderWithShell(<TopNav active="starter-pack" onSelectArea={onSelectArea} onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    await userEvent.click(screen.getByTestId('nav-workspace'));
+    expect(onSelectArea).toHaveBeenCalledWith('workspace');
+  });
+  it('calls onSelectArea even when clicking the already-active tab (MUI mutes Tabs.onChange there, so each Tab needs its own onClick — this is what lets the Workspace tab act as a "go home" gesture from any of its sub-screens)', async () => {
+    const onSelectArea = vi.fn();
+    renderWithShell(<TopNav active="workspace" onSelectArea={onSelectArea} onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    await userEvent.click(screen.getByTestId('nav-workspace'));
+    expect(onSelectArea).toHaveBeenCalledWith('workspace');
   });
   it('opens settings and the command palette via their controls', async () => {
     const onOpenSettings = vi.fn();
     const onOpenCommandPalette = vi.fn();
-    renderWithShell(<TopNav active="inicio" onSelectArea={noop} onOpenSettings={onOpenSettings} onOpenCommandPalette={onOpenCommandPalette} />);
+    renderWithShell(<TopNav active="starter-pack" onSelectArea={noop} onOpenSettings={onOpenSettings} onOpenCommandPalette={onOpenCommandPalette} />);
     await userEvent.click(screen.getByTestId('nav-settings'));
     await userEvent.click(screen.getByTestId('command-palette-trigger'));
     expect(onOpenSettings).toHaveBeenCalledOnce();
@@ -42,18 +48,18 @@ describe('TopNav', () => {
   it('marks only the active area tab as selected (the CSS underline anchor)', () => {
     renderWithShell(<TopNav active="plugins" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
     expect(screen.getByTestId('nav-plugins')).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('nav-inicio')).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByTestId('nav-starter-pack')).toHaveAttribute('aria-selected', 'false');
   });
   it('no longer renders the OGS brand line (moved to the footer)', () => {
-    renderWithShell(<TopNav active="inicio" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    renderWithShell(<TopNav active="starter-pack" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
     expect(screen.queryByText(/TECNOLOGIA BRASIL/i)).not.toBeInTheDocument();
   });
   it('shows the sync StatusPill carrying the health severity', () => {
-    renderWithShell(<TopNav active="inicio" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} healthSeverity="error" />);
+    renderWithShell(<TopNav active="starter-pack" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} healthSeverity="error" />);
     expect(screen.getByTestId('status-pill-sync')).toHaveAttribute('data-variant', 'error');
   });
   it('toggles the theme through useThemeMode', async () => {
-    renderWithShell(<TopNav active="inicio" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    renderWithShell(<TopNav active="starter-pack" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
     await userEvent.click(screen.getByTestId('theme-toggle'));
     expect(call).toHaveBeenCalledWith('settings.merge', expect.objectContaining({ ui: expect.any(Object) }));
   });

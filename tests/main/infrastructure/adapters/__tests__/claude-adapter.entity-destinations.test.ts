@@ -38,18 +38,44 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
     ]);
   });
 
-  it('drops project-scoped skill/agent destinations while linkedRepos is being replaced', async () => {
-    const skill: Skill = { urn: 'urn:skill:multi', kind: 'skill', name: 'multi', description: 'd',
-      scopes: ['personal', 'project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
+  it('routes a project-scoped skill to <resolved project path>/.claude/skills/<name>', async () => {
+    const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd',
+      scopes: ['project'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
-      { scope: 'personal', destination: '/home/u/.claude/skills/multi', strategy: 'symlink' },
+      { scope: 'project', destination: '/repos/acme/.claude/skills/acme', strategy: 'symlink' },
     ]);
   });
 
-  it('returns [] for a project-only agent (linkedRepos gone; no per-agent repoPath yet)', async () => {
+  it('routes a project-scoped agent to <resolved project path>/.claude/agents/<name>.md', async () => {
     const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'd',
-      scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
-    expect(await adapter.resolveEntityDestinations({ entity: agent })).toEqual([]);
+      scopes: ['project'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
+    expect(await adapter.resolveEntityDestinations({ entity: agent })).toEqual([
+      { scope: 'project', destination: '/repos/acme/.claude/agents/triage.md', strategy: 'symlink' },
+    ]);
+  });
+
+  it('routes a workspace-scoped skill to <resolved workspace root>/.claude/skills/<name>', async () => {
+    const wsAdapter = new ClaudeAdapter({
+      homedir: '/home/u',
+      workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
+      projectService: { get: async () => { throw new Error('not stubbed'); } },
+    });
+    const skill: Skill = { urn: 'urn:skill:ws-wide', kind: 'skill', name: 'ws-wide', description: 'd',
+      scopes: ['workspace'], scopeId: 'ws-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
+    expect(await wsAdapter.resolveEntityDestinations({ entity: skill })).toEqual([
+      { scope: 'workspace', destination: '/repos/ws/.claude/skills/ws-wide', strategy: 'symlink' },
+    ]);
+  });
+
+  it('rejects a project-scoped skill when the referenced project no longer exists', async () => {
+    const goneAdapter = new ClaudeAdapter({
+      homedir: '/home/u',
+      workspaceService: { get: async () => { throw new Error('not stubbed'); } },
+      projectService: { get: async () => { throw new DomainError('not_found', 'Project not found'); } },
+    });
+    const skill: Skill = { urn: 'urn:skill:gone', kind: 'skill', name: 'gone', description: 'd',
+      scopes: ['project'], scopeId: 'gone', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
+    await expect(goneAdapter.resolveEntityDestinations({ entity: skill })).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('routes a project instruction to <resolved project path>/{.claude/CLAUDE.md, AGENTS.md}', async () => {

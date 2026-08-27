@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceTeardownService } from '../../../../src/main/application/services/workspace-teardown.js';
 import type { ClaudeSettings } from '../../../../src/main/application/schemas/claude-settings.schema.js';
 import type { Scope } from '../../../../src/main/application/ports/scope.js';
+import type { Project } from '../../../../src/shared/project.js';
 
-import { workspacePath } from '../../../../src/shared/brand-paths.js';
+import { workspacePath, projectIndexMarkerPath } from '../../../../src/shared/brand-paths.js';
 
 const WORKSPACE = workspacePath('/home/user');
 
-const buildService = () => {
+const project = (path: string): Project => ({ id: path, name: path, path, createdAt: '' });
+
+const buildService = (projects: Project[] = []) => {
   const order: string[] = [];
   const removeAllAdapterSymlinks = vi.fn(async () => {
     order.push('symlinks');
@@ -29,13 +32,23 @@ const buildService = () => {
       });
     },
   );
+  const list = vi.fn(async () => projects);
+  const removeIfPointsToWorkspace = vi.fn(async (destination: string) => {
+    order.push(`marker:${destination}`);
+    return 'removed' as const;
+  });
   const service = new WorkspaceTeardownService(
     { removeAllAdapterSymlinks, removeAllGeneratedFiles },
     { remove },
     WORKSPACE,
     { mutate },
+    { list },
+    { removeIfPointsToWorkspace },
   );
-  return { service, removeAllAdapterSymlinks, removeAllGeneratedFiles, remove, mutate, order };
+  return {
+    service, removeAllAdapterSymlinks, removeAllGeneratedFiles, remove, mutate,
+    list, removeIfPointsToWorkspace, order,
+  };
 };
 
 describe('WorkspaceTeardownService.restore', () => {
@@ -93,5 +106,41 @@ describe('WorkspaceTeardownService.restore', () => {
     await service.restore();
 
     expect(order.indexOf(`remove:${WORKSPACE}`)).toBeLessThan(order.indexOf('mutate:personal'));
+  });
+
+  it('removes every registered project\'s index marker symlink before deleting the workspace directory', async () => {
+    const { service, removeIfPointsToWorkspace, order } = buildService([
+      project('/repos/acme'),
+      project('/repos/other'),
+    ]);
+
+    await service.restore();
+
+    expect(removeIfPointsToWorkspace).toHaveBeenCalledWith(projectIndexMarkerPath('/repos/acme'), WORKSPACE);
+    expect(removeIfPointsToWorkspace).toHaveBeenCalledWith(projectIndexMarkerPath('/repos/other'), WORKSPACE);
+    expect(order.indexOf(`marker:${projectIndexMarkerPath('/repos/acme')}`)).toBeLessThan(order.indexOf(`remove:${WORKSPACE}`));
+  });
+
+  it('keeps removing other projects\' markers when one fails', async () => {
+    const { service, removeIfPointsToWorkspace, order } = buildService([
+      project('/repos/broken'),
+      project('/repos/acme'),
+    ]);
+    removeIfPointsToWorkspace.mockImplementationOnce(async () => {
+      throw new Error('EACCES');
+    });
+
+    await service.restore();
+
+    expect(order).toContain(`marker:${projectIndexMarkerPath('/repos/acme')}`);
+  });
+
+  it('still deletes the workspace directory when the project registry is unreadable', async () => {
+    const { service, remove, list } = buildService();
+    list.mockRejectedValueOnce(new Error('SyntaxError: Unexpected token in JSON'));
+
+    await service.restore();
+
+    expect(remove).toHaveBeenCalledWith(WORKSPACE);
   });
 });

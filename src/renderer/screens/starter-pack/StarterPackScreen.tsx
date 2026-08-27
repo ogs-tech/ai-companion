@@ -21,6 +21,7 @@ import type { Nav } from '../../components/shell/nav.js';
 import { PluginInstallPreviewDialog } from '../marketplaces/PluginInstallPreviewDialog.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { useStarterPack } from '../../hooks/use-starter-pack.js';
+import { useActiveWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { brand } from '../../../shared/brand.js';
 import {
   STARTER_PACK_GROUPS,
@@ -34,6 +35,19 @@ interface StarterPackScreenProps {
 
 export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React.ReactElement {
   const { isLoading, profileConfigured, plugins, stateFor, install, reenable } = useStarterPack();
+  const { data: activeWorkspace } = useActiveWorkspace();
+  const switchWorkspace = useSwitchWorkspace();
+
+  // Personal Instruction now lives inline on the Global workspace's Visão
+  // geral — jump there, switching back to Default first (mirrors AppShell's
+  // "Workspace" tab "go home" gesture) so this always lands on the Personal
+  // Instruction card regardless of which workspace is currently active.
+  const openPersonalInstruction = (): void => {
+    if (activeWorkspace && !activeWorkspace.isDefault) {
+      void switchWorkspace.mutateAsync('default');
+    }
+    onNavigate({ area: 'workspace', sub: 'visao-geral' });
+  };
 
   // UI-only state — intentionally local. Resetting these on navigation is
   // expected; the install state that must persist lives in the query cache.
@@ -181,7 +195,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
             variant="outlined"
             size="small"
             endIcon={<Icon glyph={ArrowRight} size={16} />}
-            onClick={() => onNavigate({ area: 'biblioteca', sub: 'instructions' })}
+            onClick={openPersonalInstruction}
           >
             Configurar
           </Button>

@@ -3,13 +3,13 @@ import { Dialog, List, ListItemButton, ListItemIcon, ListItemText, TextField } f
 import type { PaperProps } from '@mui/material';
 import { Search, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { areaHasSub, LIBRARY_SUBS, NAV_AREAS, PLUGINS_SUBS, type LibrarySub, type Nav } from './nav.js';
+import { areaHasSub, WORKSPACE_SUBS, NAV_AREAS, PLUGINS_SUBS, type WorkspaceSub, type Nav } from './nav.js';
 
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   onNavigate: (nav: Nav) => void;
-  onCreate: (sub: LibrarySub) => void;
+  onCreate: (sub: WorkspaceSub) => void;
 }
 
 interface Command {
@@ -19,7 +19,7 @@ interface Command {
   run: () => void;
 }
 
-const CREATABLE: ReadonlyArray<{ sub: LibrarySub; label: string }> = [
+const CREATABLE: ReadonlyArray<{ sub: WorkspaceSub; label: string }> = [
   { sub: 'skills', label: 'Nova skill' },
   { sub: 'agents', label: 'Novo agent' },
   { sub: 'hooks', label: 'Novo hook' },
@@ -46,11 +46,11 @@ export function CommandPalette({
         glyph: a.glyph,
         run: go({ area: a.area } as Nav),
       })),
-      ...LIBRARY_SUBS.map((s) => ({
+      ...WORKSPACE_SUBS.map((s) => ({
         id: `go-${s.sub}`,
         label: s.label,
         glyph: s.glyph,
-        run: go({ area: 'biblioteca', sub: s.sub }),
+        run: go({ area: 'workspace', sub: s.sub }),
       })),
       ...PLUGINS_SUBS.map((s) => ({
         id: `go-plugin-${s.sub}`,
@@ -61,7 +61,7 @@ export function CommandPalette({
     ];
 
     const creates: Command[] = CREATABLE.map((c) => {
-      const def = LIBRARY_SUBS.find((s) => s.sub === c.sub);
+      const def = WORKSPACE_SUBS.find((s) => s.sub === c.sub);
       return {
         id: `new-${c.sub}`,
         label: c.label,
