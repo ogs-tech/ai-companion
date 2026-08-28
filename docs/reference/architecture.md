@@ -94,9 +94,15 @@ Both implement the `Adapter` port at `src/main/application/ports/adapter.ts`. `A
 
 `src/main/application/ports/claude-session-port.ts` (`ClaudeSessionPort`) + `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts` (`NodePtySessionAdapter`, backed by `node-pty` — the first native module in this codebase) spawn a real interactive `claude` CLI process per session inside a PTY, so the CLI's TUI renders correctly. `SessionService` (`src/main/application/services/session-service.ts`) owns the one-live-session-per-entity invariant, keyed by the entity's own `urn` (no separate generated session id), and resolves each session's working directory from the entity itself: a `ProjectInstruction` uses its own `repoPath`; every other entity kind (`Skill`, `Agent`, `PersonalInstruction`) uses the app's workspace root. `Session` is **not** a fourth `Entity` kind — it's ephemeral process state and never goes through `EntityRepository`; `SessionService` only reads entities (via `EntityService.get`) to resolve cwd.
 
-The `session.*` IPC namespace (`src/main/ipc/session-handlers.ts`) exposes `spawn`/`write`/`resize`/`kill`/`status` over the normal request/response `ipc:call` envelope. Streamed terminal output can't fit that request/response shape, so it travels over a second main→renderer push channel (`session:output` / `session:exit`, `src/shared/session.ts`) — see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse). Every live session's `claude` process is killed on `app.on('before-quit', ...)`, registered inside `wireIpc()` in `src/main/index.ts` (`SessionService.killAll()`) — `kill()` calls `ClaudeSessionPort.kill()` with no explicit signal, i.e. node-pty's own default (`SIGHUP` on Unix, not `SIGTERM`). There is no background daemon; sessions do not survive the app closing.
+The `session.*` IPC namespace (`src/main/ipc/session-handlers.ts`) exposes `spawn`/`write`/`resize`/`kill`/`status`/`list` over the normal request/response `ipc:call` envelope. `list` returns `SessionService.list()` — every `SessionSnapshot` currently in its in-memory map, running and exited alike, with no pruning; nothing ever removes an exited entry except a full `SessionService` rebuild. Streamed terminal output can't fit the request/response shape, so it travels over a second main→renderer push channel (`session:output` / `session:exit`, `src/shared/session.ts`) — see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse). Every live session's `claude` process is killed on `app.on('before-quit', ...)`, registered inside `wireIpc()` in `src/main/index.ts` (`SessionService.killAll()`) — `kill()` calls `ClaudeSessionPort.kill()` with no explicit signal, i.e. node-pty's own default (`SIGHUP` on Unix, not `SIGTERM`). `SessionService` is itself one of the workspace-scoped services rebuilt (empty) on every `workspace.switchTo`, with `killAll()` called on the outgoing instance first — so `session.list` is inherently scoped to the active workspace, and a session (running or exited) is gone the moment its workspace stops being active. There is no background daemon and no persistence; sessions do not survive a workspace switch or the app closing.
 
-On the renderer side, `SessionPanel` (`src/renderer/components/SessionPanel.tsx`, wrapping `@xterm/xterm` + `@xterm/addon-fit`) is embedded directly in `CustomizationEditor` — the entry point is an "Abrir sessão" button inside each entity's own editor (it only renders once the entity has been saved, i.e. `!isCreate`), not a separate top-level "Sessions" screen.
+`SessionSnapshot` carries a `label` — the anchor's human-readable name (entity/workspace/project name) — resolved once at spawn time by the same lookup that resolves `cwd`, so a session can be displayed without a second round-trip to `EntityService`/`WorkspaceService`/`ProjectService`.
+
+On the renderer side, `SessionPanel` (`src/renderer/components/SessionPanel.tsx`, wrapping `@xterm/xterm` + `@xterm/addon-fit`) is the one place that actually drives `session.spawn`/`write`/`resize` and reacts to the push channels; it's reused from two entry points: embedded directly in `CustomizationEditor` (an "Abrir sessão" button inside each entity's own editor, rendered only once the entity has been saved, i.e. `!isCreate`), and mounted per open tab inside `SessionsPanel` (`src/renderer/components/shell/SessionsPanel.tsx`), docked into `AppShell` — not scoped to `WorkspaceScreen` — so switching top-level Area never unmounts a running terminal. On mount, `SessionPanel` also calls `session.status` with the anchor's own key to reattach to a session already running server-side (e.g. spawned earlier, or from the other entry point) without requiring a manual "Abrir sessão" click.
+
+`SessionFocusProvider` (`src/renderer/lib/session-focus-context.tsx`, mounted inside `AppShell`) is UI-only state — which sessions are "open" in the panel and which one has focus — kept out of react-query since it has no server round-trip of its own; `useSessionFocus().focusSession(anchor, label)` is the single entry point every "Abrir sessão" button and session-list row calls. `SessionsPanel` keeps **every** open tab's `SessionPanel` mounted for the panel's whole lifetime, toggling only `display`/`visible` on focus change — there's no server-side scrollback buffer (no daemon, no persistence — see above), so unmounting a backgrounded tab would lose its history; collapsing the panel (`sessions-panel-collapse`/`sessions-panel-expand`) hides the same way, without unmounting anything. `SessionFocusProvider` resets its open tabs when the active workspace changes, mirroring `SessionService` being rebuilt server-side on `workspace.switchTo`.
+
+`SessionsTreeGroup` (`src/renderer/components/workspace/SessionsTreeGroup.tsx`, backed by `useSessions()` in `src/renderer/hooks/use-sessions.ts`) is a third, read-oriented entry point: a `TreeGroup` node listing every session `session.list` returns, across all three anchor kinds, with a "Mostrar sessões finalizadas" toggle filtering by `status` and a row click calling `focusSession` for that session's `anchor`/`label` — it never spawns anything itself, only browses and resumes. Because there's no push channel for "a session was spawned," `SessionPanel` invalidates `useSessions()`'s query (`sessionsQueryKey`) itself right after a successful `session.spawn`; `useSessions()` separately subscribes to the unfiltered `window.api.session.onAnyExit` listener so a session that dies in the background (its panel not focused) still drops out of the running count without user action.
 
 **Native module caveat:** `node-pty` must be rebuilt against Electron's own Node ABI to run inside the app — wired into `predev`/`prebuild` as `npm run rebuild:native` (`electron-rebuild -f -w node-pty` via `@electron/rebuild`), not `postinstall` (see `package.json`). That rebuilt binary can't be loaded from plain-Node `vitest`, so `npm install` and `npm test` always see the binary built against the host Node ABI instead. Running `npm run dev` or `npm run build` leaves the binary rebuilt for Electron's ABI; run `npm install` (or `npm rebuild node-pty`) to restore the host build before running `npm test` again. Separately, `postinstall` runs `chmod +x node_modules/node-pty/prebuilds/*/spawn-helper` (harmlessly no-op on platforms without that file, via `2>/dev/null || true`): `npm install` sometimes resets the prebuilt helper binary's execute bit, which breaks `posix_spawnp` on macOS at spawn time.
 
@@ -210,24 +216,23 @@ deletable via a trash icon. There is no floating workspace switcher in `TopNav` 
 
 The top-level "Workspace" tab doubles as a "go home" gesture: `AppShell.selectArea` switches back to the
 Default workspace (`useSwitchWorkspace().mutateAsync('default')`) whenever that tab is clicked while a
-non-default workspace is active, in addition to navigating to `visao-geral` — so leaving a project
-workspace's Skills/Agents/Hooks/MCP screens always lands back on the management list. The Visão Geral
-screen itself offers a second, more local entry point to the same gesture: `FolderTree`'s `onNavigateHome`
-".." row (see above) switches back to Default without leaving the current screen. This
-relies on each `<Tab>` in `TopNav` carrying its own `onClick`, not `Tabs`' `onChange`: MUI's `Tab` only
-calls `onChange` when the clicked tab isn't already selected (`Tab.js`'s `handleClick`), so re-clicking an
-already-active area tab — the common case here, since Skills/Agents/etc. all share the `workspace` area —
-would otherwise be a no-op. `SubRail`'s own "Visão geral" sub-item is unaffected — it's a plain
-`ListItemButton`, always navigates to whichever workspace is currently active, and is the mechanism for
-viewing a *project* workspace's own Visão Geral (file browser) after switching into it from the
-management list.
+non-default workspace is active — so leaving a project workspace's tree always lands back on the
+management list. The Visão Geral screen itself offers a second, more local entry point to the same
+gesture: `FolderTree`'s `onNavigateHome` ".." row (see above) switches back to Default without leaving the
+current screen. This relies on each `<Tab>` in `TopNav` carrying its own `onClick`, not `Tabs`' `onChange`:
+MUI's `Tab` only calls `onChange` when the clicked tab isn't already selected (`Tab.js`'s `handleClick`),
+so re-clicking the already-active `workspace` tab would otherwise be a no-op.
 
-`SubRail`'s persistent workspace-identity strip (`WorkspaceContext`) also carries a "Remover workspace"
-action, shown only when the active workspace isn't Default — since the backend refuses to delete the
-active workspace, this switches to Default first, then deletes the workspace the action was invoked on,
-then lands on the management list. The target workspace is captured in local state when the action opens
-(not read live off `useActiveWorkspace()`) so the confirmation dialog keeps naming it even as the switch
-resolves out from under it mid-flow.
+`WorkspaceScreen`'s `ScreenHeader` carries a "Remover workspace" action (an `IconButton`, next to "Abrir
+sessão"), shown only when the active workspace isn't Default and no `Project` is selected — since the
+backend refuses to delete the active workspace, this switches to Default first, then deletes the workspace
+the action was invoked on, then lands on the management list. The target workspace is captured in local
+state when the action opens (not read live off `useActiveWorkspace()`) so the confirmation dialog
+(`WorkspaceRemoveConfirmDialog`) keeps naming it even as the switch resolves out from under it mid-flow.
+This used to live in `SubRail`'s persistent workspace-identity strip; it moved onto the screen itself once
+`SubRail` stopped rendering a Workspace section, and `SubRail` itself was later deleted outright once
+Plugins — its last remaining consumer — folded into the Workspace tree too (see "Renderer structure"
+below).
 
 Switching workspaces invalidates the whole query cache (`queryClient.invalidateQueries()` with no filter)
 rather than `clear()`ing it — `clear()` destroys queries without telling their still-mounted observers to
@@ -265,22 +270,72 @@ exercised that scope.
 src/renderer/
 ├── App.tsx                 # View union: loading | main | settings | io-error
 ├── main.tsx
-├── screens/                # Main.tsx routes by Nav; per-entity dirs:
-│   ├── skills/ agents/ hooks/ mcps/
-│   ├── plugins/ marketplaces/ health/ starter-pack/ settings/
+├── screens/                # Main.tsx routes by Nav
+│   ├── workspace/ marketplaces/ health/ starter-pack/ settings/
+│   ├── plugins/            # PluginDetail/PluginImportDialog/PublishPluginDialog — reused by
+│   │                       # PluginsTreeGroup; no longer a routed screen of its own (no PluginList.tsx)
 │   ├── Main.tsx            # root screen — maps Nav state to a screen component
 │   ├── Settings.tsx
 │   └── IoError.tsx         # generic retry screen for I/O failures
-├── components/             # ds/ (design system), shell/ (TopNav, SubRail, CommandPalette), workspace/, EntityDataGrid/
+├── components/             # ds/ (design system), shell/ (TopNav, CommandPalette),
+│                           # workspace/ (FolderTree, EntityTreeGroup, HooksTreeGroup, McpTreeGroup,
+│                           # PluginsTreeGroup, SessionsTreeGroup, TreeGroup, ...), EntityDataGrid/
 ├── hooks/                  # react-query data hooks
 └── lib/                    # ipc.ts, query-client.ts, theme-mode-context.tsx, instruction-seed.ts
 ```
 
 There is no `instructions/` screen — instruction management is inline on the Workspace screen (see
-"Instructions on Visão geral" above), via `PersonalInstructionCard`/`ScopedInstructionCard` under
-`components/workspace/`. There is no `commands/` screen either — the `command` entity kind was removed too.
+"Instructions on Visão geral" above), via `InstructionTreeRow` under `components/workspace/`. There is no
+`commands/` screen either — the `command` entity kind was removed too. There are no `skills/`, `agents/`,
+`hooks/`, `mcps/`, or (as of the Plugins fold-in) top-level `plugins/` screens either — each kind is a
+collapsible `TreeGroup` node (`EntityTreeGroup` for Skill/Agent, `HooksTreeGroup`, `McpTreeGroup`,
+`PluginsTreeGroup`) rendered inline on `WorkspaceScreen`, pinned into `FolderTree` via its `pinnedRows` slot
+(the same mechanism `instructionRow` already used) whenever a non-default workspace or a `Project` is in
+view, or directly in the Default workspace's management `List` otherwise. Each group fetches its own data
+(`skill.list`/`agent.list`/`hook.list`/`mcp.list`/`plugin.list`) and opens the same
+`CustomizationEditor`/`CustomizationViewDrawer`/`McpEditorDialog`/`PluginDetail` (in a `DetailDrawer`) the
+old standalone screens used — only the surrounding chrome (a dense tree row instead of a full-page
+`EntityDataGrid`) changed. `PluginsTreeGroup` also owns the "Importar plugin" and "Publicar" actions
+(`PluginImportDialog`/`PublishPluginDialog`, unchanged), previously toolbar buttons on the old `PluginList`
+screen, now the group's `TreeGroup` header "+" action and a per-row overflow menu respectively.
 
-Navigation is state-driven via a `Nav` discriminated union in `components/shell/nav.ts` (areas: `workspace`, `starter-pack`, `plugins`, `diagnostico`); `Main.tsx` maps `Nav` to a screen. No `react-router`. Skills/Agents/Hooks/MCP (formerly a standalone `biblioteca` area) are subs of `workspace` alongside a `visao-geral` overview (the former bare Workspace screen) — their content is already scoped to the active workspace on the backend (see "Workspace / Project" below), so the nav now reflects that ownership; `SubRail` shows a persistent active-workspace name/path strip above the sub list. `defaultNav` lands on `{ area: 'workspace', sub: 'visao-geral' }` — the `workspace` area is the app's home, so its top-nav tab is labeled "Início" (glyph: house) rather than "Workspace" even though the `Area` key, routing and `SubRail`'s "Workspace" section are unchanged. Starter Pack (`StarterPackScreen`) is an ordinary page reached from the tab bar, no longer the landing screen.
+`SessionsTreeGroup` follows the same slot placement (both `pinnedRows` and the Default workspace `List`)
+but isn't part of the local/global partition the other groups apply — every session already belongs to the
+active workspace by construction (see [Session bounded context](#session-bounded-context)), so there's no
+"more global than this" bucket to hide. Its own visibility axis is session `status`, not scope: a
+`showFinishedSessions` toggle in `ScreenHeader`'s `actions` (independent of, and always shown alongside,
+the local/global `showGlobal` toggle) filters exited sessions in or out. A row click doesn't open
+`CustomizationEditor`/`McpEditorDialog` like the other groups — it calls `useSessionFocus().focusSession`
+for that session's `anchor`, the same callback the header's "Abrir sessão" buttons already call, which
+focuses (or opens) that session's tab in the persistent `SessionsPanel` docked in `AppShell`.
+
+Skill/Agent tree groups partition their list into "local" (the entity's `scopes[0]`/`scopeId` matches the
+`Project`/`Workspace` currently in view) and "global" (everything else — Personal-scope, plugin-provided,
+or scoped elsewhere) via an `EntityTreeGroupProps.localScope` prop; `HooksTreeGroup` and `McpTreeGroup`
+apply the same local/global split on their own data shapes (Hooks have no scoping at all yet, so every hook
+counts as global inside a project workspace; MCP's own `project-local`/`project-shared` scope is matched
+against the current `Project.path`/`Workspace.rootPath` instead of an `Entity.scopeId`). `PluginsTreeGroup`
+is coarser still: a plugin's own `scope` is `'personal' | 'project'` with no `scopeId`/path of its own — the
+backend resolves `'project'` scope to whichever *Workspace* is currently active (`plugin-service` sits in
+`workspace-scoped-services`, rebuilt on `workspace.switchTo`), not to whichever `Project` is selected inside
+it — so unlike Skills/Agents/MCP, drilling into a specific `Project` within a workspace doesn't narrow the
+Plugins list further; `isProjectContext` (true) vs. omitted plays the same "is a Workspace/Project in view
+at all" role the other groups use, just without per-`Project` granularity. The global bucket is hidden by
+default inside a non-default workspace and revealed by the "Mostrar/Ocultar globais" toggle in
+`ScreenHeader`'s `actions` (`WorkspaceScreen`'s `showGlobal` state) — omitted entirely on the Default
+workspace, where nothing is filtered.
+
+Navigation is state-driven via a `Nav` discriminated union in `components/shell/nav.ts` (areas: `workspace`,
+`starter-pack`, `marketplaces`, `diagnostico`); `Main.tsx` maps `Nav` to a screen. No `react-router`, and no
+area carries a `sub` anymore — Skills/Agents/Hooks/MCP/Plugins all moved from standalone screens into the
+tree nodes described above, so there is only ever one Workspace screen, and `SubRail` (which used to render
+a Plugins/Marketplaces sub-list) has been deleted entirely along with the `sub` field on `Nav`. Marketplaces
+isn't scoped to any Workspace/Project — it's a global plugin-source catalog, closer to Settings than to
+workspace content — so instead of folding into the tree like Plugins did, it was promoted to its own
+top-level tab, the same way Starter Pack was previously demoted from a Workspace sub into an ordinary page.
+`defaultNav` lands on `{ area: 'workspace' }` — the `workspace` area is the app's home, so its top-nav tab
+is labeled "Início" (glyph: house) rather than "Workspace" even though the `Area` key and routing are
+unchanged.
 
 ## Data flow (typical user action)
 

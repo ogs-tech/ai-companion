@@ -35,6 +35,12 @@ const api = {
       ipcRenderer.on(SESSION_EXIT_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_EXIT_CHANNEL, wrapped);
     },
+    /** Unfiltered exit listener — for a consolidated session list, which doesn't know every sessionId up front. */
+    onAnyExit: (listener: (sessionId: string, exitCode: number) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: SessionExitEvent): void => listener(payload.sessionId, payload.exitCode);
+      ipcRenderer.on(SESSION_EXIT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(SESSION_EXIT_CHANNEL, wrapped);
+    },
   },
 };
 

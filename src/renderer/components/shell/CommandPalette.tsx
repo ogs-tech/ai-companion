@@ -1,15 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Dialog, List, ListItemButton, ListItemIcon, ListItemText, TextField } from '@mui/material';
 import type { PaperProps } from '@mui/material';
-import { Search, type LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { areaHasSub, WORKSPACE_SUBS, NAV_AREAS, PLUGINS_SUBS, type WorkspaceSub, type Nav } from './nav.js';
+import { NAV_AREAS, type Nav } from './nav.js';
 
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   onNavigate: (nav: Nav) => void;
-  onCreate: (sub: WorkspaceSub) => void;
 }
 
 interface Command {
@@ -19,17 +18,10 @@ interface Command {
   run: () => void;
 }
 
-const CREATABLE: ReadonlyArray<{ sub: WorkspaceSub; label: string }> = [
-  { sub: 'skills', label: 'Nova skill' },
-  { sub: 'agents', label: 'Novo agent' },
-  { sub: 'hooks', label: 'Novo hook' },
-];
-
 export function CommandPalette({
   open,
   onClose,
   onNavigate,
-  onCreate,
 }: CommandPaletteProps): React.ReactElement {
   const [query, setQuery] = useState('');
 
@@ -39,42 +31,13 @@ export function CommandPalette({
       onClose();
     };
 
-    const jumps: Command[] = [
-      ...NAV_AREAS.filter((a) => !areaHasSub(a.area)).map((a) => ({
-        id: `go-${a.area}`,
-        label: a.label,
-        glyph: a.glyph,
-        run: go({ area: a.area } as Nav),
-      })),
-      ...WORKSPACE_SUBS.map((s) => ({
-        id: `go-${s.sub}`,
-        label: s.label,
-        glyph: s.glyph,
-        run: go({ area: 'workspace', sub: s.sub }),
-      })),
-      ...PLUGINS_SUBS.map((s) => ({
-        id: `go-plugin-${s.sub}`,
-        label: s.label,
-        glyph: s.glyph,
-        run: go({ area: 'plugins', sub: s.sub }),
-      })),
-    ];
-
-    const creates: Command[] = CREATABLE.map((c) => {
-      const def = WORKSPACE_SUBS.find((s) => s.sub === c.sub);
-      return {
-        id: `new-${c.sub}`,
-        label: c.label,
-        glyph: def ? def.glyph : Search,
-        run: () => {
-          onCreate(c.sub);
-          onClose();
-        },
-      };
-    });
-
-    return [...jumps, ...creates];
-  }, [onNavigate, onCreate, onClose]);
+    return NAV_AREAS.map((a) => ({
+      id: `go-${a.area}`,
+      label: a.label,
+      glyph: a.glyph,
+      run: go({ area: a.area }),
+    }));
+  }, [onNavigate, onClose]);
 
   const filtered = commands.filter((c) =>
     c.label.toLowerCase().includes(query.trim().toLowerCase()),

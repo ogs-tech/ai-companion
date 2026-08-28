@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionPanel } from '../../../src/renderer/components/SessionPanel.js';
-import { mockApi, ok, fail, renderWithTheme, type CallSpy } from '../test-utils.js';
+import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../test-utils.js';
 
 interface MockTerminal {
   write: ReturnType<typeof vi.fn>;
@@ -54,7 +54,7 @@ beforeEach(() => {
 
 describe('<SessionPanel>', () => {
   it('mounts the terminal and shows an "Abrir sessão" button before any session is started', () => {
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     expect(screen.getByTestId('session-open')).toBeInTheDocument();
     expect(mockTerminalInstances).toHaveLength(1);
     expect(mockTerminalInstances[0]!.open).toHaveBeenCalled();
@@ -62,9 +62,12 @@ describe('<SessionPanel>', () => {
 
   it('spawns a session and switches out of the idle state on click', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
+    call.mockImplementation(async (method: string) => {
+      if (method === 'session.status') return ok(null);
+      return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+    });
 
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
 
     await waitFor(() =>
@@ -75,9 +78,12 @@ describe('<SessionPanel>', () => {
 
   it('subscribes to output/exit for the spawned sessionId and writes chunks into the terminal', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
+    call.mockImplementation(async (method: string) => {
+      if (method === 'session.status') return ok(null);
+      return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+    });
 
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await waitFor(() =>
       expect(onOutput).toHaveBeenCalledWith('entity:urn:skill:foo', expect.any(Function)),
@@ -92,9 +98,12 @@ describe('<SessionPanel>', () => {
 
   it('forwards keystrokes typed into the terminal as session.write calls', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
+    call.mockImplementation(async (method: string) => {
+      if (method === 'session.status') return ok(null);
+      return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+    });
 
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'entity', urn: 'urn:skill:foo' } }));
 
@@ -108,9 +117,12 @@ describe('<SessionPanel>', () => {
 
   it('shows the ended state and a resume action when the session exits', async () => {
     const user = userEvent.setup();
-    call.mockResolvedValue(ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' }));
+    call.mockImplementation(async (method: string) => {
+      if (method === 'session.status') return ok(null);
+      return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+    });
 
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await waitFor(() =>
       expect(onExit).toHaveBeenCalledWith('entity:urn:skill:foo', expect.any(Function)),
@@ -126,7 +138,7 @@ describe('<SessionPanel>', () => {
     const user = userEvent.setup();
     call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
 
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
 
     expect(await screen.findByTestId('session-error')).toHaveTextContent('claude CLI not found in PATH');
@@ -136,7 +148,7 @@ describe('<SessionPanel>', () => {
     const user = userEvent.setup();
     call.mockResolvedValue(fail('io', 'claude CLI not found in PATH'));
 
-    renderWithTheme(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
     await screen.findByTestId('session-error');
 
@@ -145,7 +157,99 @@ describe('<SessionPanel>', () => {
 
     await user.click(retryButton);
 
-    await waitFor(() => expect(call).toHaveBeenCalledTimes(2));
-    expect(call).toHaveBeenNthCalledWith(2, 'session.spawn', { anchor: { kind: 'entity', urn: 'urn:skill:foo' } });
+    const spawnCalls = () => call.mock.calls.filter(([method]) => method === 'session.spawn');
+    await waitFor(() => expect(spawnCalls()).toHaveLength(2));
+    expect(spawnCalls()[1]).toEqual(['session.spawn', { anchor: { kind: 'entity', urn: 'urn:skill:foo' } }]);
+  });
+
+  describe('reattaching on mount', () => {
+    it('reattaches to an already-running session without requiring a click', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', label: 'foo', status: 'running' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+
+      await waitFor(() => expect(screen.queryByTestId('session-open')).toBeNull());
+      await waitFor(() =>
+        expect(onOutput).toHaveBeenCalledWith('entity:urn:skill:foo', expect.any(Function)),
+      );
+    });
+
+    it('shows the ended state when reattaching to an already-exited session', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', label: 'foo', status: 'exited' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+
+      expect(await screen.findByTestId('session-resume')).toBeInTheDocument();
+    });
+
+    it('stays idle when no existing session is found for the anchor', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') return ok(null);
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.status', { sessionId: 'entity:urn:skill:foo' }),
+      );
+      expect(screen.getByTestId('session-open')).toBeInTheDocument();
+    });
+  });
+
+  describe('visible prop', () => {
+    it('does not resize on window resize while hidden', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') return ok(null);
+        if (method === 'session.spawn') {
+          return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} visible={false} />);
+      await user.click(screen.getByTestId('session-open'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', expect.anything()));
+
+      call.mockClear();
+      window.dispatchEvent(new Event('resize'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(call).not.toHaveBeenCalledWith('session.resize', expect.anything());
+    });
+
+    it('refits and resizes once a hidden panel becomes visible again', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') return ok(null);
+        if (method === 'session.spawn') {
+          return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+        }
+        return ok(null);
+      });
+
+      const { rerender } = renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} visible />);
+      await user.click(screen.getByTestId('session-open'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', expect.anything()));
+
+      call.mockClear();
+      rerender(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} visible={false} />);
+      rerender(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} visible />);
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.resize', expect.objectContaining({ sessionId: 'entity:urn:skill:foo' })),
+      );
+    });
   });
 });

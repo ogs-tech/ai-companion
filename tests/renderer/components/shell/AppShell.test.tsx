@@ -23,7 +23,7 @@ describe('AppShell', () => {
       </AppShell>,
     );
     await userEvent.click(screen.getByTestId('nav-workspace'));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'visao-geral' });
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
   });
   it('switching to Workspace from inside a non-default workspace switches back to Default first (the "go home" gesture)', async () => {
     const onNavigate = vi.fn();
@@ -44,10 +44,10 @@ describe('AppShell', () => {
     );
     await userEvent.click(screen.getByTestId('nav-workspace'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'visao-geral' });
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
   });
 
-  it('re-clicking Workspace while already browsing one of its sub-screens (e.g. Skills) still switches back to Default', async () => {
+  it('re-clicking Workspace while already on the Workspace screen still switches back to Default', async () => {
     const onNavigate = vi.fn();
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.list') return ok([]);
@@ -60,13 +60,13 @@ describe('AppShell', () => {
       return ok({ ui: { theme: 'light' }, adapters: { claude: { enabled: true } }, language: 'off' });
     });
     renderWithShell(
-      <AppShell nav={{ area: 'workspace', sub: 'skills' }} onNavigate={onNavigate} onOpenSettings={() => undefined}>
+      <AppShell nav={{ area: 'workspace' }} onNavigate={onNavigate} onOpenSettings={() => undefined}>
         <div data-testid="screen" />
       </AppShell>,
     );
     await userEvent.click(screen.getByTestId('nav-workspace'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'visao-geral' });
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
   });
 
   it('switching to Workspace while already on Default does not call workspace.switchTo', async () => {
@@ -84,7 +84,7 @@ describe('AppShell', () => {
       </AppShell>,
     );
     await userEvent.click(screen.getByTestId('nav-workspace'));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'visao-geral' });
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
     expect(call).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
   });
 

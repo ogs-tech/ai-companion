@@ -21,7 +21,7 @@ describe('TopNav', () => {
     renderWithShell(<TopNav active="starter-pack" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
     expect(screen.getByTestId('nav-starter-pack')).toBeInTheDocument();
     expect(screen.getByTestId('nav-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('nav-plugins')).toBeInTheDocument();
+    expect(screen.getByTestId('nav-marketplaces')).toBeInTheDocument();
     expect(screen.getByTestId('nav-diagnostico')).toBeInTheDocument();
   });
   it('selects an area on click', async () => {
@@ -46,8 +46,8 @@ describe('TopNav', () => {
     expect(onOpenCommandPalette).toHaveBeenCalledOnce();
   });
   it('marks only the active area tab as selected (the CSS underline anchor)', () => {
-    renderWithShell(<TopNav active="plugins" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
-    expect(screen.getByTestId('nav-plugins')).toHaveAttribute('aria-selected', 'true');
+    renderWithShell(<TopNav active="marketplaces" onSelectArea={noop} onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    expect(screen.getByTestId('nav-marketplaces')).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('nav-starter-pack')).toHaveAttribute('aria-selected', 'false');
   });
   it('no longer renders the OGS brand line (moved to the footer)', () => {

@@ -7,11 +7,16 @@ import { queryClient } from '../../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { WorkspaceScreen } from '../../../../src/renderer/screens/workspace/WorkspaceScreen.js';
+import { SessionFocusProvider } from '../../../../src/renderer/lib/session-focus-context.js';
+import { SessionsPanel } from '../../../../src/renderer/components/shell/SessionsPanel.js';
+import { mockApi } from '../../test-utils.js';
 
-// WorkspaceScreen renders SessionDialog -> SessionPanel, which opens a real
-// xterm Terminal. Same lightweight mocks as
-// tests/renderer/screens/instructions/instructions-screen.test.tsx keep
-// xterm's real browser-only Terminal (canvas, matchMedia) out of jsdom.
+// WorkspaceScreen opens sessions through the SessionsPanel docked in
+// AppShell (SessionFocusProvider) rather than rendering a terminal itself,
+// so both are mounted here together, the same way AppShell composes them.
+// SessionsPanel -> SessionPanel opens a real xterm Terminal — same
+// lightweight mocks as tests/renderer/screens/instructions/instructions-screen.test.tsx
+// keep xterm's real browser-only Terminal (canvas, matchMedia) out of jsdom.
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     write = vi.fn();
@@ -42,7 +47,10 @@ const renderScreen = () =>
   render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createAppTheme('light')}>
-        <WorkspaceScreen />
+        <SessionFocusProvider>
+          <WorkspaceScreen />
+          <SessionsPanel />
+        </SessionFocusProvider>
       </ThemeProvider>
     </QueryClientProvider>,
   );
@@ -50,10 +58,12 @@ const renderScreen = () =>
 beforeEach(() => {
   queryClient.clear();
   vi.restoreAllMocks();
+  mockApi();
   vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
     if (method === 'workspace.getActive') return projectWorkspace;
     if (method === 'project.list') return projects;
     if (method === 'workspace.listDir') return [];
+    if (method === 'session.list') return [];
     return undefined;
   });
 });
@@ -69,7 +79,7 @@ describe('WorkspaceScreen', () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByTestId('workspace-open-session'));
-    expect(await screen.findByTestId('session-dialog')).toBeInTheDocument();
+    expect(await screen.findByTestId('sessions-panel-tab-workspace:w1')).toBeInTheDocument();
   });
 
   it('opening a session for the selected project spawns with a project anchor', async () => {
@@ -87,7 +97,7 @@ describe('WorkspaceScreen', () => {
     renderScreen();
     await user.click(await screen.findByTestId('tree-node-manage-instructions-apps'));
     await user.click(await screen.findByTestId('project-open-session-p1'));
-    expect(await screen.findByTestId('session-dialog')).toBeInTheDocument();
+    expect(await screen.findByTestId('sessions-panel-tab-project:p1')).toBeInTheDocument();
   });
 
   it('deleting the selected project calls project.delete and reverts to the workspace-level header', async () => {
@@ -410,6 +420,181 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       await user.click(await screen.findByTestId('personal-instruction-row'));
       expect(await screen.findByText('Editar Personal Instruction')).toBeInTheDocument();
+    });
+  });
+
+  describe('Skills/Agents/Hooks/MCP/Plugins tree nodes', () => {
+    it('shows every entity-kind tree node on the Default workspace overview, with no global toggle', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return globalWorkspace;
+        if (method === 'workspace.list') return [globalWorkspace];
+        if (method === 'project.list') return projects;
+        if (method === 'session.list') return [];
+        return undefined;
+      });
+      renderScreen();
+      await screen.findByTestId('workspace-management-list');
+      expect(screen.getByTestId('tree-group-skill')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-group-agent')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-group-hook')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-group-mcp')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-group-plugin')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-group-session')).toBeInTheDocument();
+      expect(screen.queryByTestId('workspace-toggle-global')).not.toBeInTheDocument();
+    });
+
+    it('inside a non-default workspace, offers a toggle to reveal global entities, hidden by default', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'skill.list') {
+          return [
+            { urn: 'urn:skill:local', kind: 'skill', name: 'local', description: '', scopes: ['workspace'], scopeId: 'w1', metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '' },
+            { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '' },
+          ];
+        }
+        return undefined;
+      });
+      renderScreen();
+      const toggle = await screen.findByTestId('workspace-toggle-global');
+      expect(toggle).toHaveTextContent('Mostrar globais');
+      await user.click(await screen.findByTestId('tree-group-skill'));
+      expect(await screen.findByTestId('tree-skill-local')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-skill-global')).not.toBeInTheDocument();
+
+      await user.click(toggle);
+      expect(toggle).toHaveTextContent('Ocultar globais');
+      expect(await screen.findByTestId('tree-skill-global')).toBeInTheDocument();
+    });
+  });
+
+  describe('Sessions tree node', () => {
+    const runningSession = {
+      sessionId: 'project:p1',
+      anchor: { kind: 'project' as const, projectId: 'p1' },
+      cwd: '/repos/acme',
+      label: 'acme',
+      status: 'running' as const,
+    };
+    const exitedSession = {
+      sessionId: 'entity:urn:skill:foo',
+      anchor: { kind: 'entity' as const, urn: 'urn:skill:foo' },
+      cwd: '/repos/acme',
+      label: 'foo',
+      status: 'exited' as const,
+    };
+
+    it('hides finished sessions until "Mostrar finalizadas" is toggled on', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [runningSession, exitedSession];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-session'));
+      expect(await screen.findByTestId('tree-session-project:p1')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-session-entity:urn:skill:foo')).not.toBeInTheDocument();
+
+      const toggle = await screen.findByTestId('workspace-toggle-finished-sessions');
+      expect(toggle).toHaveTextContent('Mostrar finalizadas');
+      await user.click(toggle);
+      expect(toggle).toHaveTextContent('Ocultar finalizadas');
+      expect(await screen.findByTestId('tree-session-entity:urn:skill:foo')).toBeInTheDocument();
+    });
+
+    it('clicking a listed session focuses it in the persistent sessions panel', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [runningSession];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-session'));
+      await user.click(await screen.findByTestId('tree-session-project:p1'));
+      expect(await screen.findByTestId('sessions-panel-tab-project:p1')).toBeInTheDocument();
+    });
+  });
+
+  describe('removing the active workspace from its Visão geral header', () => {
+    const acme = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
+
+    it('shows a remove action for the active workspace when it is not Default', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return acme;
+        if (method === 'project.list') return [];
+        if (method === 'workspace.listDir') return [];
+        return undefined;
+      });
+      renderScreen();
+      expect(await screen.findByTestId('workspace-context-remove')).toBeInTheDocument();
+    });
+
+    it('does not show a remove action for the Default workspace', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return globalWorkspace;
+        if (method === 'workspace.list') return [globalWorkspace];
+        if (method === 'project.list') return [];
+        return undefined;
+      });
+      renderScreen();
+      await screen.findByTestId('workspace-management-list');
+      expect(screen.queryByTestId('workspace-context-remove')).not.toBeInTheDocument();
+    });
+
+    it('confirming removal switches back to Default, then deletes the workspace', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return acme;
+        if (method === 'project.list') return [];
+        if (method === 'workspace.listDir') return [];
+        if (method === 'workspace.switchTo') return globalWorkspace;
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-context-remove'));
+      await user.click(await screen.findByTestId('workspace-remove-confirm-btn'));
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.delete', { id: 'w1' }));
+    });
+
+    it('canceling the confirmation calls neither switchTo nor delete', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return acme;
+        if (method === 'project.list') return [];
+        if (method === 'workspace.listDir') return [];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-context-remove'));
+      await user.click(await screen.findByTestId('workspace-remove-cancel-btn'));
+      await waitFor(() => expect(screen.queryByTestId('workspace-remove-confirm-dialog')).not.toBeInTheDocument());
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.delete', expect.anything());
+    });
+
+    it('shows an error toast when the removal fails', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return acme;
+        if (method === 'project.list') return [];
+        if (method === 'workspace.listDir') return [];
+        if (method === 'workspace.switchTo') return globalWorkspace;
+        if (method === 'workspace.delete') throw new Error('boom');
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-context-remove'));
+      await user.click(await screen.findByTestId('workspace-remove-confirm-btn'));
+      expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
     });
   });
 });

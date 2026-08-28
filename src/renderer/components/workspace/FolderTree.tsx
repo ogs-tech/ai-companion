@@ -51,6 +51,8 @@ interface FolderTreeProps {
   onUseAsProject: (absolutePath: string) => void;
   /** Pinned row rendered above the folders/files, e.g. an `InstructionTreeRow` for the current scope. */
   instructionRow?: React.ReactNode;
+  /** Pinned nodes rendered below `instructionRow` and above the folders/files, e.g. Skills/Agents/Hooks/MCP `TreeGroup`s for the current scope. */
+  pinnedRows?: React.ReactNode;
   /** Root-level folders already registered as a `Project` swap "Usar como Project" for a "Gerir instructions" shortcut into that project. */
   workspaceRootPath?: string;
   projects?: ReadonlyArray<Project>;
@@ -227,6 +229,7 @@ export function FolderTree({
   onSelectFile,
   onUseAsProject,
   instructionRow,
+  pinnedRows,
   workspaceRootPath,
   projects,
   onManageProject,
@@ -264,6 +267,7 @@ export function FolderTree({
           <UpRow testId="tree-node-home" tooltip="Voltar para o Início (workspace global)" onClick={onNavigateHome} />
         )}
         {instructionRow}
+        {pinnedRows}
         {(visibleEntries ?? []).map((entry) => (
           <TreeNode
             key={entry.name}

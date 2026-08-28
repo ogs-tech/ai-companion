@@ -15,6 +15,7 @@ export function mockApi(): CallSpy {
   const session = {
     onOutput: vi.fn(() => () => {}),
     onExit: vi.fn(() => () => {}),
+    onAnyExit: vi.fn(() => () => {}),
   };
   Object.defineProperty(window, 'api', {
     value: { call, onInstructionGenerateProgress, session },

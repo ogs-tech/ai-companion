@@ -13,6 +13,7 @@ interface RenderTreeOptions {
   onSelectFile?: (relPath: string) => void;
   onUseAsProject?: (absolutePath: string) => void;
   instructionRow?: React.ReactNode;
+  pinnedRows?: React.ReactNode;
   scopeProjectId?: string;
   workspaceRootPath?: string;
   projects?: ReadonlyArray<Project>;
@@ -29,6 +30,7 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
           onSelectFile={opts.onSelectFile ?? vi.fn()}
           onUseAsProject={opts.onUseAsProject ?? vi.fn()}
           {...(opts.instructionRow !== undefined ? { instructionRow: opts.instructionRow } : {})}
+          {...(opts.pinnedRows !== undefined ? { pinnedRows: opts.pinnedRows } : {})}
           {...(opts.scopeProjectId ? { scopeProjectId: opts.scopeProjectId } : {})}
           {...(opts.workspaceRootPath !== undefined ? { workspaceRootPath: opts.workspaceRootPath } : {})}
           {...(opts.projects !== undefined ? { projects: opts.projects } : {})}
@@ -54,6 +56,16 @@ describe('FolderTree', () => {
     });
     renderTree({ instructionRow: <div data-testid="instruction-row-slot">Instructions</div> });
     expect(await screen.findByTestId('instruction-row-slot')).toBeInTheDocument();
+    expect(await screen.findByText('src')).toBeInTheDocument();
+  });
+
+  it('renders the pinnedRows slot between instructionRow and the folders/files', async () => {
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
+      if (method === 'workspace.listDir') return [{ name: 'src', kind: 'dir' }];
+      return [];
+    });
+    renderTree({ pinnedRows: <div data-testid="pinned-rows-slot">Skills/Agents/Hooks/MCP</div> });
+    expect(await screen.findByTestId('pinned-rows-slot')).toBeInTheDocument();
     expect(await screen.findByText('src')).toBeInTheDocument();
   });
 

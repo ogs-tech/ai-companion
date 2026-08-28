@@ -117,4 +117,20 @@ describe('session-handlers', () => {
     const result = await h['session.status']!({ sessionId: 'entity:urn:skill:foo' });
     expect(result).toMatchObject({ sessionId: 'entity:urn:skill:foo', status: 'running' });
   });
+
+  it('session.list returns an empty array when no session is live', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    expect(await h['session.list']!({})).toEqual([]);
+  });
+
+  it('session.list returns every spawned session', async () => {
+    const { service, base } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const h = buildSessionHandlers(service);
+    await h['session.spawn']!({ anchor: { kind: 'entity', urn: entityUrn('skill', 'foo') } });
+    const result = (await h['session.list']!({})) as Array<{ sessionId: string }>;
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ sessionId: 'entity:urn:skill:foo', label: 'foo', status: 'running' });
+  });
 });

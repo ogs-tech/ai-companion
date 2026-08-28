@@ -8,31 +8,24 @@ const noop = () => undefined;
 
 describe('CommandPalette', () => {
   it('is hidden when closed', () => {
-    renderWithShell(<CommandPalette open={false} onClose={noop} onNavigate={noop} onCreate={noop} />);
+    renderWithShell(<CommandPalette open={false} onClose={noop} onNavigate={noop} />);
     expect(screen.queryByTestId('command-palette')).toBeNull();
   });
   it('filters commands by query and navigates on select', async () => {
     const onNavigate = vi.fn();
     const onClose = vi.fn();
-    renderWithShell(<CommandPalette open onClose={onClose} onNavigate={onNavigate} onCreate={noop} />);
+    renderWithShell(<CommandPalette open onClose={onClose} onNavigate={onNavigate} />);
     const input = screen.getByTestId('command-palette-input');
-    await userEvent.type(input, 'hooks');
-    await userEvent.click(screen.getByText(/Hooks/i));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'hooks' });
+    await userEvent.type(input, 'marketplaces');
+    await userEvent.click(screen.getByText(/Marketplaces/i));
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'marketplaces' });
     expect(onClose).toHaveBeenCalled();
   });
-  it('jumps to the Workspace overview via its "Visão geral" quick-jump entry', async () => {
+  it('jumps to the Workspace overview via its "Início" quick-jump entry', async () => {
     const onNavigate = vi.fn();
-    renderWithShell(<CommandPalette open onClose={noop} onNavigate={onNavigate} onCreate={noop} />);
-    await userEvent.type(screen.getByTestId('command-palette-input'), 'Visão geral');
-    await userEvent.click(screen.getByText('Visão geral'));
-    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace', sub: 'visao-geral' });
-  });
-  it('offers create actions for editable entities', async () => {
-    const onCreate = vi.fn();
-    renderWithShell(<CommandPalette open onClose={noop} onNavigate={noop} onCreate={onCreate} />);
-    await userEvent.type(screen.getByTestId('command-palette-input'), 'Nova skill');
-    await userEvent.click(screen.getByText('Nova skill'));
-    expect(onCreate).toHaveBeenCalledWith('skills');
+    renderWithShell(<CommandPalette open onClose={noop} onNavigate={onNavigate} />);
+    await userEvent.type(screen.getByTestId('command-palette-input'), 'Início');
+    await userEvent.click(screen.getByText('Início'));
+    expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
   });
 });

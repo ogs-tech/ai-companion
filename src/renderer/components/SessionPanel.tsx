@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Button, Stack, Typography } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import { SquareTerminal, Lock } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
-import type { SessionAnchor, SessionSnapshot } from '../../shared/session.js';
+import { sessionsQueryKey } from '../hooks/use-sessions.js';
+import { sessionAnchorKey, type SessionAnchor, type SessionSnapshot } from '../../shared/session.js';
 import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from './ds/StatusPill.js';
@@ -16,6 +18,8 @@ type PanelStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error';
 
 interface SessionPanelProps {
   anchor: SessionAnchor;
+  /** Whether this panel is the one currently in focus. Panels kept mounted in the background (visible=false) skip resize/fit so a zero-size container doesn't miscalculate the terminal's dimensions. */
+  visible?: boolean;
 }
 
 const STATUS_PILL: Record<PanelStatus, { variant: StatusPillVariant; label: string }> = {
@@ -72,14 +76,40 @@ export function SessionPanelLocked(): React.ReactElement {
   );
 }
 
-export function SessionPanel({ anchor }: SessionPanelProps): React.ReactElement {
+export function SessionPanel({ anchor, visible = true }: SessionPanelProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const queryClient = useQueryClient();
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<PanelStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  // A session already running server-side (opened earlier, or by another
+  // view anchored to the same entity/workspace/project) should show up
+  // attached on mount — the anchor's key doubles as its sessionId, so this
+  // is a plain lookup, no spawn needed.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const existing = await callIpc<SessionSnapshot | null>('session.status', {
+          sessionId: sessionAnchorKey(anchor),
+        });
+        if (active && existing) {
+          setSessionId(existing.sessionId);
+          setStatus(existing.status === 'exited' ? 'exited' : 'running');
+        }
+      } catch {
+        // No session to reattach to — stay idle, same as a fresh anchor.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionAnchorKey(anchor)]);
 
   useEffect(() => {
     const terminal = new Terminal({ convertEol: true, fontSize: 13, theme: TERMINAL_XTERM_THEME });
@@ -114,16 +144,21 @@ export function SessionPanel({ anchor }: SessionPanelProps): React.ReactElement 
   }, [sessionId]);
 
   useEffect(() => {
+    // A hidden container (kept mounted in the background so its scrollback
+    // survives) reports zero size — fitting against that would shrink the
+    // terminal to nothing, so skip until it's visible again, then re-fit.
     const syncSize = (): void => {
+      if (!visible) return;
       fitAddonRef.current?.fit();
       const dims = fitAddonRef.current?.proposeDimensions();
       if (dims && sessionId) {
         void callIpc('session.resize', { sessionId, cols: dims.cols, rows: dims.rows });
       }
     };
+    syncSize();
     window.addEventListener('resize', syncSize);
     return () => window.removeEventListener('resize', syncSize);
-  }, [sessionId]);
+  }, [sessionId, visible]);
 
   const handleOpen = async (): Promise<void> => {
     setStatus('starting');
@@ -132,11 +167,9 @@ export function SessionPanel({ anchor }: SessionPanelProps): React.ReactElement 
       const session = await callIpc<SessionSnapshot>('session.spawn', { anchor });
       setSessionId(session.sessionId);
       setStatus(session.status === 'exited' ? 'exited' : 'running');
-      fitAddonRef.current?.fit();
-      const dims = fitAddonRef.current?.proposeDimensions();
-      if (dims) {
-        void callIpc('session.resize', { sessionId: session.sessionId, cols: dims.cols, rows: dims.rows });
-      }
+      void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+      // The resize effect below reacts to `sessionId` changing and fits/resizes
+      // itself — no need to duplicate that call here.
     } catch (err) {
       setStatus('error');
       setError(err instanceof IpcCallError ? err.message : String(err));

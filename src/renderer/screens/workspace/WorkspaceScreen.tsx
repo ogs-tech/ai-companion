@@ -1,18 +1,24 @@
 import { useState } from 'react';
 import { Box, Button, Container, Divider, IconButton, List, Paper, Tooltip } from '@mui/material';
-import { SquareTerminal, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, SquareTerminal, Trash2 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { ScreenHeader } from '../../components/ds/ScreenHeader.js';
 import { FolderTree } from '../../components/workspace/FolderTree.js';
 import { FilePreviewPane } from '../../components/workspace/FilePreviewPane.js';
-import { SessionDialog } from '../../components/workspace/SessionDialog.js';
 import { WorkspaceManagementList } from '../../components/workspace/WorkspaceManagementList.js';
 import { InstructionTreeRow } from '../../components/workspace/InstructionTreeRow.js';
+import { EntityTreeGroup } from '../../components/workspace/EntityTreeGroup.js';
+import { HooksTreeGroup } from '../../components/workspace/HooksTreeGroup.js';
+import { McpTreeGroup } from '../../components/workspace/McpTreeGroup.js';
+import { PluginsTreeGroup } from '../../components/workspace/PluginsTreeGroup.js';
+import { SessionsTreeGroup } from '../../components/workspace/SessionsTreeGroup.js';
 import { CustomizationEditor, type EditorHiddenField } from '../../components/CustomizationEditor.js';
+import { WorkspaceRemoveConfirmDialog } from '../../components/shell/WorkspaceRemoveConfirmDialog.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import { seedProjectInstruction, seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
-import { useActiveWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
+import { useSessionFocus } from '../../lib/session-focus-context.js';
+import { useActiveWorkspace, useDeleteWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { useDeleteProject, useFindOrCreateProjectByPath, useProjects } from '../../hooks/use-projects.js';
 import {
   useInvalidateInstructions,
@@ -22,7 +28,7 @@ import {
 } from '../../hooks/use-instructions.js';
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Instruction } from '../../../shared/entity.js';
-import type { SessionAnchor } from '../../../shared/session.js';
+import type { Workspace } from '../../../shared/workspace.js';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -43,14 +49,22 @@ export function WorkspaceScreen(): React.ReactElement {
   const findOrCreateProject = useFindOrCreateProjectByPath();
   const deleteProject = useDeleteProject();
   const switchWorkspace = useSwitchWorkspace();
+  const deleteWorkspace = useDeleteWorkspace();
   const invalidateInstructions = useInvalidateInstructions();
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [sessionAnchor, setSessionAnchor] = useState<SessionAnchor | null>(null);
-  const [sessionTitle, setSessionTitle] = useState('');
+  const { focusSession } = useSessionFocus();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  // Hidden by default inside a project workspace, to keep the tree focused on
+  // what's actually local to it — plugin-provided and Personal-scope entities
+  // are already visible everywhere else, so they're the ones worth hiding.
+  const [showGlobal, setShowGlobal] = useState(false);
+  // Independent from showGlobal — it filters by session status (running vs. exited), not local/global scope.
+  const [showFinishedSessions, setShowFinishedSessions] = useState(false);
+  // Captured when the dialog opens, not read live off `activeWorkspace` — see SubRail's old WorkspaceContext, which this replaces.
+  const [pendingRemoval, setPendingRemoval] = useState<Workspace | null>(null);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const { data: workspaceInstruction } = useWorkspaceInstruction(activeWorkspace?.id ?? '');
@@ -74,10 +88,41 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   );
 
-  const openSession = (anchor: SessionAnchor, title: string): void => {
-    setSessionAnchor(anchor);
-    setSessionTitle(title);
-  };
+  // Skills/Agents are scoped to whichever node is currently in view (a
+  // selected Project, or the active workspace itself); Hooks have no
+  // project/workspace tier of their own yet, and MCP's own local tier
+  // ('project-local'/'project-shared') keys off a filesystem path instead.
+  const entityLocalScope = selectedProject
+    ? { scope: 'project' as const, scopeId: selectedProject.id }
+    : activeWorkspace
+      ? { scope: 'workspace' as const, scopeId: activeWorkspace.id }
+      : undefined;
+  const mcpMatchPath = selectedProject ? selectedProject.path : activeWorkspace?.rootPath;
+
+  const pinnedRows = (
+    <>
+      <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
+      <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
+      <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
+      <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
+      <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
+      <SessionsTreeGroup showFinished={showFinishedSessions} onOpen={focusSession} />
+    </>
+  );
+
+  const finishedSessionsToggle = (
+    <Tooltip title={showFinishedSessions ? 'Ocultar sessões finalizadas' : 'Mostrar sessões finalizadas'}>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<Icon glyph={showFinishedSessions ? EyeOff : Eye} size={16} />}
+        data-testid="workspace-toggle-finished-sessions"
+        onClick={() => setShowFinishedSessions((v) => !v)}
+      >
+        {showFinishedSessions ? 'Ocultar finalizadas' : 'Mostrar finalizadas'}
+      </Button>
+    </Tooltip>
+  );
 
   const selectProject = (id: string): void => {
     setSelectedProjectId(id);
@@ -114,6 +159,19 @@ export function WorkspaceScreen(): React.ReactElement {
     }
   };
 
+  const handleRemoveWorkspace = async (): Promise<void> => {
+    const target = pendingRemoval;
+    setPendingRemoval(null);
+    if (!target) return;
+    try {
+      await switchWorkspace.mutateAsync('default');
+      await deleteWorkspace.mutateAsync(target.id);
+      setToast({ variant: 'success', message: `${target.name} removido` });
+    } catch (err) {
+      setToast({ variant: 'error', message: errorMessage(err) });
+    }
+  };
+
   if (editor) {
     const isPersonal = isPersonalInstruction(editor.entity);
     return (
@@ -141,6 +199,8 @@ export function WorkspaceScreen(): React.ReactElement {
     );
   }
 
+  const showGlobalToggle = activeWorkspace !== undefined && !activeWorkspace.isDefault;
+
   return (
     <Container component="main" data-testid="workspace-screen" maxWidth="lg" sx={{ py: 2.5 }}>
       <ScreenHeader
@@ -150,12 +210,26 @@ export function WorkspaceScreen(): React.ReactElement {
         actions={
           selectedProject ? (
             <>
+              {showGlobalToggle && (
+                <Tooltip title={showGlobal ? 'Ocultar entidades globais' : 'Mostrar entidades globais'}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<Icon glyph={showGlobal ? EyeOff : Eye} size={16} />}
+                    data-testid="workspace-toggle-global"
+                    onClick={() => setShowGlobal((v) => !v)}
+                  >
+                    {showGlobal ? 'Ocultar globais' : 'Mostrar globais'}
+                  </Button>
+                </Tooltip>
+              )}
+              {finishedSessionsToggle}
               <Button
                 variant="outlined"
                 size="small"
                 startIcon={<Icon glyph={SquareTerminal} size={16} />}
                 data-testid={`project-open-session-${selectedProject.id}`}
-                onClick={() => openSession({ kind: 'project', projectId: selectedProject.id }, selectedProject.name)}
+                onClick={() => focusSession({ kind: 'project', projectId: selectedProject.id }, selectedProject.name)}
               >
                 Abrir sessão
               </Button>
@@ -170,18 +244,45 @@ export function WorkspaceScreen(): React.ReactElement {
               </Tooltip>
             </>
           ) : (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<Icon glyph={SquareTerminal} size={16} />}
-              data-testid="workspace-open-session"
-              disabled={!activeWorkspace}
-              onClick={() =>
-                activeWorkspace && openSession({ kind: 'workspace', workspaceId: activeWorkspace.id }, activeWorkspace.name)
-              }
-            >
-              Abrir sessão
-            </Button>
+            <>
+              {showGlobalToggle && (
+                <Tooltip title={showGlobal ? 'Ocultar entidades globais' : 'Mostrar entidades globais'}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<Icon glyph={showGlobal ? EyeOff : Eye} size={16} />}
+                    data-testid="workspace-toggle-global"
+                    onClick={() => setShowGlobal((v) => !v)}
+                  >
+                    {showGlobal ? 'Ocultar globais' : 'Mostrar globais'}
+                  </Button>
+                </Tooltip>
+              )}
+              {finishedSessionsToggle}
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Icon glyph={SquareTerminal} size={16} />}
+                data-testid="workspace-open-session"
+                disabled={!activeWorkspace}
+                onClick={() =>
+                  activeWorkspace && focusSession({ kind: 'workspace', workspaceId: activeWorkspace.id }, activeWorkspace.name)
+                }
+              >
+                Abrir sessão
+              </Button>
+              {showGlobalToggle && activeWorkspace && (
+                <Tooltip title="Remover workspace">
+                  <IconButton
+                    data-testid="workspace-context-remove"
+                    aria-label="Remover workspace"
+                    onClick={() => setPendingRemoval(activeWorkspace)}
+                  >
+                    <Icon glyph={Trash2} size={16} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
           )
         }
       />
@@ -195,6 +296,12 @@ export function WorkspaceScreen(): React.ReactElement {
               seed={() => blankCustomization('instruction') as Instruction}
               onOpen={openInstructionEditor}
             />
+            <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} />
+            <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} />
+            <HooksTreeGroup showGlobal={false} />
+            <McpTreeGroup showGlobal={false} />
+            <PluginsTreeGroup showGlobal={false} />
+            <SessionsTreeGroup showFinished={showFinishedSessions} onOpen={focusSession} />
           </List>
           <WorkspaceManagementList />
         </Paper>
@@ -203,6 +310,7 @@ export function WorkspaceScreen(): React.ReactElement {
           <Box sx={{ width: 320, borderRight: 1, borderColor: 'divider', overflowY: 'auto' }}>
             <FolderTree
               instructionRow={instructionRow}
+              pinnedRows={pinnedRows}
               onSelectFile={setSelectedFile}
               onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
               onManageProject={selectProject}
@@ -220,11 +328,11 @@ export function WorkspaceScreen(): React.ReactElement {
         </Paper>
       )}
 
-      <SessionDialog
-        open={sessionAnchor !== null}
-        anchor={sessionAnchor}
-        title={sessionTitle}
-        onClose={() => setSessionAnchor(null)}
+      <WorkspaceRemoveConfirmDialog
+        open={pendingRemoval !== null}
+        workspaceName={pendingRemoval?.name ?? ''}
+        onConfirm={() => void handleRemoveWorkspace()}
+        onCancel={() => setPendingRemoval(null)}
       />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Container>

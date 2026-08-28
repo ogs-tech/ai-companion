@@ -52,7 +52,7 @@ export class SessionService {
     if (pendingSpawn) return pendingSpawn;
 
     const spawnPromise = (async () => {
-      const cwd = await this.resolveCwd(anchor);
+      const { cwd, label } = await this.resolveAnchor(anchor);
 
       try {
         await this.claudeSession.spawn(sessionId, cwd, { cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
@@ -63,7 +63,7 @@ export class SessionService {
         });
       }
 
-      const session: SessionSnapshot = { sessionId, anchor, cwd, status: 'running' };
+      const session: SessionSnapshot = { sessionId, anchor, cwd, label, status: 'running' };
       this.sessions.set(sessionId, session);
       return session;
     })().finally(() => {
@@ -97,6 +97,11 @@ export class SessionService {
     return this.sessions.get(sessionId);
   }
 
+  /** All sessions in this workspace's memory, running and exited alike — never persisted, never pruned. */
+  list(): SessionSnapshot[] {
+    return Array.from(this.sessions.values());
+  }
+
   killAll(): void {
     for (const [sessionId, session] of this.sessions) {
       if (session.status === 'running') {
@@ -114,17 +119,17 @@ export class SessionService {
     this.exitListeners.push(listener);
   }
 
-  private async resolveCwd(anchor: SessionAnchor): Promise<string> {
+  private async resolveAnchor(anchor: SessionAnchor): Promise<{ cwd: string; label: string }> {
     if (anchor.kind === 'workspace') {
-      return (await this.scopeDeps.workspaceService.get(anchor.workspaceId)).rootPath;
+      const workspace = await this.scopeDeps.workspaceService.get(anchor.workspaceId);
+      return { cwd: workspace.rootPath, label: workspace.name };
     }
     if (anchor.kind === 'project') {
-      return (await this.scopeDeps.projectService.get(anchor.projectId)).path;
+      const project = await this.scopeDeps.projectService.get(anchor.projectId);
+      return { cwd: project.path, label: project.name };
     }
     const entity = await this.entityService.get(anchor.urn);
-    if (entity.scopes[0] !== 'personal') {
-      return resolveScopePath(entity, this.scopeDeps);
-    }
-    return this.workspacePath;
+    const cwd = entity.scopes[0] !== 'personal' ? await resolveScopePath(entity, this.scopeDeps) : this.workspacePath;
+    return { cwd, label: entity.name };
   }
 }

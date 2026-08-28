@@ -157,6 +157,35 @@ describe('SessionService', () => {
     expect(received).toEqual([[session.sessionId, 'hello']]);
   });
 
+  it('spawn resolves a human-readable label for each anchor kind', async () => {
+    const { service, base } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const entitySession = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    const wsSession = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+    const projectSession = await service.spawn({ kind: 'project', projectId: 'p1' });
+    expect(entitySession.label).toBe('foo');
+    expect(wsSession.label).toBe('W');
+    expect(projectSession.label).toBe('acme');
+  });
+
+  it('list returns an empty array before any session is spawned', () => {
+    const { service } = setup();
+    expect(service.list()).toEqual([]);
+  });
+
+  it('list returns every session, running and exited alike', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const entitySession = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    const wsSession = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+    claudeSession.simulateExit(entitySession.sessionId, 0);
+
+    const sessions = service.list();
+    expect(sessions).toHaveLength(2);
+    expect(sessions.find((s) => s.sessionId === entitySession.sessionId)?.status).toBe('exited');
+    expect(sessions.find((s) => s.sessionId === wsSession.sessionId)?.status).toBe('running');
+  });
+
   it('spawn deduplicates concurrent calls for the same anchor (single-flight)', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });

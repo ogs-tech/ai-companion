@@ -15,6 +15,8 @@ export interface SessionSnapshot {
   sessionId: string;
   anchor: SessionAnchor;
   cwd: string;
+  /** Human-readable name of the anchor (entity/workspace/project name), for display in a session list. */
+  label: string;
   status: SessionStatus;
 }
 

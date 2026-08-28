@@ -59,5 +59,6 @@ export function buildSessionHandlers(service: SessionService): IpcHandlers {
       const raw = asObject(params, 'session.status');
       return service.status(asString(raw['sessionId'], 'sessionId')) ?? null;
     },
+    'session.list': async () => service.list(),
   };
 }

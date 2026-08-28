@@ -52,14 +52,18 @@ describe('<Main> — shell navigation', () => {
     expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
   });
 
-  it('navigates to the skills list via the Workspace sub-rail', async () => {
+  it('expands the Skills tree node inline on the Workspace overview', async () => {
     setupRoute();
     render(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-screen');
-    await userEvent.click(screen.getByTestId('nav-skills'));
+    // Wait for the Default-branch landmark first — until `workspace.getActive`
+    // resolves, the screen briefly renders the non-default (FolderTree)
+    // shape, whose own tree groups would otherwise get expanded and unmounted
+    // out from under this test.
+    await screen.findByTestId('workspace-management-list');
+    await userEvent.click(screen.getByTestId('tree-group-skill'));
 
-    expect(await screen.findByTestId('entity-list-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-group-empty-skill')).toBeInTheDocument();
   });
 
   it('reaches the Starter Pack screen as an ordinary page via the top nav', async () => {

@@ -46,7 +46,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
     if (activeWorkspace && !activeWorkspace.isDefault) {
       void switchWorkspace.mutateAsync('default');
     }
-    onNavigate({ area: 'workspace', sub: 'visao-geral' });
+    onNavigate({ area: 'workspace' });
   };
 
   // UI-only state — intentionally local. Resetting these on navigation is
@@ -256,7 +256,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
           <Button
             size="small"
             endIcon={<Icon glyph={ArrowRight} size={16} />}
-            onClick={() => onNavigate({ area: 'plugins', sub: 'marketplaces' })}
+            onClick={() => onNavigate({ area: 'marketplaces' })}
           >
             Ver marketplaces
           </Button>
@@ -493,7 +493,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
             <Button
               size="small"
               endIcon={<Icon glyph={ArrowRight} size={16} />}
-              onClick={() => onNavigate({ area: 'plugins', sub: 'marketplaces' })}
+              onClick={() => onNavigate({ area: 'marketplaces' })}
             >
               Ver todos os marketplaces
             </Button>
