@@ -1,5 +1,5 @@
-import { Box, Chip, IconButton, List, Stack, Typography } from '@mui/material';
-import { ChevronsLeft, SquareTerminal } from 'lucide-react';
+import { Box, Chip, IconButton, List, Stack, Tooltip, Typography, useTheme } from '@mui/material';
+import { ChevronsLeft, SquareTerminal, X } from 'lucide-react';
 import { useSessionFocus } from '../../lib/session-focus-context.js';
 import { anchorKindLabel } from '../../lib/session-anchor-label.js';
 import { SessionPanel } from '../SessionPanel.js';
@@ -15,7 +15,8 @@ import { TreeGroupRow } from '../workspace/TreeGroup.js';
  * no server-side scrollback buffer: unmounting one would lose its history.
  */
 export function SessionsPanel(): React.ReactElement | null {
-  const { openTabs, focusedSessionId, expanded, focusSession, toggleExpanded } = useSessionFocus();
+  const { openTabs, focusedSessionId, expanded, focusSession, toggleExpanded, closeTab } = useSessionFocus();
+  const theme = useTheme();
 
   if (openTabs.length === 0) return null;
 
@@ -48,6 +49,7 @@ export function SessionsPanel(): React.ReactElement | null {
                   key={tab.sessionId}
                   testId={`sessions-panel-tab-${tab.sessionId}`}
                   glyph={SquareTerminal}
+                  accentColor={theme.palette.success.main}
                   primary={
                     <Typography noWrap sx={{ fontSize: '0.85rem', fontWeight: focused ? 600 : 400 }}>
                       {tab.label}
@@ -57,6 +59,30 @@ export function SessionsPanel(): React.ReactElement | null {
                     <Chip size="small" variant="outlined" label={anchorKindLabel(tab.anchor)} sx={{ height: 18, fontSize: '0.6875rem' }} />
                   }
                   onClick={() => focusSession(tab.anchor, tab.label)}
+                  actions={
+                    <Tooltip title="Fechar">
+                      <Box
+                        component="span"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Fechar ${tab.label}`}
+                        data-testid={`sessions-panel-tab-close-${tab.sessionId}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(tab.sessionId);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          if (e.key === ' ') e.preventDefault();
+                          e.stopPropagation();
+                          closeTab(tab.sessionId);
+                        }}
+                        sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                      >
+                        <Icon glyph={X} size={14} />
+                      </Box>
+                    </Tooltip>
+                  }
                 />
               );
             })}

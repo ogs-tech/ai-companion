@@ -402,6 +402,23 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
     });
 
+    it('shows the workspace list in its own toggleable Files panel, matching the non-default workspace treatment', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return globalWorkspace;
+        if (method === 'workspace.list') return [globalWorkspace];
+        if (method === 'project.list') return projects;
+        return undefined;
+      });
+      renderScreen();
+      const panel = await screen.findByTestId('workspace-files-panel');
+      expect(panel).toContainElement(await screen.findByTestId('workspace-management-list'));
+      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      expect(screen.queryByTestId('workspace-files-panel')).not.toBeInTheDocument();
+      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      expect(await screen.findByTestId('workspace-files-panel')).toBeInTheDocument();
+    });
+
     it('opens the editor in edit mode when a Personal Instruction already exists', async () => {
       const user = userEvent.setup();
       const personal = {
@@ -520,6 +537,97 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('tree-group-session'));
       await user.click(await screen.findByTestId('tree-session-project:p1'));
       expect(await screen.findByTestId('sessions-panel-tab-project:p1')).toBeInTheDocument();
+    });
+  });
+
+  describe('Customizations open in a dialog, not the file canvas', () => {
+    it('opening the instruction editor opens a dialog and keeps the tree mounted underneath', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-instruction-row'));
+      expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
+      expect(screen.getByTestId('folder-tree')).toBeInTheDocument();
+    });
+
+    it('creating a new skill opens a dialog without replacing the tree group', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-skill'));
+      await user.click(await screen.findByTestId('tree-group-new-skill'));
+      expect(await screen.findByTestId('customization-editor')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-group-skill')).toBeInTheDocument();
+    });
+
+    it('separates Sessões from Customizations as two distinct rail sections', async () => {
+      renderScreen();
+      expect(await screen.findByTestId('tree-group-session')).toBeInTheDocument();
+      expect(await screen.findByText('Customizations')).toBeInTheDocument();
+    });
+  });
+
+  describe('Files panel', () => {
+    it('can be hidden and shown again from the header toggle', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      expect(await screen.findByTestId('workspace-files-panel')).toBeInTheDocument();
+      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      expect(screen.queryByTestId('workspace-files-panel')).not.toBeInTheDocument();
+      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      expect(await screen.findByTestId('workspace-files-panel')).toBeInTheDocument();
+    });
+
+    it('opening two files keeps both tabs mounted and toggles which is visible', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return registeredProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }];
+        if (method === 'project.readFile') {
+          const path = (params as { path: string }).path;
+          return { previewable: true, truncated: false, content: `content of ${path}` };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-node-manage-instructions-apps'));
+      await user.click(await screen.findByText('a.md'));
+      expect(await screen.findByText('content of a.md')).toBeVisible();
+
+      await user.click(await screen.findByText('b.md'));
+      expect(await screen.findByText('content of b.md')).toBeVisible();
+      expect(screen.getByText('content of a.md')).not.toBeVisible();
+
+      const tabButtons = screen.getAllByTestId(/^workbench-tab-(?!close-)/);
+      expect(tabButtons).toHaveLength(2);
+      await user.click(tabButtons[0]!);
+      expect(screen.getByText('content of a.md')).toBeVisible();
+      expect(screen.getByText('content of b.md')).not.toBeVisible();
+    });
+
+    it('closing a file tab removes it and shows the empty state once none remain', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return registeredProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+        if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hello' };
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-node-manage-instructions-apps'));
+      await user.click(await screen.findByText('a.md'));
+      await screen.findByText('hello');
+      await user.click(screen.getByLabelText(/^Fechar /));
+      expect(screen.queryByText('hello')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('empty-state-workbench-empty')).toBeInTheDocument();
     });
   });
 

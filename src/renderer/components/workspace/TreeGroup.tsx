@@ -93,17 +93,27 @@ interface TreeGroupRowProps {
   /** Trailing hover actions (edit/delete/etc.), stopPropagation'd from onClick. */
   actions?: React.ReactNode;
   muted?: boolean;
+  /** Left-edge color spine marking this row's kind — the same signature used by WorkbenchCanvas's tab strip, so a session row here and a tab there read as one visual system. */
+  accentColor?: string;
 }
 
 /** A dense entity row inside a `TreeGroup`, styled like a FolderTree file row. */
-export function TreeGroupRow({ testId, glyph, primary, badge, onClick, actions, muted }: TreeGroupRowProps): React.ReactElement {
+export function TreeGroupRow({ testId, glyph, primary, badge, onClick, actions, muted, accentColor }: TreeGroupRowProps): React.ReactElement {
   return (
     <ListItemButton
       dense
       data-testid={testId}
       onClick={onClick}
-      sx={{ pl: 1.5 + 2.5, opacity: muted ? 0.65 : 1 }}
+      sx={{ pl: 1.5 + 2.5, opacity: muted ? 0.65 : 1, position: 'relative' }}
     >
+      {accentColor && (
+        <Box
+          sx={(theme) => ({
+            position: 'absolute', left: 0, top: 4, bottom: 4, width: 3,
+            borderRadius: `${theme.ogs.radius.xs}px`, bgcolor: accentColor,
+          })}
+        />
+      )}
       <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
         <Icon glyph={glyph} size={14} />
         <ListItemText primary={primary} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />

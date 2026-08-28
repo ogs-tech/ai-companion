@@ -14,6 +14,8 @@ interface SessionFocusContextValue {
   expanded: boolean;
   focusSession: (anchor: SessionAnchor, label: string) => void;
   toggleExpanded: () => void;
+  /** Drops a tab from the list — the session itself keeps running server-side, this only stops tracking it here. */
+  closeTab: (sessionId: string) => void;
 }
 
 const SessionFocusContext = createContext<SessionFocusContextValue | null>(null);
@@ -64,6 +66,11 @@ export function SessionFocusProvider({ children }: { children: ReactNode }): Rea
         setExpanded(true);
       },
       toggleExpanded: () => setExpanded((v) => !v),
+      closeTab: (sessionId) => {
+        const next = openTabs.filter((tab) => tab.sessionId !== sessionId);
+        setOpenTabs(next);
+        if (focusedSessionId === sessionId) setFocusedSessionId(next[next.length - 1]?.sessionId ?? null);
+      },
     }),
     [openTabs, focusedSessionId, expanded],
   );

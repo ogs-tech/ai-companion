@@ -4,7 +4,6 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { StatusPill } from '../ds/StatusPill.js';
 import { PluginOriginBadge } from '../PluginOriginBadge.js';
-import { CustomizationEditor } from '../CustomizationEditor.js';
 import { CustomizationViewDrawer } from '../CustomizationViewDrawer.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
@@ -26,21 +25,20 @@ interface EntityTreeGroupProps {
   localScope?: LocalScope;
   /** Whether entities that don't belong to `localScope` are currently visible. Ignored when `localScope` is omitted. */
   showGlobal: boolean;
+  /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
+  onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
 }
-
-type Editor = { kind: 'closed' } | { kind: 'create' | 'edit'; entity: Skill | Agent };
 
 function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
   if (!localScope) return true;
   return entity.scopes[0] === localScope.scope && entity.scopeId === localScope.scopeId;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, showGlobal }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
 
-  const [editor, setEditor] = useState<Editor>({ kind: 'closed' });
   const [viewing, setViewing] = useState<Entity | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
@@ -53,7 +51,7 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal }: EntityT
     const seeded = localScope
       ? ({ ...blank, scopes: [localScope.scope], scopeId: localScope.scopeId } as Skill | Agent)
       : blank;
-    setEditor({ kind: 'create', entity: seeded });
+    onEdit(kind, seeded, true);
   };
 
   const handleDelete = async (item: Entity): Promise<void> => {
@@ -66,21 +64,6 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal }: EntityT
       setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
     }
   };
-
-  if (editor.kind !== 'closed') {
-    return (
-      <CustomizationEditor
-        initial={editor.entity}
-        isCreate={editor.kind === 'create'}
-        onSaved={async (saved) => {
-          setEditor({ kind: 'edit', entity: saved as Skill | Agent });
-          await invalidate(kind);
-          setToast({ variant: 'success', message: `${saved.name} salvo` });
-        }}
-        onCancel={() => setEditor({ kind: 'closed' })}
-      />
-    );
-  }
 
   return (
     <>
@@ -121,13 +104,13 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal }: EntityT
                         data-testid={`tree-${kind}-edit-${item.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditor({ kind: 'edit', entity: item as Skill | Agent });
+                          onEdit(kind, item as Skill | Agent, false);
                         }}
                         onKeyDown={(e) => {
                           if (e.key !== 'Enter' && e.key !== ' ') return;
                           if (e.key === ' ') e.preventDefault();
                           e.stopPropagation();
-                          setEditor({ kind: 'edit', entity: item as Skill | Agent });
+                          onEdit(kind, item as Skill | Agent, false);
                         }}
                         sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
                       >
@@ -168,7 +151,7 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal }: EntityT
         onClose={() => setViewing(null)}
         onEdit={(item) => {
           setViewing(null);
-          setEditor({ kind: 'edit', entity: item as Skill | Agent });
+          onEdit(kind, item as Skill | Agent, false);
         }}
       />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
