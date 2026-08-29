@@ -20,6 +20,17 @@ export interface SessionSnapshot {
   status: SessionStatus;
 }
 
+/**
+ * A `SessionSnapshot` plus the scrollback captured so far — returned only by
+ * `session.spawn`/`session.resume`/`session.status` (a single-session
+ * lookup, used to replay output into a reattaching terminal), never by
+ * `session.list` (an aggregate list of many sessions, where shipping every
+ * buffer would be wasteful).
+ */
+export interface SessionSnapshotWithOutput extends SessionSnapshot {
+  outputBuffer: string;
+}
+
 export interface SessionOutputEvent {
   sessionId: string;
   chunk: string;

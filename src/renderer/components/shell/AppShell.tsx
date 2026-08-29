@@ -3,10 +3,9 @@ import { Box } from '@mui/material';
 import { TopNav } from './TopNav.js';
 import { AppFooter } from './AppFooter.js';
 import { CommandPalette } from './CommandPalette.js';
-import { SessionsPanel } from './SessionsPanel.js';
 import type { Area, Nav } from './nav.js';
 import { useActiveWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
-import { SessionFocusProvider } from '../../lib/session-focus-context.js';
+import { confirmDiscardUnsavedTabs } from '../../lib/workspace-tabs-guard.js';
 
 interface AppShellProps {
   nav: Nav;
@@ -44,37 +43,35 @@ export function AppShell({
   // switch/create/remove workspaces.
   const selectArea = (area: Area): void => {
     if (area === 'workspace' && activeWorkspace && !activeWorkspace.isDefault) {
+      if (!confirmDiscardUnsavedTabs()) return;
       void switchWorkspace.mutateAsync('default');
     }
     onNavigate({ area });
   };
 
   return (
-    <SessionFocusProvider>
-      <Box
-        data-testid="main-screen"
-        sx={{ minHeight: '100vh', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}
-      >
-        <TopNav
-          active={nav.area}
-          onSelectArea={selectArea}
-          onOpenSettings={onOpenSettings}
-          onOpenCommandPalette={() => setPaletteOpen(true)}
-          {...(healthSeverity !== undefined ? { healthSeverity } : {})}
-        />
-        <Box data-testid="app-shell" sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          <Box component="main" sx={{ flexGrow: 1, minWidth: 0, overflowY: 'auto' }}>
-            {children}
-          </Box>
-          <SessionsPanel />
+    <Box
+      data-testid="main-screen"
+      sx={{ height: '100vh', overflow: 'hidden', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}
+    >
+      <TopNav
+        active={nav.area}
+        onSelectArea={selectArea}
+        onOpenSettings={onOpenSettings}
+        onOpenCommandPalette={() => setPaletteOpen(true)}
+        {...(healthSeverity !== undefined ? { healthSeverity } : {})}
+      />
+      <Box data-testid="app-shell" sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        <Box component="main" sx={{ flexGrow: 1, minWidth: 0, overflowY: 'auto' }}>
+          {children}
         </Box>
-        <AppFooter />
-        <CommandPalette
-          open={paletteOpen}
-          onClose={() => setPaletteOpen(false)}
-          onNavigate={(n) => onNavigate(n)}
-        />
       </Box>
-    </SessionFocusProvider>
+      <AppFooter />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={(n) => onNavigate(n)}
+      />
+    </Box>
   );
 }

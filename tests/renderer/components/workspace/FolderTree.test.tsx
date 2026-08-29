@@ -10,16 +10,15 @@ import { FolderTree } from '../../../../src/renderer/components/workspace/Folder
 import type { Project } from '../../../../src/shared/project.js';
 
 interface RenderTreeOptions {
-  onSelectFile?: (relPath: string) => void;
+  onSelectFile?: (relPath: string, projectId?: string) => void;
   onUseAsProject?: (absolutePath: string) => void;
   instructionRow?: React.ReactNode;
   pinnedRows?: React.ReactNode;
   scopeProjectId?: string;
   workspaceRootPath?: string;
   projects?: ReadonlyArray<Project>;
-  onManageProject?: (projectId: string) => void;
-  onNavigateUp?: () => void;
-  onNavigateHome?: () => void;
+  onOpenProject?: (projectId: string) => void;
+  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 const renderTree = (opts: RenderTreeOptions = {}) =>
@@ -34,9 +33,8 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
           {...(opts.scopeProjectId ? { scopeProjectId: opts.scopeProjectId } : {})}
           {...(opts.workspaceRootPath !== undefined ? { workspaceRootPath: opts.workspaceRootPath } : {})}
           {...(opts.projects !== undefined ? { projects: opts.projects } : {})}
-          {...(opts.onManageProject !== undefined ? { onManageProject: opts.onManageProject } : {})}
-          {...(opts.onNavigateUp !== undefined ? { onNavigateUp: opts.onNavigateUp } : {})}
-          {...(opts.onNavigateHome !== undefined ? { onNavigateHome: opts.onNavigateHome } : {})}
+          {...(opts.onOpenProject !== undefined ? { onOpenProject: opts.onOpenProject } : {})}
+          {...(opts.renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow: opts.renderProjectInstructionRow } : {})}
         />
       </ThemeProvider>
     </QueryClientProvider>,
@@ -120,13 +118,36 @@ describe('FolderTree', () => {
     expect(screen.queryByText('index.ts')).not.toBeInTheDocument();
   });
 
-  it('calls onSelectFile with the file\'s relative path when clicked, when scoped to a Project', async () => {
+  it('calls onSelectFile with the file\'s relative path and Project id when clicked, when scoped to a Project', async () => {
     const user = userEvent.setup();
     const onSelectFile = vi.fn();
     vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'README.md', kind: 'file' }]);
     renderTree({ onSelectFile, scopeProjectId: 'p1' });
     await user.click(await screen.findByText('README.md'));
-    expect(onSelectFile).toHaveBeenCalledWith('README.md');
+    expect(onSelectFile).toHaveBeenCalledWith('README.md', 'p1');
+  });
+
+  it('calls onSelectFile with the matched Project id for a file inside a root folder expanded in place — not the (unset) screen scope', async () => {
+    const user = userEvent.setup();
+    const onSelectFile = vi.fn();
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
+        return [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'project.listDir' && (params as { projectId: string; path: string }).projectId === 'p1') {
+        if ((params as { path: string }).path === '') return [{ name: 'README.md', kind: 'file' }];
+      }
+      return [];
+    });
+    renderTree({
+      onSelectFile,
+      workspaceRootPath: '/repos/monorepo',
+      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
+      onOpenProject: vi.fn(),
+    });
+    await user.click(await screen.findByText('apps'));
+    await user.click(await screen.findByText('README.md'));
+    expect(onSelectFile).toHaveBeenCalledWith('README.md', 'p1');
   });
 
   it('"Use as Project" on a folder node calls onUseAsProject with the resolved absolute path', async () => {
@@ -211,7 +232,7 @@ describe('FolderTree', () => {
     expect(screen.queryByTestId('tree-node-use-as-project-src')).not.toBeInTheDocument();
   });
 
-  it('swaps "Use as Project" for "Gerir instructions" on a root folder already registered as a Project', async () => {
+  it('swaps "Use as Project" for "Abrir customizations do projeto" on a root folder already registered as a Project', async () => {
     vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
       const path = (params as { path: string }).path;
       if (method === 'workspace.listDir' && path === '') {
@@ -222,17 +243,17 @@ describe('FolderTree', () => {
     renderTree({
       workspaceRootPath: '/repos/monorepo',
       projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onManageProject: vi.fn(),
+      onOpenProject: vi.fn(),
     });
-    expect(await screen.findByTestId('tree-node-manage-instructions-apps')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-node-open-project-apps')).toBeInTheDocument();
     expect(screen.queryByTestId('tree-node-use-as-project-apps')).not.toBeInTheDocument();
     // Unmatched sibling folder keeps the normal "Use as Project" affordance.
     expect(await screen.findByTestId('tree-node-use-as-project-other')).toBeInTheDocument();
   });
 
-  it('clicking "Gerir instructions" calls onManageProject with the matched Project id', async () => {
+  it('clicking "Abrir customizations do projeto" calls onOpenProject with the matched Project id', async () => {
     const user = userEvent.setup();
-    const onManageProject = vi.fn();
+    const onOpenProject = vi.fn();
     vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
       const path = (params as { path: string }).path;
       if (method === 'workspace.listDir' && path === '') return [{ name: 'apps', kind: 'dir' }];
@@ -241,72 +262,124 @@ describe('FolderTree', () => {
     renderTree({
       workspaceRootPath: '/repos/monorepo',
       projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onManageProject,
+      onOpenProject,
     });
-    await user.click(await screen.findByTestId('tree-node-manage-instructions-apps'));
-    expect(onManageProject).toHaveBeenCalledWith('p1');
+    await user.click(await screen.findByTestId('tree-node-open-project-apps'));
+    expect(onOpenProject).toHaveBeenCalledWith('p1');
   });
 
-  it('clicking anywhere on a root folder row already registered as a Project also calls onManageProject, not just its shortcut icon', async () => {
-    const user = userEvent.setup();
-    const onManageProject = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path: string }).path;
-      if (method === 'workspace.listDir' && path === '') return [{ name: 'apps', kind: 'dir' }];
+  it('shows a running-session badge on a root folder row already registered as a Project with an active session', async () => {
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params?: unknown) => {
+      const path = (params as { path?: string } | undefined)?.path;
+      if (method === 'workspace.listDir' && path === '') {
+        return [{ name: 'apps', kind: 'dir' }, { name: 'other', kind: 'dir' }];
+      }
+      if (method === 'session.list') {
+        return [
+          {
+            sessionId: 'project:p1',
+            anchor: { kind: 'project', projectId: 'p1' },
+            cwd: '/repos/monorepo/apps',
+            label: 'apps',
+            status: 'running',
+          },
+        ];
+      }
       return [];
     });
     renderTree({
       workspaceRootPath: '/repos/monorepo',
       projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onManageProject,
+      onOpenProject: vi.fn(),
+    });
+    expect(await screen.findByText('Ativa')).toBeInTheDocument();
+    // Only "apps" has a session — the sibling "other" folder gets no badge.
+    expect(screen.getAllByText('Ativa')).toHaveLength(1);
+  });
+
+  it('clicking a root folder row already registered as a Project expands it in place, fetching its own children, instead of navigating away', async () => {
+    const user = userEvent.setup();
+    const onOpenProject = vi.fn();
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
+        return [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'project.listDir' && (params as { projectId: string; path: string }).projectId === 'p1') {
+        const path = (params as { path: string }).path;
+        if (path === '') return [{ name: 'src', kind: 'dir' }, { name: 'README.md', kind: 'file' }];
+      }
+      return [];
+    });
+    renderTree({
+      workspaceRootPath: '/repos/monorepo',
+      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
+      onOpenProject,
     });
     await user.click(await screen.findByText('apps'));
-    expect(onManageProject).toHaveBeenCalledWith('p1');
+    expect(await screen.findByText('src')).toBeInTheDocument();
+    expect(await screen.findByText('README.md')).toBeInTheDocument();
+    expect(onOpenProject).not.toHaveBeenCalled();
   });
 
-  it('shows a ".." row when scoped to a Project and onNavigateUp is provided; clicking it navigates back up', async () => {
+  it('renders renderProjectInstructionRow pinned above a Project folder\'s own children once expanded in place, without "entering" it', async () => {
     const user = userEvent.setup();
-    const onNavigateUp = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'src', kind: 'dir' }]);
-    renderTree({ scopeProjectId: 'p1', onNavigateUp });
-    await user.click(await screen.findByTestId('tree-node-up'));
-    expect(onNavigateUp).toHaveBeenCalledTimes(1);
+    const renderProjectInstructionRow = vi.fn((project: Project, _depth: number) => (
+      <div data-testid={`instruction-row-${project.name}`}>{project.name}/INSTRUCTIONS</div>
+    ));
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
+        return [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'project.listDir' && (params as { projectId: string }).projectId === 'p1') {
+        return [{ name: 'src', kind: 'dir' }];
+      }
+      return [];
+    });
+    renderTree({
+      workspaceRootPath: '/repos/monorepo',
+      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
+      onOpenProject: vi.fn(),
+      renderProjectInstructionRow,
+    });
+    expect(screen.queryByTestId('instruction-row-apps')).not.toBeInTheDocument();
+    await user.click(await screen.findByText('apps'));
+    expect(await screen.findByTestId('instruction-row-apps')).toBeInTheDocument();
+    expect(renderProjectInstructionRow).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1', name: 'apps' }), 1);
   });
 
-  it('does not show a ".." row when not scoped to a Project', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'src', kind: 'dir' }]);
-    renderTree({ onNavigateUp: vi.fn() });
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(screen.queryByTestId('tree-node-up')).not.toBeInTheDocument();
+  it('does not call renderProjectInstructionRow for a root-level folder that is not a registered Project', async () => {
+    const renderProjectInstructionRow = vi.fn(() => <div data-testid="never-rendered" />);
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      const path = (params as { path?: string } | undefined)?.path;
+      if (method === 'workspace.listDir' && path === '') return [{ name: 'plain', kind: 'dir' }];
+      return [];
+    });
+    renderTree({ renderProjectInstructionRow });
+    expect(screen.queryByTestId('never-rendered')).not.toBeInTheDocument();
+    expect(renderProjectInstructionRow).not.toHaveBeenCalled();
   });
 
-  it('does not show a ".." row when scoped to a Project but onNavigateUp is not provided', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'src', kind: 'dir' }]);
-    renderTree({ scopeProjectId: 'p1' });
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(screen.queryByTestId('tree-node-up')).not.toBeInTheDocument();
-  });
-
-  it('shows a home ".." row at the workspace root when onNavigateHome is provided; clicking it navigates home', async () => {
+  it('expands a grandchild of a root-level Project row using paths relative to the Project, not the workspace', async () => {
     const user = userEvent.setup();
-    const onNavigateHome = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'src', kind: 'dir' }]);
-    renderTree({ onNavigateHome });
-    await user.click(await screen.findByTestId('tree-node-home'));
-    expect(onNavigateHome).toHaveBeenCalledTimes(1);
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
+        return [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'project.listDir' && (params as { projectId: string; path: string }).projectId === 'p1') {
+        const path = (params as { path: string }).path;
+        if (path === '') return [{ name: 'src', kind: 'dir' }];
+        if (path === 'src') return [{ name: 'index.ts', kind: 'file' }];
+      }
+      return [];
+    });
+    renderTree({
+      workspaceRootPath: '/repos/monorepo',
+      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
+      onOpenProject: vi.fn(),
+    });
+    await user.click(await screen.findByText('apps'));
+    await user.click(await screen.findByText('src'));
+    expect(await screen.findByText('index.ts')).toBeInTheDocument();
   });
 
-  it('does not show the home ".." row when scoped to a Project, even if onNavigateHome is provided', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'src', kind: 'dir' }]);
-    renderTree({ scopeProjectId: 'p1', onNavigateHome: vi.fn() });
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(screen.queryByTestId('tree-node-home')).not.toBeInTheDocument();
-  });
-
-  it('does not show the home ".." row at the workspace root when onNavigateHome is not provided', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'src', kind: 'dir' }]);
-    renderTree();
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(screen.queryByTestId('tree-node-home')).not.toBeInTheDocument();
-  });
 });

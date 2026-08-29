@@ -66,6 +66,23 @@ export class NodeFileBrowserAdapter implements FileBrowserPort {
     return { previewable: true, content, truncated };
   }
 
+  async writeFile(absPath: string, content: string): Promise<void> {
+    let stat: import('node:fs').Stats;
+    try {
+      stat = await fs.stat(absPath);
+    } catch (err) {
+      if (isEnoent(err)) throw new DomainError('not_found', `File not found: ${absPath}`);
+      throw err;
+    }
+    if (!stat.isFile()) {
+      throw new DomainError('validation', `Not a file: ${absPath}`);
+    }
+    if (Buffer.byteLength(content, 'utf8') > MAX_READABLE_BYTES) {
+      throw new DomainError('validation', `Content exceeds the ${MAX_READABLE_BYTES / (1024 * 1024)}MB write limit`);
+    }
+    await fs.writeFile(absPath, content, 'utf8');
+  }
+
   async realpath(absPath: string): Promise<string> {
     try {
       return await fs.realpath(absPath);

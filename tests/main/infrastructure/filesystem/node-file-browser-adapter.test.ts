@@ -72,6 +72,37 @@ describe('NodeFileBrowserAdapter.readFile', () => {
   });
 });
 
+describe('NodeFileBrowserAdapter.writeFile', () => {
+  it('overwrites an existing file in place', async () => {
+    await writeFile(join(dir, 'a.txt'), 'hello');
+    await adapter.writeFile(join(dir, 'a.txt'), 'goodbye');
+    const preview = await adapter.readFile(join(dir, 'a.txt'));
+    expect(preview).toEqual({ previewable: true, content: 'goodbye', truncated: false });
+  });
+
+  it('accepts writing an empty string', async () => {
+    await writeFile(join(dir, 'a.txt'), 'hello');
+    await adapter.writeFile(join(dir, 'a.txt'), '');
+    const preview = await adapter.readFile(join(dir, 'a.txt'));
+    expect(preview).toEqual({ previewable: true, content: '', truncated: false });
+  });
+
+  it('throws not_found for a file that does not exist yet (never creates a new file)', async () => {
+    await expect(adapter.writeFile(join(dir, 'nope.txt'), 'x')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('throws validation when the target is a directory', async () => {
+    await mkdir(join(dir, 'sub'));
+    await expect(adapter.writeFile(join(dir, 'sub'), 'x')).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('throws validation when content exceeds the 5MB write cap', async () => {
+    await writeFile(join(dir, 'a.txt'), 'hello');
+    const big = 'x'.repeat(6 * 1024 * 1024);
+    await expect(adapter.writeFile(join(dir, 'a.txt'), big)).rejects.toMatchObject({ kind: 'validation' });
+  });
+});
+
 describe('NodeFileBrowserAdapter.realpath', () => {
   it('resolves a symlink to its real target', async () => {
     await mkdir(join(dir, 'real'));

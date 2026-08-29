@@ -94,7 +94,7 @@ Both implement the `Adapter` port at `src/main/application/ports/adapter.ts`. `A
 
 `src/main/application/ports/claude-session-port.ts` (`ClaudeSessionPort`) + `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts` (`NodePtySessionAdapter`, backed by `node-pty` — the first native module in this codebase) spawn a real interactive `claude` CLI process per session inside a PTY, so the CLI's TUI renders correctly. `SessionService` (`src/main/application/services/session-service.ts`) owns the one-live-session-per-entity invariant, keyed by the entity's own `urn` (no separate generated session id), and resolves each session's working directory from the entity itself: a `ProjectInstruction` uses its own `repoPath`; every other entity kind (`Skill`, `Agent`, `PersonalInstruction`) uses the app's workspace root. `Session` is **not** a fourth `Entity` kind — it's ephemeral process state and never goes through `EntityRepository`; `SessionService` only reads entities (via `EntityService.get`) to resolve cwd.
 
-The `session.*` IPC namespace (`src/main/ipc/session-handlers.ts`) exposes `spawn`/`write`/`resize`/`kill`/`status`/`list` over the normal request/response `ipc:call` envelope. `list` returns `SessionService.list()` — every `SessionSnapshot` currently in its in-memory map, running and exited alike, with no pruning; nothing ever removes an exited entry except a full `SessionService` rebuild. Streamed terminal output can't fit the request/response shape, so it travels over a second main→renderer push channel (`session:output` / `session:exit`, `src/shared/session.ts`) — see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse). Every live session's `claude` process is killed on `app.on('before-quit', ...)`, registered inside `wireIpc()` in `src/main/index.ts` (`SessionService.killAll()`) — `kill()` calls `ClaudeSessionPort.kill()` with no explicit signal, i.e. node-pty's own default (`SIGHUP` on Unix, not `SIGTERM`). `SessionService` is itself one of the workspace-scoped services rebuilt (empty) on every `workspace.switchTo`, with `killAll()` called on the outgoing instance first — so `session.list` is inherently scoped to the active workspace, and a session (running or exited) is gone the moment its workspace stops being active. There is no background daemon and no persistence; sessions do not survive a workspace switch or the app closing.
+The `session.*` IPC namespace (`src/main/ipc/session-handlers.ts`) exposes `spawn`/`write`/`resize`/`kill`/`remove`/`status`/`list` over the normal request/response `ipc:call` envelope. `list` returns `SessionService.list()` — every `SessionSnapshot` currently in its in-memory map, running and exited alike. `kill` stops the process but leaves the exited entry in place (no pruning); `remove` kills it too if still running, then deletes the entry outright — that (plus a full `SessionService` rebuild on `workspace.switchTo`) are the only ways an entry ever leaves the map. Streamed terminal output can't fit the request/response shape, so it travels over a second main→renderer push channel (`session:output` / `session:exit`, `src/shared/session.ts`) — see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse). Every live session's `claude` process is killed on `app.on('before-quit', ...)`, registered inside `wireIpc()` in `src/main/index.ts` (`SessionService.killAll()`) — `kill()` calls `ClaudeSessionPort.kill()` with no explicit signal, i.e. node-pty's own default (`SIGHUP` on Unix, not `SIGTERM`). `SessionService` is itself one of the workspace-scoped services rebuilt (empty) on every `workspace.switchTo`, with `killAll()` called on the outgoing instance first — so `session.list` is inherently scoped to the active workspace, and a session (running or exited) is gone the moment its workspace stops being active. There is no background daemon and no persistence; sessions do not survive a workspace switch or the app closing.
 
 `SessionSnapshot` carries a `label` — the anchor's human-readable name (entity/workspace/project name) — resolved once at spawn time by the same lookup that resolves `cwd`, so a session can be displayed without a second round-trip to `EntityService`/`WorkspaceService`/`ProjectService`.
 
@@ -174,8 +174,11 @@ support. Re-created on every workspace switch, alongside the Entity-backed graph
 data.
 
 The Workspace screen's folder tree can also be scoped to a single `Project` instead of the whole
-workspace: clicking anywhere on a root-level folder row already registered as a `Project` (or its "Gerir
-instructions" shortcut icon specifically) selects it, and the tree/preview switch to the
+workspace, but scoping and browsing-in-place are two different gestures now: clicking a root-level folder
+row already registered as a `Project` just expands it in place (fetches its own listing via
+`project.listDir`, keyed off that `Project`'s id) without leaving the unscoped workspace-root view; only
+its dedicated "Abrir customizations do projeto" shortcut icon (`FolderOpen`, `onOpenProject(projectId)`)
+actually scopes the whole screen, switching the tree/preview to the
 `project.listDir`/`project.readFile`/`project.resolvePath` IPC methods instead of `workspace.*`. Those
 handlers resolve `projectId` via `ProjectService.get` and build a `FileBrowserService` on demand rooted at
 that `Project`'s own `path` — same class, same containment guard, just a different root — so browsing
@@ -184,10 +187,15 @@ only renders on root-level (depth-0) folders of the *unscoped* workspace-root tr
 restriction, not enforced by `ProjectService`, since the lazy `ProjectInstruction.repoPath` migration
 (§2.9 of the workspace/project scoping design) can legitimately create a `Project` from any path, not just
 workspace-root children. Once a root-level folder is already a registered `Project` (its resolved
-`<workspaceRootPath>/<name>` matches a `Project.path`), `FolderTree` swaps that action for a "Gerir
-instructions" shortcut (`NotebookPen` icon) that calls `onManageProject(projectId)` instead —
-`WorkspaceScreen` wires this to `selectProject`, its only entry point into project scope (there is no
-separate Projects list panel; `useProjects()` backs the tree's own matching and `ScreenHeader`, below).
+`<workspaceRootPath>/<name>` matches a `Project.path`), `FolderTree` swaps that action for the "Abrir
+customizations do projeto" shortcut — `WorkspaceScreen` wires this to `selectProject`, its only entry point
+into project scope for Skills/Agents/Hooks/MCP/Plugins (there is no separate Projects list panel;
+`useProjects()` backs the tree's own matching and `ScreenHeader`, below). Scoping is no longer needed to
+reach a Project's own Instruction, though: `FolderTree`'s `renderProjectInstructionRow` render-prop pins a
+`ProjectInstructionRow` (`components/workspace/InstructionTreeRow.tsx`) above a matched Project folder's
+own children as soon as it's expanded in place — each instance owns its own `useProjectInstruction(project.id)`
+call, narrowed from the same shared `instruction.list` cache as every other instance, so several expanded
+Project folders cost no extra fetches.
 
 `FolderTree` renders a single ".." row as its first entry, mirroring directory-navigation semantics for
 the two scope levels it can be at: `onNavigateUp` (rendered only while `scopeProjectId` is set) steps back

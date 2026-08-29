@@ -36,7 +36,6 @@ import type { NotificationPort } from '../application/ports/notification-port.js
 import type { WorkspaceTeardownService } from '../application/services/workspace-teardown.js';
 import { updateLanguageSection } from '../application/services/language-section.js';
 import { asLanguagePreference } from './_validators.js';
-import type { GenerateDraftProgressEvent } from '../../shared/instruction-generation.js';
 
 export interface IpcDeps {
   settingsService: SettingsService;
@@ -61,7 +60,6 @@ export interface IpcDeps {
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   appQuit: () => void;
-  emitInstructionGenerateProgress?: (event: GenerateDraftProgressEvent) => void;
 }
 
 interface RepoPathParams {
@@ -106,7 +104,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     notificationPort,
     workspaceTeardownService,
     appQuit,
-    emitInstructionGenerateProgress,
   } = deps;
 
   return {
@@ -220,7 +217,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildSkillHandlers(skillService),
     ...buildAgentHandlers(agentService),
     ...buildHookHandlers(hookService),
-    ...buildInstructionHandlers(instructionService, emitInstructionGenerateProgress),
+    ...buildInstructionHandlers(instructionService),
     ...buildSessionHandlers(sessionService),
     ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace, fileBrowserService),
     ...buildProjectHandlers(projectService, fileBrowserPort),

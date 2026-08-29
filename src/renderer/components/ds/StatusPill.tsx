@@ -17,6 +17,8 @@ interface StatusPillProps {
   variant: StatusPillVariant;
   label?: string;
   testId?: string;
+  /** When given, the pill becomes an actionable control (button role, hover state, keyboard-activatable) instead of a passive status readout. */
+  onClick?: () => void;
 }
 
 function color(theme: Theme, variant: StatusPillVariant): string {
@@ -43,21 +45,34 @@ function color(theme: Theme, variant: StatusPillVariant): string {
   }
 }
 
-export function StatusPill({ variant, label, testId }: StatusPillProps): React.ReactElement {
+export function StatusPill({ variant, label, testId, onClick }: StatusPillProps): React.ReactElement {
   return (
     <Box
       {...(testId ? { 'data-testid': `status-pill-${testId}` } : {})}
       data-variant={variant}
+      {...(onClick
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            onClick,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              if (e.key === ' ') e.preventDefault();
+              onClick();
+            },
+          }
+        : {})}
       sx={(theme) => ({
         display: 'inline-flex',
         alignItems: 'center',
         gap: 0.75,
         px: 1,
         py: 0.25,
-        borderRadius: theme.ogs.radius.pill,
+        borderRadius: `${theme.ogs.radius.pill}px`,
         border: `1px solid ${color(theme, variant)}`,
         color: color(theme, variant),
         bgcolor: 'transparent',
+        ...(onClick ? { cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } } : {}),
       })}
     >
       <Box

@@ -4,7 +4,6 @@ import { EntityService } from '../../../../src/main/application/services/entity-
 import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeCliPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
 import { WORKSPACE_SOURCE, type Instruction } from '../../../../src/shared/entity.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
 
@@ -33,7 +32,6 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeCli = new FakeClaudeCliPort();
   const projects = new Map<string, { id: string; name: string; path: string; createdAt: string }>();
   const projectService = {
     findOrCreateByPath: vi.fn(async (path: string) => {
@@ -44,7 +42,7 @@ const setup = () => {
       return created;
     }),
   };
-  return { service: new InstructionService(base, claudeCli, projectService), repo, adapterManager, claudeCli, projectService };
+  return { service: new InstructionService(base, projectService), repo, adapterManager, projectService };
 };
 
 describe('InstructionService', () => {
@@ -108,31 +106,6 @@ describe('InstructionService', () => {
     expect((saved.instruction as Instruction).name).toBe('default');
   });
 
-  it('generatePersonalDraft returns the claude CLI text as content', async () => {
-    const { service, claudeCli } = setup();
-    claudeCli.seedResponse('# Global instructions\n\nBe concise.\n');
-    const result = await service.generatePersonalDraft('I like short replies');
-    expect(result.content).toBe('# Global instructions\n\nBe concise.\n');
-    expect(claudeCli.lastPrompt).toContain('I like short replies');
-  });
-
-  it('generatePersonalDraft forwards onEvent through to the claude CLI port', async () => {
-    const { service, claudeCli } = setup();
-    claudeCli.seedResponse('draft');
-    const onEvent = vi.fn();
-    await service.generatePersonalDraft(undefined, onEvent);
-    expect(claudeCli.lastOnEvent).toBe(onEvent);
-  });
-
-  it('generatePersonalDraft wraps a claude CLI failure as an io DomainError', async () => {
-    const { service, claudeCli } = setup();
-    claudeCli.failNext(new Error('claude CLI not found in PATH'));
-    const err = await service.generatePersonalDraft().catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(DomainError);
-    expect((err as DomainError).kind).toBe('io');
-    expect((err as DomainError).message).toContain('claude CLI not found in PATH');
-  });
-
   it('get migrates a legacy repoPath-only project instruction to a real scopeId on read', async () => {
     const { service, projectService } = setup();
     await service.save({ instruction: legacyProject('legacy-acme', '/repos/legacy-acme'), isCreate: true });
@@ -164,7 +137,6 @@ describe('InstructionService', () => {
       removeEntity: vi.fn().mockResolvedValue([]),
     } as unknown as AdapterManager;
     const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-    const claudeCli = new FakeClaudeCliPort();
 
     // Mirrors the REAL ProjectService.create's non-atomic read-modify-write
     // shape: findOrCreateByPath snapshots the current array, yields a
@@ -188,7 +160,7 @@ describe('InstructionService', () => {
       },
     };
 
-    const service = new InstructionService(base, claudeCli, racyProjectService);
+    const service = new InstructionService(base, racyProjectService);
     await service.save({ instruction: legacyProject('legacy-a', '/repos/legacy-a'), isCreate: true });
     await service.save({ instruction: legacyProject('legacy-b', '/repos/legacy-b'), isCreate: true });
     await service.save({ instruction: legacyProject('legacy-c', '/repos/legacy-c'), isCreate: true });

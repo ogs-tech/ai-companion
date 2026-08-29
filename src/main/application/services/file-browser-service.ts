@@ -20,6 +20,10 @@ export class FileBrowserService {
     return this.port.readFile(await this.resolveSafe(relPath));
   }
 
+  async writeFile(relPath: string, content: string): Promise<void> {
+    return this.port.writeFile(await this.resolveSafe(relPath), content);
+  }
+
   async resolveAbsolutePath(relPath: string): Promise<string> {
     return this.resolveSafe(relPath);
   }

@@ -102,6 +102,34 @@ describe('session-handlers', () => {
     expect(spy).toHaveBeenCalledWith('entity:urn:skill:foo');
   });
 
+  it('session.remove forwards sessionId', async () => {
+    const { service, base } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const h = buildSessionHandlers(service);
+    await h['session.spawn']!({ anchor: { kind: 'entity', urn: entityUrn('skill', 'foo') } });
+    const spy = vi.spyOn(service, 'remove');
+    await h['session.remove']!({ sessionId: 'entity:urn:skill:foo' });
+    expect(spy).toHaveBeenCalledWith('entity:urn:skill:foo');
+  });
+
+  it('session.resume validates and forwards sessionId to service.resume', async () => {
+    const { service } = setup();
+    const spy = vi.spyOn(service, 'resume').mockResolvedValue({
+      sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
+      cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '',
+    });
+    const h = buildSessionHandlers(service);
+    const result = await h['session.resume']!({ sessionId: 'workspace:w1' });
+    expect(spy).toHaveBeenCalledWith('workspace:w1');
+    expect(result).toMatchObject({ sessionId: 'workspace:w1', status: 'running' });
+  });
+
+  it('session.resume rejects a missing sessionId', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    await expect(h['session.resume']!({})).rejects.toMatchObject({ kind: 'validation' });
+  });
+
   it('session.status returns null for an unknown session', async () => {
     const { service } = setup();
     const h = buildSessionHandlers(service);

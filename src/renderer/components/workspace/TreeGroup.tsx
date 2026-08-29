@@ -90,6 +90,8 @@ interface TreeGroupRowProps {
   /** Small trailing chip/badge, e.g. a plugin origin badge or a "Global" tag. */
   badge?: React.ReactNode;
   onClick?: () => void;
+  /** Right-click on the row — e.g. to open a "Preview" context menu. */
+  onContextMenu?: (e: React.MouseEvent) => void;
   /** Trailing hover actions (edit/delete/etc.), stopPropagation'd from onClick. */
   actions?: React.ReactNode;
   muted?: boolean;
@@ -97,14 +99,26 @@ interface TreeGroupRowProps {
   accentColor?: string;
 }
 
-/** A dense entity row inside a `TreeGroup`, styled like a FolderTree file row. */
-export function TreeGroupRow({ testId, glyph, primary, badge, onClick, actions, muted, accentColor }: TreeGroupRowProps): React.ReactElement {
+/**
+ * A dense entity row inside a `TreeGroup`, styled like a FolderTree file row.
+ * `actions` (delete/etc.) stay invisible until the row is hovered or focused
+ * — kept reachable by keyboard via `:focus-within`, not just mouse hover —
+ * so a row reads as calm as a plain file/agent name until the user actually
+ * means to act on it.
+ */
+export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor }: TreeGroupRowProps): React.ReactElement {
   return (
     <ListItemButton
       dense
       data-testid={testId}
       onClick={onClick}
-      sx={{ pl: 1.5 + 2.5, opacity: muted ? 0.65 : 1, position: 'relative' }}
+      onContextMenu={onContextMenu}
+      sx={{
+        pl: 1.5 + 2.5,
+        opacity: muted ? 0.65 : 1,
+        position: 'relative',
+        '&:hover .tree-group-row-actions, &:focus-within .tree-group-row-actions': { opacity: 1 },
+      }}
     >
       {accentColor && (
         <Box
@@ -119,7 +133,11 @@ export function TreeGroupRow({ testId, glyph, primary, badge, onClick, actions, 
         <ListItemText primary={primary} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
         {badge}
       </Stack>
-      {actions}
+      {actions && (
+        <Box className="tree-group-row-actions" sx={{ display: 'flex', alignItems: 'center', opacity: 0, transition: 'opacity 120ms ease' }}>
+          {actions}
+        </Box>
+      )}
     </ListItemButton>
   );
 }

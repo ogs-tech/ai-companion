@@ -205,6 +205,115 @@ describe('<SessionPanel>', () => {
       );
       expect(screen.getByTestId('session-open')).toBeInTheDocument();
     });
+
+    it('replays the buffered output into the terminal before subscribing to live output', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({
+            sessionId: 'entity:urn:skill:foo',
+            anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+            cwd: '/workspace',
+            label: 'foo',
+            status: 'running',
+            outputBuffer: 'previous output\r\n',
+          });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+
+      await waitFor(() => expect(mockTerminalInstances[0]!.write).toHaveBeenCalledWith('previous output\r\n'));
+    });
+
+    it('does not write anything when reattaching to a session with an empty buffer', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({
+            sessionId: 'entity:urn:skill:foo',
+            anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+            cwd: '/workspace',
+            label: 'foo',
+            status: 'running',
+            outputBuffer: '',
+          });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.status', { sessionId: 'entity:urn:skill:foo' }));
+      expect(mockTerminalInstances[0]!.write).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sessionId prop (opened already-attached from the Workbench)', () => {
+    it('never shows the idle "Abrir sessão" state, whatever session.status returns while resolving', () => {
+      call.mockImplementation(async () => new Promise(() => {})); // never resolves
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+      expect(screen.queryByTestId('session-open')).toBeNull();
+    });
+
+    it('attaches by the given sessionId directly, without deriving it from the anchor', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({ sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws', label: 'W', status: 'running', outputBuffer: '' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.status', { sessionId: 'sess-1' }));
+      await waitFor(() => expect(onOutput).toHaveBeenCalledWith('sess-1', expect.any(Function)));
+    });
+
+    it('replays the buffered output for the given sessionId', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({ sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws', label: 'W', status: 'running', outputBuffer: 'hi there' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+
+      await waitFor(() => expect(mockTerminalInstances[0]!.write).toHaveBeenCalledWith('hi there'));
+    });
+
+    it('shows the ended state with a Retomar action when the given session has already exited', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({ sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws', label: 'W', status: 'exited', outputBuffer: '' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+
+      expect(await screen.findByTestId('session-resume')).toBeInTheDocument();
+    });
+
+    it('clicking Retomar calls session.resume with the given sessionId, not session.spawn', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({ sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws', label: 'W', status: 'exited', outputBuffer: '' });
+        }
+        if (method === 'session.resume') {
+          return ok({ sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws', label: 'W', status: 'running', outputBuffer: '' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+      await user.click(await screen.findByTestId('session-resume'));
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.resume', { sessionId: 'sess-1' }));
+      expect(call).not.toHaveBeenCalledWith('session.spawn', expect.anything());
+      await waitFor(() => expect(screen.queryByTestId('session-resume')).toBeNull());
+    });
   });
 
   describe('visible prop', () => {

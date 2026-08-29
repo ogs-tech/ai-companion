@@ -6,16 +6,30 @@ import type {
   ClaudeSessionSpawnOptions,
 } from '../../application/ports/claude-session-port.js';
 
-const CLAUDE_ARGS = ['--continue'];
+const CLAUDE_CONTINUE_ARGS = ['--continue'];
+const CLAUDE_FRESH_ARGS: string[] = [];
+/**
+ * `claude --continue` doesn't fall back to a fresh conversation when the cwd
+ * has never had one — it prints this (in red) and exits 1. Detected so a
+ * brand-new anchor's first-ever "Abrir sessão" doesn't dead-end as an
+ * immediately-'exited' session; see `spawnWithArgs`'s retry.
+ */
+const NO_CONVERSATION_MARKER = 'No conversation found to continue';
+/** Only needed to catch NO_CONVERSATION_MARKER at exit — capped so a long-running session's onData doesn't accumulate its entire output in memory for the rest of its life. */
+const DETECTION_WINDOW_CHARS = 4096;
 
 /**
  * Spawns the user's locally installed `claude` CLI inside a real PTY via
  * `node-pty` so its interactive TUI renders correctly (cursor movement,
  * spinners, raw keyboard input all depend on `process.stdout.isTTY`).
- * Always passes `--continue`: `claude` falls back to starting a fresh
- * conversation when no prior transcript exists for the cwd, so this covers
- * both "first ever open" and "resume" without the adapter needing to detect
- * which case it is.
+ * With `opts.continueConversation`, passes `--continue` first: on a cwd
+ * with a prior transcript this resumes it, covering "resume" without the
+ * adapter needing to detect that case. On a cwd with none, `claude` errors
+ * instead of starting fresh (see NO_CONVERSATION_MARKER) — `spawnWithArgs`
+ * retries once, transparently, without `--continue`, so "first ever open"
+ * still works. Without `opts.continueConversation`, `--continue` is never
+ * attempted at all — for a session that must always start clean, even in a
+ * cwd that already has other conversations (its own or another session's).
  */
 export class NodePtySessionAdapter implements ClaudeSessionPort {
   private readonly ptys = new Map<string, IPty>();
@@ -23,8 +37,7 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
   private exitListener: ClaudeSessionExitListener | null = null;
 
   // `bin` is overridable so tests can point at a stub script and exercise the
-  // real ENOENT/exit-code branches without depending on `claude` being
-  // installed — mirrors NodeClaudeCliAdapter's testability pattern.
+  // real ENOENT/exit-code branches without depending on `claude` being installed.
   constructor(private readonly bin = 'claude') {}
 
   onData(listener: ClaudeSessionDataListener): void {
@@ -45,10 +58,19 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
    * by a missing binary — it could be a fast, silent exit from the process itself.
    */
   spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
+    return this.spawnWithArgs(sessionId, cwd, opts, opts.continueConversation ? CLAUDE_CONTINUE_ARGS : CLAUDE_FRESH_ARGS);
+  }
+
+  private spawnWithArgs(
+    sessionId: string,
+    cwd: string,
+    opts: ClaudeSessionSpawnOptions,
+    args: readonly string[],
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       let child: IPty;
       try {
-        child = ptySpawn(this.bin, CLAUDE_ARGS, {
+        child = ptySpawn(this.bin, args as string[], {
           name: 'xterm-color',
           cols: opts.cols,
           rows: opts.rows,
@@ -69,9 +91,11 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
       // see an exit before any data arrives.
       let resolved = false;
       let hasData = false;
+      let recentOutput = '';
 
       child.onData((chunk) => {
         hasData = true;
+        recentOutput = (recentOutput + chunk).slice(-DETECTION_WINDOW_CHARS);
         if (!resolved) {
           resolved = true;
           resolve();
@@ -80,16 +104,29 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
       });
 
       child.onExit(({ exitCode }) => {
+        this.ptys.delete(sessionId);
+
         if (!resolved && !hasData) {
           // Process exited immediately without producing output; treat as spawn failure
           resolved = true;
-          this.ptys.delete(sessionId);
           reject(new Error(`Process exited with code ${exitCode}`));
-        } else {
-          // Normal exit after successful spawn
-          this.ptys.delete(sessionId);
-          this.exitListener?.(sessionId, exitCode);
+          return;
         }
+
+        if (args === CLAUDE_CONTINUE_ARGS && recentOutput.includes(NO_CONVERSATION_MARKER)) {
+          // Retry transparently under the same sessionId — SessionService and
+          // the renderer never see this exit, they just see a live session.
+          this.spawnWithArgs(sessionId, cwd, opts, CLAUDE_FRESH_ARGS).catch(() => {
+            // The retry's own promise is fire-and-forget from here (the
+            // outer spawn() already resolved on the first attempt's data);
+            // a retry failing this same way would be a real `claude` problem,
+            // which still reaches the caller via a normal exit event above.
+          });
+          return;
+        }
+
+        // Normal exit after successful spawn
+        this.exitListener?.(sessionId, exitCode);
       });
 
       // If the process produces data, resolve immediately. Otherwise, wait for either

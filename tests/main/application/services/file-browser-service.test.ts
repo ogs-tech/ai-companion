@@ -9,6 +9,7 @@ function fakePort(overrides: Partial<FileBrowserPort> = {}): FileBrowserPort {
   return {
     listDir: vi.fn().mockResolvedValue([]),
     readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'x', truncated: false }),
+    writeFile: vi.fn().mockResolvedValue(undefined),
     realpath: vi.fn(async (p: string) => p),
     ...overrides,
   };
@@ -34,6 +35,20 @@ describe('FileBrowserService', () => {
     const service = new FileBrowserService(port, ROOT);
     await service.readFile('a.txt');
     expect(port.readFile).toHaveBeenCalledWith('/repos/acme/a.txt');
+  });
+
+  it('writeFile delegates the resolved absolute path and content', async () => {
+    const port = fakePort();
+    const service = new FileBrowserService(port, ROOT);
+    await service.writeFile('a.txt', 'new content');
+    expect(port.writeFile).toHaveBeenCalledWith('/repos/acme/a.txt', 'new content');
+  });
+
+  it('writeFile rejects a path escaping the root, without calling the port', async () => {
+    const port = fakePort();
+    const service = new FileBrowserService(port, ROOT);
+    await expect(service.writeFile('../secrets', 'x')).rejects.toMatchObject({ kind: 'validation' });
+    expect(port.writeFile).not.toHaveBeenCalled();
   });
 
   it('rejects an absolute path', async () => {

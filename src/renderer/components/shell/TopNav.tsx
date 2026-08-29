@@ -1,10 +1,16 @@
+import { useSyncExternalStore } from 'react';
 import { AppBar, Button, IconButton, Stack, Tab, Tabs, Toolbar, Tooltip, Typography } from '@mui/material';
-import { Moon, Sun, Settings as SettingsGlyph } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Moon, Sun, Settings as SettingsGlyph } from 'lucide-react';
 import { Logo } from '../../assets/Logo.js';
 import { brand } from '../../../shared/brand.js';
 import { Icon } from '../ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from '../ds/StatusPill.js';
 import { useThemeMode } from '../../lib/theme-mode-context.js';
+import {
+  getWorkspaceHistorySnapshot,
+  navigateWorkspaceHistory,
+  subscribeWorkspaceHistory,
+} from '../../lib/workspace-history-store.js';
 import { NAV_AREAS, type Area } from './nav.js';
 
 interface TopNavProps {
@@ -27,6 +33,12 @@ const SYNC_LABEL: Record<'ok' | 'warning' | 'error', string> = {
   error: 'erro',
 };
 
+const SYNC_TOOLTIP: Record<'ok' | 'warning' | 'error', string> = {
+  ok: 'Tudo sincronizado com Claude Code/Cursor.',
+  warning: 'Alguns itens estão desincronizados — ver Diagnóstico.',
+  error: 'Falha ao sincronizar — ver Diagnóstico.',
+};
+
 export function TopNav({
   active,
   onSelectArea,
@@ -36,6 +48,7 @@ export function TopNav({
 }: TopNavProps): React.ReactElement {
   const { resolved, setTheme } = useThemeMode();
   const isDark = resolved === 'dark';
+  const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
 
   return (
     <AppBar
@@ -93,6 +106,35 @@ export function TopNav({
 
         {/* Right cluster */}
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Tooltip title="Voltar">
+            {/* span wrapper keeps the tooltip working while the button is disabled */}
+            <span>
+              <IconButton
+                data-testid="nav-history-back"
+                onClick={() => void navigateWorkspaceHistory('back')}
+                disabled={!canGoBack}
+                size="small"
+                sx={{ color: 'text.secondary' }}
+                aria-label="Voltar"
+              >
+                <Icon glyph={ChevronLeft} size={18} />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Avançar">
+            <span>
+              <IconButton
+                data-testid="nav-history-forward"
+                onClick={() => void navigateWorkspaceHistory('forward')}
+                disabled={!canGoForward}
+                size="small"
+                sx={{ color: 'text.secondary' }}
+                aria-label="Avançar"
+              >
+                <Icon glyph={ChevronRight} size={18} />
+              </IconButton>
+            </span>
+          </Tooltip>
           <Tooltip title="Buscar e navegar (⌘K)">
             <Button
               data-testid="command-palette-trigger"
@@ -106,11 +148,14 @@ export function TopNav({
           </Tooltip>
 
           {healthSeverity !== undefined && (
-            <StatusPill
-              variant={SYNC_VARIANT[healthSeverity]}
-              label={SYNC_LABEL[healthSeverity]}
-              testId="sync"
-            />
+            <Tooltip title={SYNC_TOOLTIP[healthSeverity]}>
+              <StatusPill
+                variant={SYNC_VARIANT[healthSeverity]}
+                label={SYNC_LABEL[healthSeverity]}
+                testId="sync"
+                onClick={() => onSelectArea('diagnostico')}
+              />
+            </Tooltip>
           )}
 
           <Tooltip title={isDark ? 'Tema claro' : 'Tema escuro'}>

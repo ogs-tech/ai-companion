@@ -31,4 +31,17 @@ export const ENTITY_GROUP_ICONS = {
   mcp: Plug,
 } as const satisfies Record<string, LucideIcon>;
 
+/**
+ * The role color each entity kind already reads as elsewhere in the app
+ * (info=azul, success=verde, warning=ambar) — shared by the Workbench tab's
+ * top-border spine (WorkspaceScreen) and the tree row's left-edge spine
+ * (TreeGroupRow's `accentColor`) so an open tab visually traces back to its
+ * row in the rail, and vice versa.
+ */
+export const ENTITY_ACCENT_COLOR = {
+  skill: 'info.main',
+  agent: 'success.main',
+  instruction: 'warning.main',
+} as const satisfies Record<'skill' | 'agent' | 'instruction', string>;
+
 export const defaultNav: Nav = { area: 'workspace' };

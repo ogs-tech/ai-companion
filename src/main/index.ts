@@ -5,10 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
-import {
-  INSTRUCTION_GENERATE_PROGRESS_CHANNEL,
-  type GenerateDraftProgressEvent,
-} from '../shared/instruction-generation.js';
 import { brand } from '../shared/brand.js';
 import {
   devLockPath,
@@ -50,7 +46,6 @@ import { PluginService } from './application/services/plugin-service.js';
 import { PluginProvenanceService } from './application/services/plugin-provenance.js';
 import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plugin-reader.js';
 import { HookService } from './application/services/hook-service.js';
-import { NodeClaudeCliAdapter } from './infrastructure/claude-cli/node-claude-cli-adapter.js';
 import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
@@ -248,9 +243,6 @@ async function wireIpc(): Promise<void> {
     cache: pluginCache,
     fs: nodeFsAdapter,
   });
-  const emitInstructionGenerateProgress = (event: GenerateDraftProgressEvent): void => {
-    mainWindow?.webContents.send(INSTRUCTION_GENERATE_PROGRESS_CHANNEL, event);
-  };
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
@@ -302,7 +294,6 @@ async function wireIpc(): Promise<void> {
     pluginService,
     claudeRuntimeReader,
     claudeSettingsFile,
-    claudeCli: new NodeClaudeCliAdapter(),
     claudeSessionPort: new NodePtySessionAdapter(),
   };
 
@@ -353,7 +344,6 @@ async function wireIpc(): Promise<void> {
     notificationPort,
     workspaceTeardownService: workspaceScoped.workspaceTeardownService,
     appQuit: () => app.quit(),
-    emitInstructionGenerateProgress,
   });
 
   const switchQueue = createTaskQueue();

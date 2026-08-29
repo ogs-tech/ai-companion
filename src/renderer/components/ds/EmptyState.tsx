@@ -23,7 +23,7 @@ export function EmptyState({ glyph, title, description, cta, testId }: EmptyStat
         py: 8,
         px: 3,
         border: `1px dashed ${theme.palette.divider}`,
-        borderRadius: theme.ogs.radius.md,
+        borderRadius: `${theme.ogs.radius.md}px`,
         color: 'text.secondary',
       })}
     >

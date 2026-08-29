@@ -10,7 +10,6 @@ import { EntityService } from '../../../src/main/application/services/entity-ser
 import { InMemoryEntityRepository } from '../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeCliPort } from '../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import { WORKSPACE_SOURCE, type Skill, type Agent, type Instruction } from '../../../src/shared/entity.js';
 import { buildWorkspaceHandlers } from '../../../src/main/ipc/workspace-handlers.js';
@@ -82,7 +81,7 @@ const setupInstructionService = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  return new InstructionService(base, new FakeClaudeCliPort(), { findOrCreateByPath: vi.fn() });
+  return new InstructionService(base, { findOrCreateByPath: vi.fn() });
 };
 
 describe('skill-handlers', () => {
@@ -186,31 +185,6 @@ describe('instruction-handlers', () => {
     await h['instruction.save']!({ instruction: instruction(), isCreate: true });
     expect(spy).toHaveBeenCalled();
   });
-
-  it('instruction.generateDraft passes the context through', async () => {
-    const svc = setupInstructionService();
-    const spy = vi.spyOn(svc, 'generatePersonalDraft');
-    const h = buildInstructionHandlers(svc);
-    await h['instruction.generateDraft']!({ context: 'I like short replies' });
-    expect(spy).toHaveBeenCalledWith('I like short replies');
-  });
-
-  it('instruction.generateDraft works with no params (no context)', async () => {
-    const svc = setupInstructionService();
-    const spy = vi.spyOn(svc, 'generatePersonalDraft');
-    const h = buildInstructionHandlers(svc);
-    await h['instruction.generateDraft']!(undefined);
-    expect(spy).toHaveBeenCalledWith(undefined);
-  });
-
-  it('instruction.generateDraft forwards the progress emitter when wired', async () => {
-    const svc = setupInstructionService();
-    const spy = vi.spyOn(svc, 'generatePersonalDraft');
-    const emitProgress = vi.fn();
-    const h = buildInstructionHandlers(svc, emitProgress);
-    await h['instruction.generateDraft']!({ context: 'I like short replies' });
-    expect(spy).toHaveBeenCalledWith('I like short replies', emitProgress);
-  });
 });
 
 describe('marketplace-handlers', () => {
@@ -270,6 +244,7 @@ const setupFileBrowserService = () =>
     {
       listDir: vi.fn().mockResolvedValue([]),
       readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'x', truncated: false }),
+      writeFile: vi.fn().mockResolvedValue(undefined),
       realpath: vi.fn(async (p: string) => p),
     },
     '/repos/acme',
@@ -332,7 +307,7 @@ describe('workspace-handlers', () => {
   it('workspace.listDir delegates to fileBrowserService.listDir', async () => {
     const svc = setupWorkspaceService();
     const fileBrowserService = new FileBrowserService(
-      { listDir: vi.fn().mockResolvedValue([{ name: 'a.txt', kind: 'file' }]), readFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
+      { listDir: vi.fn().mockResolvedValue([{ name: 'a.txt', kind: 'file' }]), readFile: vi.fn(), writeFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
       '/repos/acme',
     );
     const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
@@ -343,7 +318,7 @@ describe('workspace-handlers', () => {
   it('workspace.readFile delegates to fileBrowserService.readFile', async () => {
     const svc = setupWorkspaceService();
     const fileBrowserService = new FileBrowserService(
-      { listDir: vi.fn(), readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'hi', truncated: false }), realpath: vi.fn(async (p: string) => p) },
+      { listDir: vi.fn(), readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'hi', truncated: false }), writeFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
       '/repos/acme',
     );
     const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
@@ -351,10 +326,39 @@ describe('workspace-handlers', () => {
     expect(result).toEqual({ previewable: true, content: 'hi', truncated: false });
   });
 
+  it('workspace.writeFile delegates to fileBrowserService.writeFile', async () => {
+    const svc = setupWorkspaceService();
+    const writeFile = vi.fn().mockResolvedValue(undefined);
+    const fileBrowserService = new FileBrowserService(
+      { listDir: vi.fn(), readFile: vi.fn(), writeFile, realpath: vi.fn(async (p: string) => p) },
+      '/repos/acme',
+    );
+    const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
+    await h['workspace.writeFile']!({ path: 'a.txt', content: 'hello' });
+    expect(writeFile).toHaveBeenCalledWith('/repos/acme/a.txt', 'hello');
+  });
+
+  it('workspace.writeFile accepts an empty content string', async () => {
+    const svc = setupWorkspaceService();
+    const writeFile = vi.fn().mockResolvedValue(undefined);
+    const fileBrowserService = new FileBrowserService(
+      { listDir: vi.fn(), readFile: vi.fn(), writeFile, realpath: vi.fn(async (p: string) => p) },
+      '/repos/acme',
+    );
+    const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
+    await h['workspace.writeFile']!({ path: 'a.txt', content: '' });
+    expect(writeFile).toHaveBeenCalledWith('/repos/acme/a.txt', '');
+  });
+
+  it('workspace.writeFile rejects a missing content field', async () => {
+    const h = buildWorkspaceHandlers(setupWorkspaceService(), vi.fn(), setupFileBrowserService());
+    await expect(h['workspace.writeFile']!({ path: 'a.txt' })).rejects.toMatchObject({ kind: 'validation' });
+  });
+
   it('workspace.resolvePath returns the resolved absolute path', async () => {
     const svc = setupWorkspaceService();
     const fileBrowserService = new FileBrowserService(
-      { listDir: vi.fn(), readFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
+      { listDir: vi.fn(), readFile: vi.fn(), writeFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
       '/repos/acme',
     );
     const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
@@ -365,7 +369,7 @@ describe('workspace-handlers', () => {
   it('workspace.listDir rejects a path escaping the root', async () => {
     const svc = setupWorkspaceService();
     const fileBrowserService = new FileBrowserService(
-      { listDir: vi.fn(), readFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
+      { listDir: vi.fn(), readFile: vi.fn(), writeFile: vi.fn(), realpath: vi.fn(async (p: string) => p) },
       '/repos/acme',
     );
     const h = buildWorkspaceHandlers(svc, vi.fn(), fileBrowserService);
@@ -383,6 +387,7 @@ const setupProjectService = () =>
 const fakeFileBrowserPort = () => ({
   listDir: vi.fn().mockResolvedValue([{ name: 'a.txt', kind: 'file' }]),
   readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'hi', truncated: false }),
+  writeFile: vi.fn().mockResolvedValue(undefined),
   realpath: vi.fn(async (p: string) => p),
 });
 
@@ -452,6 +457,22 @@ describe('project-handlers', () => {
     const result = await h['project.readFile']!({ projectId: created.id, path: 'a.txt' });
     expect(port.readFile).toHaveBeenCalledWith('/repos/acme/a.txt');
     expect(result).toEqual({ previewable: true, content: 'hi', truncated: false });
+  });
+
+  it('project.writeFile resolves the project root and delegates to the file browser port', async () => {
+    const svc = setupProjectService();
+    const created = await svc.create({ name: 'acme', path: '/repos/acme' });
+    const port = fakeFileBrowserPort();
+    const h = buildProjectHandlers(svc, port);
+    await h['project.writeFile']!({ projectId: created.id, path: 'a.txt', content: 'hello' });
+    expect(port.writeFile).toHaveBeenCalledWith('/repos/acme/a.txt', 'hello');
+  });
+
+  it('project.writeFile rejects an unknown projectId', async () => {
+    const h = buildProjectHandlers(setupProjectService(), fakeFileBrowserPort());
+    await expect(
+      h['project.writeFile']!({ projectId: 'nope', path: 'a.txt', content: 'x' }),
+    ).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('project.resolvePath returns the absolute path under the project root', async () => {

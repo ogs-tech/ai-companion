@@ -10,7 +10,7 @@ export function LoadingState({ kind, testId }: LoadingStateProps): React.ReactEl
   return (
     <Stack {...(testId ? { 'data-testid': `loading-state-${testId}` } : {})} spacing={1.5} sx={{ py: 2 }}>
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} variant="rounded" height={kind === 'detail' ? 240 : 64} sx={(theme) => ({ borderRadius: theme.ogs.radius.md })} />
+        <Skeleton key={i} variant="rounded" height={kind === 'detail' ? 240 : 64} sx={(theme) => ({ borderRadius: `${theme.ogs.radius.md}px` })} />
       ))}
     </Stack>
   );

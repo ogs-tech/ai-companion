@@ -55,6 +55,14 @@ export function buildSessionHandlers(service: SessionService): IpcHandlers {
       const raw = asObject(params, 'session.kill');
       service.kill(asString(raw['sessionId'], 'sessionId'));
     },
+    'session.remove': async (params) => {
+      const raw = asObject(params, 'session.remove');
+      service.remove(asString(raw['sessionId'], 'sessionId'));
+    },
+    'session.resume': async (params) => {
+      const raw = asObject(params, 'session.resume');
+      return service.resume(asString(raw['sessionId'], 'sessionId'));
+    },
     'session.status': async (params) => {
       const raw = asObject(params, 'session.status');
       return service.status(asString(raw['sessionId'], 'sessionId')) ?? null;

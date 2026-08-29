@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Box, Tooltip } from '@mui/material';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Box, Stack, Tooltip } from '@mui/material';
+import { Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { StatusPill } from '../ds/StatusPill.js';
 import { PluginOriginBadge } from '../PluginOriginBadge.js';
-import { CustomizationViewDrawer } from '../CustomizationViewDrawer.js';
+import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
-import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
+import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { useCustomizationList, useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
@@ -27,6 +28,8 @@ interface EntityTreeGroupProps {
   showGlobal: boolean;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
   onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
+  /** Right-click on a row → "Preview" — opens a read-only rendered-Markdown tab instead of the editing tab `onEdit` opens. */
+  onPreview?: (entity: Skill | Agent) => void;
 }
 
 function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
@@ -34,13 +37,13 @@ function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
   return entity.scopes[0] === localScope.scope && entity.scopeId === localScope.scopeId;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, onPreview }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
 
-  const [viewing, setViewing] = useState<Entity | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const previewMenu = useRowContextMenu<Skill | Agent>();
 
   const localItems = items.filter((item) => isLocal(item, localScope));
   const globalItems = localScope && showGlobal ? items.filter((item) => !isLocal(item, localScope)) : [];
@@ -84,74 +87,58 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit }:
               glyph={ENTITY_GROUP_ICONS[kind]}
               primary={item.name}
               muted={global}
-              onClick={() => setViewing(item)}
+              accentColor={ENTITY_ACCENT_COLOR[kind]}
+              onClick={() => onEdit(kind, item as Skill | Agent, false)}
+              onContextMenu={(e) => previewMenu.openMenu(e, item as Skill | Agent)}
               badge={
-                item.source.kind === 'plugin' ? (
-                  <PluginOriginBadge pluginId={item.source.pluginId} provenance={item.source.provenance} />
-                ) : global ? (
-                  <StatusPill variant="idle" label="Global" testId={`${kind}-global-${item.name}`} />
-                ) : undefined
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
+                  {item.source.kind === 'plugin' ? (
+                    <PluginOriginBadge pluginId={item.source.pluginId} provenance={item.source.provenance} />
+                  ) : global ? (
+                    <StatusPill variant="idle" label="Global" testId={`${kind}-global-${item.name}`} />
+                  ) : undefined}
+                </Stack>
               }
+              // Row click already opens this same item in the editor tab (view
+              // mode when read-only, edit mode otherwise) — a separate "Editar"
+              // action here would just duplicate it, so only Excluir survives
+              // as a hover action.
               actions={
                 item.source.kind === 'workspace' ? (
-                  <Box sx={{ display: 'flex', gap: 0.25 }}>
-                    <Tooltip title="Editar">
-                      <Box
-                        component="span"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Editar ${item.name}`}
-                        data-testid={`tree-${kind}-edit-${item.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit(kind, item as Skill | Agent, false);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter' && e.key !== ' ') return;
-                          if (e.key === ' ') e.preventDefault();
-                          e.stopPropagation();
-                          onEdit(kind, item as Skill | Agent, false);
-                        }}
-                        sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                      >
-                        <Icon glyph={Pencil} size={14} />
-                      </Box>
-                    </Tooltip>
-                    <Tooltip title="Excluir">
-                      <Box
-                        component="span"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Excluir ${item.name}`}
-                        data-testid={`tree-${kind}-delete-${item.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleDelete(item);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter' && e.key !== ' ') return;
-                          if (e.key === ' ') e.preventDefault();
-                          e.stopPropagation();
-                          void handleDelete(item);
-                        }}
-                        sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                      >
-                        <Icon glyph={Trash2} size={14} />
-                      </Box>
-                    </Tooltip>
-                  </Box>
+                  <Tooltip title="Excluir">
+                    <Box
+                      component="span"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Excluir ${item.name}`}
+                      data-testid={`tree-${kind}-delete-${item.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDelete(item);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        if (e.key === ' ') e.preventDefault();
+                        e.stopPropagation();
+                        void handleDelete(item);
+                      }}
+                      sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                    >
+                      <Icon glyph={Trash2} size={14} />
+                    </Box>
+                  </Tooltip>
                 ) : undefined
               }
             />
           );
         })}
       </TreeGroup>
-      <CustomizationViewDrawer
-        entity={viewing}
-        onClose={() => setViewing(null)}
-        onEdit={(item) => {
-          setViewing(null);
-          onEdit(kind, item as Skill | Agent, false);
+      <RowContextMenu
+        state={previewMenu.state}
+        onClose={previewMenu.closeMenu}
+        onPreview={() => {
+          if (previewMenu.state) onPreview?.(previewMenu.state.target);
         }}
       />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

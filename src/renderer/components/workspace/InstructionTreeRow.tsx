@@ -4,21 +4,26 @@ import { Globe, NotebookPen, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
+import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
+import { useInvalidateInstructions, useProjectInstruction } from '../../hooks/use-instructions.js';
+import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
+import { SessionStatusBadge } from '../SessionStatusBadge.js';
+import { seedProjectInstruction } from '../../lib/instruction-seed.js';
 import type { Instruction } from '../../../shared/entity.js';
+import type { Project } from '../../../shared/project.js';
 
 type InstructionRowKind = 'personal' | 'workspace' | 'project';
 
 const ROW_COPY: Record<InstructionRowKind, { label: string; glyph: LucideIcon; removeLabel?: (name: string) => string }> = {
-  personal: { label: 'Personal Instruction', glyph: Globe },
+  personal: { label: 'INSTRUCTIONS', glyph: Globe },
   workspace: {
-    label: 'Instructions do workspace',
+    label: 'INSTRUCTIONS',
     glyph: NotebookPen,
     removeLabel: (name) => `Remover as instructions deste workspace (${name})?`,
   },
   project: {
-    label: 'Instructions do projeto',
+    label: 'INSTRUCTIONS',
     glyph: NotebookPen,
     removeLabel: (name) => `Remover as instructions deste projeto (${name})?`,
   },
@@ -29,6 +34,12 @@ interface InstructionTreeRowProps {
   instruction: Instruction | null | undefined;
   seed: () => Instruction;
   onOpen: (entity: Instruction, isCreate: boolean) => void;
+  /** Right-click → "Preview". Omitted entirely (no context menu) while `instruction` is null/undefined — nothing saved yet to preview. */
+  onPreview?: (entity: Instruction) => void;
+  /** Overrides the default `data-testid` (`${kind}-instruction-row`) — needed when several `kind="project"` rows for different projects can be mounted at once (one per expanded folder), so each needs its own unique id. */
+  testId?: string;
+  /** Tree nesting level, matching `FolderTree`'s `TreeNode` indent formula (`pl: 1.5 + depth * 2`) — lets a row pinned inside a folder node (e.g. a Project's own INSTRUCTIONS) line up with its sibling files/folders instead of sitting flush with its parent. Defaults to `0` (top-level, unindented). */
+  depth?: number;
 }
 
 /**
@@ -38,10 +49,13 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, testId, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
+  const rowTestId = testId ?? `${kind}-instruction-row`;
+  const deleteTestId = testId ? `${testId}-delete` : `${kind}-instruction-delete`;
   const invalidate = useInvalidateInstructions();
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const previewMenu = useRowContextMenu<Instruction>();
   const configured = instruction != null;
   const canDelete = configured && copy.removeLabel !== undefined;
 
@@ -62,40 +76,96 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen }: Instruct
     <>
       <ListItemButton
         dense
-        data-testid={`${kind}-instruction-row`}
+        data-testid={rowTestId}
         onClick={() => onOpen(instruction ?? seed(), !instruction)}
-        sx={{ pl: 1.5 }}
+        onContextMenu={(e) => {
+          if (!instruction) return;
+          previewMenu.openMenu(e, instruction);
+        }}
+        sx={{
+          pl: 1.5 + depth * 2,
+          position: 'relative',
+          '&:hover .instruction-row-actions, &:focus-within .instruction-row-actions': { opacity: 1 },
+        }}
       >
+        <Box
+          sx={(theme) => ({
+            position: 'absolute', left: 0, top: 4, bottom: 4, width: 3,
+            borderRadius: `${theme.ogs.radius.xs}px`, bgcolor: ENTITY_ACCENT_COLOR.instruction,
+          })}
+        />
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
           <Icon glyph={copy.glyph} size={14} />
           <ListItemText primary={copy.label} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
+          {instruction && <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />}
         </Stack>
         {canDelete && (
-          <Tooltip title="Remover">
-            <Box
-              component="span"
-              role="button"
-              tabIndex={0}
-              aria-label={`Remover ${copy.label}`}
-              data-testid={`${kind}-instruction-delete`}
-              onClick={(e) => {
-                e.stopPropagation();
-                void handleDelete();
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                if (e.key === ' ') e.preventDefault();
-                e.stopPropagation();
-                void handleDelete();
-              }}
-              sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-            >
-              <Icon glyph={Trash2} size={14} />
-            </Box>
-          </Tooltip>
+          <Box className="instruction-row-actions" sx={{ display: 'flex', alignItems: 'center', opacity: 0, transition: 'opacity 120ms ease' }}>
+            <Tooltip title="Remover">
+              <Box
+                component="span"
+                role="button"
+                tabIndex={0}
+                aria-label={`Remover ${copy.label}`}
+                data-testid={deleteTestId}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleDelete();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  if (e.key === ' ') e.preventDefault();
+                  e.stopPropagation();
+                  void handleDelete();
+                }}
+                sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+              >
+                <Icon glyph={Trash2} size={14} />
+              </Box>
+            </Tooltip>
+          </Box>
         )}
       </ListItemButton>
+      <RowContextMenu
+        state={previewMenu.state}
+        onClose={previewMenu.closeMenu}
+        onPreview={() => {
+          if (previewMenu.state) onPreview?.(previewMenu.state.target);
+        }}
+      />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
+  );
+}
+
+interface ProjectInstructionRowProps {
+  project: Project;
+  onOpen: (entity: Instruction, isCreate: boolean) => void;
+  /** See `InstructionTreeRowProps.onPreview`. */
+  onPreview?: (entity: Instruction) => void;
+  /** See `InstructionTreeRowProps.testId` — pass a per-project id whenever more than one of these can be mounted at once (e.g. several Project folders expanded in the same tree). */
+  testId?: string;
+  /** See `InstructionTreeRowProps.depth`. */
+  depth?: number;
+}
+
+/**
+ * Owns the `useProjectInstruction` query for one specific Project, so it can
+ * be mounted once per Project folder — every instance narrows the same
+ * shared `instruction.list` cache (see `useScopedInstruction`), so having
+ * several on screen at once costs no extra fetches.
+ */
+export function ProjectInstructionRow({ project, onOpen, onPreview, testId, depth }: ProjectInstructionRowProps): React.ReactElement {
+  const { data: projectInstruction } = useProjectInstruction(project.id);
+  return (
+    <InstructionTreeRow
+      kind="project"
+      instruction={projectInstruction}
+      seed={() => seedProjectInstruction(project)}
+      onOpen={onOpen}
+      {...(onPreview ? { onPreview } : {})}
+      {...(testId ? { testId } : {})}
+      {...(depth !== undefined ? { depth } : {})}
+    />
   );
 }

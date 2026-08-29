@@ -7,6 +7,19 @@ export interface WorkbenchTab {
   glyph: LucideIcon;
   label: string;
   onClose?: () => void;
+  /** Verb shown on the close control's tooltip/aria-label — e.g. "Minimizar" for a session tab whose process is still running, vs. "Fechar" once it isn't. Defaults to "Fechar". */
+  closeLabel?: string;
+  /**
+   * Top-border color for this tab when active — the signature that lets a
+   * user trace an open tab back to its row in the rail (skill/agent/
+   * instruction tabs use their kind's role color; falls back to
+   * `secondary.main`, the same neutral used for file tabs).
+   */
+  accentColor?: string;
+  /** Skips the canvas's own content padding — for tabs (like the entity editor) that manage their own internal spacing edge-to-edge. */
+  dense?: boolean;
+  /** Unsaved-changes indicator — a small dot next to the label, same signal a `closeTab`/scope-switch discard guard reads to decide whether to confirm. */
+  dirty?: boolean;
   /** Rendered for every open tab on every render, not just the active one — visibility is a `display` toggle (via the `hidden` arg), never a mount/unmount, so scroll position survives switching away and back. */
   render: (hidden: boolean) => React.ReactNode;
 }
@@ -19,10 +32,9 @@ interface WorkbenchCanvasProps {
 }
 
 /**
- * The file-editing surface to the right of the Workspace tree — every open
- * file is a tab here. Skills/Agents/Instructions/Hooks/MCP/Plugins are
- * Customizations, not files, and open in their own dialog instead (see
- * WorkspaceScreen's entityDialog) — this canvas stays file-only.
+ * The Sublime-like editing surface to the right of the Workspace tree — every
+ * open file AND every open Skill/Agent/Instruction tab lives here, all
+ * rendered through the same EditorPanel; sessions share the tab strip too.
  */
 export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: WorkbenchCanvasProps): React.ReactElement {
   return (
@@ -37,7 +49,7 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
                 role="button"
                 tabIndex={0}
                 aria-pressed={active}
-                aria-label={tab.label}
+                aria-label={tab.dirty ? `${tab.label} (não salvo)` : tab.label}
                 data-testid={`workbench-tab-${tab.id}`}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(e) => {
@@ -51,7 +63,7 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
                   cursor: 'pointer',
                   borderRight: 1,
                   borderTop: 2,
-                  borderTopColor: active ? 'secondary.main' : 'transparent',
+                  borderTopColor: active ? (tab.accentColor ?? 'secondary.main') : 'transparent',
                   borderColor: active ? undefined : 'divider',
                   bgcolor: active ? 'background.paper' : 'transparent',
                   flexShrink: 0,
@@ -62,12 +74,19 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
                   <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: active ? 600 : 400, maxWidth: 160 }}>
                     {tab.label}
                   </Typography>
+                  {tab.dirty && (
+                    <Box
+                      data-testid={`workbench-tab-dirty-${tab.id}`}
+                      aria-hidden
+                      sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }}
+                    />
+                  )}
                   {tab.onClose && (
                     <Box
                       component="span"
                       role="button"
                       tabIndex={0}
-                      aria-label={`Fechar ${tab.label}`}
+                      aria-label={`${tab.closeLabel ?? 'Fechar'} ${tab.label}`}
                       data-testid={`workbench-tab-close-${tab.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -90,11 +109,14 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
           })}
         </Stack>
       )}
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: tabs.length > 0 ? 2 : 0 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {tabs.length === 0
           ? emptyState
           : tabs.map((tab) => (
-              <Box key={tab.id} sx={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%' }}>
+              <Box
+                key={tab.id}
+                sx={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%', p: tab.dense ? 0 : 2 }}
+              >
                 {tab.render(tab.id !== activeTabId)}
               </Box>
             ))}

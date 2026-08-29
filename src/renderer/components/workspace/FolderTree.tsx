@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import { Box, Collapse, List, ListItemButton, ListItemText, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronRight, ChevronDown, Folder, File as FileIcon, FolderInput, FolderUp, FolderX, NotebookPen } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, File as FileIcon, FolderInput, FolderOpen, FolderX } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { Toast, type ToastMessage } from '../Toast.js';
+import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
+import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
 import type { Project } from '../../../shared/project.js';
+
+interface PreviewTarget {
+  relPath: string;
+  projectId?: string;
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -17,64 +24,45 @@ function joinRootPath(root: string, name: string): string {
   return `${root.replace(/[\\/]+$/, '')}/${name}`;
 }
 
-interface UpRowProps {
-  testId: string;
-  tooltip: string;
-  onClick: () => void;
-}
-
-/** A ".." row — one level of "go back" in the tree's nesting, be it out of a Project or all the way home. */
-function UpRow({ testId, tooltip, onClick }: UpRowProps): React.ReactElement {
-  return (
-    <Tooltip title={tooltip} placement="right">
-      <ListItemButton
-        dense
-        data-testid={testId}
-        aria-label={tooltip}
-        onClick={onClick}
-        sx={{ pl: 1.5, borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-          <Icon glyph={FolderUp} size={14} />
-          <ListItemText
-            primary=".."
-            slotProps={{ primary: { sx: { fontSize: '0.85rem', color: 'text.secondary' } } }}
-          />
-        </Stack>
-      </ListItemButton>
-    </Tooltip>
-  );
-}
-
 interface FolderTreeProps {
-  onSelectFile: (relPath: string) => void;
+  /**
+   * `projectId` is the file's own scope — the closest ancestor Project, whether
+   * that's an explicit `scopeProjectId` or a root-level folder expanded in place
+   * because it matched a registered Project. Callers must route reads/writes
+   * through that project, not whatever project (if any) the screen itself is
+   * currently scoped to — those can differ when a Project folder is browsed
+   * inline without "entering" it.
+   */
+  onSelectFile: (relPath: string, projectId?: string) => void;
   onUseAsProject: (absolutePath: string) => void;
+  /** Right-click on a file row → "Preview" — opens a read-only rendered-Markdown tab instead of the normal editing tab. Omitted rows (folders, Project shortcuts) simply don't get a context menu. */
+  onPreviewFile?: (relPath: string, projectId?: string) => void;
   /** Pinned row rendered above the folders/files, e.g. an `InstructionTreeRow` for the current scope. */
   instructionRow?: React.ReactNode;
   /** Pinned nodes rendered below `instructionRow` and above the folders/files, e.g. Skills/Agents/Hooks/MCP `TreeGroup`s for the current scope. */
   pinnedRows?: React.ReactNode;
-  /** Root-level folders already registered as a `Project` swap "Usar como Project" for a "Gerir instructions" shortcut into that project. */
+  /** Root-level folders already registered as a `Project` swap "Usar como Project" for an "Abrir customizations do projeto" shortcut into that project. */
   workspaceRootPath?: string;
   projects?: ReadonlyArray<Project>;
-  onManageProject?: (projectId: string) => void;
+  onOpenProject?: (projectId: string) => void;
   scopeProjectId?: string;
-  /** Called when the ".." row is clicked — only rendered while `scopeProjectId` is set, to step back out to the workspace-wide tree. */
-  onNavigateUp?: () => void;
-  /** Called when the ".." row is clicked — only rendered while NOT scoped to a Project, to step back out to Início (the global/Default workspace). */
-  onNavigateHome?: () => void;
+  /** Renders a Project's own INSTRUCTIONS row pinned above its children once its folder node is expanded in place — lets a Project's instruction be reached without "entering" it via `onOpenProject`. `depth` matches its children's own indent level (see `TreeNode`'s `pl: 1.5 + depth * 2`), so the row reads as nested under the Project folder rather than flush with it. */
+  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 interface TreeNodeProps {
   entry: FileBrowserEntry;
   relPath: string;
   depth: number;
-  onSelectFile: (relPath: string) => void;
+  onSelectFile: (relPath: string, projectId?: string) => void;
   onUseAsProject: (absolutePath: string) => void;
+  onOpenPreviewMenu: (e: React.MouseEvent, target: PreviewTarget) => void;
   onError: (message: string) => void;
   workspaceRootPath?: string;
   projects?: ReadonlyArray<Project>;
-  onManageProject?: (projectId: string) => void;
+  onOpenProject?: (projectId: string) => void;
   scopeProjectId?: string;
+  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 function TreeNode({
@@ -83,19 +71,15 @@ function TreeNode({
   depth,
   onSelectFile,
   onUseAsProject,
+  onOpenPreviewMenu,
   onError,
   workspaceRootPath,
   projects,
-  onManageProject,
+  onOpenProject,
   scopeProjectId,
+  renderProjectInstructionRow,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
-  /** The workspace root listing is flat, for now — only a Project's own tree supports drilling into subfolders. */
-  const canExpand = entry.kind === 'dir' && scopeProjectId !== undefined;
-  const { data: children, isError: childrenError } = useDirListing(relPath, {
-    enabled: expanded && canExpand,
-    ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
-  });
   const resolveAbsolutePath = useResolveAbsolutePath();
   const isRootLevel = entry.kind === 'dir' && depth === 0 && !scopeProjectId;
   const matchedProject =
@@ -103,6 +87,22 @@ function TreeNode({
       ? projects?.find((p) => p.path === joinRootPath(workspaceRootPath, entry.name))
       : undefined;
   const canUseAsProject = isRootLevel && matchedProject === undefined;
+  // A root-level folder already registered as a Project expands in place too,
+  // browsing its own tree without leaving the workspace-root view — full
+  // navigation into the Project (Skills/Agents/Instructions/Sessions) stays
+  // behind the dedicated "Gerir instructions" shortcut further below. Every
+  // other root-level folder stays flat, for now — only inside a Project's own
+  // tree (scoped, or expanded in place here) can you drill into subfolders.
+  const effectiveProjectId = scopeProjectId ?? matchedProject?.id;
+  const canExpand = entry.kind === 'dir' && effectiveProjectId !== undefined;
+  // A Project row's own listing is relative to ITS root ('') when expanded in
+  // place from the unscoped workspace view — `relPath` there is
+  // workspace-relative (e.g. "apps"), not what `project.listDir` expects.
+  const listingPath = scopeProjectId ? relPath : matchedProject ? '' : relPath;
+  const { data: children, isError: childrenError } = useDirListing(listingPath, {
+    enabled: expanded && canExpand,
+    ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
+  });
 
   const handleUseAsProject = async (): Promise<void> => {
     try {
@@ -120,25 +120,28 @@ function TreeNode({
         sx={{ pl: 1.5 + depth * 2 }}
         onClick={() => {
           if (canExpand) setExpanded((v) => !v);
-          else if (matchedProject && onManageProject) onManageProject(matchedProject.id);
-          else if (entry.kind === 'file') onSelectFile(relPath);
+          else if (entry.kind === 'file') onSelectFile(relPath, effectiveProjectId);
+        }}
+        onContextMenu={(e) => {
+          if (entry.kind !== 'file') return;
+          onOpenPreviewMenu(e, { relPath, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
         }}
       >
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
-          {/* The workspace-root listing is flat and folders-only — nothing there ever
-              expands, so reserving chevron space would just misalign it against the
-              flush-left "..", instruction, and management rows above it. */}
-          {scopeProjectId !== undefined &&
-            (canExpand ? (
-              <Icon glyph={expanded ? ChevronDown : ChevronRight} size={14} />
-            ) : (
-              <Box sx={{ width: 14 }} />
-            ))}
+          {/* Reserved uniformly so folder names line up whether or not a given row
+              can expand — root-level Project folders now can, plain root-level
+              folders still can't ("flat, for now"). */}
+          {canExpand ? (
+            <Icon glyph={expanded ? ChevronDown : ChevronRight} size={14} />
+          ) : (
+            <Box sx={{ width: 14 }} />
+          )}
           <Icon glyph={entry.kind === 'dir' ? Folder : FileIcon} size={14} />
           <ListItemText
             primary={entry.name}
             slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }}
           />
+          {matchedProject && <SessionStatusBadge anchor={{ kind: 'project', projectId: matchedProject.id }} />}
         </Stack>
         {canUseAsProject && (
           <Tooltip title="Usar como Project">
@@ -164,27 +167,27 @@ function TreeNode({
             </Box>
           </Tooltip>
         )}
-        {matchedProject && onManageProject && (
-          <Tooltip title="Gerir instructions do projeto">
+        {matchedProject && onOpenProject && (
+          <Tooltip title="Abrir customizations do projeto">
             <Box
               component="span"
               role="button"
               tabIndex={0}
-              aria-label={`Gerir instructions do projeto ${entry.name}`}
-              data-testid={`tree-node-manage-instructions-${entry.name}`}
+              aria-label={`Abrir customizations do projeto ${entry.name}`}
+              data-testid={`tree-node-open-project-${entry.name}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onManageProject(matchedProject.id);
+                onOpenProject(matchedProject.id);
               }}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter' && e.key !== ' ') return;
                 if (e.key === ' ') e.preventDefault();
                 e.stopPropagation();
-                onManageProject(matchedProject.id);
+                onOpenProject(matchedProject.id);
               }}
               sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
             >
-              <Icon glyph={NotebookPen} size={14} />
+              <Icon glyph={FolderOpen} size={14} />
             </Box>
           </Tooltip>
         )}
@@ -202,19 +205,24 @@ function TreeNode({
             </Typography>
           ) : (
             <List disablePadding>
+              {matchedProject && renderProjectInstructionRow
+                ? renderProjectInstructionRow(matchedProject, depth + 1)
+                : null}
               {(children ?? []).map((child) => (
                 <TreeNode
                   key={child.name}
                   entry={child}
-                  relPath={relPath ? `${relPath}/${child.name}` : child.name}
+                  relPath={listingPath ? `${listingPath}/${child.name}` : child.name}
                   depth={depth + 1}
                   onSelectFile={onSelectFile}
                   onUseAsProject={onUseAsProject}
+                  onOpenPreviewMenu={onOpenPreviewMenu}
                   onError={onError}
                   {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
                   {...(projects !== undefined ? { projects } : {})}
-                  {...(onManageProject !== undefined ? { onManageProject } : {})}
-                  {...(scopeProjectId ? { scopeProjectId } : {})}
+                  {...(onOpenProject !== undefined ? { onOpenProject } : {})}
+                  {...(effectiveProjectId ? { scopeProjectId: effectiveProjectId } : {})}
+                  {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
                 />
               ))}
             </List>
@@ -228,19 +236,20 @@ function TreeNode({
 export function FolderTree({
   onSelectFile,
   onUseAsProject,
+  onPreviewFile,
   instructionRow,
   pinnedRows,
   workspaceRootPath,
   projects,
-  onManageProject,
+  onOpenProject,
   scopeProjectId,
-  onNavigateUp,
-  onNavigateHome,
+  renderProjectInstructionRow,
 }: FolderTreeProps): React.ReactElement {
   const { data: rootEntries, isError } = useDirListing('', {
     ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
   });
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const previewMenu = useRowContextMenu<PreviewTarget>();
   /** The (unscoped) workspace root listing is folders-only, for now — matches the flat, no-depth behavior in TreeNode. */
   const visibleEntries = scopeProjectId ? rootEntries : rootEntries?.filter((entry) => entry.kind === 'dir');
 
@@ -260,12 +269,6 @@ export function FolderTree({
   return (
     <>
       <List disablePadding data-testid="folder-tree">
-        {scopeProjectId && onNavigateUp && (
-          <UpRow testId="tree-node-up" tooltip="Voltar para o workspace" onClick={onNavigateUp} />
-        )}
-        {!scopeProjectId && onNavigateHome && (
-          <UpRow testId="tree-node-home" tooltip="Voltar para o Início (workspace global)" onClick={onNavigateHome} />
-        )}
         {instructionRow}
         {pinnedRows}
         {(visibleEntries ?? []).map((entry) => (
@@ -276,14 +279,23 @@ export function FolderTree({
             depth={0}
             onSelectFile={onSelectFile}
             onUseAsProject={onUseAsProject}
+            onOpenPreviewMenu={previewMenu.openMenu}
             onError={(message) => setToast({ variant: 'error', message })}
             {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
             {...(projects !== undefined ? { projects } : {})}
-            {...(onManageProject !== undefined ? { onManageProject } : {})}
+            {...(onOpenProject !== undefined ? { onOpenProject } : {})}
             {...(scopeProjectId ? { scopeProjectId } : {})}
+            {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
           />
         ))}
       </List>
+      <RowContextMenu
+        state={previewMenu.state}
+        onClose={previewMenu.closeMenu}
+        onPreview={() => {
+          if (previewMenu.state) onPreviewFile?.(previewMenu.state.target.relPath, previewMenu.state.target.projectId);
+        }}
+      />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
   );

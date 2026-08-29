@@ -1,6 +1,8 @@
 export interface ClaudeSessionSpawnOptions {
   cols: number;
   rows: number;
+  /** Whether to try attaching to this cwd's prior `claude` conversation first (`--continue`), falling back to a fresh one if there isn't any. `false` skips that attempt entirely, for a session that must always start clean even when the cwd already has other conversations. */
+  continueConversation: boolean;
 }
 
 export type ClaudeSessionDataListener = (sessionId: string, chunk: string) => void;

@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { WorkspaceManagementList } from '../../../../src/renderer/components/workspace/WorkspaceManagementList.js';
+import { renderWithQuery } from '../../test-utils.js';
 
-const renderList = () =>
-  render(
-    <QueryClientProvider client={queryClient}>
-      <WorkspaceManagementList />
-    </QueryClientProvider>,
+const renderList = (beforeSwitch?: () => boolean, instructionRow?: React.ReactNode) =>
+  renderWithQuery(
+    <WorkspaceManagementList
+      {...(beforeSwitch ? { beforeSwitch } : {})}
+      {...(instructionRow !== undefined ? { instructionRow } : {})}
+    />,
+    { client: queryClient },
   );
 
 const workspaces = [
@@ -33,6 +35,22 @@ describe('WorkspaceManagementList', () => {
     expect(await screen.findByTestId('workspace-list-row-w1')).toHaveTextContent('Acme');
   });
 
+  it('renders the instructionRow slot pinned above the workspace list', async () => {
+    renderList(undefined, <div data-testid="instruction-row-slot">Instructions</div>);
+    expect(await screen.findByTestId('instruction-row-slot')).toBeInTheDocument();
+    expect(await screen.findByTestId('workspace-list-row-w1')).toBeInTheDocument();
+  });
+
+  it('renders the instructionRow slot even when there are no other workspaces (empty state)', async () => {
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
+      if (method === 'workspace.list') return [workspaces[0]];
+      return undefined;
+    });
+    renderList(undefined, <div data-testid="instruction-row-slot">Instructions</div>);
+    expect(await screen.findByTestId('instruction-row-slot')).toBeInTheDocument();
+    expect(await screen.findByTestId('empty-state-workspace-management-empty')).toBeInTheDocument();
+  });
+
   it('never lists the default/global workspace — the screen around it already shows that', async () => {
     renderList();
     await screen.findByTestId('workspace-list-row-w1');
@@ -42,6 +60,23 @@ describe('WorkspaceManagementList', () => {
   it('clicking a row switches to it', async () => {
     const user = userEvent.setup();
     renderList();
+    await user.click(await screen.findByTestId('workspace-list-row-w1'));
+    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'w1' }));
+  });
+
+  it('does not switch when beforeSwitch declines', async () => {
+    const user = userEvent.setup();
+    const beforeSwitch = vi.fn().mockReturnValue(false);
+    renderList(beforeSwitch);
+    await user.click(await screen.findByTestId('workspace-list-row-w1'));
+    expect(beforeSwitch).toHaveBeenCalled();
+    expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
+  });
+
+  it('switches when beforeSwitch allows it', async () => {
+    const user = userEvent.setup();
+    const beforeSwitch = vi.fn().mockReturnValue(true);
+    renderList(beforeSwitch);
     await user.click(await screen.findByTestId('workspace-list-row-w1'));
     await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'w1' }));
   });
@@ -79,6 +114,37 @@ describe('WorkspaceManagementList', () => {
     renderList();
     await user.click(await screen.findByTestId('workspace-list-new'));
     expect(await screen.findByTestId('toast')).toHaveTextContent('disk full');
+  });
+
+  it('shows an EmptyState with the create action when there are no other workspaces', async () => {
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
+      if (method === 'workspace.list') return [workspaces[0]];
+      return undefined;
+    });
+    renderList();
+    expect(await screen.findByTestId('empty-state-workspace-management-empty')).toHaveTextContent('Nenhum outro workspace');
+    expect(screen.getByTestId('workspace-list-new')).toBeInTheDocument();
+  });
+
+  it('shows a running-session badge on a workspace row with an active session', async () => {
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
+      if (method === 'workspace.list') return workspaces;
+      if (method === 'session.list') {
+        return [
+          {
+            sessionId: 'workspace:w1',
+            anchor: { kind: 'workspace', workspaceId: 'w1' },
+            cwd: '/repos/acme',
+            label: 'Acme',
+            status: 'running',
+          },
+        ];
+      }
+      return undefined;
+    });
+    renderList();
+    const row = await screen.findByTestId('workspace-list-row-w1');
+    await waitFor(() => expect(row).toHaveTextContent('Ativa'));
   });
 
   it('shows an error toast when switching fails', async () => {

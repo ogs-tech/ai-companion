@@ -3,11 +3,7 @@ import type { Instruction } from '../../../shared/entity.js';
 import { entityUrn, WORKSPACE_SOURCE } from '../../../shared/entity.js';
 import type { SyncResult } from '../../../shared/sync-result.js';
 import { personalInstructionId, projectInstructionSlug } from '../../domain/instruction-id.js';
-import { ioError } from '../../domain/errors.js';
-import type { ClaudeCliPort } from '../ports/claude-cli-port.js';
 import type { ProjectService } from './project-service.js';
-import { buildPersonalInstructionPrompt } from './instruction-generation-prompt.js';
-import type { GenerateDraftProgressEvent } from '../../../shared/instruction-generation.js';
 
 export interface SaveInstructionResult {
   instruction: Instruction;
@@ -19,14 +15,9 @@ export interface DeleteInstructionResult {
   syncReport?: SyncResult[];
 }
 
-export interface GenerateDraftResult {
-  content: string;
-}
-
 export class InstructionService {
   constructor(
     private readonly base: EntityService,
-    private readonly claudeCli: ClaudeCliPort,
     private readonly projectService: Pick<ProjectService, 'findOrCreateByPath'>,
   ) {}
 
@@ -103,30 +94,5 @@ export class InstructionService {
     }
     const urn = entityUrn('instruction', input.name);
     return this.base.delete({ urn, removeSymlinks });
-  }
-
-  /**
-   * Drafts the body of a new personal instruction via the local `claude` CLI,
-   * given optional free-text context from the user. Returns the raw Markdown
-   * only — the caller (renderer) builds the full entity and lets the user
-   * review/edit it in the create-flow editor before saving.
-   */
-  async generatePersonalDraft(
-    context?: string,
-    onEvent?: (event: GenerateDraftProgressEvent) => void,
-  ): Promise<GenerateDraftResult> {
-    const prompt = buildPersonalInstructionPrompt(context);
-    try {
-      const { text } = await this.claudeCli.generate({
-        prompt,
-        ...(onEvent ? { onEvent } : {}),
-      });
-      return { content: text };
-    } catch (err) {
-      throw ioError({
-        message: `Failed to generate a draft via the claude CLI: ${(err as Error).message}`,
-        details: { reason: 'claude_cli_failed' },
-      });
-    }
   }
 }

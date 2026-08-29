@@ -12,6 +12,14 @@ export function asString(value: unknown, field: string): string {
   return value;
 }
 
+/** Like {@link asString}, but accepts an empty string — for fields such as file content where an intentionally-emptied value is valid. */
+export function asRawString(value: unknown, field: string): string {
+  if (typeof value !== 'string') {
+    throw new DomainError('validation', `Missing or invalid '${field}'`);
+  }
+  return value;
+}
+
 export function asObject(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new DomainError('validation', `Invalid '${label}' payload`);

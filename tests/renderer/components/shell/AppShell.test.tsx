@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppShell } from '../../../../src/renderer/components/shell/AppShell.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
+import { registerUnsavedTabsGuard } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
 
 let call: CallSpy;
 beforeEach(() => {
@@ -12,6 +13,7 @@ beforeEach(() => {
     if (method === 'workspace.getActive') return ok(undefined);
     return ok({ ui: { theme: 'light' }, adapters: { claude: { enabled: true } }, language: 'off' });
   });
+  registerUnsavedTabsGuard(null);
 });
 
 describe('AppShell', () => {
@@ -67,6 +69,26 @@ describe('AppShell', () => {
     await userEvent.click(screen.getByTestId('nav-workspace'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
     expect(onNavigate).toHaveBeenCalledWith({ area: 'workspace' });
+  });
+
+  it('does not switch back to Default when a registered unsaved-tabs guard declines (e.g. the Workspace screen has a dirty Workbench tab)', async () => {
+    const onNavigate = vi.fn();
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.list') return ok([]);
+      if (method === 'workspace.getActive') {
+        return ok({ id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' });
+      }
+      return ok({ ui: { theme: 'light' }, adapters: { claude: { enabled: true } }, language: 'off' });
+    });
+    registerUnsavedTabsGuard(() => false);
+    renderWithShell(
+      <AppShell nav={{ area: 'starter-pack' }} onNavigate={onNavigate} onOpenSettings={() => undefined}>
+        <div data-testid="screen" />
+      </AppShell>,
+    );
+    await userEvent.click(screen.getByTestId('nav-workspace'));
+    expect(call).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
   it('switching to Workspace while already on Default does not call workspace.switchTo', async () => {

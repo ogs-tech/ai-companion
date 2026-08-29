@@ -1,23 +1,12 @@
 import type { IpcHandlers } from './dispatcher.js';
 import type { InstructionService } from '../application/services/instruction-service.js';
 import type { Instruction } from '../../shared/entity.js';
-import type { GenerateDraftProgressEvent } from '../../shared/instruction-generation.js';
-import { asObject, asString, optParams } from './_validators.js';
+import { asObject, asString } from './_validators.js';
 
-export function buildInstructionHandlers(
-  service: InstructionService,
-  emitProgress?: (event: GenerateDraftProgressEvent) => void,
-): IpcHandlers {
+export function buildInstructionHandlers(service: InstructionService): IpcHandlers {
   return {
     'instruction.list': async () => {
       return service.list();
-    },
-    'instruction.generateDraft': async (params) => {
-      const raw = optParams(params, 'instruction.generateDraft');
-      const context = typeof raw['context'] === 'string' ? raw['context'] : undefined;
-      return emitProgress
-        ? service.generatePersonalDraft(context, emitProgress)
-        : service.generatePersonalDraft(context);
     },
     'instruction.get': async (params) => {
       const raw = asObject(params, 'instruction.get');

@@ -2,7 +2,7 @@ import type { IpcHandlers } from './dispatcher.js';
 import type { ProjectService } from '../application/services/project-service.js';
 import type { FileBrowserPort } from '../application/ports/file-browser-port.js';
 import { FileBrowserService } from '../application/services/file-browser-service.js';
-import { asObject, asString } from './_validators.js';
+import { asObject, asRawString, asString } from './_validators.js';
 
 export function buildProjectHandlers(service: ProjectService, fileBrowserPort: FileBrowserPort): IpcHandlers {
   const browserForProject = async (projectId: string): Promise<FileBrowserService> => {
@@ -46,6 +46,11 @@ export function buildProjectHandlers(service: ProjectService, fileBrowserPort: F
       const raw = asObject(params, 'project.readFile');
       const browser = await browserForProject(asString(raw['projectId'], 'projectId'));
       return browser.readFile(asString(raw['path'], 'path'));
+    },
+    'project.writeFile': async (params) => {
+      const raw = asObject(params, 'project.writeFile');
+      const browser = await browserForProject(asString(raw['projectId'], 'projectId'));
+      await browser.writeFile(asString(raw['path'], 'path'), asRawString(raw['content'], 'content'));
     },
     'project.resolvePath': async (params) => {
       const raw = asObject(params, 'project.resolvePath');

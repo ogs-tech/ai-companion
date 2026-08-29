@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EntityTreeGroup } from '../../../../src/renderer/components/workspace/EntityTreeGroup.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -78,12 +78,12 @@ describe('EntityTreeGroup', () => {
     );
   });
 
-  it('opens the editor tab for an existing item on click of the edit action', async () => {
+  it('opens the editor tab for an existing item on click of the row', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
     renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEdit} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
-    await user.click(await screen.findByTestId('tree-skill-edit-personal-skill'));
+    await user.click(await screen.findByTestId('tree-skill-personal-skill'));
     expect(onEdit).toHaveBeenCalledWith('skill', expect.objectContaining({ name: 'personal-skill' }), false);
   });
 
@@ -100,12 +100,41 @@ describe('EntityTreeGroup', () => {
     confirmSpy.mockRestore();
   });
 
-  it('does not offer edit/delete for a plugin-provided item', async () => {
+  it('shows a running-session badge only on the row whose entity has an active session', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'skill.list') return ok([projectScoped, personalScoped, pluginSkill]);
+      if (method === 'session.list') {
+        return ok([
+          {
+            sessionId: 'entity:urn:skill:personal-skill',
+            anchor: { kind: 'entity', urn: 'urn:skill:personal-skill' },
+            cwd: '/x',
+            label: 'personal-skill',
+            status: 'running',
+          },
+        ]);
+      }
+      return ok(undefined);
+    });
     const user = userEvent.setup();
     renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
+
+    const activeRow = await screen.findByTestId('tree-skill-personal-skill');
+    expect(within(activeRow).getByTestId('status-pill-session-status-entity:urn:skill:personal-skill')).toHaveTextContent('Ativa');
+
+    const idleRow = await screen.findByTestId('tree-skill-project-skill');
+    expect(within(idleRow).queryByText('Ativa')).not.toBeInTheDocument();
+  });
+
+  it('does not offer a delete action for a plugin-provided item, but the row still opens it (read-only) in the editor tab', async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEdit} />);
+    await user.click(await screen.findByTestId('tree-group-skill'));
     await screen.findByTestId('tree-skill-plugin-skill');
     expect(screen.queryByTestId('tree-skill-delete-plugin-skill')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('tree-skill-edit-plugin-skill')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('tree-skill-plugin-skill'));
+    expect(onEdit).toHaveBeenCalledWith('skill', expect.objectContaining({ name: 'plugin-skill' }), false);
   });
 });

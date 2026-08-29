@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../src/renderer/lib/ipc.js';
-import { useDirListing, useFilePreview, useResolveAbsolutePath } from '../../../src/renderer/hooks/use-file-browser.js';
+import { useDirListing, useFilePreview, useResolveAbsolutePath, useWriteFile } from '../../../src/renderer/hooks/use-file-browser.js';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -63,5 +63,28 @@ describe('use-file-browser', () => {
     const { result } = renderHook(() => useFilePreview('a.txt', { projectId: 'p1' }), { wrapper });
     await waitFor(() => expect(result.current.data).toEqual({ previewable: true, content: 'hi', truncated: false }));
     expect(ipc.callIpc).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.txt' });
+  });
+
+  it('useWriteFile calls workspace.writeFile when no projectId is given', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useWriteFile(), { wrapper });
+    await result.current.mutateAsync({ path: 'a.txt', content: 'new content' });
+    expect(spy).toHaveBeenCalledWith('workspace.writeFile', { path: 'a.txt', content: 'new content' });
+  });
+
+  it('useWriteFile calls project.writeFile when scoped to a projectId', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useWriteFile(), { wrapper });
+    await result.current.mutateAsync({ path: 'a.txt', content: 'new content', projectId: 'p1' });
+    expect(spy).toHaveBeenCalledWith('project.writeFile', { projectId: 'p1', path: 'a.txt', content: 'new content' });
+  });
+
+  it('useWriteFile updates the matching readFile query cache on success', async () => {
+    vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
+    const { result: writeResult } = renderHook(() => useWriteFile(), { wrapper });
+    await writeResult.current.mutateAsync({ path: 'a.txt', content: 'new content' });
+
+    const { result: previewResult } = renderHook(() => useFilePreview('a.txt'), { wrapper });
+    await waitFor(() => expect(previewResult.current.data).toEqual({ previewable: true, content: 'new content', truncated: false }));
   });
 });

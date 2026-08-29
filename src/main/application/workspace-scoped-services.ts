@@ -7,7 +7,6 @@ import type { PluginProvenanceService } from './services/plugin-provenance.js';
 import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
-import type { ClaudeCliPort } from './ports/claude-cli-port.js';
 import type { ClaudeSessionPort } from './ports/claude-session-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
@@ -44,7 +43,6 @@ export interface WorkspaceScopedSharedDeps {
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
-  claudeCli: ClaudeCliPort;
   claudeSessionPort: ClaudeSessionPort;
 }
 
@@ -71,7 +69,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    claudeCli, claudeSessionPort,
+    claudeSessionPort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -104,7 +102,7 @@ export function buildWorkspaceScopedServices(
 
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
-  const instructionService = new InstructionService(entityService, claudeCli, projectService);
+  const instructionService = new InstructionService(entityService, projectService);
   const sessionService = new SessionService(entityService, claudeSessionPort, dataDir, {
     workspaceService: shared.workspaceService,
     projectService,

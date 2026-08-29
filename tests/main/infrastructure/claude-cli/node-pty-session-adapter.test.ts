@@ -14,7 +14,7 @@ describe('NodePtySessionAdapter', () => {
     adapter.onData((sessionId, chunk) => chunks.push(chunk));
     adapter.onExit((sessionId, exitCode) => exits.push([sessionId, exitCode]));
 
-    await adapter.spawn('sess-1', process.cwd(), { cols: 80, rows: 24 });
+    await adapter.spawn('sess-1', process.cwd(), { cols: 80, rows: 24, continueConversation: true });
     adapter.write('sess-1', 'hello\r');
 
     await vi.waitFor(() => {
@@ -35,7 +35,47 @@ describe('NodePtySessionAdapter', () => {
   it('spawn rejects when the binary does not exist', async () => {
     const adapter = new NodePtySessionAdapter('/definitely/not/a/real/binary-xyz');
     await expect(
-      adapter.spawn('sess-2', process.cwd(), { cols: 80, rows: 24 }),
+      adapter.spawn('sess-2', process.cwd(), { cols: 80, rows: 24, continueConversation: true }),
     ).rejects.toThrow();
+  });
+
+  it('retries once without --continue when claude reports no prior conversation, without surfacing the failed attempt as an exit', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-no-conversation.sh'));
+    const chunks: string[] = [];
+    const exits: Array<[string, number]> = [];
+    adapter.onData((sessionId, chunk) => chunks.push(chunk));
+    adapter.onExit((sessionId, exitCode) => exits.push([sessionId, exitCode]));
+
+    await adapter.spawn('sess-3', process.cwd(), { cols: 80, rows: 24, continueConversation: true });
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('READY');
+    });
+    expect(exits).toEqual([]);
+
+    adapter.write('sess-3', 'hello\r');
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('ECHO:hello');
+    });
+    await vi.waitFor(() => {
+      expect(exits).toEqual([['sess-3', 7]]);
+    });
+  });
+
+  it('with continueConversation:false, never attempts --continue — no failed-attempt flash, no retry, starts clean immediately', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-no-conversation.sh'));
+    const chunks: string[] = [];
+    const exits: Array<[string, number]> = [];
+    adapter.onData((sessionId, chunk) => chunks.push(chunk));
+    adapter.onExit((sessionId, exitCode) => exits.push([sessionId, exitCode]));
+
+    await adapter.spawn('sess-4', process.cwd(), { cols: 80, rows: 24, continueConversation: false });
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('READY');
+    });
+    expect(chunks.join('')).not.toContain('No conversation found to continue');
+    expect(exits).toEqual([]);
   });
 });
