@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@mui/material';
@@ -12,6 +12,8 @@ import type { Project } from '../../../../src/shared/project.js';
 interface RenderTreeOptions {
   onSelectFile?: (relPath: string, projectId?: string) => void;
   onUseAsProject?: (absolutePath: string) => void;
+  onPreviewFile?: (relPath: string, projectId?: string) => void;
+  onNewAction?: (relPath: string, projectId?: string) => void;
   instructionRow?: React.ReactNode;
   pinnedRows?: React.ReactNode;
   scopeProjectId?: string;
@@ -28,6 +30,8 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
         <FolderTree
           onSelectFile={opts.onSelectFile ?? vi.fn()}
           onUseAsProject={opts.onUseAsProject ?? vi.fn()}
+          {...(opts.onPreviewFile ? { onPreviewFile: opts.onPreviewFile } : {})}
+          {...(opts.onNewAction ? { onNewAction: opts.onNewAction } : {})}
           {...(opts.instructionRow !== undefined ? { instructionRow: opts.instructionRow } : {})}
           {...(opts.pinnedRows !== undefined ? { pinnedRows: opts.pinnedRows } : {})}
           {...(opts.scopeProjectId ? { scopeProjectId: opts.scopeProjectId } : {})}
@@ -67,7 +71,7 @@ describe('FolderTree', () => {
     expect(await screen.findByText('src')).toBeInTheDocument();
   });
 
-  it('lists the root folders on mount, filtering out files — folders-only, for now', async () => {
+  it('lists both root folders and root files in the (unscoped) workspace listing', async () => {
     vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
         return [{ name: 'src', kind: 'dir' }, { name: 'README.md', kind: 'file' }];
@@ -76,7 +80,21 @@ describe('FolderTree', () => {
     });
     renderTree();
     expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(screen.queryByText('README.md')).not.toBeInTheDocument();
+    expect(await screen.findByText('README.md')).toBeInTheDocument();
+  });
+
+  it('calls onSelectFile with no projectId for a root-level file in the (unscoped) workspace listing', async () => {
+    const user = userEvent.setup();
+    const onSelectFile = vi.fn();
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
+        return [{ name: 'README.md', kind: 'file' }];
+      }
+      return [];
+    });
+    renderTree({ onSelectFile });
+    await user.click(await screen.findByText('README.md'));
+    expect(onSelectFile).toHaveBeenCalledWith('README.md', undefined);
   });
 
   it('lists both folders and files when scoped to a Project', async () => {
@@ -382,4 +400,50 @@ describe('FolderTree', () => {
     expect(await screen.findByText('index.ts')).toBeInTheDocument();
   });
 
+  describe('context menu — New Action', () => {
+    it('offers both "Preview" and "New Action" on a file row, when scoped to a Project', async () => {
+      const onPreviewFile = vi.fn();
+      const onNewAction = vi.fn();
+      vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'README.md', kind: 'file' }]);
+      renderTree({ scopeProjectId: 'p1', onPreviewFile, onNewAction });
+      const row = await screen.findByText('README.md');
+      fireEvent.contextMenu(row);
+      expect(await screen.findByTestId('row-context-menu-preview')).toBeInTheDocument();
+      const newActionItem = await screen.findByTestId('row-context-menu-new-action');
+      fireEvent.click(newActionItem);
+      expect(onNewAction).toHaveBeenCalledWith('README.md', 'p1');
+    });
+
+    it('offers only "New Action" (no "Preview") on a folder row that can expand, when scoped to a Project', async () => {
+      const onPreviewFile = vi.fn();
+      const onNewAction = vi.fn();
+      vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'project.listDir' && (params as { path: string }).path === '') return [{ name: 'src', kind: 'dir' }];
+        return [];
+      });
+      renderTree({ scopeProjectId: 'p1', onPreviewFile, onNewAction });
+      const row = await screen.findByText('src');
+      fireEvent.contextMenu(row);
+      expect(screen.queryByTestId('row-context-menu-preview')).not.toBeInTheDocument();
+      const newActionItem = await screen.findByTestId('row-context-menu-new-action');
+      fireEvent.click(newActionItem);
+      expect(onNewAction).toHaveBeenCalledWith('src', 'p1');
+    });
+
+    it('offers "New Action" (no "Preview") on an unmatched root-level folder in the unscoped workspace listing', async () => {
+      const onNewAction = vi.fn();
+      vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        const path = (params as { path?: string } | undefined)?.path;
+        if (method === 'workspace.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
+        return [];
+      });
+      renderTree({ onNewAction });
+      const row = await screen.findByText('src');
+      fireEvent.contextMenu(row);
+      expect(screen.queryByTestId('row-context-menu-preview')).not.toBeInTheDocument();
+      const newActionItem = await screen.findByTestId('row-context-menu-new-action');
+      fireEvent.click(newActionItem);
+      expect(onNewAction).toHaveBeenCalledWith('src', undefined);
+    });
+  });
 });

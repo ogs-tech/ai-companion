@@ -40,6 +40,10 @@ export class EntityService {
     return this.repository.get(urn);
   }
 
+  filePath(urn: string): Promise<string> {
+    return this.repository.filePath(urn);
+  }
+
   async save(command: SaveEntityCommand): Promise<SaveEntityResult> {
     const { entity, isCreate = false } = command;
     this.validator?.validate(entity);

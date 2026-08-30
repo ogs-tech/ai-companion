@@ -39,4 +39,15 @@ describe('InMemoryEntityRepository', () => {
     first.content = 'mutated';
     expect(((await repo.get('urn:skill:a')) as Skill).content).toBe('b');
   });
+
+  it('filePath returns a deterministic stand-in path for a saved entity', async () => {
+    const repo = new InMemoryEntityRepository();
+    await repo.save(skill('a'));
+    expect(await repo.filePath('urn:skill:a')).toBe('/in-memory/urn:skill:a');
+  });
+
+  it('filePath rejects on a missing urn with not_found', async () => {
+    const repo = new InMemoryEntityRepository();
+    await expect(repo.filePath('urn:skill:nope')).rejects.toMatchObject({ kind: 'not_found' });
+  });
 });

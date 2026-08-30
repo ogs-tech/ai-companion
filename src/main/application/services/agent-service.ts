@@ -38,6 +38,10 @@ export class AgentService {
     return (await this.base.get(entityUrn('agent', id))) as Agent;
   }
 
+  resolvePath(id: AgentId): Promise<string> {
+    return this.base.filePath(entityUrn('agent', id));
+  }
+
   async save(input: { agent: Agent; isCreate?: boolean; scope?: Scope }): Promise<SaveAgentResult> {
     if (input.agent.source.kind === 'plugin') {
       throw new OperationNotAllowedForOriginError(

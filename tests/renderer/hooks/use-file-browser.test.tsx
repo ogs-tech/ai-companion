@@ -37,9 +37,9 @@ describe('use-file-browser', () => {
   });
 
   it('useFilePreview fetches via workspace.readFile when path is set', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, content: 'hi', truncated: false });
+    vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, kind: 'text', content: 'hi', truncated: false });
     const { result } = renderHook(() => useFilePreview('a.txt'), { wrapper });
-    await waitFor(() => expect(result.current.data).toEqual({ previewable: true, content: 'hi', truncated: false }));
+    await waitFor(() => expect(result.current.data).toEqual({ previewable: true, kind: 'text', content: 'hi', truncated: false }));
     expect(ipc.callIpc).toHaveBeenCalledWith('workspace.readFile', { path: 'a.txt' });
   });
 
@@ -59,9 +59,9 @@ describe('use-file-browser', () => {
   });
 
   it('useFilePreview fetches via project.readFile when scoped to a projectId', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, content: 'hi', truncated: false });
+    vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, kind: 'text', content: 'hi', truncated: false });
     const { result } = renderHook(() => useFilePreview('a.txt', { projectId: 'p1' }), { wrapper });
-    await waitFor(() => expect(result.current.data).toEqual({ previewable: true, content: 'hi', truncated: false }));
+    await waitFor(() => expect(result.current.data).toEqual({ previewable: true, kind: 'text', content: 'hi', truncated: false }));
     expect(ipc.callIpc).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.txt' });
   });
 
@@ -85,6 +85,6 @@ describe('use-file-browser', () => {
     await writeResult.current.mutateAsync({ path: 'a.txt', content: 'new content' });
 
     const { result: previewResult } = renderHook(() => useFilePreview('a.txt'), { wrapper });
-    await waitFor(() => expect(previewResult.current.data).toEqual({ previewable: true, content: 'new content', truncated: false }));
+    await waitFor(() => expect(previewResult.current.data).toEqual({ previewable: true, kind: 'text', content: 'new content', truncated: false }));
   });
 });

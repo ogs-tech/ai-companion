@@ -97,8 +97,17 @@ export class FsEntityRepository implements EntityRepository {
         name = entry.name.slice(0, -'.md'.length);
       }
       if (name === undefined) continue;
-      const raw = await readFile(await this.fileFor(kind, name), 'utf8');
-      out.push(parseEntityFile({ kind, name, raw, source: WORKSPACE_SOURCE }));
+      try {
+        const raw = await readFile(await this.fileFor(kind, name), 'utf8');
+        out.push(parseEntityFile({ kind, name, raw, source: WORKSPACE_SOURCE }));
+      } catch {
+        // A single malformed file (e.g. broken YAML frontmatter from an edit
+        // made outside the app, such as a Claude session editing an entity's
+        // canonical source directly) must not take down the whole list — skip
+        // it, same tolerance `listInstructions` already gives a malformed
+        // project instruction dir.
+        continue;
+      }
     }
     return out;
   }
@@ -275,6 +284,22 @@ export class FsEntityRepository implements EntityRepository {
       if (isEnoent(err)) throw new DomainError('not_found', `Entity not found: ${urn}`);
       throw err;
     }
+  }
+
+  async filePath(urn: string): Promise<string> {
+    const { kind, name } = parseUrn(urn);
+    await this.get(urn);
+    if (kind === 'instruction' && isPersonalName(name)) {
+      const modern = await this.personalInstructionFile();
+      try {
+        await access(modern);
+        return modern;
+      } catch (err) {
+        if (!isEnoent(err)) throw err;
+        return this.legacyInstructionFile(name);
+      }
+    }
+    return this.fileFor(kind, name);
   }
 
   async exists(urn: string): Promise<boolean> {

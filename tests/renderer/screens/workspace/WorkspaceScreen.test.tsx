@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -75,7 +75,7 @@ const openDirtyFileTab = async (user: ReturnType<typeof userEvent.setup>) => {
       return path ? [] : [{ name: 'apps', kind: 'dir' }];
     }
     if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-    if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hello' };
+    if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
     if (method === 'project.writeFile') return undefined;
     return undefined;
   });
@@ -143,7 +143,7 @@ describe('WorkspaceScreen', () => {
         return path ? [] : [{ name: 'apps', kind: 'dir' }];
       }
       if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       if (method === 'session.list') return [];
       if (method === 'session.spawn') {
         return { sessionId: 'sess-p1', anchor: { kind: 'project', projectId: 'p1' }, cwd: '/repos/acme/apps', label: 'apps', status: 'running', outputBuffer: '' };
@@ -159,6 +159,142 @@ describe('WorkspaceScreen', () => {
     expect(await screen.findByTestId('workbench-tab-session:sess-p1')).toBeInTheDocument();
   });
 
+  describe('"New Action" context menu', () => {
+    it('on the workspace INSTRUCTIONS row: resolves its path, spawns a workspace-anchored session, and writes the draft once ready (non-empty outputBuffer)', async () => {
+      const user = userEvent.setup();
+      const workspaceInstruction = {
+        urn: 'urn:instruction:w1', kind: 'instruction', name: 'w1', description: '',
+        scopes: ['workspace'], scopeId: 'w1',
+        metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+        source: { kind: 'workspace' }, content: '',
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        if (method === 'instruction.list') return [workspaceInstruction];
+        if (method === 'instruction.resolvePath') return { absolutePath: '/repos/acme/.ai-companion/instructions/project/w1/INSTRUCTION.md' };
+        if (method === 'session.spawn') {
+          return {
+            sessionId: 'sess-new-action', anchor: { kind: 'workspace', workspaceId: 'w1' },
+            cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: 'Welcome to claude\n',
+          };
+        }
+        return undefined;
+      });
+      renderScreen();
+      const row = await screen.findByTestId('workspace-instruction-row');
+      fireEvent.contextMenu(row);
+      const item = await screen.findByTestId('row-context-menu-new-action');
+      await user.click(item);
+
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'workspace', workspaceId: 'w1' } }),
+      );
+      expect(await screen.findByTestId('workbench-tab-session:sess-new-action')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
+          sessionId: 'sess-new-action',
+          data: '@/repos/acme/.ai-companion/instructions/project/w1/INSTRUCTION.md — describe the new action you want to create based on this',
+        }),
+      );
+    });
+
+    it('on a project-scoped Skill row: anchors the session to the skill\'s OWN project scope, not whatever the Control Panel currently shows', async () => {
+      const user = userEvent.setup();
+      const projectSkill = {
+        urn: 'urn:skill:helper', kind: 'skill', name: 'helper', description: '',
+        scopes: ['project'], scopeId: 'p1',
+        metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+        source: { kind: 'workspace' }, content: '',
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        if (method === 'skill.list') return [projectSkill];
+        if (method === 'skill.resolvePath') return { absolutePath: '/repos/acme/.ai-companion/skills/helper/SKILL.md' };
+        if (method === 'session.spawn') {
+          return {
+            sessionId: 'sess-skill', anchor: { kind: 'project', projectId: 'p1' },
+            cwd: '/repos/acme', label: 'acme', status: 'running', outputBuffer: 'ready\n',
+          };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-header-menu-button'));
+      await user.click(screen.getByTestId('workspace-toggle-global'));
+      await user.click(await screen.findByTestId('tree-group-skill'));
+      const row = await screen.findByTestId('tree-skill-helper');
+      fireEvent.contextMenu(row);
+      const item = await screen.findByTestId('row-context-menu-new-action');
+      await user.click(item);
+
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'project', projectId: 'p1' } }),
+      );
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
+          sessionId: 'sess-skill',
+          data: '@/repos/acme/.ai-companion/skills/helper/SKILL.md — describe the new action you want to create based on this',
+        }),
+      );
+    });
+
+    it('on a file row inside a Project: uses the relative path directly (no resolvePath round trip) and defers the write until the session emits its first output', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return registeredProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+        if (method === 'session.list') return [];
+        if (method === 'session.spawn') {
+          return {
+            sessionId: 'sess-file', anchor: { kind: 'project', projectId: 'p1' },
+            cwd: '/repos/acme/apps', label: 'apps', status: 'running', outputBuffer: '',
+          };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByText('apps'));
+      const row = await screen.findByText('a.md');
+      fireEvent.contextMenu(row);
+      const item = await screen.findByTestId('row-context-menu-new-action');
+      await user.click(item);
+
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'project', projectId: 'p1' } }),
+      );
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('project.resolvePath', expect.anything());
+      // Nothing written yet — outputBuffer was empty, so it's waiting on the session's first live output.
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('session.write', expect.anything());
+
+      // SessionPanel itself also subscribes to onOutput once it mounts for
+      // this tab — with no guaranteed ordering against our own subscription
+      // — so fire every listener registered for this sessionId rather than
+      // assuming which one is "ours".
+      const onOutputCalls = (window.api.session.onOutput as Mock).mock.calls as [string, (chunk: string) => void][];
+      const listenersForSession = onOutputCalls.filter(([id]) => id === 'sess-file').map(([, listener]) => listener);
+      expect(listenersForSession.length).toBeGreaterThan(0);
+      listenersForSession.forEach((listener) => listener('$ '));
+
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
+          sessionId: 'sess-file',
+          data: '@a.md — describe the new action you want to create based on this',
+        }),
+      );
+    });
+  });
+
   it('deleting the selected project calls project.delete and reverts to the workspace-level header', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
@@ -169,7 +305,7 @@ describe('WorkspaceScreen', () => {
         return path ? [] : [{ name: 'apps', kind: 'dir' }];
       }
       if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       return undefined;
     });
     renderScreen();
@@ -190,7 +326,7 @@ describe('WorkspaceScreen', () => {
         return path ? [] : [{ name: 'apps', kind: 'dir' }];
       }
       if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       if (method === 'project.delete') throw new Error('Project not found');
       return undefined;
     });
@@ -231,7 +367,7 @@ describe('WorkspaceScreen', () => {
       if (method === 'project.listDir' && (params as { projectId: string }).projectId === 'p1') {
         return [{ name: 'project-scoped-file.md', kind: 'file' }];
       }
-      if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       return undefined;
     });
     renderScreen();
@@ -255,7 +391,7 @@ describe('WorkspaceScreen', () => {
         return path ? [] : [{ name: 'apps', kind: 'dir' }];
       }
       if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       return undefined;
     });
     renderScreen();
@@ -286,7 +422,7 @@ describe('WorkspaceScreen', () => {
           return path ? [] : [{ name: 'apps', kind: 'dir' }];
         }
         if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
         return undefined;
       });
       renderScreen();
@@ -310,7 +446,7 @@ describe('WorkspaceScreen', () => {
           return path ? [] : [{ name: 'apps', kind: 'dir' }];
         }
         if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hi' };
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
         return undefined;
       });
       renderScreen();
@@ -788,7 +924,7 @@ describe('WorkspaceScreen', () => {
           return path ? [] : [{ name: 'apps', kind: 'dir' }];
         }
         if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, truncated: false, content: '# Hello' };
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: '# Hello' };
         return undefined;
       });
       renderScreen();
@@ -835,6 +971,99 @@ describe('WorkspaceScreen', () => {
       fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
       expect(screen.queryByTestId('row-context-menu-preview')).not.toBeInTheDocument();
     });
+
+    it('right-clicking a configured workspace INSTRUCTIONS row opens its content as a read-only preview tab', async () => {
+      const user = userEvent.setup();
+      const workspaceInstruction = {
+        urn: 'urn:instruction:w1', kind: 'instruction' as const, name: 'Acme',
+        description: '', scopes: ['workspace' as const], scopeId: 'w1',
+        metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+        source: { kind: 'workspace' as const }, content: '# Team instructions',
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'instruction.list') return [workspaceInstruction];
+        return undefined;
+      });
+      renderScreen();
+      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
+      await user.click(await screen.findByTestId('row-context-menu-preview'));
+
+      expect(await screen.findByTestId('workbench-tab-preview:entity:urn:instruction:w1')).toBeInTheDocument();
+      expect(screen.getByTestId('markdown-preview')).toBeInTheDocument();
+      expect(screen.queryByTestId('body-editor')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Properties via right-click', () => {
+    it('right-clicking a skill row opens (or focuses) its editing tab and shows the Properties modal', async () => {
+      const user = userEvent.setup();
+      const acmeSkill = {
+        urn: 'urn:skill:acme', kind: 'skill' as const, name: 'acme', description: '',
+        scopes: ['workspace' as const], scopeId: 'w1', metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+        source: { kind: 'workspace' as const }, content: '# Skill body',
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'skill.list') return [acmeSkill];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-skill'));
+      fireEvent.contextMenu(await screen.findByTestId('tree-skill-acme'));
+      await user.click(await screen.findByTestId('row-context-menu-properties'));
+
+      expect(await screen.findByTestId('workbench-tab-entity:urn:skill:acme')).toBeInTheDocument();
+      expect(screen.getByTestId('properties-modal')).toBeInTheDocument();
+      expect(screen.getByLabelText('Name')).toHaveValue('acme');
+    });
+
+    it('right-clicking a configured workspace INSTRUCTIONS row opens its editing tab and shows the Properties modal', async () => {
+      const user = userEvent.setup();
+      const workspaceInstruction = {
+        urn: 'urn:instruction:w1', kind: 'instruction' as const, name: 'Acme',
+        description: '', scopes: ['workspace' as const], scopeId: 'w1',
+        metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+        source: { kind: 'workspace' as const }, content: '# Team instructions',
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'instruction.list') return [workspaceInstruction];
+        return undefined;
+      });
+      renderScreen();
+      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
+      await user.click(await screen.findByTestId('row-context-menu-properties'));
+
+      expect(await screen.findByTestId('workbench-tab-entity:urn:instruction:w1')).toBeInTheDocument();
+      expect(screen.getByTestId('properties-modal')).toBeInTheDocument();
+    });
+
+    it('never offers Properties on the Personal Instruction row — every field is fixed there', async () => {
+      const personal = {
+        urn: 'urn:instruction:default', kind: 'instruction' as const, name: 'default',
+        description: '', scopes: ['personal' as const], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+        source: { kind: 'workspace' as const }, content: '# Personal',
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return globalWorkspace;
+        if (method === 'workspace.list') return [globalWorkspace];
+        if (method === 'project.list') return projects;
+        if (method === 'instruction.list') return [personal];
+        if (method === 'instruction.get') return personal;
+        return undefined;
+      });
+      renderScreen();
+      fireEvent.contextMenu(await screen.findByTestId('personal-instruction-row'));
+      expect(await screen.findByTestId('row-context-menu-preview')).toBeInTheDocument();
+      expect(screen.queryByTestId('row-context-menu-properties')).not.toBeInTheDocument();
+    });
   });
 
   describe('Files panel', () => {
@@ -862,7 +1091,7 @@ describe('WorkspaceScreen', () => {
         if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }];
         if (method === 'project.readFile') {
           const path = (params as { path: string }).path;
-          return { previewable: true, truncated: false, content: `content of ${path}` };
+          return { previewable: true, kind: 'text', truncated: false, content: `content of ${path}` };
         }
         return undefined;
       });
@@ -913,7 +1142,7 @@ describe('WorkspaceScreen', () => {
           return path ? [] : [{ name: 'apps', kind: 'dir' }];
         }
         if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hello' };
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
         return undefined;
       });
       renderScreen();
@@ -978,6 +1207,9 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('tree-group-skill'));
       await user.click(await screen.findByTestId('tree-group-new-skill'));
       await screen.findByTestId('editor-panel');
+      // A brand new entity opens straight into its Properties modal (Name is
+      // required before it can be saved) — close it to reach the body editor.
+      await user.click(screen.getByLabelText('Fechar'));
       const editor = document.querySelector('[data-testid="body-editor"] .cm-content') as HTMLElement;
       editor.focus();
       await user.type(editor, 'x', { skipClick: true });
@@ -1011,6 +1243,7 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('tree-group-skill'));
       await user.click(await screen.findByTestId('tree-group-new-skill'));
       await screen.findByTestId('editor-panel');
+      await user.click(screen.getByLabelText('Fechar'));
       const editor = document.querySelector('[data-testid="body-editor"] .cm-content') as HTMLElement;
       editor.focus();
       await user.type(editor, 'x', { skipClick: true });
@@ -1031,7 +1264,7 @@ describe('WorkspaceScreen', () => {
           return path ? [] : [{ name: 'apps', kind: 'dir' }];
         }
         if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, truncated: false, content: 'hello' };
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
         return undefined;
       });
       renderScreen();

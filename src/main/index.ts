@@ -48,6 +48,8 @@ import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plu
 import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
+import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
+import { ChokidarFileWatcher } from './infrastructure/file-watcher/chokidar-file-watcher.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
 import { SettingsMarketplaceRepository } from './infrastructure/marketplace/settings-marketplace-repository.js';
@@ -295,6 +297,7 @@ async function wireIpc(): Promise<void> {
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeSessionPort: new NodePtySessionAdapter(),
+    fileWatcherPort: new ChokidarFileWatcher(),
   };
 
   let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
@@ -315,8 +318,17 @@ async function wireIpc(): Promise<void> {
   };
   attachSessionBridges(workspaceScoped);
 
+  const attachEntityWatch = (services: WorkspaceScopedServices): void => {
+    services.entityWatchService.onEntityChanged((event) => {
+      mainWindow?.webContents.send(ENTITY_CHANGED_CHANNEL, event);
+    });
+    services.entityWatchService.start();
+  };
+  attachEntityWatch(workspaceScoped);
+
   app.on('before-quit', () => {
     workspaceScoped.sessionService.killAll();
+    void workspaceScoped.entityWatchService.stop();
   });
 
   const notificationPort = new ElectronNotificationAdapter();
@@ -361,12 +373,14 @@ async function wireIpc(): Promise<void> {
   function switchActiveWorkspace(id: string): Promise<Workspace> {
     return switchQueue(async () => {
       workspaceScoped.sessionService.killAll();
+      await workspaceScoped.entityWatchService.stop();
       const target = await workspaceService.switchTo(id);
       const targetDataDir = dataDirFor(target);
       await workspaceBootstrap.create(targetDataDir); // same self-heal as at startup
       workspaceScoped = buildWorkspaceScopedServices(targetDataDir, sharedDeps);
       fileBrowserService = new FileBrowserService(fileBrowserPort, target.rootPath);
       attachSessionBridges(workspaceScoped);
+      attachEntityWatch(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));
       return target;
     });

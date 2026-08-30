@@ -99,6 +99,14 @@ export interface InstructionSidecar {
   repoPath?: string;
 }
 
+export interface EntityChangedEvent {
+  kind: EntityKind;
+  urn: string;
+}
+
+/** Push channel main→renderer, fired when a workspace's file watcher re-syncs an entity edited outside the app's own save() flow (see `docs/reference/ipc-contract.md#push-channels-exception-to-requestresponse`). */
+export const ENTITY_CHANGED_CHANNEL = 'entity:changed' as const;
+
 export function entityUrn(kind: EntityKind, name: string): string {
   return `urn:${kind}:${name}`;
 }

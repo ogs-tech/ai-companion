@@ -40,4 +40,10 @@ describe('SkillService', () => {
     await service.save({ skill: skill(), isCreate: true });
     expect((await service.get(skillId('demo'))).urn).toBe('urn:skill:demo');
   });
+
+  it('resolvePath returns the skill\'s canonical source file path', async () => {
+    const { service } = setup();
+    await service.save({ skill: skill(), isCreate: true });
+    expect(await service.resolvePath(skillId('demo'))).toBe('/in-memory/urn:skill:demo');
+  });
 });

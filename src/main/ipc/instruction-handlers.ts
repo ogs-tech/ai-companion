@@ -1,7 +1,7 @@
 import type { IpcHandlers } from './dispatcher.js';
 import type { InstructionService } from '../application/services/instruction-service.js';
 import type { Instruction } from '../../shared/entity.js';
-import { asObject, asString } from './_validators.js';
+import { asObject, asString, optParams } from './_validators.js';
 
 export function buildInstructionHandlers(service: InstructionService): IpcHandlers {
   return {
@@ -11,6 +11,12 @@ export function buildInstructionHandlers(service: InstructionService): IpcHandle
     'instruction.get': async (params) => {
       const raw = asObject(params, 'instruction.get');
       return service.get(asString(raw['id'], 'id'));
+    },
+    'instruction.resolvePath': async (params) => {
+      const raw = optParams(params, 'instruction.resolvePath');
+      const id = typeof raw['id'] === 'string' ? raw['id'] : undefined;
+      const absolutePath = await service.resolvePath(id);
+      return { absolutePath };
     },
     'instruction.save': async (params) => {
       const raw = asObject(params, 'instruction.save');

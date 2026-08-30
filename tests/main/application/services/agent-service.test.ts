@@ -33,4 +33,10 @@ describe('AgentService', () => {
     const pluginAgent: Agent = { ...agent(), source: { kind: 'plugin', pluginId: 'p', provenance: 'workspace-managed' } };
     await expect(service.save({ agent: pluginAgent })).rejects.toMatchObject({ kind: 'validation' });
   });
+
+  it('resolvePath returns the agent\'s canonical source file path', async () => {
+    const { service } = setup();
+    await service.save({ agent: agent(), isCreate: true });
+    expect(await service.resolvePath(agentId('rev'))).toBe('/in-memory/urn:agent:rev');
+  });
 });

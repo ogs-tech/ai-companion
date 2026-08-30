@@ -175,4 +175,16 @@ describe('InstructionService', () => {
     // its way to creating it.
     expect(projects).toHaveLength(3);
   });
+
+  it('resolvePath returns the personal instruction\'s canonical source file path', async () => {
+    const { service } = setup();
+    await service.save({ instruction: personal(), isCreate: true });
+    expect(await service.resolvePath()).toBe('/in-memory/urn:instruction:default');
+  });
+
+  it('resolvePath returns a project instruction\'s canonical source file path', async () => {
+    const { service } = setup();
+    await service.save({ instruction: project('acme', 'proj-1'), isCreate: true });
+    expect(await service.resolvePath('acme')).toBe('/in-memory/urn:instruction:acme');
+  });
 });

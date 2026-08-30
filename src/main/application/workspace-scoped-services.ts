@@ -32,6 +32,8 @@ import type { HealthCollector } from './services/health/health-collector.js';
 import { WorkspaceTeardownService } from './services/workspace-teardown.js';
 import { ClaudeAdapter } from '../infrastructure/adapters/claude-adapter.js';
 import { CursorAdapter } from '../infrastructure/adapters/cursor-adapter.js';
+import { EntityWatchService } from './services/entity-watch-service.js';
+import type { FileWatcherPort } from './ports/file-watcher-port.js';
 
 export interface WorkspaceScopedSharedDeps {
   clock: ClockPort;
@@ -44,6 +46,7 @@ export interface WorkspaceScopedSharedDeps {
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
   claudeSessionPort: ClaudeSessionPort;
+  fileWatcherPort: FileWatcherPort;
 }
 
 export interface WorkspaceScopedServices {
@@ -59,6 +62,7 @@ export interface WorkspaceScopedServices {
   projectService: ProjectService;
   healthService: HealthService;
   workspaceTeardownService: WorkspaceTeardownService;
+  entityWatchService: EntityWatchService;
 }
 
 /** `dataDir` is `<workspace.rootPath>/.ai-companion` — already bootstrapped by the caller. */
@@ -69,7 +73,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    claudeSessionPort,
+    claudeSessionPort, fileWatcherPort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -126,9 +130,11 @@ export function buildWorkspaceScopedServices(
     symlinkManager,
   );
 
+  const entityWatchService = new EntityWatchService(dataDir, entityRepository, adapterManager, fileWatcherPort);
+
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
     skillService, agentService, instructionService, sessionService, projectService,
-    healthService, workspaceTeardownService,
+    healthService, workspaceTeardownService, entityWatchService,
   };
 }

@@ -8,7 +8,7 @@ const ROOT = '/repos/acme';
 function fakePort(overrides: Partial<FileBrowserPort> = {}): FileBrowserPort {
   return {
     listDir: vi.fn().mockResolvedValue([]),
-    readFile: vi.fn().mockResolvedValue({ previewable: true, content: 'x', truncated: false }),
+    readFile: vi.fn().mockResolvedValue({ previewable: true, kind: 'text', content: 'x', truncated: false }),
     writeFile: vi.fn().mockResolvedValue(undefined),
     realpath: vi.fn(async (p: string) => p),
     ...overrides,

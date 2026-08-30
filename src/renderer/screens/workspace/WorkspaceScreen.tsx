@@ -41,6 +41,7 @@ import { useActiveWorkspace, useDeleteWorkspace, useSwitchWorkspace } from '../.
 import { useDeleteProject, useFindOrCreateProjectByPath, useProjects } from '../../hooks/use-projects.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
+import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
 import {
   useInvalidateInstructions,
   usePersonalInstruction,
@@ -111,6 +112,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const invalidateInstructions = useInvalidateInstructions();
   const { data: sessions } = useSessions();
   const queryClient = useQueryClient();
+  useEntityChangeInvalidation();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -132,6 +134,11 @@ export function WorkspaceScreen(): React.ReactElement {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const newTabSeq = useRef(0);
+  // A tree row's right-click "Properties" action opens (or focuses) the
+  // entity's own tab, then asks that specific tab's EditorPanel to show its
+  // Properties modal — this id is that one-shot request, consumed (reset to
+  // null) once the matching EditorPanel instance picks it up.
+  const [propertiesRequestTabId, setPropertiesRequestTabId] = useState<string | null>(null);
 
   const filesPanelRef = usePanelRef();
   const [filesCollapsed, setFilesCollapsed] = useState(false);
@@ -339,6 +346,96 @@ export function WorkspaceScreen(): React.ReactElement {
   const previewEntity = (entity: Skill | Agent | Instruction): void =>
     openEntityPreviewTab(entity.urn, entity.name, entityBody(entity));
 
+  // Opens (or focuses) an already-saved entity's own tab, then asks that tab
+  // to show its Properties modal — the tab id it targets (`entity:${urn}`)
+  // matches exactly what `openEntityTab`/`openInstructionTab` give an
+  // existing (non-create) entity's tab.
+  const requestEntityProperties = (kind: EntityKind, entity: Skill | Agent): void => {
+    openEntityTab(kind, entity, false);
+    setPropertiesRequestTabId(`entity:${entity.urn}`);
+  };
+  const requestInstructionProperties = (entity: Instruction): void => {
+    openInstructionTab(entity, false);
+    setPropertiesRequestTabId(`entity:${entity.urn}`);
+  };
+
+  // The item's own project/workspace scope, never its `entity` urn — an
+  // `entity` anchor would reuse an already-running session for that item
+  // instead of the fresh one "New Action" always wants. `personal`-scoped
+  // entities (no project/workspace of their own) fall back to the active
+  // workspace, whose cwd is where their canonical source actually lives.
+  const anchorForEntityScope = (entity: Pick<Skill | Agent | Instruction, 'scopes' | 'scopeId'>): SessionAnchor | null => {
+    const scope = entity.scopes[0];
+    if (scope === 'project' && entity.scopeId) return { kind: 'project', projectId: entity.scopeId };
+    if (scope === 'workspace' && entity.scopeId) return { kind: 'workspace', workspaceId: entity.scopeId };
+    return activeWorkspace ? { kind: 'workspace', workspaceId: activeWorkspace.id } : null;
+  };
+
+  // Right-click → "New Action": always a brand-new session whose first
+  // message is a draft `@<path>` reference the user reviews and edits before
+  // sending — never auto-submitted. Written immediately if the spawn
+  // response already carries startup output (`outputBuffer`), otherwise
+  // deferred to the session's first live output chunk, so the draft never
+  // races the `claude` REPL's own readiness.
+  const startNewActionSession = (anchor: SessionAnchor, path: string): void => {
+    void (async () => {
+      try {
+        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor });
+        openSessionTab(session);
+        void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+        const draft = `@${path} — describe the new action you want to create based on this`;
+        const write = (): void => void callIpc('session.write', { sessionId: session.sessionId, data: draft });
+        if (session.outputBuffer) {
+          write();
+        } else {
+          const unsubscribe = window.api.session.onOutput(session.sessionId, () => {
+            unsubscribe();
+            write();
+          });
+        }
+      } catch (err) {
+        setToast({ variant: 'error', message: errorMessage(err) });
+      }
+    })();
+  };
+
+  const newActionFromResolvedPath = (anchor: SessionAnchor | null, resolvePath: () => Promise<string>): void => {
+    if (!anchor) return;
+    void (async () => {
+      try {
+        startNewActionSession(anchor, await resolvePath());
+      } catch (err) {
+        setToast({ variant: 'error', message: errorMessage(err) });
+      }
+    })();
+  };
+
+  // Files/folders already sit inside the target project's own tree, so their
+  // relPath already matches a project-anchored session's cwd — no path
+  // resolution IPC round trip needed, unlike entities (see below).
+  const newActionForFile = (relPath: string, projectId?: string): void => {
+    const anchor: SessionAnchor | null = projectId
+      ? { kind: 'project', projectId }
+      : activeWorkspace
+        ? { kind: 'workspace', workspaceId: activeWorkspace.id }
+        : null;
+    if (!anchor) return;
+    startNewActionSession(anchor, relPath);
+  };
+
+  const newActionForEntity = (kind: EntityKind, entity: Skill | Agent): void =>
+    newActionFromResolvedPath(anchorForEntityScope(entity), async () => {
+      const { absolutePath } = await callIpc<{ absolutePath: string }>(`${kind}.resolvePath`, { id: entity.name });
+      return absolutePath;
+    });
+
+  const newActionForInstruction = (entity: Instruction): void =>
+    newActionFromResolvedPath(anchorForEntityScope(entity), async () => {
+      const params = isPersonalInstruction(entity) ? {} : { id: entity.name };
+      const { absolutePath } = await callIpc<{ absolutePath: string }>('instruction.resolvePath', params);
+      return absolutePath;
+    });
+
   // Pinned at the top of the Explorer Panel's FolderTree (not the Control
   // Panel) — always the active workspace's own INSTRUCTIONS row, regardless
   // of which Project (if any) the Control Panel is currently scoped to. It
@@ -356,6 +453,8 @@ export function WorkspaceScreen(): React.ReactElement {
         openInstructionEditor(entity, isCreate);
       }}
       onPreview={previewEntity}
+      onProperties={requestInstructionProperties}
+      onNewAction={newActionForInstruction}
     />
   );
 
@@ -399,8 +498,8 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const customizationRows = (
     <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} onEdit={openEntityTab} onPreview={previewEntity} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} onEdit={openEntityTab} onPreview={previewEntity} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
+      <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
+      <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
       <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
       <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
       <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
@@ -409,8 +508,8 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const defaultWorkspaceCustomizationRows = (
     <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={openEntityTab} onPreview={previewEntity} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={openEntityTab} onPreview={previewEntity} />
+      <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} />
+      <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} />
       <HooksTreeGroup showGlobal={false} />
       <McpTreeGroup showGlobal={false} />
       <PluginsTreeGroup showGlobal={false} />
@@ -618,6 +717,8 @@ export function WorkspaceScreen(): React.ReactElement {
             }
           }}
           onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
+          openPropertiesRequest={tab.id === propertiesRequestTabId}
+          onPropertiesRequestHandled={() => setPropertiesRequestTabId(null)}
         />
       ),
     };
@@ -677,6 +778,7 @@ export function WorkspaceScreen(): React.ReactElement {
                 seed={() => blankCustomization('instruction') as Instruction}
                 onOpen={openInstructionEditor}
                 onPreview={previewEntity}
+                onNewAction={newActionForInstruction}
               />
             }
           />
@@ -685,6 +787,7 @@ export function WorkspaceScreen(): React.ReactElement {
             onSelectFile={openFileTab}
             onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
             onPreviewFile={openFilePreviewTab}
+            onNewAction={newActionForFile}
             projects={projects}
             instructionRow={instructionRow}
             renderProjectInstructionRow={(project, depth) => (
@@ -698,6 +801,14 @@ export function WorkspaceScreen(): React.ReactElement {
                   // of its files does (see `syncProjectFromTab`).
                   setSelectedProjectId(project.id);
                   openInstructionEditor(entity, isCreate);
+                }}
+                onProperties={(entity) => {
+                  setSelectedProjectId(project.id);
+                  requestInstructionProperties(entity);
+                }}
+                onNewAction={(entity) => {
+                  setSelectedProjectId(project.id);
+                  newActionForInstruction(entity);
                 }}
                 testId={`tree-node-instructions-${project.name}`}
                 depth={depth}

@@ -42,6 +42,8 @@ Defined in [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts).
 
 Every method above is request/response over `ipc:call`. One exception: `session:output` and `session:exit` (defined in [`src/shared/session.ts`](../../src/shared/session.ts)) stream live PTY output and report a session's exit code while a `claude` process spawned via `session.spawn` is running — that streaming can't fit the request/response `ipc:call` envelope. **Multiple sessions can be live at once** — one per `entity`/`workspace`/`project` anchor for `entity`, but any number for `workspace`/`project` (see [`session`](#session) below) — so preload itself filters by `sessionId` before invoking the renderer's listener — there's no single "the" session to assume, and `sessionId` is only the anchor's own key (`entity:<urn>`) for `entity`; for `workspace`/`project` it's an opaque `crypto.randomUUID()` with no relationship to any `urn`. Preload exposes these as `window.api.session.onOutput(sessionId, listener) → unsubscribe` and `window.api.session.onExit(sessionId, listener) → unsubscribe`, each listener receiving only the payload (`chunk` / `exitCode`) for that session. A third accessor, `window.api.session.onAnyExit(listener) → unsubscribe`, skips the `sessionId` filter entirely — it exists for `useSessions()`, which needs to notice a session exiting in the background without already knowing every live `sessionId` up front.
 
+A second exception: `entity:changed` (defined in [`src/shared/entity.ts`](../../src/shared/entity.ts)), fired whenever `EntityWatchService` (`src/main/application/services/entity-watch-service.ts`) re-syncs a Skill/Agent/Instruction edited outside the app's own `save()` — e.g. by a `claude` session writing to the entity's canonical source file directly. Payload is `{ kind: EntityKind; urn: string }`. Preload exposes it unfiltered as `window.api.entity.onChanged(listener) → unsubscribe` (the renderer doesn't know ahead of time which urn an external edit touched), used to invalidate that kind's list query so the tree picks up the change.
+
 ## Preload bridge
 
 `src/preload/index.ts` exposes a single function on `window.api`:
@@ -117,7 +119,7 @@ Git helpers (branch/repo detection) — not currently called from the renderer. 
 | `workspace.writeFile` | `{ path: string; content: string }` | `void` |
 | `workspace.resolvePath` | `{ path: string }` | `{ absolutePath: string }` |
 
-`workspace.list` returns every registered workspace. `workspace.getActive` returns the currently active workspace. `workspace.create` registers a new workspace and bootstraps its `.ai-companion` data dir (does not switch to it). `workspace.switchTo` kills the outgoing workspace's live sessions and rebuilds the Entity-backed service graph against the target workspace. `workspace.delete` rejects (`validation`) if `id` is the active workspace. `workspace.listDir` lists a directory relative to the active workspace's root (`path` defaults to `''`, the root itself) and rejects paths escaping the root. `workspace.readFile` reads a file for preview, returning `{previewable:false, reason}` for binary/oversized files instead of throwing. `workspace.writeFile` overwrites an existing file in place with the same containment guard as `readFile`; it rejects (`not_found`) if the file doesn't already exist, (`validation`) if the target isn't a regular file or `content` exceeds the same 5MB cap `readFile` enforces on the read side — it never creates a new file or its parent directories. `workspace.resolvePath` resolves a workspace-relative path to an absolute one (used by "Use as Project"), applying the same containment guard as the other two methods.
+`workspace.list` returns every registered workspace. `workspace.getActive` returns the currently active workspace. `workspace.create` registers a new workspace and bootstraps its `.ai-companion` data dir (does not switch to it). `workspace.switchTo` kills the outgoing workspace's live sessions and rebuilds the Entity-backed service graph against the target workspace. `workspace.delete` rejects (`validation`) if `id` is the active workspace. `workspace.listDir` lists a directory relative to the active workspace's root (`path` defaults to `''`, the root itself) and rejects paths escaping the root. `workspace.readFile` reads a file for preview, returning `{previewable:false, reason}` for binary/oversized files instead of throwing. A previewable result also carries a `kind`: `'text'` (`{content, truncated}`, content capped at 256KB) or `'spreadsheet'` for a `.xlsx` file (`{sheets: SpreadsheetSheet[], truncated}`, parsed with `exceljs`; formula cells show their last-cached result, not the formula; each sheet capped at 2000 rows) — spreadsheets are view-only, `workspace.writeFile` only ever writes `kind: 'text'` content back. A `SpreadsheetSheet` (`src/shared/file-browser.ts`) is `{name, rows: SpreadsheetCell[][], merges: SpreadsheetMerge[], columnWidths: (number|undefined)[], frozenRows, frozenCols}`: each `SpreadsheetCell` is a plain `string` for an unstyled cell, or `{value, style}` when the source file styled that cell (`style: {bold?, italic?, color?, backgroundColor?, align?}`, read from the cell's own font/fill/alignment — no workbook theme-color resolution); `merges` are 0-indexed `{row, col, rowSpan, colSpan}` ranges anchored at each merge's top-left cell; `columnWidths` mirrors the workbook's own column widths (`undefined` where the file left a column auto-width); `frozenRows`/`frozenCols` come from the sheet's frozen-pane view, 0 when it has none. Numbers render through their own cell number format (currency, percentage, thousands grouping); dates stay `YYYY-MM-DD` regardless of the source format — full Excel date-token formatting isn't implemented. `workspace.writeFile` overwrites an existing file in place with the same containment guard as `readFile`; it rejects (`not_found`) if the file doesn't already exist, (`validation`) if the target isn't a regular file or `content` exceeds the same 5MB cap `readFile` enforces on the read side — it never creates a new file or its parent directories. `workspace.resolvePath` resolves a workspace-relative path to an absolute one (used by "Use as Project"), applying the same containment guard as the other two methods.
 
 ### `project`
 
@@ -149,6 +151,7 @@ Git helpers (branch/repo detection) — not currently called from the renderer. 
 |---|---|---|
 | `skill.list` | `{ scope?: 'personal' \| 'project' }` | `Skill[]` (workspace + plugin-provided, with `source` field) |
 | `skill.get` | `{ id: string }` | `Skill` |
+| `skill.resolvePath` | `{ id: string }` | `{ absolutePath: string }` |
 | `skill.save` | `{ skill: Skill; isCreate?: boolean }` | `{ skill: Skill; syncReport: SyncResult[] }` |
 | `skill.delete` | `{ id: string; removeSymlinks: boolean }` | `{ ok: true }` |
 
@@ -156,12 +159,15 @@ Git helpers (branch/repo detection) — not currently called from the renderer. 
 
 Saving or deleting a plugin-provided skill (`source.kind === 'plugin'`) raises `OperationNotAllowedForOriginError` (`kind: 'internal'` unless mapped). Validated by `EntityValidator` against `skillEntitySchema` in [`src/main/application/schemas/entity-schema.ts`](../../src/main/application/schemas/entity-schema.ts).
 
+`skill.resolvePath`/`agent.resolvePath`/`instruction.resolvePath` return the absolute path of the entity's own canonical source file on disk (rejects `not_found` for a missing id) — used by the tree row's "New Action" context-menu entry to seed a new session's first message with an `@`-reference to the item.
+
 ### `agent`
 
 | Method | Params | Result |
 |---|---|---|
 | `agent.list` | `{ scope?: 'personal' \| 'project' }` | `Agent[]` (workspace + plugin-provided) |
 | `agent.get` | `{ id: string }` | `Agent` |
+| `agent.resolvePath` | `{ id: string }` | `{ absolutePath: string }` |
 | `agent.save` | `{ agent: Agent; isCreate?: boolean }` | `{ agent: Agent; syncReport: SyncResult[] }` |
 | `agent.delete` | `{ id: string; removeSymlinks: boolean }` | `{ ok: true }` |
 
@@ -173,6 +179,7 @@ Saving or deleting a plugin-provided skill (`source.kind === 'plugin'`) raises `
 |---|---|---|
 | `instruction.list` | `{}` | `Instruction[]` (personal singleton first when present, then every project/workspace instruction) |
 | `instruction.get` | `{ id: string }` (`'default'` for personal; slug otherwise) | `Instruction` |
+| `instruction.resolvePath` | `{ id?: string }` (omitted/`'default'` for personal; slug otherwise) | `{ absolutePath: string }` |
 | `instruction.save` | `{ instruction: Instruction; isCreate?: boolean }` | `{ instruction: Instruction; syncReport: SyncResult[] }` |
 | `instruction.delete` | `{ name: string; removeSymlinks?: boolean }` | `{ ok: true; syncReport?: SyncResult[] }` |
 

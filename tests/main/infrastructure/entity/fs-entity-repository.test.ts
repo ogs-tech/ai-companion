@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FsEntityRepository } from '../../../../src/main/infrastructure/entity/fs-entity-repository.js';
-import { WORKSPACE_SOURCE, type Skill, type Instruction } from '../../../../src/shared/entity.js';
+import { WORKSPACE_SOURCE, type Skill, type Agent, type Instruction } from '../../../../src/shared/entity.js';
 
 const meta = { version: '0.1.0', createdAt: '2026-04-26T10:00:00.000Z', updatedAt: '2026-04-26T10:00:00.000Z' };
 
@@ -81,6 +81,26 @@ describe('FsEntityRepository — list & delete', () => {
   it('rejects delete of a missing skill with not_found', async () => {
     const repo = new FsEntityRepository(ws);
     await expect(repo.delete('urn:skill:missing')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('list skips a skill with malformed frontmatter instead of throwing for the whole kind', async () => {
+    const repo = new FsEntityRepository(ws);
+    await repo.save({ urn: 'urn:skill:good', kind: 'skill', name: 'good', description: 'd',
+      scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' } as Skill);
+    await mkdir(join(ws, 'skills', 'broken'), { recursive: true });
+    await writeFile(join(ws, 'skills', 'broken', 'SKILL.md'), '---\nnot: [valid, yaml\n---\nbody\n', 'utf8');
+    const list = await repo.list({ kind: 'skill' });
+    expect(list.map((e) => e.name)).toEqual(['good']);
+  });
+
+  it('list skips an agent with malformed frontmatter instead of throwing for the whole kind', async () => {
+    const repo = new FsEntityRepository(ws);
+    await repo.save({ urn: 'urn:agent:good', kind: 'agent', name: 'good', description: 'd',
+      scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' } as Agent);
+    await mkdir(join(ws, 'agents'), { recursive: true });
+    await writeFile(join(ws, 'agents', 'broken.md'), '---\nnot: [valid, yaml\n---\nbody\n', 'utf8');
+    const list = await repo.list({ kind: 'agent' });
+    expect(list.map((e) => e.name)).toEqual(['good']);
   });
 });
 
@@ -207,5 +227,42 @@ describe('FsEntityRepository — project instruction storage', () => {
     await repo.save(projectInstruction('acme', '/repos/acme'));
     expect(await repo.exists('urn:instruction:acme')).toBe(true);
     expect(await repo.exists('urn:instruction:ghost')).toBe(false);
+  });
+});
+
+describe('FsEntityRepository — filePath', () => {
+  it('resolves a skill urn to its SKILL.md path', async () => {
+    const repo = new FsEntityRepository(ws);
+    await repo.save({ urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
+      scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: '# Demo\n' } as Skill);
+    expect(await repo.filePath('urn:skill:demo')).toBe(join(ws, 'skills', 'demo', 'SKILL.md'));
+  });
+
+  it('resolves the personal instruction urn to instructions/default.md', async () => {
+    const repo = new FsEntityRepository(ws);
+    await repo.save({ urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
+      scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: '# Hi\n' } as Instruction);
+    expect(await repo.filePath('urn:instruction:default')).toBe(join(ws, 'instructions', 'default.md'));
+  });
+
+  it('resolves a legacy-only personal instruction to global-instructions/default.md', async () => {
+    await mkdir(join(ws, 'global-instructions'), { recursive: true });
+    await writeFile(join(ws, 'global-instructions', 'default.md'), '# Legacy body\n', 'utf8');
+    const repo = new FsEntityRepository(ws);
+    expect(await repo.filePath('urn:instruction:default')).toBe(join(ws, 'global-instructions', 'default.md'));
+  });
+
+  it('resolves a project instruction urn to its INSTRUCTION.md path', async () => {
+    const repo = new FsEntityRepository(ws);
+    await repo.save({
+      urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme', description: 'acme rules',
+      scopes: ['project'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: '# Acme\n',
+    } as Instruction);
+    expect(await repo.filePath('urn:instruction:acme')).toBe(join(ws, 'instructions', 'project', 'acme', 'INSTRUCTION.md'));
+  });
+
+  it('rejects with not_found for a urn that does not exist', async () => {
+    const repo = new FsEntityRepository(ws);
+    await expect(repo.filePath('urn:skill:missing')).rejects.toMatchObject({ kind: 'not_found' });
   });
 });

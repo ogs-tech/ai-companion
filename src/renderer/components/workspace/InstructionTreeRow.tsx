@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Box, ListItemButton, ListItemText, Stack, Tooltip } from '@mui/material';
-import { Globe, NotebookPen, Trash2 } from 'lucide-react';
+import { Eye, Globe, NotebookPen, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { useInvalidateInstructions, useProjectInstruction } from '../../hooks/use-instructions.js';
 import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
@@ -36,6 +36,10 @@ interface InstructionTreeRowProps {
   onOpen: (entity: Instruction, isCreate: boolean) => void;
   /** Right-click → "Preview". Omitted entirely (no context menu) while `instruction` is null/undefined — nothing saved yet to preview. */
   onPreview?: (entity: Instruction) => void;
+  /** Right-click → "Properties". Also gated on `instruction` being configured, and never offered for `kind="personal"` — every Properties field is hidden there (name/scope/description/version are all fixed), so there's nothing to edit. */
+  onProperties?: (entity: Instruction) => void;
+  /** Right-click → "New Action" — opens a brand-new session with a draft first message referencing this instruction. Gated on `instruction` being configured (nothing to reference otherwise), but — unlike Properties — offered for `kind="personal"` too, since starting a session from it is meaningful even though there's nothing to edit. */
+  onNewAction?: (entity: Instruction) => void;
   /** Overrides the default `data-testid` (`${kind}-instruction-row`) — needed when several `kind="project"` rows for different projects can be mounted at once (one per expanded folder), so each needs its own unique id. */
   testId?: string;
   /** Tree nesting level, matching `FolderTree`'s `TreeNode` indent formula (`pl: 1.5 + depth * 2`) — lets a row pinned inside a folder node (e.g. a Project's own INSTRUCTIONS) line up with its sibling files/folders instead of sitting flush with its parent. Defaults to `0` (top-level, unindented). */
@@ -49,13 +53,23 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, testId, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const deleteTestId = testId ? `${testId}-delete` : `${kind}-instruction-delete`;
   const invalidate = useInvalidateInstructions();
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const previewMenu = useRowContextMenu<Instruction>();
+  const rowMenu = useRowContextMenu<Instruction>();
+  const rowMenuTarget = rowMenu.state?.target;
+  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
+    ? [
+        { key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreview?.(rowMenuTarget) },
+        ...(kind !== 'personal'
+          ? [{ key: 'properties', label: 'Properties', glyph: Settings2, onSelect: () => onProperties?.(rowMenuTarget) }]
+          : []),
+        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget) },
+      ]
+    : [];
   const configured = instruction != null;
   const canDelete = configured && copy.removeLabel !== undefined;
 
@@ -80,7 +94,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         onClick={() => onOpen(instruction ?? seed(), !instruction)}
         onContextMenu={(e) => {
           if (!instruction) return;
-          previewMenu.openMenu(e, instruction);
+          rowMenu.openMenu(e, instruction);
         }}
         sx={{
           pl: 1.5 + depth * 2,
@@ -126,13 +140,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
           </Box>
         )}
       </ListItemButton>
-      <RowContextMenu
-        state={previewMenu.state}
-        onClose={previewMenu.closeMenu}
-        onPreview={() => {
-          if (previewMenu.state) onPreview?.(previewMenu.state.target);
-        }}
-      />
+      <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
   );
@@ -143,6 +151,10 @@ interface ProjectInstructionRowProps {
   onOpen: (entity: Instruction, isCreate: boolean) => void;
   /** See `InstructionTreeRowProps.onPreview`. */
   onPreview?: (entity: Instruction) => void;
+  /** See `InstructionTreeRowProps.onProperties`. */
+  onProperties?: (entity: Instruction) => void;
+  /** See `InstructionTreeRowProps.onNewAction`. */
+  onNewAction?: (entity: Instruction) => void;
   /** See `InstructionTreeRowProps.testId` — pass a per-project id whenever more than one of these can be mounted at once (e.g. several Project folders expanded in the same tree). */
   testId?: string;
   /** See `InstructionTreeRowProps.depth`. */
@@ -155,7 +167,7 @@ interface ProjectInstructionRowProps {
  * shared `instruction.list` cache (see `useScopedInstruction`), so having
  * several on screen at once costs no extra fetches.
  */
-export function ProjectInstructionRow({ project, onOpen, onPreview, testId, depth }: ProjectInstructionRowProps): React.ReactElement {
+export function ProjectInstructionRow({ project, onOpen, onPreview, onProperties, onNewAction, testId, depth }: ProjectInstructionRowProps): React.ReactElement {
   const { data: projectInstruction } = useProjectInstruction(project.id);
   return (
     <InstructionTreeRow
@@ -164,6 +176,8 @@ export function ProjectInstructionRow({ project, onOpen, onPreview, testId, dept
       seed={() => seedProjectInstruction(project)}
       onOpen={onOpen}
       {...(onPreview ? { onPreview } : {})}
+      {...(onProperties ? { onProperties } : {})}
+      {...(onNewAction ? { onNewAction } : {})}
       {...(testId ? { testId } : {})}
       {...(depth !== undefined ? { depth } : {})}
     />

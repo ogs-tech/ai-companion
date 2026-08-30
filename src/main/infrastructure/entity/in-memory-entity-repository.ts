@@ -34,4 +34,11 @@ export class InMemoryEntityRepository implements EntityRepository {
   exists(urn: string): Promise<boolean> {
     return Promise.resolve(this.store.has(urn));
   }
+
+  filePath(urn: string): Promise<string> {
+    if (!this.store.has(urn)) {
+      return Promise.reject(new DomainError('not_found', `Entity not found: ${urn}`));
+    }
+    return Promise.resolve(`/in-memory/${urn}`);
+  }
 }

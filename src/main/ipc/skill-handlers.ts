@@ -18,6 +18,12 @@ export function buildSkillHandlers(service: SkillService): IpcHandlers {
       return service.get(skillId(asString(raw['id'], 'id')));
     },
 
+    'skill.resolvePath': async (params) => {
+      const raw = asObject(params, 'skill.resolvePath');
+      const absolutePath = await service.resolvePath(skillId(asString(raw['id'], 'id')));
+      return { absolutePath };
+    },
+
     'skill.save': async (params) => {
       const raw = asObject(params, 'skill.save');
       const skill = asObject(raw['skill'], 'skill') as unknown as Skill;

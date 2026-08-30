@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Box, Stack, Tooltip } from '@mui/material';
-import { Trash2 } from 'lucide-react';
+import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { StatusPill } from '../ds/StatusPill.js';
 import { PluginOriginBadge } from '../PluginOriginBadge.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
-import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { useCustomizationList, useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
@@ -30,6 +30,10 @@ interface EntityTreeGroupProps {
   onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
   /** Right-click on a row → "Preview" — opens a read-only rendered-Markdown tab instead of the editing tab `onEdit` opens. */
   onPreview?: (entity: Skill | Agent) => void;
+  /** Right-click on a row → "Properties" — opens (or focuses) the entity's editing tab and requests its Properties modal. */
+  onProperties?: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
+  /** Right-click on a row → "New Action" — opens a brand-new session with a draft first message referencing this entity. */
+  onNewAction?: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
 }
 
 function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
@@ -37,13 +41,21 @@ function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
   return entity.scopes[0] === localScope.scope && entity.scopeId === localScope.scopeId;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, onPreview }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const previewMenu = useRowContextMenu<Skill | Agent>();
+  const rowMenu = useRowContextMenu<Skill | Agent>();
+  const rowMenuTarget = rowMenu.state?.target;
+  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
+    ? [
+        { key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreview?.(rowMenuTarget) },
+        { key: 'properties', label: 'Properties', glyph: Settings2, onSelect: () => onProperties?.(kind, rowMenuTarget) },
+        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(kind, rowMenuTarget) },
+      ]
+    : [];
 
   const localItems = items.filter((item) => isLocal(item, localScope));
   const globalItems = localScope && showGlobal ? items.filter((item) => !isLocal(item, localScope)) : [];
@@ -89,7 +101,7 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
               muted={global}
               accentColor={ENTITY_ACCENT_COLOR[kind]}
               onClick={() => onEdit(kind, item as Skill | Agent, false)}
-              onContextMenu={(e) => previewMenu.openMenu(e, item as Skill | Agent)}
+              onContextMenu={(e) => rowMenu.openMenu(e, item as Skill | Agent)}
               badge={
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                   <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
@@ -134,13 +146,7 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
           );
         })}
       </TreeGroup>
-      <RowContextMenu
-        state={previewMenu.state}
-        onClose={previewMenu.closeMenu}
-        onPreview={() => {
-          if (previewMenu.state) onPreview?.(previewMenu.state.target);
-        }}
-      />
+      <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
   );

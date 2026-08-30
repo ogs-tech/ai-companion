@@ -41,7 +41,7 @@ export function useWriteFile() {
     },
     onSuccess: (_data, { path, content, projectId }) => {
       const key = projectId ? (['project', 'readFile', projectId, path] as const) : (['workspace', 'readFile', path] as const);
-      queryClient.setQueryData<FilePreview>(key, { previewable: true, content, truncated: false });
+      queryClient.setQueryData<FilePreview>(key, { previewable: true, kind: 'text', content, truncated: false });
     },
   });
 }

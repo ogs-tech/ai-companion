@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
-import { Eye } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
 interface RowContextMenuState<T> {
@@ -33,14 +33,22 @@ export function useRowContextMenu<T>(): {
   };
 }
 
+export interface RowContextMenuAction {
+  key: string;
+  label: string;
+  glyph: LucideIcon;
+  onSelect: () => void;
+}
+
 interface RowContextMenuProps {
   state: { mouseX: number; mouseY: number } | null;
   onClose: () => void;
-  onPreview: () => void;
+  /** One entry per action a row offers — e.g. Preview, Properties. Empty/omitted rows simply don't call `openMenu` in the first place. */
+  actions: readonly RowContextMenuAction[];
 }
 
-/** The menu itself — a single "Preview" action for now, opened at the cursor position from a tree row's right-click. */
-export function RowContextMenu({ state, onClose, onPreview }: RowContextMenuProps): React.ReactElement {
+/** The menu itself, opened at the cursor position from a tree row's right-click. */
+export function RowContextMenu({ state, onClose, actions }: RowContextMenuProps): React.ReactElement {
   return (
     <Menu
       open={state !== null}
@@ -48,16 +56,19 @@ export function RowContextMenu({ state, onClose, onPreview }: RowContextMenuProp
       anchorReference="anchorPosition"
       anchorPosition={state ? { top: state.mouseY, left: state.mouseX } : undefined}
     >
-      <MenuItem
-        data-testid="row-context-menu-preview"
-        onClick={() => {
-          onClose();
-          onPreview();
-        }}
-      >
-        <ListItemIcon><Icon glyph={Eye} size={16} /></ListItemIcon>
-        <ListItemText>Preview</ListItemText>
-      </MenuItem>
+      {actions.map((action) => (
+        <MenuItem
+          key={action.key}
+          data-testid={`row-context-menu-${action.key}`}
+          onClick={() => {
+            onClose();
+            action.onSelect();
+          }}
+        >
+          <ListItemIcon><Icon glyph={action.glyph} size={16} /></ListItemIcon>
+          <ListItemText>{action.label}</ListItemText>
+        </MenuItem>
+      ))}
     </Menu>
   );
 }

@@ -38,6 +38,10 @@ export class SkillService {
     return (await this.base.get(entityUrn('skill', id))) as Skill;
   }
 
+  resolvePath(id: SkillId): Promise<string> {
+    return this.base.filePath(entityUrn('skill', id));
+  }
+
   async save(input: { skill: Skill; isCreate?: boolean; scope?: Scope }): Promise<SaveSkillResult> {
     if (input.skill.source.kind === 'plugin') {
       throw new OperationNotAllowedForOriginError(

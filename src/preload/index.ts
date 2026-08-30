@@ -6,6 +6,7 @@ import {
   type SessionOutputEvent,
   type SessionExitEvent,
 } from '../shared/session.js';
+import { ENTITY_CHANGED_CHANNEL, type EntityChangedEvent } from '../shared/entity.js';
 
 const api = {
   call: <T>(method: string, params: unknown): Promise<IpcResult<T>> =>
@@ -31,6 +32,14 @@ const api = {
       const wrapped = (_event: IpcRendererEvent, payload: SessionExitEvent): void => listener(payload.sessionId, payload.exitCode);
       ipcRenderer.on(SESSION_EXIT_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_EXIT_CHANNEL, wrapped);
+    },
+  },
+  entity: {
+    /** Unfiltered — the renderer doesn't know ahead of time which urn a watcher-detected external edit touched. */
+    onChanged: (listener: (event: EntityChangedEvent) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: EntityChangedEvent): void => listener(payload);
+      ipcRenderer.on(ENTITY_CHANGED_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(ENTITY_CHANGED_CHANNEL, wrapped);
     },
   },
 };

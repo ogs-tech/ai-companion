@@ -95,3 +95,16 @@ describe('EntityService.get / list', () => {
     expect(listed.map((e) => e.urn)).toContain('urn:skill:demo');
   });
 });
+
+describe('EntityService.filePath', () => {
+  it('delegates to the repository', async () => {
+    const { service } = setup();
+    await service.save({ entity: skill(), isCreate: true });
+    expect(await service.filePath('urn:skill:demo')).toBe('/in-memory/urn:skill:demo');
+  });
+
+  it('rejects not_found for a urn that does not exist', async () => {
+    const { service } = setup();
+    await expect(service.filePath('urn:skill:missing')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});

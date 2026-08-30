@@ -23,7 +23,12 @@ import { SimpleGitClient } from '../../../src/main/infrastructure/git/simple-git
 import { OctokitClient } from '../../../src/main/infrastructure/github/octokit-client.js';
 import { FakeCredentialStorePort } from '../../../src/main/application/services/__fixtures__/fake-credential-store-port.js';
 import type { WorkspaceScopedSharedDeps } from '../../../src/main/application/workspace-scoped-services.js';
+import type { FileWatcherPort } from '../../../src/main/application/ports/file-watcher-port.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../src/shared/entity.js';
+
+const noopFileWatcherPort: FileWatcherPort = {
+  watch: () => ({ close: async () => undefined }),
+};
 
 let dirA: string;
 let dirB: string;
@@ -93,6 +98,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeSessionPort: new FakeClaudeSessionPort(),
+    fileWatcherPort: noopFileWatcherPort,
   };
 }
 

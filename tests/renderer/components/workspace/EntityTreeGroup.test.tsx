@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EntityTreeGroup } from '../../../../src/renderer/components/workspace/EntityTreeGroup.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -136,5 +136,17 @@ describe('EntityTreeGroup', () => {
     expect(screen.queryByTestId('tree-skill-delete-plugin-skill')).not.toBeInTheDocument();
     await user.click(screen.getByTestId('tree-skill-plugin-skill'));
     expect(onEdit).toHaveBeenCalledWith('skill', expect.objectContaining({ name: 'plugin-skill' }), false);
+  });
+
+  it('right-click → "New Action" passes the row\'s kind and entity through', async () => {
+    const user = userEvent.setup();
+    const onNewAction = vi.fn();
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} onNewAction={onNewAction} />);
+    await user.click(await screen.findByTestId('tree-group-skill'));
+    const row = await screen.findByTestId('tree-skill-personal-skill');
+    fireEvent.contextMenu(row);
+    const item = await screen.findByTestId('row-context-menu-new-action');
+    fireEvent.click(item);
+    expect(onNewAction).toHaveBeenCalledWith('skill', expect.objectContaining({ name: 'personal-skill' }));
   });
 });

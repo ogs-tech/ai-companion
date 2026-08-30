@@ -16,8 +16,11 @@ export function mockApi(): CallSpy {
     onExit: vi.fn(() => () => {}),
     onAnyExit: vi.fn(() => () => {}),
   };
+  const entity = {
+    onChanged: vi.fn(() => () => {}),
+  };
   Object.defineProperty(window, 'api', {
-    value: { call, session },
+    value: { call, session, entity },
     writable: true,
     configurable: true,
   });

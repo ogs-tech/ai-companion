@@ -90,6 +90,10 @@ The adapter implementations live under `src/main/infrastructure/adapters/`:
 
 Both implement the `Adapter` port at `src/main/application/ports/adapter.ts`. `AdapterDestination` is a discriminated union on `strategy`: `{ scope, destination, strategy: 'symlink' }` for symlink targets, or `{ scope, destination, strategy: 'write', content }` for generated files. `AdapterManager` branches on `strategy` when syncing: `symlink` destinations go through `SymlinkManager`; `write` destinations go through `FileMaterializer` (see above).
 
+### Entity file watcher
+
+`EntityWatchService` (`src/main/application/services/entity-watch-service.ts`) keeps adapter destinations in sync when a canonical entity source file is edited **outside** the app's own `save()` flow — e.g. a `claude` session (opened via a tree row's "New Action" context-menu entry) writing to a Skill/Agent/Instruction's file directly. It watches the active workspace's whole `dataDir` recursively through the `FileWatcherPort` (`src/main/application/ports/file-watcher-port.ts`), implemented by `ChokidarFileWatcher` (`src/main/infrastructure/file-watcher/chokidar-file-watcher.ts`, backed by `chokidar` — glob-free in v4, so the port watches root paths and reports every change under them). Every reported path is filtered through the pure `mapFilePathToEntity` (`src/main/application/entity/entity-watch-path.ts`), the reverse of `FsEntityRepository`'s on-disk conventions; a match re-reads the entity (tolerating a malformed/mid-write file by skipping it, same as `FsEntityRepository.list`'s per-item tolerance) and calls `AdapterManager.syncEntity` directly — deliberately **not** the full `EntityService.save()`, since an externally-detected change has no rename to detect and no `updatedAt` worth stamping. A successful re-sync fires `entity:changed` (`src/shared/entity.ts`) over the same main→renderer push-channel mechanism as `session:output`/`session:exit` (see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse)); the renderer's `useEntityChangeInvalidation` hook invalidates that kind's list query so the tree picks up the change. Like every other workspace-scoped service, one `EntityWatchService` instance is built per `buildWorkspaceScopedServices(dataDir, …)` call and is stopped before the outgoing workspace's instance is discarded on `workspace.switchTo`.
+
 ## Session bounded context
 
 `src/main/application/ports/claude-session-port.ts` (`ClaudeSessionPort`) + `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts` (`NodePtySessionAdapter`, backed by `node-pty` — the first native module in this codebase) spawn a real interactive `claude` CLI process per session inside a PTY, so the CLI's TUI renders correctly. `SessionService` (`src/main/application/services/session-service.ts`) owns the one-live-session-per-entity invariant, keyed by the entity's own `urn` (no separate generated session id), and resolves each session's working directory from the entity itself: a `ProjectInstruction` uses its own `repoPath`; every other entity kind (`Skill`, `Agent`, `PersonalInstruction`) uses the app's workspace root. `Session` is **not** a fourth `Entity` kind — it's ephemeral process state and never goes through `EntityRepository`; `SessionService` only reads entities (via `EntityService.get`) to resolve cwd.
@@ -165,13 +169,24 @@ for a future plan to address.
 
 ### Workspace file browser and session anchoring
 
-`FileBrowserPort` (`listDir`/`readFile`/`realpath`, implemented by `NodeFileBrowserAdapter` via
+`FileBrowserPort` (`listDir`/`readFile`/`writeFile`/`realpath`, implemented by `NodeFileBrowserAdapter` via
 `node:fs/promises`) is wrapped by `FileBrowserService`, which resolves a caller-supplied path relative to
 the active workspace's `rootPath` and rejects anything escaping it (`..`, an absolute path, or a symlink
-resolving outside the root) before touching the filesystem. Read-only: no write/rename/delete/move
-support. Re-created on every workspace switch, alongside the Entity-backed graph, but rooted at the raw
-`rootPath` rather than `<rootPath>/.ai-companion` — it browses the author's real files, not the app's own
-data.
+resolving outside the root) before touching the filesystem. `writeFile` overwrites an existing file in
+place only — no rename/delete/move support, and it never creates a new file. Re-created on every workspace
+switch, alongside the Entity-backed graph, but rooted at the raw `rootPath` rather than
+`<rootPath>/.ai-companion` — it browses the author's real files, not the app's own data.
+
+`readFile` returns a `FilePreview` tagged by `kind`: plain text is read as UTF-8 (capped at 256KB, marked
+`truncated`) and stays editable through `writeFile`; a `.xlsx` file is instead parsed with `exceljs` into a
+`SpreadsheetSheet` per sheet — cell text plus, when the source file styled that cell, its font/fill/alignment
+(`SpreadsheetCell = string | {value, style}`), the sheet's merged ranges, column widths and frozen-pane split
+(capped at 2000 rows per sheet; a formula cell shows its last-cached `result`, not the formula itself; a
+number renders through its own cell number format — currency, percentage, thousands grouping — dates stay
+`YYYY-MM-DD` regardless of format) — and rendered read-only in `EditorPanel`'s `SpreadsheetPreview` (a plain
+`Table` with merged cells as colSpan/rowSpan, a sticky frozen header row, and a MUI `Tabs` strip pinned to the
+bottom of the grid, matching where Excel/Sheets/LibreOffice put sheet tabs). Any other binary content (a null
+byte in the first 8000 bytes) is `previewable: false`. Spreadsheet write-back isn't implemented yet — view only.
 
 The Workspace screen's folder tree can also be scoped to a single `Project` instead of the whole
 workspace, but scoping and browsing-in-place are two different gestures now: clicking a root-level folder
@@ -214,6 +229,23 @@ tree) it swaps to that `Project`'s name/path with "Abrir sessão" anchored on th
 action (`project.delete`, which also clears the selection back to workspace scope). Both, and the
 entity-anchored flow from the Customization editor, go through the same `SessionService`/`session.spawn`
 surface.
+
+Every tree row that offers a right-click menu (`FolderTree` files/folders, `EntityTreeGroup` Skills/Agents,
+`InstructionTreeRow`/`ProjectInstructionRow`, including the `personal` row) also offers "New Action" —
+wired in `WorkspaceScreen` to `newActionForFile`/`newActionForEntity`/`newActionForInstruction`, all
+funneling into `startNewActionSession`. Unlike "Abrir sessão" above, this **never** anchors on the clicked
+item's own `entity` urn (which is a singleton — spawning again would reuse an already-running session
+instead of a fresh one); it anchors on the item's own project/workspace scope instead
+(`anchorForEntityScope`, falling back to the active workspace for `personal`-scoped entities), spawns an
+always-fresh `project`/`workspace`-anchored session, opens its tab, then seeds its first message with a
+draft `@<path>` reference — the entity's canonical source path (via `skill.resolvePath`/
+`agent.resolvePath`/`instruction.resolvePath`) or, for a file/folder already inside the target scope, its
+relative path directly (no resolve round trip, since it already matches the session's own cwd). The draft
+is written via `session.write` — immediately if `session.spawn`'s response already carries startup output,
+otherwise deferred to the session's first live `session:output` chunk — and is never auto-submitted; the
+user reviews and edits it like any other terminal input before sending. See "Entity file watcher" above for
+what keeps adapter destinations in sync when that session goes on to edit a Skill/Agent/Instruction file
+directly.
 
 ### Workspace switching navigation
 

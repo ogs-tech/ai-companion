@@ -75,6 +75,12 @@ export class InstructionService {
     return this.migrateIfLegacy(entity);
   }
 
+  /** Absolute path of the instruction's own canonical source file. Doesn't need `migrateIfLegacy` — a legacy project instruction's body file lives at the same path regardless of whether its `scopeId` backfill has run yet. */
+  resolvePath(name = 'default'): Promise<string> {
+    const id = name === 'default' ? personalInstructionId(name) : projectInstructionSlug(name);
+    return this.base.filePath(entityUrn('instruction', id));
+  }
+
   async save(input: { instruction: Instruction; isCreate?: boolean }): Promise<SaveInstructionResult> {
     const result = await this.base.save({
       entity: { ...input.instruction, source: WORKSPACE_SOURCE },

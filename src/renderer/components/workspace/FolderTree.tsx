@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { Box, Collapse, List, ListItemButton, ListItemText, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronRight, ChevronDown, Folder, File as FileIcon, FolderInput, FolderOpen, FolderX } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, Folder, File as FileIcon, FolderInput, FolderOpen, FolderX, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
 import type { Project } from '../../../shared/project.js';
 
-interface PreviewTarget {
+interface RowMenuTarget {
   relPath: string;
+  kind: 'file' | 'dir';
   projectId?: string;
 }
 
@@ -35,8 +36,10 @@ interface FolderTreeProps {
    */
   onSelectFile: (relPath: string, projectId?: string) => void;
   onUseAsProject: (absolutePath: string) => void;
-  /** Right-click on a file row → "Preview" — opens a read-only rendered-Markdown tab instead of the normal editing tab. Omitted rows (folders, Project shortcuts) simply don't get a context menu. */
+  /** Right-click on a file row → "Preview" — opens a read-only rendered-Markdown tab instead of the normal editing tab. Never offered for folders (nothing to preview). */
   onPreviewFile?: (relPath: string, projectId?: string) => void;
+  /** Right-click on a file OR folder row → "New Action" — opens a brand-new session with a draft first message referencing it. */
+  onNewAction?: (relPath: string, projectId?: string) => void;
   /** Pinned row rendered above the folders/files, e.g. an `InstructionTreeRow` for the current scope. */
   instructionRow?: React.ReactNode;
   /** Pinned nodes rendered below `instructionRow` and above the folders/files, e.g. Skills/Agents/Hooks/MCP `TreeGroup`s for the current scope. */
@@ -56,7 +59,7 @@ interface TreeNodeProps {
   depth: number;
   onSelectFile: (relPath: string, projectId?: string) => void;
   onUseAsProject: (absolutePath: string) => void;
-  onOpenPreviewMenu: (e: React.MouseEvent, target: PreviewTarget) => void;
+  onOpenRowMenu: (e: React.MouseEvent, target: RowMenuTarget) => void;
   onError: (message: string) => void;
   workspaceRootPath?: string;
   projects?: ReadonlyArray<Project>;
@@ -71,7 +74,7 @@ function TreeNode({
   depth,
   onSelectFile,
   onUseAsProject,
-  onOpenPreviewMenu,
+  onOpenRowMenu,
   onError,
   workspaceRootPath,
   projects,
@@ -123,8 +126,7 @@ function TreeNode({
           else if (entry.kind === 'file') onSelectFile(relPath, effectiveProjectId);
         }}
         onContextMenu={(e) => {
-          if (entry.kind !== 'file') return;
-          onOpenPreviewMenu(e, { relPath, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
+          onOpenRowMenu(e, { relPath, kind: entry.kind, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
         }}
       >
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
@@ -216,7 +218,7 @@ function TreeNode({
                   depth={depth + 1}
                   onSelectFile={onSelectFile}
                   onUseAsProject={onUseAsProject}
-                  onOpenPreviewMenu={onOpenPreviewMenu}
+                  onOpenRowMenu={onOpenRowMenu}
                   onError={onError}
                   {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
                   {...(projects !== undefined ? { projects } : {})}
@@ -237,6 +239,7 @@ export function FolderTree({
   onSelectFile,
   onUseAsProject,
   onPreviewFile,
+  onNewAction,
   instructionRow,
   pinnedRows,
   workspaceRootPath,
@@ -249,9 +252,16 @@ export function FolderTree({
     ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
   });
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const previewMenu = useRowContextMenu<PreviewTarget>();
-  /** The (unscoped) workspace root listing is folders-only, for now — matches the flat, no-depth behavior in TreeNode. */
-  const visibleEntries = scopeProjectId ? rootEntries : rootEntries?.filter((entry) => entry.kind === 'dir');
+  const rowMenu = useRowContextMenu<RowMenuTarget>();
+  const rowMenuTarget = rowMenu.state?.target;
+  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
+    ? [
+        ...(rowMenuTarget.kind === 'file'
+          ? [{ key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreviewFile?.(rowMenuTarget.relPath, rowMenuTarget.projectId) }]
+          : []),
+        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath, rowMenuTarget.projectId) },
+      ]
+    : [];
 
   if (isError) {
     return (
@@ -271,7 +281,7 @@ export function FolderTree({
       <List disablePadding data-testid="folder-tree">
         {instructionRow}
         {pinnedRows}
-        {(visibleEntries ?? []).map((entry) => (
+        {(rootEntries ?? []).map((entry) => (
           <TreeNode
             key={entry.name}
             entry={entry}
@@ -279,7 +289,7 @@ export function FolderTree({
             depth={0}
             onSelectFile={onSelectFile}
             onUseAsProject={onUseAsProject}
-            onOpenPreviewMenu={previewMenu.openMenu}
+            onOpenRowMenu={rowMenu.openMenu}
             onError={(message) => setToast({ variant: 'error', message })}
             {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
             {...(projects !== undefined ? { projects } : {})}
@@ -289,13 +299,7 @@ export function FolderTree({
           />
         ))}
       </List>
-      <RowContextMenu
-        state={previewMenu.state}
-        onClose={previewMenu.closeMenu}
-        onPreview={() => {
-          if (previewMenu.state) onPreviewFile?.(previewMenu.state.target.relPath, previewMenu.state.target.projectId);
-        }}
-      />
+      <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
   );

@@ -18,6 +18,12 @@ export function buildAgentHandlers(service: AgentService): IpcHandlers {
       return service.get(agentId(asString(raw['id'], 'id')));
     },
 
+    'agent.resolvePath': async (params) => {
+      const raw = asObject(params, 'agent.resolvePath');
+      const absolutePath = await service.resolvePath(agentId(asString(raw['id'], 'id')));
+      return { absolutePath };
+    },
+
     'agent.save': async (params) => {
       const raw = asObject(params, 'agent.save');
       const agent = asObject(raw['agent'], 'agent') as unknown as Agent;

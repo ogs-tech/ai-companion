@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
 import { InstructionTreeRow, ProjectInstructionRow } from '../../../../src/renderer/components/workspace/InstructionTreeRow.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import type { Instruction } from '../../../../src/shared/entity.js';
@@ -96,6 +96,44 @@ describe('InstructionTreeRow labels', () => {
     );
     expect(screen.getByTestId('tree-node-instructions-apps')).toBeInTheDocument();
     expect(screen.queryByTestId('project-instruction-row')).not.toBeInTheDocument();
+  });
+});
+
+describe('InstructionTreeRow context menu — New Action', () => {
+  it('offers "New Action" for a configured personal instruction (unlike "Properties", it is not excluded there)', async () => {
+    const onNewAction = vi.fn();
+    const target = instruction();
+    renderWithShell(
+      <InstructionTreeRow kind="personal" instruction={target} seed={() => target} onOpen={vi.fn()} onNewAction={onNewAction} />,
+    );
+    const row = await screen.findByTestId('personal-instruction-row');
+    fireEvent.contextMenu(row);
+    const item = await screen.findByTestId('row-context-menu-new-action');
+    fireEvent.click(item);
+    expect(onNewAction).toHaveBeenCalledWith(target);
+  });
+
+  it('offers "New Action" for a configured project instruction', async () => {
+    const onNewAction = vi.fn();
+    const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['project'], scopeId: 'p1' });
+    renderWithShell(
+      <InstructionTreeRow kind="project" instruction={target} seed={() => target} onOpen={vi.fn()} onNewAction={onNewAction} />,
+    );
+    const row = await screen.findByTestId('project-instruction-row');
+    fireEvent.contextMenu(row);
+    const item = await screen.findByTestId('row-context-menu-new-action');
+    fireEvent.click(item);
+    expect(onNewAction).toHaveBeenCalledWith(target);
+  });
+
+  it('offers no context menu at all while the instruction is not yet configured', () => {
+    const onNewAction = vi.fn();
+    renderWithShell(
+      <InstructionTreeRow kind="personal" instruction={null} seed={() => instruction()} onOpen={vi.fn()} onNewAction={onNewAction} />,
+    );
+    const row = screen.getByTestId('personal-instruction-row');
+    fireEvent.contextMenu(row);
+    expect(screen.queryByTestId('row-context-menu-new-action')).not.toBeInTheDocument();
   });
 });
 
