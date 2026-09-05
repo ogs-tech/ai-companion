@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionPanel } from '../../../src/renderer/components/SessionPanel.js';
@@ -41,23 +41,73 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon };
 });
 
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  callback: () => void;
+  constructor(callback: () => void) {
+    this.callback = callback;
+    mockResizeObserverInstances.push(this);
+  }
+}
+
+const mockResizeObserverInstances: MockResizeObserver[] = [];
+
 let call: CallSpy;
 let onOutput: ReturnType<typeof vi.fn>;
 let onExit: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   mockTerminalInstances.length = 0;
+  mockResizeObserverInstances.length = 0;
+  vi.stubGlobal('ResizeObserver', MockResizeObserver);
   call = mockApi();
   onOutput = vi.mocked(window.api.session.onOutput);
   onExit = vi.mocked(window.api.session.onExit);
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('<SessionPanel>', () => {
+  it('lets the terminal grow to fill the tab instead of a fixed height, so it does not leave dead space below it', () => {
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    expect(screen.getByTestId('session-terminal')).toHaveStyle({ flexGrow: '1', minHeight: '0px' });
+  });
+
+  it('mounts the terminal directly into the padding-free session-terminal box, so FitAddon never sizes rows/cols against space eaten by padding', () => {
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    const terminalBox = screen.getByTestId('session-terminal');
+    expect(terminalBox.style.padding).toBe('');
+    expect(mockTerminalInstances[0]!.open).toHaveBeenCalledWith(terminalBox);
+  });
+
   it('mounts the terminal and shows an "Abrir sessão" button before any session is started', () => {
     renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     expect(screen.getByTestId('session-open')).toBeInTheDocument();
     expect(mockTerminalInstances).toHaveLength(1);
     expect(mockTerminalInstances[0]!.open).toHaveBeenCalled();
+  });
+
+  it('shows the "Sessão" header with its status pill while idle, since that is where the "Abrir sessão" action lives', () => {
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    expect(screen.getByTestId('status-pill-session')).toBeInTheDocument();
+  });
+
+  it('drops the header once the session is running, so the terminal reads as the whole tab instead of a panel with a chrome bar', async () => {
+    const user = userEvent.setup();
+    call.mockImplementation(async (method: string) => {
+      if (method === 'session.status') return ok(null);
+      return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+    });
+
+    renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+    await user.click(screen.getByTestId('session-open'));
+
+    await waitFor(() => expect(screen.queryByTestId('status-pill-session')).toBeNull());
+    expect(screen.getByTestId('session-terminal')).toBeInTheDocument();
   });
 
   it('spawns a session and switches out of the idle state on click', async () => {
@@ -359,6 +409,45 @@ describe('<SessionPanel>', () => {
       await waitFor(() =>
         expect(call).toHaveBeenCalledWith('session.resize', expect.objectContaining({ sessionId: 'entity:urn:skill:foo' })),
       );
+    });
+  });
+
+  describe('container resize', () => {
+    it('refits and resizes when the terminal container itself changes size, not only on window resize', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') return ok(null);
+        if (method === 'session.spawn') {
+          return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      await user.click(screen.getByTestId('session-open'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', expect.anything()));
+
+      // The effect re-runs when sessionId changes from null to the spawned
+      // id, tearing down the first observer and creating a fresh one — only
+      // the latest instance is still connected.
+      const observer = mockResizeObserverInstances.at(-1)!;
+      expect(observer.observe).toHaveBeenCalledWith(screen.getByTestId('session-terminal'));
+
+      call.mockClear();
+      observer.callback();
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.resize', expect.objectContaining({ sessionId: 'entity:urn:skill:foo' })),
+      );
+    });
+
+    it('disconnects the observer on unmount', () => {
+      const { unmount } = renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      const observer = mockResizeObserverInstances[0]!;
+
+      unmount();
+
+      expect(observer.disconnect).toHaveBeenCalled();
     });
   });
 });

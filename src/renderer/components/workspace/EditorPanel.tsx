@@ -12,9 +12,11 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableHead,
   TableRow,
   Tabs,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { FileX, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
@@ -26,7 +28,12 @@ import { SyncReportModal } from '../SyncReportModal.js';
 import { ReadOnlyNotice } from '../ReadOnlyNotice.js';
 import { entityUrn, isWorkspaceSource } from '../../../shared/entity.js';
 import type { SyncResult } from '../../../shared/sync-result.js';
-import type { SpreadsheetCell, SpreadsheetCellStyle, SpreadsheetMerge, SpreadsheetSheet } from '../../../shared/file-browser.js';
+import type {
+  SpreadsheetCell,
+  SpreadsheetCellStyle,
+  SpreadsheetMerge,
+  SpreadsheetSheet,
+} from '../../../shared/file-browser.js';
 import { entityBody, withEntityBody } from '../../lib/entity-body.js';
 import { useFilePreview, useWriteFile } from '../../hooks/use-file-browser.js';
 import { languageForPath } from '../../lib/code-language.js';
@@ -34,9 +41,14 @@ import { fonts } from '../../tokens.js';
 
 export type { EditableEntity, EditorHiddenField };
 
-export type PreviewSource = { kind: 'file'; path: string; projectId?: string } | { kind: 'entity'; body: string };
+export type PreviewSource =
+  | { kind: 'file'; path: string; projectId?: string }
+  | { kind: 'entity'; body: string };
 
-const SAVE_BY_KIND: Record<EditableEntity['kind'], { method: string; payloadKey: string; resultKey: string }> = {
+const SAVE_BY_KIND: Record<
+  EditableEntity['kind'],
+  { method: string; payloadKey: string; resultKey: string }
+> = {
   skill: { method: 'skill.save', payloadKey: 'skill', resultKey: 'skill' },
   agent: { method: 'agent.save', payloadKey: 'agent', resultKey: 'agent' },
   instruction: { method: 'instruction.save', payloadKey: 'instruction', resultKey: 'instruction' },
@@ -163,8 +175,12 @@ function EntitySubject({
     if (openPropertiesRequest) notifyPropertiesRequestHandled();
   }, [openPropertiesRequest]);
 
-  const [baseline, setBaseline] = useState(() => ({ props: propertiesSnapshot(initial), body: entityBody(initial) }));
-  const isDirty = !readOnly && (propertiesSnapshot(entity) !== baseline.props || body !== baseline.body);
+  const [baseline, setBaseline] = useState(() => ({
+    props: propertiesSnapshot(initial),
+    body: entityBody(initial),
+  }));
+  const isDirty =
+    !readOnly && (propertiesSnapshot(entity) !== baseline.props || body !== baseline.body);
   const notifyDirtyChange = useEffectEvent((dirty: boolean) => {
     onDirtyChange(dirty);
   });
@@ -181,7 +197,10 @@ function EntitySubject({
       const urn = entity.urn || entityUrn(entity.kind, entity.name);
       const toSave = withEntityBody({ ...entity, urn }, body);
       const { method, payloadKey, resultKey } = SAVE_BY_KIND[toSave.kind];
-      const result = await callIpc<Record<string, unknown>>(method, { [payloadKey]: toSave, isCreate });
+      const result = await callIpc<Record<string, unknown>>(method, {
+        [payloadKey]: toSave,
+        isCreate,
+      });
       const saved = result[resultKey] as EditableEntity;
       const report = (result['syncReport'] as SyncResult[] | undefined) ?? [];
 
@@ -193,12 +212,19 @@ function EntitySubject({
       if (report.some((entry) => entry.status !== 'ok')) setSyncReport(report);
       await onSaved(saved);
     } catch (err) {
-      if (err instanceof IpcCallError && err.kind === 'validation' && Array.isArray(err.details?.errors)) {
+      if (
+        err instanceof IpcCallError &&
+        err.kind === 'validation' &&
+        Array.isArray(err.details?.errors)
+      ) {
         const errors = err.details.errors as Array<{ path: string; message: string }>;
         const list = errors.map((e) => `${e.path}: ${e.message}`).join('\n');
         setToast({ variant: 'error', message: `${errors.length} validation error(s)\n${list}` });
       } else {
-        setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
+        setToast({
+          variant: 'error',
+          message: err instanceof IpcCallError ? err.message : String(err),
+        });
       }
     } finally {
       setSaving(false);
@@ -215,7 +241,10 @@ function EntitySubject({
     !isHidden('name') || !isHidden('description') || !isHidden('version') || !isHidden('scope');
 
   return (
-    <Box data-testid="editor-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
+    <Box
+      data-testid="editor-panel"
+      sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}
+    >
       {readOnly && pluginSource && (
         <Box sx={{ px: 2, pt: 2, flexShrink: 0 }}>
           <ReadOnlyNotice pluginId={pluginSource.pluginId} />
@@ -223,19 +252,38 @@ function EntitySubject({
       )}
 
       <Box sx={{ px: 2, py: 2 }}>
-        <MarkdownBody mode={readOnly ? 'preview' : 'edit'} body={body} onChangeBody={setBody} disabled={readOnly} language="markdown" />
+        <MarkdownBody
+          mode={readOnly ? 'preview' : 'edit'}
+          body={body}
+          onChangeBody={setBody}
+          disabled={readOnly}
+          language="markdown"
+        />
       </Box>
 
       {showFrontmatter && (
-        <Dialog open={propertiesOpen} onClose={() => setPropertiesOpen(false)} maxWidth="sm" fullWidth data-testid="properties-modal">
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Dialog
+          open={propertiesOpen}
+          onClose={() => setPropertiesOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          data-testid="properties-modal"
+        >
+          <DialogTitle
+            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          >
             Properties
             <IconButton size="small" aria-label="Fechar" onClick={() => setPropertiesOpen(false)}>
               <Icon glyph={X} size={16} />
             </IconButton>
           </DialogTitle>
           <DialogContent>
-            <PropertiesForm entity={entity} onChange={setEntity} {...(hiddenFields ? { hiddenFields } : {})} readOnly={readOnly} />
+            <PropertiesForm
+              entity={entity}
+              onChange={setEntity}
+              {...(hiddenFields ? { hiddenFields } : {})}
+              readOnly={readOnly}
+            />
           </DialogContent>
         </Dialog>
       )}
@@ -248,8 +296,18 @@ function EntitySubject({
 
 type FileSubjectProps = Extract<EditorPanelProps, { subject: 'file' }>;
 
-function FileSubject({ path, projectId, active = true, onDirtyChange }: FileSubjectProps): React.ReactElement {
-  const { data: preview, isLoading, isError, error } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
+function FileSubject({
+  path,
+  projectId,
+  active = true,
+  onDirtyChange,
+}: FileSubjectProps): React.ReactElement {
+  const {
+    data: preview,
+    isLoading,
+    isError,
+    error,
+  } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
   const writeFile = useWriteFile();
 
   const [draft, setDraft] = useState<string | null>(null);
@@ -281,7 +339,8 @@ function FileSubject({ path, projectId, active = true, onDirtyChange }: FileSubj
   // 256KB-truncated in-memory buffer as if it were the whole file would
   // silently discard its untruncated tail. Spreadsheets are view-only for
   // now — there's no write-back path for the parsed grid yet.
-  const editable = preview?.previewable === true && preview.kind === 'text' && preview.truncated === false;
+  const editable =
+    preview?.previewable === true && preview.kind === 'text' && preview.truncated === false;
 
   const handleSave = async (): Promise<void> => {
     if (draft === null) return;
@@ -291,7 +350,10 @@ function FileSubject({ path, projectId, active = true, onDirtyChange }: FileSubj
       setBaseline(draft);
       setToast({ variant: 'success', message: `${fileTitle(path)} salvo` });
     } catch (err) {
-      setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
+      setToast({
+        variant: 'error',
+        message: err instanceof IpcCallError ? err.message : String(err),
+      });
     } finally {
       setSaving(false);
     }
@@ -319,7 +381,12 @@ function FileSubject({ path, projectId, active = true, onDirtyChange }: FileSubj
   } else if (!preview.previewable) {
     body = (
       <Box data-testid="file-preview-not-previewable">
-        <EmptyState glyph={FileX} title="Não é possível pré-visualizar" description={preview.reason} testId="file-preview-reason" />
+        <EmptyState
+          glyph={FileX}
+          title="Não é possível pré-visualizar"
+          description={preview.reason}
+          testId="file-preview-reason"
+        />
       </Box>
     );
   } else if (preview.kind === 'spreadsheet') {
@@ -329,19 +396,29 @@ function FileSubject({ path, projectId, active = true, onDirtyChange }: FileSubj
   } else {
     const truncatedNotice = preview.truncated && (
       <Alert severity="info" data-testid="file-preview-truncated-notice" sx={{ mb: 1.5 }}>
-        Arquivo grande — mostrando apenas o início. Edição desabilitada para não gravar um arquivo incompleto.
+        Arquivo grande — mostrando apenas o início. Edição desabilitada para não gravar um arquivo
+        incompleto.
       </Alert>
     );
     body = (
       <>
         {truncatedNotice}
-        <MarkdownBody mode="edit" body={draft} onChangeBody={setDraft} disabled={!editable} language={languageForPath(path)} />
+        <MarkdownBody
+          mode="edit"
+          body={draft}
+          onChangeBody={setDraft}
+          disabled={!editable}
+          language={languageForPath(path)}
+        />
       </>
     );
   }
 
   return (
-    <Box data-testid="editor-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
+    <Box
+      data-testid="editor-panel"
+      sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}
+    >
       <Box sx={{ px: 2, py: 2, flex: 1 }}>{body}</Box>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
@@ -354,16 +431,36 @@ function PreviewSubject({ source }: PreviewSubjectProps): React.ReactElement {
   return (
     <Box data-testid="editor-panel" sx={{ height: '100%', overflow: 'auto', px: 2, py: 2 }}>
       {source.kind === 'entity' ? (
-        <MarkdownBody mode="preview" body={source.body} onChangeBody={() => {}} disabled language="markdown" />
+        <MarkdownBody
+          mode="preview"
+          body={source.body}
+          onChangeBody={() => {}}
+          disabled
+          language="markdown"
+        />
       ) : (
-        <FilePreviewBody path={source.path} {...(source.projectId ? { projectId: source.projectId } : {})} />
+        <FilePreviewBody
+          path={source.path}
+          {...(source.projectId ? { projectId: source.projectId } : {})}
+        />
       )}
     </Box>
   );
 }
 
-function FilePreviewBody({ path, projectId }: { path: string; projectId?: string }): React.ReactElement {
-  const { data: preview, isLoading, isError, error } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
+function FilePreviewBody({
+  path,
+  projectId,
+}: {
+  path: string;
+  projectId?: string;
+}): React.ReactElement {
+  const {
+    data: preview,
+    isLoading,
+    isError,
+    error,
+  } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
 
   if (isError) {
     return (
@@ -381,12 +478,26 @@ function FilePreviewBody({ path, projectId }: { path: string; projectId?: string
   if (!preview.previewable) {
     return (
       <Box data-testid="file-preview-not-previewable">
-        <EmptyState glyph={FileX} title="Não é possível pré-visualizar" description={preview.reason} testId="file-preview-reason" />
+        <EmptyState
+          glyph={FileX}
+          title="Não é possível pré-visualizar"
+          description={preview.reason}
+          testId="file-preview-reason"
+        />
       </Box>
     );
   }
-  if (preview.kind === 'spreadsheet') return <SpreadsheetPreview sheets={preview.sheets} truncated={preview.truncated} />;
-  return <MarkdownBody mode="preview" body={preview.content} onChangeBody={() => {}} disabled language="markdown" />;
+  if (preview.kind === 'spreadsheet')
+    return <SpreadsheetPreview sheets={preview.sheets} truncated={preview.truncated} />;
+  return (
+    <MarkdownBody
+      mode="preview"
+      body={preview.content}
+      onChangeBody={() => {}}
+      disabled
+      language="markdown"
+    />
+  );
 }
 
 /** True when a stringified cell round-trips through `Number()` cleanly — used to right-align figures the way spreadsheets conventionally do, when the source file didn't specify an explicit alignment for that cell. */
@@ -404,16 +515,70 @@ function cellStyle(cell: SpreadsheetCell): SpreadsheetCellStyle | undefined {
   return typeof cell === 'string' ? undefined : cell.style;
 }
 
+/** The formula text (e.g. `A1+A2`), for a cell the source file recorded one for — `undefined` for a plain value. */
+function cellFormula(cell: SpreadsheetCell): string | undefined {
+  return typeof cell === 'string' ? undefined : cell.formula;
+}
+
+/** `true` when neither the source file's cache nor the fallback computation could produce a value — `cellText` is then the formula itself, rendered muted rather than as a normal result. */
+function cellFormulaUnresolved(cell: SpreadsheetCell): boolean {
+  return typeof cell === 'string' ? false : (cell.formulaUnresolved ?? false);
+}
+
+/** What the formula bar shows for a selected cell: the literal `=formula` expression (the Excel/Numbers/LibreOffice convention) when the cell has one, its plain displayed value otherwise. */
+function formulaBarText(cell: SpreadsheetCell): string {
+  const formula = cellFormula(cell);
+  return formula ? `=${formula}` : cellText(cell);
+}
+
 /** Excel's column width is "characters of the default font" — the same character-to-pixel approximation spreadsheet tooling commonly uses to translate it into a CSS width. */
 function columnWidthPx(width: number | undefined): number | undefined {
   return width === undefined ? undefined : Math.round(width * 7 + 5);
 }
 
-/** Nominal row height for a dense (`size="small"`) table row under this grid's single-line cell styling — used only to stack a multi-row frozen header's sticky offsets; it doesn't affect the cells' own layout. */
+/** Excel row height is stored in points; at 96dpi a CSS pixel is 3/4 of a point, so converting the other way multiplies by 4/3. */
+function rowHeightPx(height: number | undefined): number | undefined {
+  return height === undefined ? undefined : Math.round(height * (4 / 3));
+}
+
+/** 0-based column index to its spreadsheet letter: A, B, …, Z, AA, AB, … */
+function columnLetter(index: number): string {
+  let n = index + 1;
+  let letters = '';
+  while (n > 0) {
+    const remainder = (n - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letters;
+}
+
+/**
+ * Fallback row height, applied as an EXPLICIT `<TableRow>` height whenever a
+ * row has no file-provided or resized height — not just a visual nicety:
+ * the sticky top offsets for frozen rows/the column-letter header are
+ * computed from this same constant, so an unset row must actually render at
+ * exactly this height or a frozen row drifts onto — and visually hides —
+ * the row below it once scrolled (auto/content-driven height would make the
+ * real rendered height diverge from what the sticky math assumes).
+ */
 const FROZEN_ROW_HEIGHT_PX = 33;
+/** The synthetic top row of column letters (A, B, C…) renders at the same height as a data row under dense styling. */
+const COLUMN_HEADER_ROW_HEIGHT_PX = FROZEN_ROW_HEIGHT_PX;
+/** The formula bar sits above the grid itself, outside the frozen-row sticky stack. */
+const FORMULA_BAR_HEIGHT_PX = 36;
+/** Width of the sticky row-number column on the left — enough for a 4-digit row number plus its resize handle. */
+const ROW_HEADER_WIDTH_PX = 44;
+/** Starting point for a drag-resize on a column the source file never set an explicit width for. Never applied to an unresized column's own rendered width, which stays content-driven — same auto-width behavior the grid already had before headers existed. */
+const DEFAULT_COLUMN_WIDTH_PX = 120;
+const MIN_COLUMN_WIDTH_PX = 32;
+const MIN_ROW_HEIGHT_PX = 20;
 
 /** From a sheet's merge list: which cell positions a merge covers besides its own top-left anchor (skipped on render, since the anchor's colSpan/rowSpan already accounts for them), keyed by the anchor position for the ones that need those span attributes. */
-function buildMergeIndex(merges: SpreadsheetMerge[]): { anchors: Map<string, SpreadsheetMerge>; covered: Set<string> } {
+function buildMergeIndex(merges: SpreadsheetMerge[]): {
+  anchors: Map<string, SpreadsheetMerge>;
+  covered: Set<string>;
+} {
   const anchors = new Map<string, SpreadsheetMerge>();
   const covered = new Set<string>();
   for (const merge of merges) {
@@ -427,27 +592,135 @@ function buildMergeIndex(merges: SpreadsheetMerge[]): { anchors: Map<string, Spr
   return { anchors, covered };
 }
 
+interface SelectedCell {
+  sheet: number;
+  row: number;
+  col: number;
+}
+
 /**
- * A read-only grid for a parsed `.xlsx` workbook. Sheet tabs sit at the
- * bottom of the grid — where native spreadsheet apps (Excel, Google Sheets,
- * LibreOffice) put them — and scroll horizontally when there are more
- * sheets than fit. A merged range renders as one cell with the matching
- * colSpan/rowSpan; a cell's own font/fill/alignment from the source file
- * wins over this grid's built-in heuristics (first-column emphasis, numeric
- * right-align), which only kick in for a cell the file left unstyled. A
- * frozen header row, when the sheet has one, stays pinned while the body
- * scrolls. Each cell is width-capped with a single-line ellipsis (full
- * value available via the native `title` tooltip on hover) — without that
- * cap, a long free-text cell (a legend, a note) forces its row to wrap
- * across many lines while every other row in the sheet stays single-line,
- * which is what broke the layout: rows lose a consistent height and columns
- * drift out of alignment with the header above them. No cell editing yet:
- * the main-process side only reads spreadsheets, it doesn't write them back.
+ * A read-only grid for a parsed `.xlsx` workbook, styled after a real
+ * spreadsheet (Excel/Numbers/LibreOffice) rather than a generic data table:
+ * sticky column-letter (A, B, C…) and row-number (1, 2, 3…) headers frame
+ * the grid, a formula bar above it shows the selected cell's reference and
+ * content — the literal `=formula` text for a formula cell (a small corner
+ * marker on the cell itself flags that it has one, since the source file's
+ * cached result alone doesn't say how a value was derived) — and dragging a
+ * header's edge resizes that column/row for this viewing session only:
+ * there's no write-back path for `.xlsx`, so a resize is never persisted
+ * and resets the next time the file is opened. Sheet tabs sit at the bottom
+ * of the grid — where native spreadsheet apps put them — and scroll
+ * horizontally when there are more sheets than fit. A merged range renders
+ * as one cell with the matching colSpan/rowSpan; a cell's own
+ * font/fill/alignment from the source file wins over this grid's built-in
+ * heuristics (first-column emphasis, numeric right-align), which only kick
+ * in for a cell the file left unstyled. A frozen header row/column, when
+ * the sheet has one, stays pinned while the body scrolls — the same sticky
+ * mechanism the column/row headers use, just applied one layer further in.
+ * Each cell is width-capped with a single-line ellipsis (full value
+ * available via the native `title` tooltip on hover) — without that cap, a
+ * long free-text cell (a legend, a note) forces its row to wrap across many
+ * lines while every other row in the sheet stays single-line, which is what
+ * broke the layout: rows lose a consistent height and columns drift out of
+ * alignment with the header above them. No cell editing yet: the
+ * main-process side only reads spreadsheets, it doesn't write them back.
  */
-function SpreadsheetPreview({ sheets, truncated }: { sheets: SpreadsheetSheet[]; truncated: boolean }): React.ReactElement {
+function SpreadsheetPreview({
+  sheets,
+  truncated,
+}: {
+  sheets: SpreadsheetSheet[];
+  truncated: boolean;
+}): React.ReactElement {
   const [activeSheet, setActiveSheet] = useState(0);
+  const [colWidthOverrides, setColWidthOverrides] = useState<
+    Record<number, Record<number, number>>
+  >({});
+  const [rowHeightOverrides, setRowHeightOverrides] = useState<
+    Record<number, Record<number, number>>
+  >({});
+  const [selected, setSelected] = useState<SelectedCell>({ sheet: 0, row: 0, col: 0 });
+
+  // A sheet switch always re-selects that sheet's A1 — an in-render
+  // adjustment (React's sanctioned "derive state from a changed prop/state"
+  // pattern, same shape as EntitySubject's `prevPropertiesRequest` above)
+  // rather than an effect, so it converges in the same render as the switch.
+  if (selected.sheet !== activeSheet) {
+    setSelected({ sheet: activeSheet, row: 0, col: 0 });
+  }
+
   const sheet = sheets[activeSheet] ?? sheets[0];
   const { anchors, covered } = buildMergeIndex(sheet?.merges ?? []);
+  const columnCount = sheet?.rows[0]?.length ?? 0;
+
+  const columnWidth = (colIndex: number): number | undefined =>
+    colWidthOverrides[activeSheet]?.[colIndex] ?? columnWidthPx(sheet?.columnWidths[colIndex]);
+  const rowHeight = (rowIndex: number): number | undefined =>
+    rowHeightOverrides[activeSheet]?.[rowIndex] ?? rowHeightPx(sheet?.rowHeights[rowIndex]);
+
+  /** Sticky left offset for a frozen data column — the row-number column's own width plus every earlier frozen column's effective width. */
+  const frozenColumnLeft = (colIndex: number): number => {
+    let left = ROW_HEADER_WIDTH_PX;
+    for (let c = 0; c < colIndex; c += 1) left += columnWidth(c) ?? DEFAULT_COLUMN_WIDTH_PX;
+    return left;
+  };
+
+  // Drag math is delta-from-drag-start against a fixed base captured once at
+  // mousedown, not delta-since-last-move — so a `mousemove` handler can be
+  // idempotent (overwrite, not accumulate) and never drifts across a long
+  // drag with many intermediate events.
+  const startColumnResize =
+    (colIndex: number) =>
+    (e: React.MouseEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const baseWidth = columnWidth(colIndex) ?? DEFAULT_COLUMN_WIDTH_PX;
+      const onMove = (moveEvent: MouseEvent): void => {
+        const next = Math.max(
+          MIN_COLUMN_WIDTH_PX,
+          Math.round(baseWidth + (moveEvent.clientX - startX)),
+        );
+        setColWidthOverrides((prev) => ({
+          ...prev,
+          [activeSheet]: { ...prev[activeSheet], [colIndex]: next },
+        }));
+      };
+      const onUp = (): void => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+
+  const startRowResize =
+    (rowIndex: number) =>
+    (e: React.MouseEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startY = e.clientY;
+      const baseHeight = rowHeight(rowIndex) ?? FROZEN_ROW_HEIGHT_PX;
+      const onMove = (moveEvent: MouseEvent): void => {
+        const next = Math.max(
+          MIN_ROW_HEIGHT_PX,
+          Math.round(baseHeight + (moveEvent.clientY - startY)),
+        );
+        setRowHeightOverrides((prev) => ({
+          ...prev,
+          [activeSheet]: { ...prev[activeSheet], [rowIndex]: next },
+        }));
+      };
+      const onUp = (): void => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+
+  const selectedCell = sheet?.rows[selected.row]?.[selected.col];
+  const selectedRefLabel = `${columnLetter(selected.col)}${selected.row + 1}`;
 
   return (
     <Box data-testid="spreadsheet-preview">
@@ -457,67 +730,264 @@ function SpreadsheetPreview({ sheets, truncated }: { sheets: SpreadsheetSheet[];
         </Alert>
       )}
       {!sheet || sheet.rows.length === 0 ? (
-        <EmptyState glyph={FileX} title="Aba vazia" description="Esta planilha não tem linhas para mostrar." testId="spreadsheet-empty" />
+        <EmptyState
+          glyph={FileX}
+          title="Aba vazia"
+          description="Esta planilha não tem linhas para mostrar."
+          testId="spreadsheet-empty"
+        />
       ) : (
-        <TableContainer component={Paper}>
-          <Table size="small" sx={{ borderCollapse: 'collapse' }}>
-            <TableBody>
-              {sheet.rows.map((row, rowIndex) => (
-                <TableRow key={rowIndex} sx={(theme) => ({ '&:nth-of-type(even)': { backgroundColor: theme.palette.action.hover } })}>
-                  {row.map((cell, cellIndex) => {
-                    if (covered.has(`${rowIndex}:${cellIndex}`)) return null;
-                    const merge = anchors.get(`${rowIndex}:${cellIndex}`);
-                    const text = cellText(cell);
-                    const style = cellStyle(cell);
-                    const isLabelColumn = cellIndex === 0;
-                    const numeric = isNumericCell(text);
-                    const align = style?.align ?? (numeric ? 'right' : 'left');
-                    const bold = style ? (style.bold ?? false) : isLabelColumn;
-                    const widthPx = columnWidthPx(sheet.columnWidths[cellIndex]);
-                    const frozenRow = rowIndex < sheet.frozenRows;
+        <>
+          <Box
+            data-testid="spreadsheet-formula-bar"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              height: FORMULA_BAR_HEIGHT_PX,
+              px: 1,
+              position: 'sticky',
+              top: 0,
+              zIndex: 4,
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider',
+              borderBottom: 0,
+              fontFamily: fonts.mono,
+              fontSize: '0.8125rem',
+            }}
+          >
+            <Box
+              data-testid="spreadsheet-formula-bar-ref"
+              sx={{ minWidth: ROW_HEADER_WIDTH_PX, fontWeight: 600, color: 'text.secondary' }}
+            >
+              {selectedRefLabel}
+            </Box>
+            <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0 }}>
+              fx
+            </Box>
+            <Box
+              data-testid="spreadsheet-formula-bar-content"
+              sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {selectedCell !== undefined ? formulaBarText(selectedCell) : ''}
+            </Box>
+          </Box>
+          <TableContainer
+            component={Paper}
+            sx={{ overflow: 'visible', borderTopLeftRadius: 0, borderTopRightRadius: 0 }}
+          >
+            <Table size="small" sx={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+              <TableHead>
+                <TableRow sx={{ height: COLUMN_HEADER_ROW_HEIGHT_PX }}>
+                  <TableCell
+                    data-testid="spreadsheet-corner-header"
+                    sx={(theme) => ({
+                      position: 'sticky',
+                      top: FORMULA_BAR_HEIGHT_PX,
+                      left: 0,
+                      zIndex: 3,
+                      width: ROW_HEADER_WIDTH_PX,
+                      minWidth: ROW_HEADER_WIDTH_PX,
+                      bgcolor: theme.ogs.surfaces.rail,
+                      border: 1,
+                      borderColor: 'divider',
+                    })}
+                  />
+                  {Array.from({ length: columnCount }, (_, colIndex) => {
+                    const isActiveColumn = selected.col === colIndex;
                     return (
                       <TableCell
-                        key={cellIndex}
-                        title={text}
-                        colSpan={merge?.colSpan ?? 1}
-                        rowSpan={merge?.rowSpan ?? 1}
-                        sx={(theme) => {
-                          const backgroundColor = style ? style.backgroundColor : isLabelColumn ? theme.ogs.surfaces.rail : undefined;
-                          return {
-                            fontFamily: fonts.mono,
-                            fontSize: '0.8125rem',
-                            lineHeight: 1.5,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            width: widthPx,
-                            maxWidth: widthPx ?? (isLabelColumn ? 420 : 280),
-                            minWidth: widthPx ?? (isLabelColumn ? 160 : 90),
-                            border: 1,
-                            borderColor: 'divider',
-                            textAlign: align,
-                            fontWeight: bold ? 600 : 400,
-                            fontStyle: style?.italic ? 'italic' : 'normal',
-                            ...(style?.color ? { color: style.color } : {}),
-                            ...(backgroundColor ? { backgroundColor } : {}),
-                            ...(frozenRow && {
-                              position: 'sticky',
-                              top: rowIndex * FROZEN_ROW_HEIGHT_PX,
-                              zIndex: 2,
-                              backgroundColor: backgroundColor ?? theme.palette.background.paper,
-                            }),
-                          };
-                        }}
+                        key={colIndex}
+                        sx={(theme) => ({
+                          position: 'sticky',
+                          top: FORMULA_BAR_HEIGHT_PX,
+                          zIndex: colIndex < sheet.frozenCols ? 2 : 1,
+                          ...(colIndex < sheet.frozenCols && { left: frozenColumnLeft(colIndex) }),
+                          width: columnWidth(colIndex),
+                          fontFamily: fonts.mono,
+                          fontSize: '0.75rem',
+                          fontWeight: isActiveColumn ? 700 : 600,
+                          textAlign: 'center',
+                          bgcolor: isActiveColumn
+                            ? alpha(theme.palette.secondary.main, 0.14)
+                            : theme.ogs.surfaces.rail,
+                          color: isActiveColumn ? theme.palette.secondary.main : undefined,
+                          border: 1,
+                          borderColor: 'divider',
+                          userSelect: 'none',
+                        })}
                       >
-                        {text}
+                        {columnLetter(colIndex)}
+                        <Box
+                          aria-hidden
+                          data-testid={`spreadsheet-col-resize-${colIndex}`}
+                          onMouseDown={startColumnResize(colIndex)}
+                          sx={{
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            width: 6,
+                            cursor: 'col-resize',
+                            '&:hover': { bgcolor: 'primary.main', opacity: 0.4 },
+                          }}
+                        />
                       </TableCell>
                     );
                   })}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {sheet.rows.map((row, rowIndex) => {
+                  const height = rowHeight(rowIndex);
+                  const frozenRow = rowIndex < sheet.frozenRows;
+                  const isActiveRow = selected.row === rowIndex;
+                  return (
+                    <TableRow key={rowIndex} sx={{ height: height ?? FROZEN_ROW_HEIGHT_PX }}>
+                      <TableCell
+                        component="th"
+                        scope="row"
+                        data-testid={`spreadsheet-row-header-${rowIndex}`}
+                        sx={(theme) => ({
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: frozenRow ? 2 : 1,
+                          ...(frozenRow && {
+                            top:
+                              FORMULA_BAR_HEIGHT_PX +
+                              COLUMN_HEADER_ROW_HEIGHT_PX +
+                              rowIndex * FROZEN_ROW_HEIGHT_PX,
+                          }),
+                          width: ROW_HEADER_WIDTH_PX,
+                          minWidth: ROW_HEADER_WIDTH_PX,
+                          fontFamily: fonts.mono,
+                          fontSize: '0.75rem',
+                          fontWeight: isActiveRow ? 700 : 600,
+                          textAlign: 'center',
+                          bgcolor: isActiveRow
+                            ? alpha(theme.palette.secondary.main, 0.14)
+                            : theme.ogs.surfaces.rail,
+                          color: isActiveRow ? theme.palette.secondary.main : undefined,
+                          border: 1,
+                          borderColor: 'divider',
+                          userSelect: 'none',
+                        })}
+                      >
+                        {rowIndex + 1}
+                        <Box
+                          aria-hidden
+                          data-testid={`spreadsheet-row-resize-${rowIndex}`}
+                          onMouseDown={startRowResize(rowIndex)}
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: 6,
+                            cursor: 'row-resize',
+                            '&:hover': { bgcolor: 'primary.main', opacity: 0.4 },
+                          }}
+                        />
+                      </TableCell>
+                      {row.map((cell, cellIndex) => {
+                        if (covered.has(`${rowIndex}:${cellIndex}`)) return null;
+                        const merge = anchors.get(`${rowIndex}:${cellIndex}`);
+                        const text = cellText(cell);
+                        const style = cellStyle(cell);
+                        const hasFormula = cellFormula(cell) !== undefined;
+                        const unresolved = cellFormulaUnresolved(cell);
+                        const isLabelColumn = cellIndex === 0;
+                        const numeric = isNumericCell(text);
+                        const align = style?.align ?? (numeric ? 'right' : 'left');
+                        const bold = style ? (style.bold ?? false) : isLabelColumn;
+                        const widthPx = columnWidth(cellIndex);
+                        const frozenCol = cellIndex < sheet.frozenCols;
+                        const isSelected = selected.row === rowIndex && selected.col === cellIndex;
+                        return (
+                          <TableCell
+                            key={cellIndex}
+                            title={text}
+                            colSpan={merge?.colSpan ?? 1}
+                            rowSpan={merge?.rowSpan ?? 1}
+                            aria-selected={isSelected}
+                            onClick={() =>
+                              setSelected({ sheet: activeSheet, row: rowIndex, col: cellIndex })
+                            }
+                            sx={(theme) => {
+                              const resolvedBackground =
+                                style?.backgroundColor ??
+                                (isLabelColumn
+                                  ? theme.ogs.surfaces.rail
+                                  : theme.palette.background.paper);
+                              return {
+                                position: 'relative',
+                                fontFamily: fonts.mono,
+                                fontSize: '0.8125rem',
+                                lineHeight: 1.5,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                cursor: 'default',
+                                width: widthPx,
+                                maxWidth: widthPx ?? (isLabelColumn ? 420 : 280),
+                                minWidth: widthPx ?? (isLabelColumn ? 160 : 90),
+                                border: 1,
+                                borderColor: 'divider',
+                                textAlign: align,
+                                fontWeight: bold ? 600 : 400,
+                                fontStyle: style?.italic || unresolved ? 'italic' : 'normal',
+                                ...(unresolved
+                                  ? { color: theme.palette.text.disabled }
+                                  : style?.color
+                                    ? { color: style.color }
+                                    : {}),
+                                backgroundColor: resolvedBackground,
+                                ...(isSelected && {
+                                  outline: `2px solid ${theme.palette.secondary.main}`,
+                                  outlineOffset: -2,
+                                  zIndex: 1,
+                                }),
+                                ...(frozenRow && {
+                                  position: 'sticky',
+                                  top:
+                                    FORMULA_BAR_HEIGHT_PX +
+                                    COLUMN_HEADER_ROW_HEIGHT_PX +
+                                    rowIndex * FROZEN_ROW_HEIGHT_PX,
+                                  zIndex: 2,
+                                  backgroundColor: resolvedBackground,
+                                }),
+                                ...(frozenCol && {
+                                  position: 'sticky',
+                                  left: frozenColumnLeft(cellIndex),
+                                  zIndex: frozenRow ? 2 : 1,
+                                  backgroundColor: resolvedBackground,
+                                }),
+                                ...(hasFormula && {
+                                  '&::after': {
+                                    content: '""',
+                                    position: 'absolute',
+                                    top: 0,
+                                    right: 0,
+                                    borderStyle: 'solid',
+                                    borderWidth: '0 6px 6px 0',
+                                    borderColor: `transparent ${theme.palette.info.main} transparent transparent`,
+                                  },
+                                }),
+                              };
+                            }}
+                          >
+                            {text}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
       {sheets.length > 1 && (
         <Tabs

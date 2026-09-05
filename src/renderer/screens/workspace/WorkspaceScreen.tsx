@@ -686,6 +686,11 @@ export function WorkspaceScreen(): React.ReactElement {
         glyph: SquareTerminal,
         label: tab.label,
         closeLabel: running ? 'Minimizar' : 'Fechar',
+        // Manages its own edge-to-edge spacing (padding only around the
+        // header, none around the terminal itself) — the canvas's own p:2
+        // would otherwise leave a margin around the terminal that breaks the
+        // "this is the whole page" effect.
+        dense: true,
         onClose: () => closeTab(tab.id),
         render: (hidden) => <SessionPanel anchor={tab.anchor} sessionId={tab.sessionId} visible={!hidden} />,
       };

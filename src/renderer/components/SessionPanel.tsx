@@ -176,7 +176,18 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     };
     syncSize();
     window.addEventListener('resize', syncSize);
-    return () => window.removeEventListener('resize', syncSize);
+    // The container's own box can change size without a window resize event
+    // ever firing — the split-pane layout settling after mount, a sidebar
+    // collapsing, a divider drag, a tab switch — so `fit()` also needs to
+    // react to the container itself, or the terminal's rows/cols go stale
+    // and its bottom edge (the CLI's input box and status line) ends up
+    // clipped by this box's `overflow: hidden`.
+    const resizeObserver = new ResizeObserver(syncSize);
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+    return () => {
+      window.removeEventListener('resize', syncSize);
+      resizeObserver.disconnect();
+    };
   }, [sessionId, visible]);
 
   const handleOpen = async (): Promise<void> => {
@@ -226,25 +237,43 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       </Button>
     ) : null;
 
+  // The header only ever carries an action (Abrir sessão / Tentar novamente
+  // / Retomar) for idle, error, or exited states — a running (or starting)
+  // session has nothing for it to do, so it's dropped entirely and the
+  // terminal fills the whole tab, reading as a real terminal instead of a
+  // themed app panel with a chrome bar on top.
+  const showHeader = action !== null;
+
   return (
-    <Box data-testid="session-panel">
-      <SessionHeader pill={STATUS_PILL[status]} action={action} />
+    <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {showHeader && (
+        <Box sx={{ px: 2, pt: 2 }}>
+          <SessionHeader pill={STATUS_PILL[status]} action={action} />
+        </Box>
+      )}
       {error && (
-        <Typography color="error" data-testid="session-error" sx={{ mb: 1.5 }}>
+        <Typography color="error" data-testid="session-error" sx={{ mx: 2, mb: 1.5, flexShrink: 0 }}>
           {error}
         </Typography>
       )}
+      {/* No padding, border, or radius here — a running session drops the
+          header above and this box is the only thing left in the tab, so any
+          inset chrome would read as "a panel with a terminal in it" rather
+          than the terminal being the page. */}
+      {/* No padding here, ever — xterm's FitAddon measures this element's own
+          clientHeight/Width (the parent it was `open()`ed into) to compute
+          rows/cols. Padding on it would size the terminal to include the
+          padded-away space, and the CLI's own bottom-most row (its input box
+          and status line) would render past `overflow: hidden` and clip. */}
       <Box
         ref={containerRef}
         data-testid="session-terminal"
-        sx={(theme) => ({
-          height: 420,
-          p: 1,
+        sx={{
+          flexGrow: 1,
+          minHeight: 0,
           bgcolor: ogs.ink,
-          border: `1px solid ${theme.palette.divider}`,
-          borderRadius: `${theme.ogs.radius.md}px`,
           overflow: 'hidden',
-        })}
+        }}
       />
     </Box>
   );

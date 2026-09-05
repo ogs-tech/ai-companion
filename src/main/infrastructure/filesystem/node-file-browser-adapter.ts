@@ -1,9 +1,20 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import ExcelJS from 'exceljs';
-import type { FileBrowserEntry, FileBrowserPort, FilePreview } from '../../application/ports/file-browser-port.js';
-import type { SpreadsheetCell, SpreadsheetCellStyle, SpreadsheetMerge, SpreadsheetSheet } from '../../../shared/file-browser.js';
+import JSZip from 'jszip';
+import type {
+  FileBrowserEntry,
+  FileBrowserPort,
+  FilePreview,
+} from '../../application/ports/file-browser-port.js';
+import type {
+  SpreadsheetCell,
+  SpreadsheetCellStyle,
+  SpreadsheetMerge,
+  SpreadsheetSheet,
+} from '../../../shared/file-browser.js';
 import { DomainError } from '../../domain/errors.js';
+import { createFormulaResolver, formulaOf } from './spreadsheet-formula-resolver.js';
 
 const MAX_READABLE_BYTES = 5 * 1024 * 1024; // 5MB — above this, never even read the file.
 const PREVIEW_CONTENT_CAP = 256 * 1024; // 256KB — previewable content is truncated to this.
@@ -29,11 +40,17 @@ function formatNumber(value: number, numFmt: string | undefined): string {
   }
   const currencySymbol = CURRENCY_SYMBOLS.find((symbol) => numFmt.includes(symbol));
   if (currencySymbol) {
-    const grouped = value.toLocaleString('pt-BR', { minimumFractionDigits: decimals || 2, maximumFractionDigits: decimals || 2 });
+    const grouped = value.toLocaleString('pt-BR', {
+      minimumFractionDigits: decimals || 2,
+      maximumFractionDigits: decimals || 2,
+    });
     return `${currencySymbol} ${grouped}`;
   }
   if (numFmt.includes('#,##0')) {
-    return value.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return value.toLocaleString('pt-BR', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
   }
   return String(value);
 }
@@ -44,8 +61,10 @@ function cellToText(value: ExcelJS.CellValue, numFmt: string | undefined): strin
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === 'number') return formatNumber(value, numFmt);
   if (typeof value === 'object') {
-    if ('result' in value) return cellToText((value as ExcelJS.CellFormulaValue).result ?? '', numFmt);
-    if ('richText' in value) return (value as ExcelJS.CellRichTextValue).richText.map((run) => run.text).join('');
+    if ('result' in value)
+      return cellToText((value as ExcelJS.CellFormulaValue).result ?? '', numFmt);
+    if ('richText' in value)
+      return (value as ExcelJS.CellRichTextValue).richText.map((run) => run.text).join('');
     if ('text' in value) return String((value as ExcelJS.CellHyperlinkValue).text ?? '');
     return '';
   }
@@ -58,7 +77,9 @@ function argbToHex(argb: string | undefined): string | undefined {
   return `#${argb.slice(-6)}`;
 }
 
-function alignmentOf(horizontal: ExcelJS.Alignment['horizontal'] | undefined): 'left' | 'center' | 'right' | undefined {
+function alignmentOf(
+  horizontal: ExcelJS.Alignment['horizontal'] | undefined,
+): 'left' | 'center' | 'right' | undefined {
   if (horizontal === 'left') return 'left';
   if (horizontal === 'center' || horizontal === 'centerContinuous') return 'center';
   if (horizontal === 'right') return 'right';
@@ -94,7 +115,12 @@ function parseMergeRange(range: string): SpreadsheetMerge {
   const [startRef, endRef] = range.split(':');
   const start = parseCellRef(startRef ?? '');
   const end = endRef ? parseCellRef(endRef) : start;
-  return { row: start.row, col: start.col, rowSpan: end.row - start.row + 1, colSpan: end.col - start.col + 1 };
+  return {
+    row: start.row,
+    col: start.col,
+    rowSpan: end.row - start.row + 1,
+    colSpan: end.col - start.col + 1,
+  };
 }
 
 /**
@@ -111,38 +137,109 @@ interface FrozenWorksheetView {
   ySplit?: number;
 }
 
-async function readSpreadsheet(buffer: Buffer): Promise<FilePreview> {
+/**
+ * exceljs always writes (and expects to read back) a worksheet's comments
+ * part at the flat `xl/commentsN.xml` path. Some other generators — notably
+ * openpyxl — place it at a nested path like `xl/comments/commentN.xml`
+ * instead, which is valid per the OOXML relationship model but isn't
+ * recognized by exceljs's regex-based part scan. The unrecognized part is
+ * silently skipped, but the worksheet's own `_rels` file still carries a
+ * relationship pointing at it, and reconciling that relationship crashes
+ * with a raw `TypeError` (exceljs issue, unpatched as of 4.4.0). The preview
+ * never renders cell comments, so the fix is to drop the dangling
+ * comments/vmlDrawing relationships before handing the buffer to exceljs,
+ * rather than reproduce its parser.
+ */
+async function stripCommentRelationships(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  const relsEntries = Object.keys(zip.files).filter((name) =>
+    /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(name),
+  );
+  for (const relsPath of relsEntries) {
+    const xml = await zip.file(relsPath)?.async('string');
+    if (!xml) continue;
+    const cleaned = xml.replace(/<Relationship\b[^>]*\/>/g, (tag) =>
+      /Type="[^"]*\/relationships\/(comments|vmlDrawing)"/.test(tag) ? '' : tag,
+    );
+    if (cleaned !== xml) zip.file(relsPath, cleaned);
+  }
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+async function loadWorkbook(buffer: Buffer): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
+  // exceljs's bundled .d.ts shadows the global `Buffer` with its own
+  // module-local (and incompatible) ambient interface, so a plain `as
+  // Buffer` still fails structurally — extracting the parameter type
+  // directly sidesteps the name clash without an `any` escape hatch.
+  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  return workbook;
+}
+
+async function readSpreadsheet(buffer: Buffer): Promise<FilePreview> {
+  let workbook: ExcelJS.Workbook;
   try {
-    // exceljs's bundled .d.ts shadows the global `Buffer` with its own
-    // module-local (and incompatible) ambient interface, so a plain `as
-    // Buffer` still fails structurally — extracting the parameter type
-    // directly sidesteps the name clash without an `any` escape hatch.
-    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    workbook = await loadWorkbook(buffer);
   } catch {
-    return { previewable: false, reason: 'Could not read this spreadsheet' };
+    try {
+      workbook = await loadWorkbook(await stripCommentRelationships(buffer));
+    } catch {
+      return { previewable: false, reason: 'Could not read this spreadsheet' };
+    }
   }
 
   let truncated = false;
+  const formulaResolver = createFormulaResolver(workbook);
   const sheets: SpreadsheetSheet[] = workbook.worksheets.map((worksheet) => {
+    // A dense, rectangular walk by real 1-based row/column number — not
+    // `worksheet.eachRow`, which silently skips a row with zero cells (so a
+    // fully blank row would shift every row after it up by one) and whose
+    // per-row `eachCell` only reaches that row's own last touched column (so
+    // a short row wouldn't line up under the sheet's widest one). Row/column
+    // identification (the whole point of adding headers) depends on every
+    // row array's index and length matching the file's real coordinates.
+    const totalRows = worksheet.lastRow?.number ?? 0;
+    const totalCols = worksheet.columnCount;
+    const rowLimit = Math.min(totalRows, MAX_PREVIEW_ROWS);
+    if (totalRows > MAX_PREVIEW_ROWS) truncated = true;
+
     const rows: SpreadsheetCell[][] = [];
-    worksheet.eachRow((row) => {
-      if (rows.length >= MAX_PREVIEW_ROWS) {
-        truncated = true;
-        return;
-      }
+    const rowHeights: (number | undefined)[] = [];
+    for (let r = 1; r <= rowLimit; r += 1) {
+      const row = worksheet.getRow(r);
+      rowHeights.push(row.height);
       const rowCells: SpreadsheetCell[] = [];
-      // `includeEmpty: true` visits every column up to the row's last
-      // touched cell (not just the ones with a value), so a gap like an
-      // unset B1 between a set A1 and C1 still lands as its own '' entry
-      // instead of shifting C1 left.
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        const text = cellToText(cell.value, cell.numFmt);
+      for (let c = 1; c <= totalCols; c += 1) {
+        const cell = row.getCell(c);
+        let text = cellToText(cell.value, cell.numFmt);
         const style = styleOf(cell);
-        rowCells.push(style ? { value: text, style } : text);
-      });
+        const formula = formulaOf(cell.value);
+        if (formula !== undefined) {
+          let formulaUnresolved = false;
+          // No cached <v> to display — script-generated workbooks (openpyxl and
+          // similar) write formula text but never evaluate it. Fall back to a
+          // best-effort computed value rather than leaving the cell blank.
+          if (text === '') {
+            const resolution = formulaResolver.resolve(worksheet.name, r, c);
+            if (resolution.resolved) {
+              text = cellToText(resolution.value, cell.numFmt);
+            } else {
+              text = formula;
+              formulaUnresolved = true;
+            }
+          }
+          rowCells.push({
+            value: text,
+            formula,
+            ...(style ? { style } : {}),
+            ...(formulaUnresolved ? { formulaUnresolved: true } : {}),
+          });
+        } else {
+          rowCells.push(style ? { value: text, style } : text);
+        }
+      }
       rows.push(rowCells);
-    });
+    }
 
     const merges = (worksheet.model.merges ?? [])
       .map(parseMergeRange)
@@ -156,7 +253,7 @@ async function readSpreadsheet(buffer: Buffer): Promise<FilePreview> {
     const frozenRows = view?.state === 'frozen' ? (view.ySplit ?? 0) : 0;
     const frozenCols = view?.state === 'frozen' ? (view.xSplit ?? 0) : 0;
 
-    return { name: worksheet.name, rows, merges, columnWidths, frozenRows, frozenCols };
+    return { name: worksheet.name, rows, merges, columnWidths, rowHeights, frozenRows, frozenCols };
   });
 
   return { previewable: true, kind: 'spreadsheet', sheets, truncated };
@@ -203,7 +300,10 @@ export class NodeFileBrowserAdapter implements FileBrowserPort {
       throw new DomainError('validation', `Not a file: ${absPath}`);
     }
     if (stat.size > MAX_READABLE_BYTES) {
-      return { previewable: false, reason: `File is too large to preview (over ${MAX_READABLE_BYTES / (1024 * 1024)}MB)` };
+      return {
+        previewable: false,
+        reason: `File is too large to preview (over ${MAX_READABLE_BYTES / (1024 * 1024)}MB)`,
+      };
     }
 
     const buffer = await fs.readFile(absPath);
@@ -234,7 +334,10 @@ export class NodeFileBrowserAdapter implements FileBrowserPort {
       throw new DomainError('validation', `Not a file: ${absPath}`);
     }
     if (Buffer.byteLength(content, 'utf8') > MAX_READABLE_BYTES) {
-      throw new DomainError('validation', `Content exceeds the ${MAX_READABLE_BYTES / (1024 * 1024)}MB write limit`);
+      throw new DomainError(
+        'validation',
+        `Content exceeds the ${MAX_READABLE_BYTES / (1024 * 1024)}MB write limit`,
+      );
     }
     await fs.writeFile(absPath, content, 'utf8');
   }

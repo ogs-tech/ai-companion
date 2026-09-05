@@ -1,13 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorPanel } from '../../../../src/renderer/components/workspace/EditorPanel.js';
 import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../../test-utils.js';
 import type { Agent, Instruction, Skill } from '../../../../src/shared/entity.js';
 import type { SpreadsheetCell, SpreadsheetSheet } from '../../../../src/shared/file-browser.js';
+import { createAppTheme } from '../../../../src/renderer/theme.js';
 
-function sheet(name: string, rows: SpreadsheetCell[][], overrides: Partial<SpreadsheetSheet> = {}): SpreadsheetSheet {
-  return { name, rows, merges: [], columnWidths: [], frozenRows: 0, frozenCols: 0, ...overrides };
+function sheet(
+  name: string,
+  rows: SpreadsheetCell[][],
+  overrides: Partial<SpreadsheetSheet> = {},
+): SpreadsheetSheet {
+  return {
+    name,
+    rows,
+    merges: [],
+    columnWidths: [],
+    rowHeights: [],
+    frozenRows: 0,
+    frozenCols: 0,
+    ...overrides,
+  };
 }
 
 function skill(overrides: Partial<Skill> = {}): Skill {
@@ -57,14 +71,16 @@ const cmContent = (container: HTMLElement): HTMLElement =>
   container.querySelector('[data-testid="body-editor"] .cm-content') as HTMLElement;
 
 /** Fires the Ctrl+S save shortcut `EditorPanel` listens for on `window`. */
-const pressSave = (user: ReturnType<typeof userEvent.setup>): Promise<void> => user.keyboard('{Control>}s{/Control}');
+const pressSave = (user: ReturnType<typeof userEvent.setup>): Promise<void> =>
+  user.keyboard('{Control>}s{/Control}');
 
 let call: CallSpy;
 beforeEach(() => {
   call = mockApi();
   call.mockImplementation(async (method: string) => {
     if (method === 'project.list') return ok([{ id: 'p1', name: 'Acme', path: '/repos/acme' }]);
-    if (method === 'workspace.getActive') return ok({ id: 'w1', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' });
+    if (method === 'workspace.getActive')
+      return ok({ id: 'w1', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' });
     return ok(undefined);
   });
 });
@@ -90,7 +106,14 @@ describe('EditorPanel — entity subject', () => {
     const onSaved = vi.fn();
     call.mockImplementation(async (method: string, params: unknown) => {
       if (method === 'project.list') return ok([]);
-      if (method === 'workspace.getActive') return ok({ id: 'w1', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' });
+      if (method === 'workspace.getActive')
+        return ok({
+          id: 'w1',
+          name: 'Default',
+          rootPath: '/home/u',
+          isDefault: true,
+          createdAt: '',
+        });
       if (method === 'skill.save') {
         const p = params as { skill: Skill; isCreate: boolean };
         return ok({ skill: { ...p.skill, urn: 'urn:skill:acme' }, syncReport: [] });
@@ -98,7 +121,13 @@ describe('EditorPanel — entity subject', () => {
       return ok(undefined);
     });
     renderWithQuery(
-      <EditorPanel subject="entity" initial={skill({ urn: '', name: 'acme' })} isCreate onSaved={onSaved} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={skill({ urn: '', name: 'acme' })}
+        isCreate
+        onSaved={onSaved}
+        onDirtyChange={vi.fn()}
+      />,
     );
     await pressSave(user);
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
@@ -116,7 +145,13 @@ describe('EditorPanel — entity subject', () => {
       return ok(undefined);
     });
     const { container } = renderWithQuery(
-      <EditorPanel subject="entity" initial={agent()} isCreate={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={agent()}
+        isCreate={false}
+        onSaved={vi.fn()}
+        onDirtyChange={vi.fn()}
+      />,
     );
     expect(cmContent(container).textContent).toBe('you are a helpful agent');
     await pressSave(user);
@@ -137,7 +172,13 @@ describe('EditorPanel — entity subject', () => {
       return ok(undefined);
     });
     const { rerender } = renderWithQuery(
-      <EditorPanel subject="entity" initial={skill({ urn: 'urn:skill:acme', name: 'acme' })} isCreate={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={skill({ urn: 'urn:skill:acme', name: 'acme' })}
+        isCreate={false}
+        onSaved={vi.fn()}
+        onDirtyChange={vi.fn()}
+      />,
     );
     // Properties lives in a modal now — opened externally (a tree row's
     // right-click "Properties" action), simulated here via the same
@@ -168,12 +209,25 @@ describe('EditorPanel — entity subject', () => {
     // attach the errors array the component reads from IpcCallError.details directly.
     call.mockImplementation(async (method: string) => {
       if (method === 'skill.save') {
-        return { ok: false, error: { kind: 'validation', message: 'invalid', details: { errors: [{ path: 'name', message: 'required' }] } } };
+        return {
+          ok: false,
+          error: {
+            kind: 'validation',
+            message: 'invalid',
+            details: { errors: [{ path: 'name', message: 'required' }] },
+          },
+        };
       }
       return ok(undefined);
     });
     renderWithQuery(
-      <EditorPanel subject="entity" initial={skill()} isCreate={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={skill()}
+        isCreate={false}
+        onSaved={vi.fn()}
+        onDirtyChange={vi.fn()}
+      />,
     );
     await pressSave(user);
     expect(await screen.findByText(/name: required/i)).toBeInTheDocument();
@@ -182,10 +236,23 @@ describe('EditorPanel — entity subject', () => {
 
   it('renders the Checkbox/FormGroup scope UI for an instruction instead of the skill/agent toggle group', async () => {
     const { rerender } = renderWithQuery(
-      <EditorPanel subject="entity" initial={instruction()} isCreate={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={instruction()}
+        isCreate={false}
+        onSaved={vi.fn()}
+        onDirtyChange={vi.fn()}
+      />,
     );
     rerender(
-      <EditorPanel subject="entity" initial={instruction()} isCreate={false} openPropertiesRequest onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={instruction()}
+        isCreate={false}
+        openPropertiesRequest
+        onSaved={vi.fn()}
+        onDirtyChange={vi.fn()}
+      />,
     );
     expect(await screen.findByRole('checkbox', { name: 'project' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Workspace' })).not.toBeInTheDocument();
@@ -211,7 +278,9 @@ describe('EditorPanel — entity subject', () => {
     renderWithQuery(
       <EditorPanel
         subject="entity"
-        initial={skill({ source: { kind: 'plugin', pluginId: 'acme-plugin', provenance: 'workspace-managed' } })}
+        initial={skill({
+          source: { kind: 'plugin', pluginId: 'acme-plugin', provenance: 'workspace-managed' },
+        })}
         isCreate={false}
         onSaved={vi.fn()}
         onDirtyChange={vi.fn()}
@@ -235,7 +304,13 @@ describe('EditorPanel — entity subject', () => {
       return ok(undefined);
     });
     const { container } = renderWithQuery(
-      <EditorPanel subject="entity" initial={skill({ content: '' })} isCreate={false} onSaved={vi.fn()} onDirtyChange={onDirtyChange} />,
+      <EditorPanel
+        subject="entity"
+        initial={skill({ content: '' })}
+        isCreate={false}
+        onSaved={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
     );
     const editor = cmContent(container);
     editor.focus();
@@ -258,7 +333,14 @@ describe('EditorPanel — entity subject', () => {
       return ok(undefined);
     });
     const { container } = renderWithQuery(
-      <EditorPanel subject="entity" initial={skill({ content: '' })} isCreate={false} active={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+      <EditorPanel
+        subject="entity"
+        initial={skill({ content: '' })}
+        isCreate={false}
+        active={false}
+        onSaved={vi.fn()}
+        onDirtyChange={vi.fn()}
+      />,
     );
     const editor = cmContent(container);
     editor.focus();
@@ -271,32 +353,43 @@ describe('EditorPanel — entity subject', () => {
 describe('EditorPanel — file subject', () => {
   it('loads content via workspace.readFile when no projectId is given', async () => {
     call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.readFile') return ok({ previewable: true, kind: 'text', content: 'file body', truncated: false });
+      if (method === 'workspace.readFile')
+        return ok({ previewable: true, kind: 'text', content: 'file body', truncated: false });
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="notes.md" onDirtyChange={vi.fn()} />);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.readFile', { path: 'notes.md' }));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('workspace.readFile', { path: 'notes.md' }),
+    );
     expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
   });
 
   it('loads content via project.readFile when scoped to a projectId', async () => {
     call.mockImplementation(async (method: string) => {
-      if (method === 'project.readFile') return ok({ previewable: true, kind: 'text', content: 'file body', truncated: false });
+      if (method === 'project.readFile')
+        return ok({ previewable: true, kind: 'text', content: 'file body', truncated: false });
       return ok(undefined);
     });
-    renderWithQuery(<EditorPanel subject="file" path="notes.md" projectId="p1" onDirtyChange={vi.fn()} />);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'notes.md' }));
+    renderWithQuery(
+      <EditorPanel subject="file" path="notes.md" projectId="p1" onDirtyChange={vi.fn()} />,
+    );
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'notes.md' }),
+    );
   });
 
   it('saves edits via workspace.writeFile and clears the dirty flag on Ctrl/Cmd+S', async () => {
     const user = userEvent.setup();
     const onDirtyChange = vi.fn();
     call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.readFile') return ok({ previewable: true, kind: 'text', content: '', truncated: false });
+      if (method === 'workspace.readFile')
+        return ok({ previewable: true, kind: 'text', content: '', truncated: false });
       if (method === 'workspace.writeFile') return ok(undefined);
       return ok(undefined);
     });
-    const { container } = renderWithQuery(<EditorPanel subject="file" path="notes.md" onDirtyChange={onDirtyChange} />);
+    const { container } = renderWithQuery(
+      <EditorPanel subject="file" path="notes.md" onDirtyChange={onDirtyChange} />,
+    );
     const editor = await waitFor(() => {
       const el = cmContent(container);
       if (!el) throw new Error('editor not ready');
@@ -309,14 +402,17 @@ describe('EditorPanel — file subject', () => {
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
 
     await pressSave(user);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.writeFile', { path: 'notes.md', content: 'x' }));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('workspace.writeFile', { path: 'notes.md', content: 'x' }),
+    );
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });
 
   it('never writes a truncated file — Ctrl/Cmd+S is a no-op while it stays read-only', async () => {
     const user = userEvent.setup();
     call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.readFile') return ok({ previewable: true, kind: 'text', content: 'partial…', truncated: true });
+      if (method === 'workspace.readFile')
+        return ok({ previewable: true, kind: 'text', content: 'partial…', truncated: true });
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="big.txt" onDirtyChange={vi.fn()} />);
@@ -327,7 +423,8 @@ describe('EditorPanel — file subject', () => {
 
   it('renders a not-previewable (binary/oversized) file as an empty state with no editor', async () => {
     call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.readFile') return ok({ previewable: false, reason: 'File appears to be binary' });
+      if (method === 'workspace.readFile')
+        return ok({ previewable: false, reason: 'File appears to be binary' });
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="image.bin" onDirtyChange={vi.fn()} />);
@@ -352,7 +449,12 @@ describe('EditorPanel — file subject', () => {
           previewable: true,
           kind: 'spreadsheet',
           truncated: false,
-          sheets: [sheet('Catalog', [['Name', 'Price'], ['Widget', '9.99']])],
+          sheets: [
+            sheet('Catalog', [
+              ['Name', 'Price'],
+              ['Widget', '9.99'],
+            ]),
+          ],
         });
       }
       return ok(undefined);
@@ -374,27 +476,32 @@ describe('EditorPanel — file subject', () => {
           previewable: true,
           kind: 'spreadsheet',
           truncated: false,
-          sheets: [
-            sheet('First', [['alpha']]),
-            sheet('Second', [['beta']]),
-          ],
+          sheets: [sheet('First', [['alpha']]), sheet('Second', [['beta']])],
         });
       }
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
-    expect(await screen.findByText('alpha')).toBeInTheDocument();
-    expect(screen.queryByText('beta')).not.toBeInTheDocument();
+    // Scoped to the grid itself — A1 of the active sheet is also
+    // auto-selected, so its text repeats in the formula bar above the grid.
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('alpha')).toBeInTheDocument();
+    expect(within(table).queryByText('beta')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Second' }));
-    expect(await screen.findByText('beta')).toBeInTheDocument();
-    expect(screen.queryByText('alpha')).not.toBeInTheDocument();
+    expect(await within(table).findByText('beta')).toBeInTheDocument();
+    expect(within(table).queryByText('alpha')).not.toBeInTheDocument();
   });
 
   it('shows a truncation notice for a spreadsheet whose sheet was capped', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.readFile') {
-        return ok({ previewable: true, kind: 'spreadsheet', truncated: true, sheets: [sheet('Catalog', [['a']])] });
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: true,
+          sheets: [sheet('Catalog', [['a']])],
+        });
       }
       return ok(undefined);
     });
@@ -415,7 +522,7 @@ describe('EditorPanel — file subject', () => {
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
-    await screen.findByText('alpha');
+    await screen.findByRole('table');
     const preview = screen.getByTestId('spreadsheet-preview');
     const order = Array.from(preview.querySelectorAll('table, [role="tablist"]')).map((el) =>
       el.tagName === 'TABLE' ? 'table' : 'tabs',
@@ -430,15 +537,29 @@ describe('EditorPanel — file subject', () => {
           previewable: true,
           kind: 'spreadsheet',
           truncated: false,
-          sheets: [sheet('Catalog', [['Title', ''], ['a', 'b']], { merges: [{ row: 0, col: 0, rowSpan: 1, colSpan: 2 }] })],
+          sheets: [
+            sheet(
+              'Catalog',
+              [
+                ['Title', ''],
+                ['a', 'b'],
+              ],
+              { merges: [{ row: 0, col: 0, rowSpan: 1, colSpan: 2 }] },
+            ),
+          ],
         });
       }
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
-    const titleCell = await screen.findByText('Title');
-    expect(titleCell.closest('td')).toHaveAttribute('colspan', '2');
-    expect(screen.getAllByRole('row')[0]?.querySelectorAll('td')).toHaveLength(1);
+    // Title (A1) is also auto-selected, so it repeats in the formula bar — scope to the grid's <td>.
+    const titleCell = (await screen.findAllByText('Title'))
+      .map((el) => el.closest('td'))
+      .find((el) => el !== null)!;
+    expect(titleCell).toHaveAttribute('colspan', '2');
+    // Row-number header cell is a <th>, not a <td> — so the merged data row
+    // still reports exactly one <td>, the merged Title cell itself.
+    expect(titleCell.closest('tr')?.querySelectorAll('td')).toHaveLength(1);
   });
 
   it("applies a cell's own font/fill style from the source file, taking it over the built-in first-column heuristic", async () => {
@@ -449,15 +570,285 @@ describe('EditorPanel — file subject', () => {
           kind: 'spreadsheet',
           truncated: false,
           sheets: [
-            sheet('Catalog', [[{ value: 'Total', style: { bold: false, backgroundColor: '#ffe066' } }]]),
+            sheet('Catalog', [
+              [{ value: 'Total', style: { bold: false, backgroundColor: '#ffe066' } }],
+            ]),
           ],
         });
       }
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
-    const cell = await screen.findByText('Total');
+    // Total (A1) is also auto-selected, so it repeats in the formula bar — scope to the grid's <td>.
+    const cell = (await screen.findAllByText('Total'))
+      .map((el) => el.closest('td'))
+      .find((el) => el !== null)!;
     expect(cell).toHaveStyle({ backgroundColor: '#ffe066', fontWeight: 400 });
+  });
+
+  it('renders an unresolved formula cell with the formula text muted/italic, instead of a blank cell or a normal-looking value', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [
+              [{ value: 'INDEX(A1,B1)', formula: 'INDEX(A1,B1)', formulaUnresolved: true }],
+            ]),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    // The cell (A1) is also auto-selected, so its text repeats in the formula bar — scope to the grid's <td>.
+    const cell = (await screen.findAllByText('INDEX(A1,B1)'))
+      .map((el) => el.closest('td'))
+      .find((el) => el !== null)!;
+    expect(cell).toHaveStyle({
+      fontStyle: 'italic',
+      color: createAppTheme('light').palette.text.disabled,
+    });
+  });
+
+  it('renders column-letter and row-number headers around the data grid, like a real spreadsheet', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [
+              ['Widget', '9.99'],
+              ['Gadget', '4.50'],
+            ]),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    const grid = await screen.findByTestId('spreadsheet-preview');
+
+    expect(
+      within(grid)
+        .getAllByRole('columnheader')
+        .map((el) => el.textContent),
+    ).toEqual(['', 'A', 'B']);
+    expect(
+      within(grid)
+        .getAllByRole('rowheader')
+        .map((el) => el.textContent),
+    ).toEqual(['1', '2']);
+  });
+
+  describe('formula bar', () => {
+    function formulaBarRef(): HTMLElement {
+      return screen.getByTestId('spreadsheet-formula-bar-ref');
+    }
+    function formulaBarContent(): HTMLElement {
+      return screen.getByTestId('spreadsheet-formula-bar-content');
+    }
+
+    it('selects A1 by default and shows its value in the formula bar', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.readFile') {
+          return ok({
+            previewable: true,
+            kind: 'spreadsheet',
+            truncated: false,
+            sheets: [sheet('Catalog', [['Widget', '9.99']])],
+          });
+        }
+        return ok(undefined);
+      });
+      renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+      await screen.findByTestId('spreadsheet-preview');
+
+      expect(formulaBarRef()).toHaveTextContent('A1');
+      expect(formulaBarContent()).toHaveTextContent('Widget');
+    });
+
+    it('shows the formula text (prefixed with "=") for a selected formula cell, not its cached value', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.readFile') {
+          return ok({
+            previewable: true,
+            kind: 'spreadsheet',
+            truncated: false,
+            sheets: [
+              sheet('Catalog', [
+                ['2', '3'],
+                ['', { value: '5', formula: 'A1+B1' }],
+              ]),
+            ],
+          });
+        }
+        return ok(undefined);
+      });
+      renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+      await screen.findByTestId('spreadsheet-preview');
+
+      await user.click(screen.getByText('5'));
+
+      expect(formulaBarRef()).toHaveTextContent('B2');
+      expect(formulaBarContent()).toHaveTextContent('=A1+B1');
+    });
+
+    it('resets the selection back to A1 of the newly active sheet when switching sheet tabs', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.readFile') {
+          return ok({
+            previewable: true,
+            kind: 'spreadsheet',
+            truncated: false,
+            sheets: [sheet('First', [['alpha']]), sheet('Second', [['beta']])],
+          });
+        }
+        return ok(undefined);
+      });
+      renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+      const table = await screen.findByRole('table');
+      await within(table).findByText('alpha');
+
+      await user.click(screen.getByRole('tab', { name: 'Second' }));
+      await within(table).findByText('beta');
+
+      expect(formulaBarRef()).toHaveTextContent('A1');
+      expect(formulaBarContent()).toHaveTextContent('beta');
+    });
+  });
+
+  it("highlights the selected cell's row-number and column-letter headers, reinforcing which row/column it's in", async () => {
+    const user = userEvent.setup();
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [
+              ['a', 'b'],
+              ['c', 'd'],
+            ]),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    await screen.findByTestId('spreadsheet-preview');
+
+    await user.click(screen.getByText('d')); // row 2, column B
+
+    expect(screen.getByRole('rowheader', { name: '2' })).toHaveStyle({ fontWeight: '700' });
+    expect(screen.getByRole('columnheader', { name: 'B' })).toHaveStyle({ fontWeight: '700' });
+    expect(screen.getByRole('rowheader', { name: '1' })).toHaveStyle({ fontWeight: '600' });
+    expect(screen.getByRole('columnheader', { name: 'A' })).toHaveStyle({ fontWeight: '600' });
+  });
+
+  it('gives every row (including the column-letter header) an explicit height, so sticky frozen-row/column offsets stay accurate without a real layout measurement', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [sheet('Catalog', [['a'], ['b']])],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    const table = await screen.findByRole('table');
+
+    for (const row of within(table).getAllByRole('row')) {
+      expect(row).toHaveStyle({ height: '33px' });
+    }
+  });
+
+  it('keeps the table container from establishing its own scroll/sticky context, so its sticky offsets stay relative to the tab panel that actually scrolls', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [sheet('Catalog', [['a']])],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    const table = await screen.findByRole('table');
+
+    // MUI's TableContainer defaults to overflow-x:auto, which (per the CSS
+    // overflow spec) computes overflow-y to auto too — making it its OWN
+    // nearest scrolling ancestor for any sticky descendant, independent of
+    // the tab panel that actually scrolls. That silently breaks every
+    // hand-computed sticky offset (formula bar height + header row height +
+    // frozen-row stacking): a frozen row ends up stuck relative to the
+    // TableContainer's own (usually unscrolled) top instead, landing right
+    // on top of the row below it. Forcing `overflow: visible` here defers
+    // scrolling to the outer panel, the single consistent sticky reference
+    // frame every offset in this component assumes.
+    expect(table.closest('.MuiTableContainer-root')).toHaveStyle({ overflow: 'visible' });
+  });
+
+  describe('resizing columns and rows', () => {
+    it('grows a column by the pointer delta when dragging its header resize handle', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.readFile') {
+          return ok({
+            previewable: true,
+            kind: 'spreadsheet',
+            truncated: false,
+            sheets: [sheet('Catalog', [['a', 'b']])], // no file-provided width -> drag starts from the default baseline (120px)
+          });
+        }
+        return ok(undefined);
+      });
+      renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+      await screen.findByTestId('spreadsheet-preview');
+
+      const handle = screen.getByTestId('spreadsheet-col-resize-0');
+      fireEvent.mouseDown(handle, { clientX: 100 });
+      fireEvent.mouseMove(window, { clientX: 140 });
+      fireEvent.mouseUp(window);
+
+      expect(screen.getByRole('columnheader', { name: 'A' })).toHaveStyle({ width: '160px' });
+    });
+
+    it('grows a row by the pointer delta when dragging its row-number resize handle', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.readFile') {
+          return ok({
+            previewable: true,
+            kind: 'spreadsheet',
+            truncated: false,
+            sheets: [sheet('Catalog', [['a']], { rowHeights: [24] })], // 24pt -> 32px
+          });
+        }
+        return ok(undefined);
+      });
+      renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+      await screen.findByTestId('spreadsheet-preview');
+
+      const handle = screen.getByTestId('spreadsheet-row-resize-0');
+      fireEvent.mouseDown(handle, { clientY: 100 });
+      fireEvent.mouseMove(window, { clientY: 130 });
+      fireEvent.mouseUp(window);
+
+      expect(screen.getByRole('rowheader', { name: '1' }).closest('tr')).toHaveStyle({
+        height: '62px',
+      });
+    });
   });
 });
 
@@ -470,7 +861,8 @@ describe('EditorPanel — preview subject', () => {
 
   it("fetches and renders a file's content as read-only rendered Markdown", async () => {
     call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.readFile') return ok({ previewable: true, kind: 'text', content: '# File', truncated: false });
+      if (method === 'workspace.readFile')
+        return ok({ previewable: true, kind: 'text', content: '# File', truncated: false });
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="preview" source={{ kind: 'file', path: 'notes.md' }} />);
@@ -480,7 +872,8 @@ describe('EditorPanel — preview subject', () => {
 
   it('renders an empty state for a non-previewable file', async () => {
     call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.readFile') return ok({ previewable: false, reason: 'File appears to be binary' });
+      if (method === 'workspace.readFile')
+        return ok({ previewable: false, reason: 'File appears to be binary' });
       return ok(undefined);
     });
     renderWithQuery(<EditorPanel subject="preview" source={{ kind: 'file', path: 'image.bin' }} />);
@@ -490,11 +883,18 @@ describe('EditorPanel — preview subject', () => {
   it("renders a file's spreadsheet content as a read-only table", async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.readFile') {
-        return ok({ previewable: true, kind: 'spreadsheet', truncated: false, sheets: [sheet('Catalog', [['Widget']])] });
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [sheet('Catalog', [['Widget']])],
+        });
       }
       return ok(undefined);
     });
-    renderWithQuery(<EditorPanel subject="preview" source={{ kind: 'file', path: 'catalog.xlsx' }} />);
+    renderWithQuery(
+      <EditorPanel subject="preview" source={{ kind: 'file', path: 'catalog.xlsx' }} />,
+    );
     expect(await screen.findByTestId('spreadsheet-preview')).toBeInTheDocument();
     expect(screen.queryByTestId('body-editor')).not.toBeInTheDocument();
   });

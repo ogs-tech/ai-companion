@@ -10,7 +10,7 @@
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "rebuild:native": "electron-rebuild -f -w node-pty",
-    "predev": "npm run rebuild:native",
+    "predev": "bash scripts/check-mac-install.sh && npm run rebuild:native",
     "prebuild": "npm run rebuild:native",
     "dev": "electron-vite dev",
     "install:dev-shortcut": "bash scripts/install-dev-shortcut.sh",
@@ -68,6 +68,8 @@
     "@xterm/xterm": "^6.0.0",
     "chokidar": "^4.0.3",
     "exceljs": "^4.4.0",
+    "fast-formula-parser": "^1.0.19",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.17.0",
     "node-pty": "^1.1.0",
     "proper-lockfile": "^4.1.2",
