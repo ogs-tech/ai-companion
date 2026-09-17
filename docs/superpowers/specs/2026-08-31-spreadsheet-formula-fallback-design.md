@@ -185,3 +185,62 @@ when, the source file supplies none.
   (`formulaUnresolved`) gets the muted/italic treatment.
 - External file references, R1C1 notation, and iterative/circular-reference calculation settings —
   unsupported by the underlying parser; any formula relying on them falls back to `formulaUnresolved`.
+
+---
+
+## 8. Addendum (2026-09-17) — two gaps found against the real workbook
+
+Implemented and shipped, this design left every calculated column of the reported
+`calculator_catalog.xlsx` still muted: of its 107 formula cells (all 107 uncached, as §1 found),
+only 54 resolved. Two independent root causes, both now fixed; the remaining 53 were a single
+cascade off ten leaf failures, because §5's rule that a failed dependency can't produce a usable
+value propagates strictly.
+
+### 8.1 The parser instance must not be re-entered
+
+§3 specified "one `FormulaParser` instance backs the whole resolver". That is unsafe, and the reason
+is structural rather than incidental: resolution recurses _from inside_ an in-progress `parse` — an
+`onCell`/`onRange` callback hits an uncached dependency and starts a second `parse` on the same
+instance. `FormulaParser` wraps a chevrotain parser, which keeps mutable per-parse state (token
+index, and a lazily-populated lookahead-function cache keyed off the current rule position). The
+outer parse then reads a cache slot the nested one invalidated and throws a raw
+`TypeError: Cannot read properties of undefined (reading 'call')`, which the library re-wraps as
+`#ERROR!` — so the cell fell back to `formulaUnresolved` for no legitimate reason.
+
+A trivial dependent (`A2+1`) survives this; anything that returns to a function-call or binary-op
+chain afterwards does not. That is exactly why the report showed _some_ rows rendering and others
+muted with no apparent pattern — and why the original unit test for recursive resolution passed
+without catching it.
+
+The resolver now pools one parser **per recursion depth** (`parserAtDepth`). Sibling dependencies at
+the same depth resolve sequentially, never concurrently, so sharing between them is safe. A fresh
+parser per cell would also be correct but costs ~1.6ms to construct, which the 2000-rows-per-sheet
+cap makes material; the pool is instead bounded by dependency-chain depth.
+
+**Invariant for future changes:** any code path that can call `parse` while another `parse` is on the
+stack must go through `parseNested`, never a captured parser reference.
+
+### 8.2 `fast-formula-parser`'s stub functions
+
+§2's library-choice research assumed function coverage that v1.0.19 does not have. Beyond `MATCH`
+(already reimplemented locally), `SUMIFS` is also an empty stub — `formulas/functions/math.js`'s
+`SUMIFS: () => {}` — and `grammar/hooks.js` turns an `undefined` return into a thrown `#NAME?`.
+`SUMIFS` is now implemented locally alongside `MATCH`/`INDEX`, on top of the library's own exported
+`Criteria.parse`.
+
+A sweep of the installed package found **28 such stubs**. The ones most likely to be hit by an
+ordinary workbook, and not yet implemented here:
+
+> `MAX`, `MIN`, `MEDIAN`, `LARGE`, `SMALL`, `AVERAGEIFS`, `MAXIFS`, `MINIFS`, `STDEVA`, `STDEVPA`,
+> `TRIMMEAN`, `PERMUT`. `COUNTIFS` is absent from the library altogether.
+
+**Tracked follow-up:** implement at least `MAX`/`MIN`/`MEDIAN` and the `*IFS` family, in a change
+separate from this bug fix. Until then any workbook using them renders those cells — and everything
+downstream of them — as muted formula text.
+
+### 8.3 Verification
+
+`e2e/xlsx-formula-preview.spec.ts` drives the real Electron app against a generated workbook
+carrying both failure shapes, and asserts the grid never renders bare formula text. It was confirmed
+to fail against the pre-fix build and pass after. Against the reported file itself, all 107 formula
+cells now resolve, with previously-working values unchanged.

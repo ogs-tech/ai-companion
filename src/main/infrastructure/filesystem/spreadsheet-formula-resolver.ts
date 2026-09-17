@@ -1,8 +1,8 @@
 import type ExcelJS from 'exceljs';
 import FormulaParser from 'fast-formula-parser';
-import type { FormulaParserContext, FormulaScalar } from 'fast-formula-parser';
+import type { FormulaParserContext, FormulaScalar, ParsedCriteria } from 'fast-formula-parser';
 
-const { FormulaError, FormulaHelpers: H, Types, WildCard } = FormulaParser;
+const { Criteria, FormulaError, FormulaHelpers: H, Types, WildCard } = FormulaParser;
 
 /** The literal formula expression (e.g. `A1+A2`), for a cell whose value carries one — a shared-formula dependent cell (`sharedFormula` instead of its own `formula` text) is out of scope for a view-only preview and reports no formula. */
 export function formulaOf(value: ExcelJS.CellValue): string | undefined {
@@ -133,6 +133,105 @@ function matchFunction(
   return found + 1;
 }
 
+/** Excel's ordering across mismatched operand types: number < text < boolean. */
+const TYPE_RANK: Record<string, number> = { number: 1, string: 2, boolean: 3 };
+
+/**
+ * Excel's criteria comparison for the `*IF`/`*IFS` family. Text compares
+ * case-insensitively (Excel's own semantics, and what the reported workbook's
+ * `"não"` criteria relies on); a blank cell compares as `0`, matching how
+ * Excel coerces an empty operand. Mismatched types are never equal but still
+ * order by `TYPE_RANK` for the inequality operators.
+ */
+function matchesCriteria(value: FormulaScalar | null, criteria: ParsedCriteria): boolean {
+  if (criteria.op === 'wc')
+    return criteria.match === (criteria.value as RegExp).test(String(value ?? ''));
+
+  const left: FormulaScalar = value ?? 0;
+  const right = (criteria.value ?? 0) as FormulaScalar;
+  const comparable =
+    typeof left === 'string' && typeof right === 'string'
+      ? ([left.toLowerCase(), right.toLowerCase()] as const)
+      : ([left, right] as const);
+  const [a, b] = comparable;
+
+  if (typeof a !== typeof b) {
+    const rank = (TYPE_RANK[typeof a] ?? 0) - (TYPE_RANK[typeof b] ?? 0);
+    switch (criteria.op) {
+      case '=':
+        return false;
+      case '<>':
+        return true;
+      case '>':
+        return rank > 0;
+      case '<':
+        return rank < 0;
+      case '>=':
+        return rank >= 0;
+      case '<=':
+        return rank <= 0;
+      default:
+        return false;
+    }
+  }
+
+  switch (criteria.op) {
+    case '=':
+      return a === b;
+    case '<>':
+      return a !== b;
+    case '>':
+      return a > b;
+    case '<':
+      return a < b;
+    case '>=':
+      return a >= b;
+    case '<=':
+      return a <= b;
+    default:
+      return false;
+  }
+}
+
+/**
+ * `SUMIFS` is a second unimplemented stub in `fast-formula-parser` v1.0.19
+ * (`formulas/functions/math.js`'s `SUMIFS: () => {}`, alongside the `MATCH`
+ * one above) — and its dispatcher turns an `undefined` return into a thrown
+ * `#NAME?`, so every `SUMIFS` cell and everything downstream of one fell back
+ * to `formulaUnresolved`. This implements Excel's semantics on top of the
+ * library's own publicly-exported `Criteria.parse`, reusing its comparison,
+ * wildcard and boolean-literal parsing rather than re-deriving them.
+ *
+ * Unlike the library's `SUMIF`, `SUMIFS` is not registered as a
+ * context-needing function, so its arguments arrive already dereferenced to
+ * values — ranges as arrays, criteria as scalars. Excel requires every range
+ * to share the sum range's dimensions, so flattening each in the same
+ * row-major order keeps positions aligned without any resizing step.
+ */
+function sumIfsFunction(sumRangeArg: unknown, ...criteriaArgs: unknown[]): number {
+  const sumRange = H.accept(sumRangeArg, Types.ARRAY, undefined, true, true);
+  const conditions: { range: FormulaScalar[]; criteria: ParsedCriteria }[] = [];
+  for (let i = 0; i + 1 < criteriaArgs.length; i += 2) {
+    conditions.push({
+      range: H.accept(criteriaArgs[i], Types.ARRAY, undefined, true, true),
+      criteria: Criteria.parse(H.accept(criteriaArgs[i + 1])),
+    });
+  }
+
+  let sum = 0;
+  for (let i = 0; i < sumRange.length; i += 1) {
+    const matchesAll = conditions.every((condition) =>
+      matchesCriteria(condition.range[i] ?? null, condition.criteria),
+    );
+    if (!matchesAll) continue;
+    // A non-numeric cell inside the sum range is skipped, exactly as Excel
+    // does — it is not an error, and must not fail the whole sum.
+    const addend = sumRange[i];
+    if (typeof addend === 'number') sum += addend;
+  }
+  return sum;
+}
+
 /**
  * `fast-formula-parser`'s own INDEX (same source file as the MATCH stub
  * above) drops the source range's sheet when constructing the single-cell
@@ -222,15 +321,18 @@ function indexFunction(
  * that is itself an uncached formula recurses into the same `resolve`),
  * memoized (a cell already resolved this pass is never recomputed), and
  * cycle-safe (re-entering a cell already being resolved on the current call
- * stack resolves immediately as `{ resolved: false }`). One `FormulaParser`
- * instance backs the whole resolver, so the memo — and its `MATCH`/`INDEX`
- * gap-fixes above — apply uniformly across every sheet.
+ * stack resolves immediately as `{ resolved: false }`). One memo — and the
+ * `MATCH`/`INDEX`/`SUMIFS` gap-fixes above — apply uniformly across every
+ * sheet; see `parserAtDepth` for why the parser itself is pooled by recursion
+ * depth rather than shared outright.
  */
 export function createFormulaResolver(workbook: ExcelJS.Workbook): {
   resolve(sheetName: string, row: number, col: number): FormulaResolution;
 } {
   const memo = new Map<string, FormulaResolution>();
   const inFlight = new Set<string>();
+  const parsers: FormulaParser[] = [];
+  let parseDepth = 0;
 
   function resolve(sheetName: string, row: number, col: number): FormulaResolution {
     const key = cellKey(sheetName, row, col);
@@ -262,7 +364,7 @@ export function createFormulaResolver(workbook: ExcelJS.Workbook): {
       };
 
     try {
-      const raw = parser.parse(formula, { sheet: sheetName, row, col });
+      const raw = parseNested(formula, sheetName, row, col);
       if (raw instanceof FormulaParser.FormulaError)
         return { resolved: true, value: raw.toString() };
       return { resolved: true, value: raw as ExcelJS.CellValue };
@@ -280,36 +382,82 @@ export function createFormulaResolver(workbook: ExcelJS.Workbook): {
     return result.value;
   }
 
-  const parser = new FormulaParser({
-    functions: {
-      MATCH: matchFunction as (...args: never[]) => unknown,
-      INDEX: indexFunction as unknown as (...args: never[]) => unknown,
-    },
-    onCell: (ref) => operandOf(requireResolved(ref.sheet ?? '', ref.row, ref.col)),
-    onRange: (ref) => {
-      const sheet = ref.sheet ?? '';
-      const rows: (FormulaScalar | null)[][] = [];
-      for (let r = ref.from.row; r <= ref.to.row; r += 1) {
-        const cols: (FormulaScalar | null)[] = [];
-        for (let c = ref.from.col; c <= ref.to.col; c += 1)
-          cols.push(operandOf(requireResolved(sheet, r, c)));
-        rows.push(cols);
-      }
-      return rows;
-    },
-    onVariable: (name) => {
-      const defined = workbook.definedNames.getRanges(name);
-      const rangeRef = defined.ranges[0];
-      if (!rangeRef) throw new UnresolvedDependencyError(`undefined name ${name}`);
-      const parsed = parseDefinedNameRange(rangeRef);
-      if (!parsed)
-        throw new UnresolvedDependencyError(`unparseable defined name range ${rangeRef}`);
-      if (parsed.from.row === parsed.to.row && parsed.from.col === parsed.to.col) {
-        return { sheet: parsed.sheet, row: parsed.from.row, col: parsed.from.col };
-      }
-      return { sheet: parsed.sheet, from: parsed.from, to: parsed.to };
-    },
-  });
+  function makeParser(): FormulaParser {
+    return new FormulaParser({
+      functions: {
+        MATCH: matchFunction as (...args: never[]) => unknown,
+        SUMIFS: sumIfsFunction as (...args: never[]) => unknown,
+        INDEX: indexFunction as unknown as (...args: never[]) => unknown,
+      },
+      onCell: (ref) => operandOf(requireResolved(ref.sheet ?? '', ref.row, ref.col)),
+      onRange: (ref) => {
+        const sheet = ref.sheet ?? '';
+        const rows: (FormulaScalar | null)[][] = [];
+        for (let r = ref.from.row; r <= ref.to.row; r += 1) {
+          const cols: (FormulaScalar | null)[] = [];
+          for (let c = ref.from.col; c <= ref.to.col; c += 1)
+            cols.push(operandOf(requireResolved(sheet, r, c)));
+          rows.push(cols);
+        }
+        return rows;
+      },
+      onVariable: (name) => {
+        const defined = workbook.definedNames.getRanges(name);
+        const rangeRef = defined.ranges[0];
+        if (!rangeRef) throw new UnresolvedDependencyError(`undefined name ${name}`);
+        const parsed = parseDefinedNameRange(rangeRef);
+        if (!parsed)
+          throw new UnresolvedDependencyError(`unparseable defined name range ${rangeRef}`);
+        if (parsed.from.row === parsed.to.row && parsed.from.col === parsed.to.col) {
+          return { sheet: parsed.sheet, row: parsed.from.row, col: parsed.from.col };
+        }
+        return { sheet: parsed.sheet, from: parsed.from, to: parsed.to };
+      },
+    });
+  }
+
+  /**
+   * One parser per recursion depth, created on demand.
+   *
+   * Resolution recurses *from inside* an in-progress `parse`: an `onCell`/
+   * `onRange` callback hits a dependency that is itself an uncached formula,
+   * and resolving it starts a second `parse`. A `FormulaParser` wraps a
+   * chevrotain parser, which keeps mutable per-parse state (token index and,
+   * critically, a lazily-populated lookahead-function cache keyed off the
+   * current rule position). Re-entering the same instance leaves the outer
+   * parse reading a cache slot the nested one invalidated, surfacing as a raw
+   * `TypeError: Cannot read properties of undefined (reading 'call')` that the
+   * library re-wraps as `#ERROR!` — so the cell fell back to
+   * `formulaUnresolved` for no legitimate reason. A trivial dependent like
+   * `A2+1` happens to survive it; anything that returns to a function-call or
+   * binary-op chain afterwards does not, which is exactly why the reported
+   * workbook rendered some rows and left others muted.
+   *
+   * Depth-keyed pooling keeps that state private to each level of the
+   * recursion while still reusing instances — sibling dependencies at the same
+   * depth resolve one after another, never concurrently, so sharing a parser
+   * between them is safe. A fresh parser per cell would also be correct but
+   * costs ~1.6ms to construct, which the 2000-rows-per-sheet preview cap makes
+   * material; the pool's size is instead bounded by the dependency chain's
+   * depth, which is small in practice.
+   */
+  function parserAtDepth(depth: number): FormulaParser {
+    const pooled = parsers[depth];
+    if (pooled) return pooled;
+    const created = makeParser();
+    parsers[depth] = created;
+    return created;
+  }
+
+  function parseNested(formula: string, sheetName: string, row: number, col: number): unknown {
+    const parser = parserAtDepth(parseDepth);
+    parseDepth += 1;
+    try {
+      return parser.parse(formula, { sheet: sheetName, row, col });
+    } finally {
+      parseDepth -= 1;
+    }
+  }
 
   return { resolve };
 }

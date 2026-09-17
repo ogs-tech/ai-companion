@@ -270,4 +270,129 @@ describe('createFormulaResolver', () => {
     expect(resolver.resolve('Sheet1', 1, 2)).toEqual({ resolved: true, value: 21 });
     expect(resolver.resolve('Sheet1', 2, 2)).toEqual({ resolved: true, value: 22 });
   });
+  // The resolver recurses *from inside* an in-progress `parse` (an `onCell`
+  // callback resolving an uncached dependency), so a single shared parser
+  // instance is re-entered mid-parse. chevrotain keeps mutable per-parse state
+  // (token index, lookahead cache), and the outer parse then reads a lookahead
+  // slot the nested parse invalidated. A bare `A2+1` survives it; anything that
+  // returns to a function-call/binary-op chain afterwards does not — which is
+  // why the reported workbook rendered some rows and not others.
+  it('resolves an uncached dependency referenced from inside a function call, without corrupting the outer parse', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      sheet.getCell('A1').value = 10;
+      uncachedFormula(sheet, 'A2', 'A1*3');
+      uncachedFormula(sheet, 'A3', 'ROUND(A2/5,0)*5');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 3, 1)).toEqual({ resolved: true, value: 30 });
+  });
+
+  it('resolves two sibling uncached dependencies at the same nesting depth within one formula', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      sheet.getCell('A1').value = 4;
+      uncachedFormula(sheet, 'B1', 'A1*2');
+      uncachedFormula(sheet, 'B2', 'A1*3');
+      uncachedFormula(sheet, 'C1', 'ROUND(B1/2,0)+ROUND(B2/3,0)');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 3)).toEqual({ resolved: true, value: 8 });
+  });
+
+  it('resolves a dependency chain three levels deep from inside nested function calls', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      sheet.getCell('A1').value = 100;
+      uncachedFormula(sheet, 'A2', 'ROUND(A1/3,0)');
+      uncachedFormula(sheet, 'A3', 'ROUND(A2/2,0)*2');
+      uncachedFormula(sheet, 'A4', 'ROUND(A3/4,0)*4');
+    });
+    const resolver = createFormulaResolver(workbook);
+    // A2 = 33, A3 = round(33/2)*2 = 34, A4 = round(34/4)*4 = 36
+    expect(resolver.resolve('Sheet1', 4, 1)).toEqual({ resolved: true, value: 36 });
+  });
+
+  // `SUMIFS` is another empty stub in fast-formula-parser (`formulas/functions/math.js`'s
+  // `SUMIFS: () => {}`), which its dispatcher turns into `#NAME?` — same gap as `MATCH`.
+  it('resolves SUMIFS across two criteria ranges', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      const rows: [string, string, number][] = [
+        ['IDV', 'não', 18],
+        ['IDV', 'sim', 6],
+        ['PAGE', 'não', 3],
+        ['IDV', 'não', 2],
+      ];
+      rows.forEach(([sku, addon, hours], i) => {
+        sheet.getCell(`A${i + 1}`).value = sku;
+        sheet.getCell(`B${i + 1}`).value = addon;
+        sheet.getCell(`C${i + 1}`).value = hours;
+      });
+      uncachedFormula(sheet, 'E1', 'SUMIFS($C$1:$C$4,$A$1:$A$4,"IDV",$B$1:$B$4,"não")');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 5)).toEqual({ resolved: true, value: 20 });
+  });
+
+  it('resolves SUMIFS with a comparison criteria', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      [5, 15, 25].forEach((n, i) => {
+        sheet.getCell(`A${i + 1}`).value = n;
+        sheet.getCell(`B${i + 1}`).value = n * 2;
+      });
+      uncachedFormula(sheet, 'C1', 'SUMIFS($B$1:$B$3,$A$1:$A$3,">10")');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 3)).toEqual({ resolved: true, value: 80 });
+  });
+
+  it('resolves SUMIFS with a wildcard criteria', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      ['alpha', 'beta', 'alpine'].forEach((s, i) => {
+        sheet.getCell(`A${i + 1}`).value = s;
+        sheet.getCell(`B${i + 1}`).value = (i + 1) * 10;
+      });
+      uncachedFormula(sheet, 'C1', 'SUMIFS($B$1:$B$3,$A$1:$A$3,"al*")');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 3)).toEqual({ resolved: true, value: 40 });
+  });
+
+  it('matches SUMIFS text criteria case-insensitively, as Excel does', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      sheet.getCell('A1').value = 'Não';
+      sheet.getCell('B1').value = 7;
+      uncachedFormula(sheet, 'C1', 'SUMIFS($B$1:$B$1,$A$1:$A$1,"não")');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 3)).toEqual({ resolved: true, value: 7 });
+  });
+
+  it('resolves SUMIFS with no matching row as 0, not as an unresolved cell', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      sheet.getCell('A1').value = 'IDV';
+      sheet.getCell('B1').value = 9;
+      uncachedFormula(sheet, 'C1', 'SUMIFS($B$1:$B$1,$A$1:$A$1,"NOPE")');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 3)).toEqual({ resolved: true, value: 0 });
+  });
+
+  it('skips a non-numeric cell in the SUMIFS sum range instead of failing the whole sum', () => {
+    const workbook = workbookWith((wb) => {
+      const sheet = wb.addWorksheet('Sheet1');
+      sheet.getCell('A1').value = 'x';
+      sheet.getCell('A2').value = 'x';
+      sheet.getCell('B1').value = 'n/a';
+      sheet.getCell('B2').value = 5;
+      uncachedFormula(sheet, 'C1', 'SUMIFS($B$1:$B$2,$A$1:$A$2,"x")');
+    });
+    const resolver = createFormulaResolver(workbook);
+    expect(resolver.resolve('Sheet1', 1, 3)).toEqual({ resolved: true, value: 5 });
+  });
 });

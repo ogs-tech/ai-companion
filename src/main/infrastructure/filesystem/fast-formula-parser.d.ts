@@ -55,6 +55,22 @@ declare module 'fast-formula-parser' {
     toRegex(text: string, flags?: string): RegExp;
   }
 
+  /**
+   * A criteria argument (`">10"`, `"não"`, `"al*"`) parsed into an operator
+   * plus its operand. `op` is `'wc'` for a wildcard criteria, in which case
+   * `value` is the compiled `RegExp` and `match` says whether a hit means
+   * "equals" (`=`) or "differs" (`<>`).
+   */
+  export interface ParsedCriteria {
+    op: '=' | '<>' | '>' | '<' | '>=' | '<=' | 'wc';
+    value: FormulaScalar | RegExp;
+    match?: boolean;
+  }
+
+  export interface CriteriaHelper {
+    parse(criteria: FormulaScalar): ParsedCriteria;
+  }
+
   /** A function arg already unwrapped to `{value, isArray}` by the parser's own dispatcher (for any function not in `funsNeedContextAndNoDataRetrieve`/`funsNeedContext`, e.g. our `MATCH` override) — `accept` narrows it further by `type`. */
   export interface ResolvedFormulaArg {
     value?: unknown;
@@ -68,6 +84,14 @@ declare module 'fast-formula-parser' {
     accept(param: unknown, type: 0, defValue?: number): number;
     /** `Types.ARRAY` with `flat: true` — a deeply-flattened 1D array (what `MATCH`'s lookup array needs). */
     accept(param: unknown, type: 1, defValue: undefined, flat: true): FormulaScalar[];
+    /** `Types.ARRAY` with `allowSingleValue: true` — additionally packs a lone scalar (what a one-cell range like `A1:A1` dereferences to) into a 1-element array, as the library's own `SUMIF` does. */
+    accept(
+      param: unknown,
+      type: 1,
+      defValue: undefined,
+      flat: true,
+      allowSingleValue: true,
+    ): FormulaScalar[];
     isRangeRef(param: unknown): param is RangeRefArg;
     isCellRef(param: unknown): param is CellRefArg;
   }
@@ -99,6 +123,7 @@ declare module 'fast-formula-parser' {
   }
 
   export default class FormulaParser {
+    static readonly Criteria: CriteriaHelper;
     static readonly FormulaError: typeof FormulaError;
     static readonly FormulaHelpers: FormulaHelpersApi;
     static readonly Types: FormulaTypes;
