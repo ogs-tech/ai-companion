@@ -773,6 +773,145 @@ describe('EditorPanel — file subject', () => {
     }
   });
 
+  it("lays the grid out at the file's own column widths instead of stretching them to fill the panel", async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          // 10 and 20 Excel character-widths -> 75px and 145px.
+          sheets: [sheet('Catalog', [['a', 'b']], { columnWidths: [10, 20] })],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    const table = await screen.findByRole('table');
+
+    // Under MUI's default `width: 100%` + `table-layout: auto`, a `<td>`
+    // width is only a hint: the browser recomputes every column from
+    // content and redistributes the slack, so one wide merged cell inflates
+    // the whole sheet and the file's geometry is lost. Pinning the layout
+    // to `fixed` at the summed width is what makes the declared widths
+    // actually the rendered widths.
+    expect(table).toHaveStyle({ tableLayout: 'fixed', width: '264px' }); // 44 row header + 75 + 145
+  });
+
+  it("sizes a column the file left unset from the sheet's own default width, falling back to Excel's 8.43-character default", async () => {
+    call.mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.readFile') {
+        const withSheetDefault = (params as { path: string }).path === 'with-default.xlsx';
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [['a', 'b']], {
+              columnWidths: [10],
+              ...(withSheetDefault ? { defaultColumnWidth: 20 } : {}),
+            }),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+
+    const { unmount } = renderWithQuery(
+      <EditorPanel subject="file" path="with-default.xlsx" onDirtyChange={vi.fn()} />,
+    );
+    // 44 row header + 75 (10 chars) + 145 (the sheet's own 20-char default).
+    expect(await screen.findByRole('table')).toHaveStyle({ width: '264px' });
+    unmount();
+
+    renderWithQuery(<EditorPanel subject="file" path="plain.xlsx" onDirtyChange={vi.fn()} />);
+    // 44 row header + 75 (10 chars) + 64 (Excel's own 8.43-char default).
+    expect(await screen.findByRole('table')).toHaveStyle({ width: '183px' });
+  });
+
+  it('breaks a wrap-text cell across lines instead of clipping it to one ellipsized line', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [
+              [
+                { value: 'wrapped', style: { wrapText: true } },
+                { value: 'clipped', style: { bold: true } },
+              ],
+            ]),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    await screen.findByTestId('spreadsheet-preview');
+
+    expect(screen.getByRole('cell', { name: 'wrapped' })).toHaveStyle({
+      whiteSpace: 'pre-wrap',
+      textOverflow: 'clip',
+    });
+    // A cell the file did NOT mark as wrapping keeps the single-line
+    // ellipsis, so one long free-text cell can't stretch its whole row.
+    expect(screen.getByRole('cell', { name: 'clipped' })).toHaveStyle({
+      whiteSpace: 'nowrap',
+      textOverflow: 'ellipsis',
+    });
+  });
+
+  it("anchors a cell's text to the vertical alignment the file gave it, so wrapped text in a tall row starts at the top", async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [
+              [{ value: 'top', style: { verticalAlign: 'top' } }, { value: 'unset' }],
+            ]),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    await screen.findByTestId('spreadsheet-preview');
+
+    expect(screen.getByRole('cell', { name: 'top' })).toHaveStyle({ verticalAlign: 'top' });
+    expect(screen.getByRole('cell', { name: 'unset' })).toHaveStyle({ verticalAlign: 'middle' });
+  });
+
+  it("stacks frozen rows by their real heights, so a tall frozen row doesn't land on top of the one below it", async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile') {
+        return ok({
+          previewable: true,
+          kind: 'spreadsheet',
+          truncated: false,
+          sheets: [
+            sheet('Catalog', [['a'], ['b'], ['c']], {
+              frozenRows: 2,
+              rowHeights: [60, undefined], // 60pt -> 80px; the second row has no explicit height
+            }),
+          ],
+        });
+      }
+      return ok(undefined);
+    });
+    renderWithQuery(<EditorPanel subject="file" path="catalog.xlsx" onDirtyChange={vi.fn()} />);
+    await screen.findByTestId('spreadsheet-preview');
+
+    // formula bar (36) + column-letter header (33)
+    expect(screen.getByRole('rowheader', { name: '1' })).toHaveStyle({ top: '69px' });
+    // ...plus row 1's REAL 80px height, not the 33px fallback baseline.
+    expect(screen.getByRole('rowheader', { name: '2' })).toHaveStyle({ top: '149px' });
+  });
+
   it('keeps the table container from establishing its own scroll/sticky context, so its sticky offsets stay relative to the tab panel that actually scrolls', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.readFile') {
@@ -809,7 +948,12 @@ describe('EditorPanel — file subject', () => {
             previewable: true,
             kind: 'spreadsheet',
             truncated: false,
-            sheets: [sheet('Catalog', [['a', 'b']])], // no file-provided width -> drag starts from the default baseline (120px)
+            // No file-provided width, so this column both renders at and
+            // drags from Excel's own 8.43-character default (64px). Under
+            // the grid's fixed layout there is no "content-driven" width
+            // left for an unsized column to fall back to, so the rendered
+            // width and the drag baseline are necessarily the same number.
+            sheets: [sheet('Catalog', [['a', 'b']])],
           });
         }
         return ok(undefined);
@@ -822,7 +966,7 @@ describe('EditorPanel — file subject', () => {
       fireEvent.mouseMove(window, { clientX: 140 });
       fireEvent.mouseUp(window);
 
-      expect(screen.getByRole('columnheader', { name: 'A' })).toHaveStyle({ width: '160px' });
+      expect(screen.getByRole('columnheader', { name: 'A' })).toHaveStyle({ width: '104px' });
     });
 
     it('grows a row by the pointer delta when dragging its row-number resize handle', async () => {

@@ -86,6 +86,14 @@ function alignmentOf(
   return undefined;
 }
 
+/** Excel's remaining two vertical modes — `justify` and `distributed` — spread the wrapped lines themselves apart rather than anchoring the block, which CSS `vertical-align` can't express; they drop to `undefined` so the grid's own default applies. */
+function verticalAlignmentOf(
+  vertical: ExcelJS.Alignment['vertical'] | undefined,
+): 'top' | 'middle' | 'bottom' | undefined {
+  if (vertical === 'top' || vertical === 'middle' || vertical === 'bottom') return vertical;
+  return undefined;
+}
+
 /** Reads the subset of the source file's cell style that the preview grid renders — `undefined` when the cell carries none of it, so unstyled cells stay plain strings on the wire. */
 function styleOf(cell: ExcelJS.Cell): SpreadsheetCellStyle | undefined {
   const style: SpreadsheetCellStyle = {};
@@ -99,6 +107,9 @@ function styleOf(cell: ExcelJS.Cell): SpreadsheetCellStyle | undefined {
   }
   const align = alignmentOf(cell.alignment?.horizontal);
   if (align) style.align = align;
+  if (cell.alignment?.wrapText) style.wrapText = true;
+  const verticalAlign = verticalAlignmentOf(cell.alignment?.vertical);
+  if (verticalAlign) style.verticalAlign = verticalAlign;
   return Object.keys(style).length > 0 ? style : undefined;
 }
 
@@ -253,7 +264,20 @@ async function readSpreadsheet(buffer: Buffer): Promise<FilePreview> {
     const frozenRows = view?.state === 'frozen' ? (view.ySplit ?? 0) : 0;
     const frozenCols = view?.state === 'frozen' ? (view.xSplit ?? 0) : 0;
 
-    return { name: worksheet.name, rows, merges, columnWidths, rowHeights, frozenRows, frozenCols };
+    // Only set by files that override Excel's own 8.43-character default;
+    // absent otherwise, which the renderer reads as "use that default".
+    const { defaultColWidth } = worksheet.properties;
+
+    return {
+      name: worksheet.name,
+      rows,
+      merges,
+      columnWidths,
+      ...(defaultColWidth !== undefined ? { defaultColumnWidth: defaultColWidth } : {}),
+      rowHeights,
+      frozenRows,
+      frozenCols,
+    };
   });
 
   return { previewable: true, kind: 'spreadsheet', sheets, truncated };

@@ -10,6 +10,10 @@ export interface SpreadsheetCellStyle {
   color?: string;
   backgroundColor?: string;
   align?: 'left' | 'center' | 'right';
+  /** The cell's "wrap text" flag — the renderer breaks a wrapped cell across lines instead of clipping it to one ellipsized line. */
+  wrapText?: boolean;
+  /** Vertical alignment inside the cell; `undefined` both when the file set none and when it set one the grid has no CSS equivalent for (Excel's `justify`/`distributed`). */
+  verticalAlign?: 'top' | 'middle' | 'bottom';
 }
 
 /**
@@ -40,6 +44,16 @@ export interface SpreadsheetSheet {
   merges: SpreadsheetMerge[];
   /** Column widths in the workbook's own character-width unit, index-aligned to columns; `undefined` where the file never set one. */
   columnWidths: (number | undefined)[];
+  /**
+   * The sheet's own default column width, in the same character-width unit
+   * as `columnWidths` — what every column `columnWidths` leaves `undefined`
+   * is actually laid out at. Absent when the file never set one, in which
+   * case the renderer falls back to Excel's own 8.43-character default.
+   * (The row-height counterpart is deliberately NOT carried: exceljs always
+   * reports one, and Excel's 15pt default is too cramped for this grid's
+   * type, so unset rows keep the grid's own taller baseline instead.)
+   */
+  defaultColumnWidth?: number;
   /** Row heights in points, index-aligned to `rows`; `undefined` where the file never set an explicit height for that row. */
   rowHeights: (number | undefined)[];
   /** Frozen leading rows/columns from the workbook's own pane split (0 when the sheet has no freeze). */

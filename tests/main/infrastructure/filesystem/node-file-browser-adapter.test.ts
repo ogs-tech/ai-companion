@@ -383,6 +383,61 @@ describe('NodeFileBrowserAdapter.readFile — spreadsheet (.xlsx)', () => {
     expect(preview.sheets[0]?.columnWidths).toEqual([24, undefined]);
   });
 
+  it('reads the wrap-text flag and vertical alignment into a cell style', async () => {
+    const path = join(dir, 'wrapped.xlsx');
+    await writeWorkbook(path, (workbook) => {
+      const sheet = workbook.addWorksheet('Sheet1');
+      const cell = sheet.getCell('A1');
+      cell.value = 'A long description that Excel wraps across several lines';
+      cell.alignment = { wrapText: true, vertical: 'top' };
+    });
+
+    const preview = await adapter.readFile(path);
+    if (!preview.previewable || preview.kind !== 'spreadsheet')
+      throw new Error('expected spreadsheet preview');
+    expect(preview.sheets[0]?.rows[0]?.[0]).toEqual({
+      value: 'A long description that Excel wraps across several lines',
+      style: { wrapText: true, verticalAlign: 'top' },
+    });
+  });
+
+  it("drops a vertical alignment the grid has no equivalent for, rather than inventing one", async () => {
+    const path = join(dir, 'justified.xlsx');
+    await writeWorkbook(path, (workbook) => {
+      const sheet = workbook.addWorksheet('Sheet1');
+      const cell = sheet.getCell('A1');
+      cell.value = 'x';
+      // Excel's `justify`/`distributed` spread the lines themselves apart —
+      // there is no single CSS `vertical-align` that means the same thing.
+      cell.alignment = { vertical: 'justify' };
+    });
+
+    const preview = await adapter.readFile(path);
+    if (!preview.previewable || preview.kind !== 'spreadsheet')
+      throw new Error('expected spreadsheet preview');
+    expect(preview.sheets[0]?.rows[0]?.[0]).toBe('x');
+  });
+
+  it("reads the sheet's own default column width, leaving it undefined when the file never set one", async () => {
+    const withDefault = join(dir, 'with-default-width.xlsx');
+    await writeWorkbook(withDefault, (workbook) => {
+      workbook.addWorksheet('Sheet1', { properties: { defaultColWidth: 14 } }).addRow(['a']);
+    });
+    const withoutDefault = join(dir, 'without-default-width.xlsx');
+    await writeWorkbook(withoutDefault, (workbook) => {
+      workbook.addWorksheet('Sheet1').addRow(['a']);
+    });
+
+    const withPreview = await adapter.readFile(withDefault);
+    const withoutPreview = await adapter.readFile(withoutDefault);
+    if (!withPreview.previewable || withPreview.kind !== 'spreadsheet')
+      throw new Error('expected spreadsheet preview');
+    if (!withoutPreview.previewable || withoutPreview.kind !== 'spreadsheet')
+      throw new Error('expected spreadsheet preview');
+    expect(withPreview.sheets[0]?.defaultColumnWidth).toBe(14);
+    expect(withoutPreview.sheets[0]?.defaultColumnWidth).toBeUndefined();
+  });
+
   it('reads a frozen-pane split into frozenRows/frozenCols', async () => {
     const path = join(dir, 'frozen.xlsx');
     await writeWorkbook(path, (workbook) => {

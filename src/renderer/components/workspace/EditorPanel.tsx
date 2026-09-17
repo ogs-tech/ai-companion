@@ -554,23 +554,32 @@ function columnLetter(index: number): string {
 }
 
 /**
- * Fallback row height, applied as an EXPLICIT `<TableRow>` height whenever a
- * row has no file-provided or resized height — not just a visual nicety:
- * the sticky top offsets for frozen rows/the column-letter header are
- * computed from this same constant, so an unset row must actually render at
- * exactly this height or a frozen row drifts onto — and visually hides —
- * the row below it once scrolled (auto/content-driven height would make the
- * real rendered height diverge from what the sticky math assumes).
+ * Row height for a row the file gave no explicit height and nobody resized,
+ * applied as an EXPLICIT `<TableRow>` height so the frozen-row sticky stack
+ * can be computed without measuring real layout. Deliberately taller than
+ * Excel's own 15pt (20px) default, which this grid's 13px monospace type
+ * doesn't sit comfortably in — the same reason `SpreadsheetSheet` carries
+ * no default-row-height counterpart to its `defaultColumnWidth`.
  */
-const FROZEN_ROW_HEIGHT_PX = 33;
-/** The synthetic top row of column letters (A, B, C…) renders at the same height as a data row under dense styling. */
-const COLUMN_HEADER_ROW_HEIGHT_PX = FROZEN_ROW_HEIGHT_PX;
+const DEFAULT_ROW_HEIGHT_PX = 33;
+/** The synthetic top row of column letters (A, B, C…) renders at the same height as a default data row. */
+const COLUMN_HEADER_ROW_HEIGHT_PX = DEFAULT_ROW_HEIGHT_PX;
 /** The formula bar sits above the grid itself, outside the frozen-row sticky stack. */
 const FORMULA_BAR_HEIGHT_PX = 36;
 /** Width of the sticky row-number column on the left — enough for a 4-digit row number plus its resize handle. */
 const ROW_HEADER_WIDTH_PX = 44;
-/** Starting point for a drag-resize on a column the source file never set an explicit width for. Never applied to an unresized column's own rendered width, which stays content-driven — same auto-width behavior the grid already had before headers existed. */
-const DEFAULT_COLUMN_WIDTH_PX = 120;
+/** Excel's own column width, for a sheet that sets no `defaultColumnWidth` of its own — in the same character-width unit. */
+const EXCEL_DEFAULT_COLUMN_WIDTH_CHARS = 8.43;
+/**
+ * Horizontal padding per side inside a grid cell. Excel's width unit already
+ * budgets its own ~2px inset per side (the `+ 5` in `columnWidthPx`), and
+ * `box-sizing: border-box` takes padding OUT of the declared width rather
+ * than adding to it — so MUI's `size="small"` default of 16px per side would
+ * leave a correctly-sized column showing 32px less TEXT than the very same
+ * column shows in Excel.
+ */
+const CELL_PADDING_X_PX = 4;
+const CELL_PADDING_Y_PX = 2;
 const MIN_COLUMN_WIDTH_PX = 32;
 const MIN_ROW_HEIGHT_PX = 20;
 
@@ -617,13 +626,26 @@ interface SelectedCell {
  * in for a cell the file left unstyled. A frozen header row/column, when
  * the sheet has one, stays pinned while the body scrolls — the same sticky
  * mechanism the column/row headers use, just applied one layer further in.
- * Each cell is width-capped with a single-line ellipsis (full value
- * available via the native `title` tooltip on hover) — without that cap, a
- * long free-text cell (a legend, a note) forces its row to wrap across many
- * lines while every other row in the sheet stays single-line, which is what
- * broke the layout: rows lose a consistent height and columns drift out of
- * alignment with the header above them. No cell editing yet: the
- * main-process side only reads spreadsheets, it doesn't write them back.
+ *
+ * Layout is `table-layout: fixed` over a `<colgroup>`, with the table sized
+ * to the exact sum of its columns rather than stretched to the panel. Under
+ * the browser's default auto layout a `<td>` width is only a hint — column
+ * widths get recomputed from content and the slack redistributed, so a
+ * single wide merged banner cell inflates every column in the sheet and the
+ * file's geometry is lost. Fixed layout is what makes a declared width the
+ * rendered width; the panel scrolls horizontally when the sheet is wider
+ * than it.
+ *
+ * Only a cell the file marked "wrap text" breaks across lines (anchored by
+ * its own vertical alignment); every other cell keeps a single-line
+ * ellipsis with the full value on the native `title` tooltip. That split
+ * matters: wrapping unconditionally is what broke the layout before, since
+ * one long free-text cell (a legend, a note) would stretch its row while
+ * every other row stayed single-line. A wrapped row still renders at the
+ * height the file recorded for it — Excel sized that row to fit the wrapped
+ * text in the first place — and CSS treats it as a minimum, so nothing is
+ * ever clipped away. No cell editing yet: the main-process side only reads
+ * spreadsheets, it doesn't write them back.
  */
 function SpreadsheetPreview({
   sheets,
@@ -653,16 +675,41 @@ function SpreadsheetPreview({
   const { anchors, covered } = buildMergeIndex(sheet?.merges ?? []);
   const columnCount = sheet?.rows[0]?.length ?? 0;
 
-  const columnWidth = (colIndex: number): number | undefined =>
-    colWidthOverrides[activeSheet]?.[colIndex] ?? columnWidthPx(sheet?.columnWidths[colIndex]);
-  const rowHeight = (rowIndex: number): number | undefined =>
-    rowHeightOverrides[activeSheet]?.[rowIndex] ?? rowHeightPx(sheet?.rowHeights[rowIndex]);
+  // Under fixed layout every column needs a real number — there is no
+  // "let the content decide" fallback left — so these resolve all the way
+  // down: a live resize wins, then the file's own width for that
+  // column/row, then the sheet's (or Excel's) default.
+  const defaultColumnWidthPx =
+    columnWidthPx(sheet?.defaultColumnWidth ?? EXCEL_DEFAULT_COLUMN_WIDTH_CHARS) ??
+    EXCEL_DEFAULT_COLUMN_WIDTH_CHARS;
+  const columnWidth = (colIndex: number): number =>
+    colWidthOverrides[activeSheet]?.[colIndex] ??
+    columnWidthPx(sheet?.columnWidths[colIndex]) ??
+    defaultColumnWidthPx;
+  const rowHeight = (rowIndex: number): number =>
+    rowHeightOverrides[activeSheet]?.[rowIndex] ??
+    rowHeightPx(sheet?.rowHeights[rowIndex]) ??
+    DEFAULT_ROW_HEIGHT_PX;
 
   /** Sticky left offset for a frozen data column — the row-number column's own width plus every earlier frozen column's effective width. */
   const frozenColumnLeft = (colIndex: number): number => {
     let left = ROW_HEADER_WIDTH_PX;
-    for (let c = 0; c < colIndex; c += 1) left += columnWidth(c) ?? DEFAULT_COLUMN_WIDTH_PX;
+    for (let c = 0; c < colIndex; c += 1) left += columnWidth(c);
     return left;
+  };
+
+  /** Sticky top offset for a frozen data row — the formula bar and column-letter header, plus every earlier frozen row's own height. Summing the real heights (rather than multiplying by one baseline) is what keeps a tall frozen row from landing on top of the row below it. */
+  const frozenRowTop = (rowIndex: number): number => {
+    let top = FORMULA_BAR_HEIGHT_PX + COLUMN_HEADER_ROW_HEIGHT_PX;
+    for (let r = 0; r < rowIndex; r += 1) top += rowHeight(r);
+    return top;
+  };
+
+  /** The grid's own width: the row-number gutter plus every column, which is what the table is sized to under fixed layout. */
+  const gridWidthPx = (): number => {
+    let width = ROW_HEADER_WIDTH_PX;
+    for (let c = 0; c < columnCount; c += 1) width += columnWidth(c);
+    return width;
   };
 
   // Drag math is delta-from-drag-start against a fixed base captured once at
@@ -675,7 +722,7 @@ function SpreadsheetPreview({
       e.preventDefault();
       e.stopPropagation();
       const startX = e.clientX;
-      const baseWidth = columnWidth(colIndex) ?? DEFAULT_COLUMN_WIDTH_PX;
+      const baseWidth = columnWidth(colIndex);
       const onMove = (moveEvent: MouseEvent): void => {
         const next = Math.max(
           MIN_COLUMN_WIDTH_PX,
@@ -700,7 +747,7 @@ function SpreadsheetPreview({
       e.preventDefault();
       e.stopPropagation();
       const startY = e.clientY;
-      const baseHeight = rowHeight(rowIndex) ?? FROZEN_ROW_HEIGHT_PX;
+      const baseHeight = rowHeight(rowIndex);
       const onMove = (moveEvent: MouseEvent): void => {
         const next = Math.max(
           MIN_ROW_HEIGHT_PX,
@@ -777,7 +824,21 @@ function SpreadsheetPreview({
             component={Paper}
             sx={{ overflow: 'visible', borderTopLeftRadius: 0, borderTopRightRadius: 0 }}
           >
-            <Table size="small" sx={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+            <Table
+              size="small"
+              sx={{
+                borderCollapse: 'separate',
+                borderSpacing: 0,
+                tableLayout: 'fixed',
+                width: gridWidthPx(),
+              }}
+            >
+              <colgroup>
+                <col style={{ width: ROW_HEADER_WIDTH_PX }} />
+                {Array.from({ length: columnCount }, (_, colIndex) => (
+                  <col key={colIndex} style={{ width: columnWidth(colIndex) }} />
+                ))}
+              </colgroup>
               <TableHead>
                 <TableRow sx={{ height: COLUMN_HEADER_ROW_HEIGHT_PX }}>
                   <TableCell
@@ -788,7 +849,7 @@ function SpreadsheetPreview({
                       left: 0,
                       zIndex: 3,
                       width: ROW_HEADER_WIDTH_PX,
-                      minWidth: ROW_HEADER_WIDTH_PX,
+                      padding: `${CELL_PADDING_Y_PX}px ${CELL_PADDING_X_PX}px`,
                       bgcolor: theme.ogs.surfaces.rail,
                       border: 1,
                       borderColor: 'divider',
@@ -805,6 +866,7 @@ function SpreadsheetPreview({
                           zIndex: colIndex < sheet.frozenCols ? 2 : 1,
                           ...(colIndex < sheet.frozenCols && { left: frozenColumnLeft(colIndex) }),
                           width: columnWidth(colIndex),
+                          padding: `${CELL_PADDING_Y_PX}px ${CELL_PADDING_X_PX}px`,
                           fontFamily: fonts.mono,
                           fontSize: '0.75rem',
                           fontWeight: isActiveColumn ? 700 : 600,
@@ -844,7 +906,7 @@ function SpreadsheetPreview({
                   const frozenRow = rowIndex < sheet.frozenRows;
                   const isActiveRow = selected.row === rowIndex;
                   return (
-                    <TableRow key={rowIndex} sx={{ height: height ?? FROZEN_ROW_HEIGHT_PX }}>
+                    <TableRow key={rowIndex} sx={{ height }}>
                       <TableCell
                         component="th"
                         scope="row"
@@ -853,14 +915,9 @@ function SpreadsheetPreview({
                           position: 'sticky',
                           left: 0,
                           zIndex: frozenRow ? 2 : 1,
-                          ...(frozenRow && {
-                            top:
-                              FORMULA_BAR_HEIGHT_PX +
-                              COLUMN_HEADER_ROW_HEIGHT_PX +
-                              rowIndex * FROZEN_ROW_HEIGHT_PX,
-                          }),
+                          ...(frozenRow && { top: frozenRowTop(rowIndex) }),
                           width: ROW_HEADER_WIDTH_PX,
-                          minWidth: ROW_HEADER_WIDTH_PX,
+                          padding: `${CELL_PADDING_Y_PX}px ${CELL_PADDING_X_PX}px`,
                           fontFamily: fonts.mono,
                           fontSize: '0.75rem',
                           fontWeight: isActiveRow ? 700 : 600,
@@ -901,7 +958,7 @@ function SpreadsheetPreview({
                         const numeric = isNumericCell(text);
                         const align = style?.align ?? (numeric ? 'right' : 'left');
                         const bold = style ? (style.bold ?? false) : isLabelColumn;
-                        const widthPx = columnWidth(cellIndex);
+                        const wrap = style?.wrapText ?? false;
                         const frozenCol = cellIndex < sheet.frozenCols;
                         const isSelected = selected.row === rowIndex && selected.col === cellIndex;
                         return (
@@ -925,13 +982,19 @@ function SpreadsheetPreview({
                                 fontFamily: fonts.mono,
                                 fontSize: '0.8125rem',
                                 lineHeight: 1.5,
-                                whiteSpace: 'nowrap',
+                                // Only a cell the file marked "wrap text"
+                                // breaks across lines; `pre-wrap` also keeps
+                                // the literal newlines Excel stores inside
+                                // such a cell, and `anywhere` lets an
+                                // unbroken token (a long URL, a SKU) break
+                                // rather than overflow its column.
+                                whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
+                                overflowWrap: wrap ? 'anywhere' : 'normal',
                                 overflow: 'hidden',
-                                textOverflow: 'ellipsis',
+                                textOverflow: wrap ? 'clip' : 'ellipsis',
+                                verticalAlign: style?.verticalAlign ?? 'middle',
                                 cursor: 'default',
-                                width: widthPx,
-                                maxWidth: widthPx ?? (isLabelColumn ? 420 : 280),
-                                minWidth: widthPx ?? (isLabelColumn ? 160 : 90),
+                                padding: `${CELL_PADDING_Y_PX}px ${CELL_PADDING_X_PX}px`,
                                 border: 1,
                                 borderColor: 'divider',
                                 textAlign: align,
@@ -950,10 +1013,7 @@ function SpreadsheetPreview({
                                 }),
                                 ...(frozenRow && {
                                   position: 'sticky',
-                                  top:
-                                    FORMULA_BAR_HEIGHT_PX +
-                                    COLUMN_HEADER_ROW_HEIGHT_PX +
-                                    rowIndex * FROZEN_ROW_HEIGHT_PX,
+                                  top: frozenRowTop(rowIndex),
                                   zIndex: 2,
                                   backgroundColor: resolvedBackground,
                                 }),
