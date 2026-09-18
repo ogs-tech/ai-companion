@@ -45,6 +45,12 @@ export default defineConfig({
         test: {
           name: 'jsdom',
           environment: 'jsdom',
+          // WorkspaceScreen.test.tsx alone runs 40s; sharing CPU with the rest
+          // of the suite stretches it past 120s, and its heaviest tests then
+          // cross Vitest's 5s default and fail as timeouts rather than on any
+          // assertion. The renderer tests mount real MUI trees — they are slow
+          // by nature, not by accident.
+          testTimeout: 20_000,
           include: ['tests/renderer/**/*.test.{ts,tsx}'],
           setupFiles: ['./tests/renderer/setup.ts'],
         },

@@ -145,6 +145,24 @@ Git helpers (branch/repo detection) — not currently called from the renderer. 
 |---|---|---|
 | `dialog.selectFolder` | `{ defaultPath?: string }` (or `null`) | `{ canceled: boolean; path?: string }` |
 
+### `openWith`
+
+| Method | Params | Result |
+|---|---|---|
+| `openWith.suggest` | `{ path: string; projectId?: string; kind: 'file' \| 'dir' }` | `OpenWithSuggestions` |
+| `openWith.open` | `{ path: string; projectId?: string; kind: 'file' \| 'dir'; appId: string; appPath: string }` | `void` |
+| `openWith.chooseApp` | `{ path: string; projectId?: string; kind: 'file' \| 'dir' }` | `{ canceled: boolean }` |
+| `openWith.openDefault` | `{ path: string; projectId?: string }` | `void` |
+| `openWith.reveal` | `{ path: string; projectId?: string }` | `void` |
+
+Backs the file tree's right-click "Abrir com" submenu and its "Revelar no Finder" sibling. **This namespace deliberately breaks the `workspace.*`/`project.*` symmetry**: rather than ten methods duplicated per scope, each of these five takes an optional `projectId` and picks the root itself — the workspace's when absent, the given `Project`'s when present — then resolves `path` through the very same `FileBrowserService` containment guard (`..`, absolute paths and escaping symlinks all rejected). `path` is always scope-relative and, unlike the other file-browser methods, may be the empty string — that is the root itself, which is a real target here: a `Project` folder expanded in place inside the workspace tree is addressed relative to its own root. No renderer-supplied absolute path ever reaches the OS.
+
+`openWith.suggest` asks the platform which applications are registered for the path, then filters, dedupes and ranks them into `{ primary, more }` (`src/shared/open-with.ts`): `primary` is the first 6, `more` the rest. Each `ExternalApp` is `{ id, name, path, isDefault, isRemembered, iconDataUrl? }`, where `id` is the bundle identifier — the key everything downstream uses, because a bundle survives being moved or renamed and its display name is localized. Filtering drops bundles under `/Library/Caches/`, inside `node_modules`, or in any dot-prefixed directory (test-runner and editor-extension copies of real apps, which Launch Services reports as installed); dedupe keeps one copy per bundle id, preferring `/Applications` over a system or external-volume location. Ranking is: remembered choice → OS default → curated rank for the path's category → alphabetical (`src/main/application/open-with/catalog.ts`). The curated table only *scores*; it never hides an application the OS offered.
+
+`openWith.open` launches the path in the chosen application and then records it in `settings.openWith`, keyed by extension (`.md`), `dir` for folders or `file` for names without one — in that order, so a failed launch never leaves a preference pointing at a bundle that isn't there. `openWith.chooseApp` opens the native application picker and, on a pick, resolves that bundle's own identifier before delegating to the same path. If the bundle can't be read, the application is still launched but nothing is remembered: a preference stored under a filesystem path could never match a suggestion (which always carries a bundle id), so the entry would be permanent dead weight in settings.json. `openWith.openDefault` and `openWith.reveal` are the portable subset (Electron `shell.openPath` / `showItemInFolder`).
+
+Application discovery is macOS-only: `MacAppLauncher` asks Launch Services through `osascript -l JavaScript`, which ships with every macOS install and so needs no Xcode, no compiled helper and no extra dependency. The target path is passed as `argv`, never interpolated into the script — filenames are attacker-influenced whenever the workspace is. Every failure mode (timeout, unparseable output, an unregistered type) degrades to an empty candidate list rather than throwing. On other platforms `SystemDefaultAppLauncher` returns no candidates, so the submenu shows only "abrir com o aplicativo padrão"; `openWith.open` there rejects with `validation`.
+
 ### `skill`
 
 | Method | Params | Result |

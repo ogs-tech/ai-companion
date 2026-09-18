@@ -34,6 +34,17 @@ export interface Settings {
    * mean the same thing, and settings.json stays free of a key nobody set.
    */
   pricing?: Record<string, ModelRateSettings>;
+  /**
+   * The application last chosen through "open with", keyed by what it was
+   * chosen for — an extension (`.md`), `dir` for folders, or `file` for names
+   * without one — and valued by bundle identifier. Consulted only to float
+   * that app to the top of the menu, so a stale id (app uninstalled) simply
+   * matches nothing.
+   *
+   * Optional and absent by default: nobody who never used the feature gets
+   * the key written into their settings.json.
+   */
+  openWith?: Record<string, string>;
 }
 
 export const WorkspacePaths = [

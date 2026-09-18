@@ -37,6 +37,7 @@ const baseDeps = (): IpcDeps => {
     fileBrowserService: {} as IpcDeps['fileBrowserService'],
     fileBrowserPort: {} as IpcDeps['fileBrowserPort'],
     projectService: {} as IpcDeps['projectService'],
+    openWithService: {} as IpcDeps['openWithService'],
     repoService: {} as IpcDeps['repoService'],
     adapterManager: {} as IpcDeps['adapterManager'],
     dialogPort: {} as IpcDeps['dialogPort'],

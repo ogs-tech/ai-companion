@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Box, Collapse, List, ListItemButton, ListItemText, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronRight, ChevronDown, Eye, Folder, File as FileIcon, FolderInput, FolderOpen, FolderX, SquareTerminal } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
+import { useRevealPath, type OpenWithTarget } from '../../hooks/use-open-with.js';
+import { OpenWithMenu } from './OpenWithMenu.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
 import type { Project } from '../../../shared/project.js';
@@ -126,7 +128,11 @@ function TreeNode({
           else if (entry.kind === 'file') onSelectFile(relPath, effectiveProjectId);
         }}
         onContextMenu={(e) => {
-          onOpenRowMenu(e, { relPath, kind: entry.kind, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
+          // `listingPath`, not `relPath`, for the same reason the children
+          // listing uses it: a Project folder expanded in place is addressed
+          // relative to ITS root (''), and pairing the workspace-relative name
+          // with its own projectId would resolve <project>/<project name>.
+          onOpenRowMenu(e, { relPath: listingPath, kind: entry.kind, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
         }}
       >
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
@@ -254,11 +260,47 @@ export function FolderTree({
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<RowMenuTarget>();
   const rowMenuTarget = rowMenu.state?.target;
+  const [openWithAnchor, setOpenWithAnchor] = useState<HTMLElement | null>(null);
+  const [openWithTarget, setOpenWithTarget] = useState<OpenWithTarget | null>(null);
+  const revealPath = useRevealPath();
+
+  const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({
+    relPath: target.relPath,
+    kind: target.kind,
+    ...(target.projectId ? { projectId: target.projectId } : {}),
+  });
+
+  const closeRowAndSubmenu = (): void => {
+    setOpenWithAnchor(null);
+    rowMenu.closeMenu();
+  };
+
   const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
     ? [
         ...(rowMenuTarget.kind === 'file'
           ? [{ key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreviewFile?.(rowMenuTarget.relPath, rowMenuTarget.projectId) }]
           : []),
+        {
+          key: 'open-with',
+          label: 'Abrir com',
+          glyph: ExternalLink,
+          keepOpen: true,
+          hasSubmenu: true,
+          onSelect: (anchor) => {
+            setOpenWithTarget(asOpenWithTarget(rowMenuTarget));
+            setOpenWithAnchor(anchor);
+          },
+        },
+        {
+          key: 'reveal',
+          label: 'Revelar no Finder',
+          glyph: FolderSearch,
+          onSelect: () => {
+            revealPath
+              .mutateAsync(asOpenWithTarget(rowMenuTarget))
+              .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+          },
+        },
         { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath, rowMenuTarget.projectId) },
       ]
     : [];
@@ -299,7 +341,14 @@ export function FolderTree({
           />
         ))}
       </List>
-      <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
+      <RowContextMenu state={rowMenu.state} onClose={closeRowAndSubmenu} actions={rowMenuActions} />
+      <OpenWithMenu
+        anchorEl={openWithAnchor}
+        target={openWithTarget}
+        onClose={() => setOpenWithAnchor(null)}
+        onDone={closeRowAndSubmenu}
+        onError={(message) => setToast({ variant: 'error', message })}
+      />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
   );

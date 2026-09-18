@@ -22,6 +22,7 @@ import type { HealthService } from '../../../src/main/application/services/healt
 import type { NotificationPort } from '../../../src/main/application/ports/notification-port.js';
 import type { WorkspaceTeardownService } from '../../../src/main/application/services/workspace-teardown.js';
 import type { McpService } from '../../../src/main/application/services/mcp-service.js';
+import type { OpenWithService } from '../../../src/main/application/services/open-with-service.js';
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
 import type { FileBrowserPort } from '../../../src/main/application/ports/file-browser-port.js';
 import type { Settings } from '../../../src/shared/settings.js';
@@ -56,6 +57,7 @@ interface Deps {
   hookService: HookService;
   healthService: HealthService;
   mcpService: McpService;
+  openWithService: OpenWithService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   appQuit: () => void;
@@ -93,9 +95,11 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
 
   const dialogSpy = {
     selectFolder: vi.fn().mockResolvedValue({ canceled: false, path: '/picked' }),
+    selectApplication: vi.fn().mockResolvedValue({ canceled: true }),
   };
   const dialogPort: DialogPort = {
     selectFolder: dialogSpy.selectFolder,
+    selectApplication: dialogSpy.selectApplication,
   };
 
   const adapterManager: AdapterManager = {
@@ -105,6 +109,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     countDestinations: vi.fn().mockResolvedValue(0),
   } as unknown as AdapterManager;
 
+  const openWithService = null as unknown as OpenWithService;
   const pluginService = null as unknown as PluginService;
   const skillService = null as unknown as SkillService;
   const agentService = null as unknown as AgentService;
@@ -152,6 +157,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     hookService,
     healthService,
     mcpService,
+    openWithService,
     notificationPort,
     workspaceTeardownService,
     appQuit: () => undefined,

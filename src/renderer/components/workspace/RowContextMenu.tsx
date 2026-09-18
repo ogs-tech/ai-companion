@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
-import type { LucideIcon } from 'lucide-react';
+import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
 interface RowContextMenuState<T> {
@@ -37,7 +37,19 @@ export interface RowContextMenuAction {
   key: string;
   label: string;
   glyph: LucideIcon;
-  onSelect: () => void;
+  /**
+   * Receives the clicked item's own DOM node, so an action whose result is
+   * another menu can anchor it to itself. Actions that don't need it can keep
+   * a zero-argument callback.
+   */
+  onSelect: (anchor: HTMLElement) => void;
+  /**
+   * Leaves this menu open. For an action that opens a submenu anchored to its
+   * own row — closing here would take the anchor down with it.
+   */
+  keepOpen?: boolean;
+  /** Draws the affordance that says "this opens another menu". */
+  hasSubmenu?: boolean;
 }
 
 interface RowContextMenuProps {
@@ -60,13 +72,15 @@ export function RowContextMenu({ state, onClose, actions }: RowContextMenuProps)
         <MenuItem
           key={action.key}
           data-testid={`row-context-menu-${action.key}`}
-          onClick={() => {
-            onClose();
-            action.onSelect();
+          onClick={(event) => {
+            const anchor = event.currentTarget;
+            if (action.keepOpen !== true) onClose();
+            action.onSelect(anchor);
           }}
         >
           <ListItemIcon><Icon glyph={action.glyph} size={16} /></ListItemIcon>
           <ListItemText>{action.label}</ListItemText>
+          {action.hasSubmenu === true && <Icon glyph={ChevronRight} size={14} />}
         </MenuItem>
       ))}
     </Menu>

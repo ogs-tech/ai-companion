@@ -446,4 +446,101 @@ describe('FolderTree', () => {
       expect(onNewAction).toHaveBeenCalledWith('src', undefined);
     });
   });
+
+  describe('open with', () => {
+    const listOnly = (entries: { name: string; kind: 'file' | 'dir' }[]) =>
+      vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        const path = (params as { path?: string } | undefined)?.path;
+        if (method === 'workspace.listDir' && path === '') return entries;
+        if (method === 'openWith.suggest') return { primary: [], more: [] };
+        return undefined;
+      });
+
+    it('offers "Abrir com" and "Revelar no Finder" on a file row', async () => {
+      listOnly([{ name: 'README.md', kind: 'file' }]);
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+
+      expect(await screen.findByTestId('row-context-menu-open-with')).toBeInTheDocument();
+      expect(screen.getByTestId('row-context-menu-reveal')).toBeInTheDocument();
+    });
+
+    it('offers "Abrir com" on a folder row too', async () => {
+      listOnly([{ name: 'src', kind: 'dir' }]);
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('src'));
+
+      expect(await screen.findByTestId('row-context-menu-open-with')).toBeInTheDocument();
+    });
+
+    it('reveals the row in the file manager, by relative path', async () => {
+      const callIpc = listOnly([{ name: 'README.md', kind: 'file' }]);
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      fireEvent.click(await screen.findByTestId('row-context-menu-reveal'));
+
+      await waitFor(() =>
+        expect(callIpc).toHaveBeenCalledWith('openWith.reveal', { path: 'README.md' }),
+      );
+    });
+
+    it('opens the suggestions submenu without closing the row menu', async () => {
+      listOnly([{ name: 'README.md', kind: 'file' }]);
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      fireEvent.click(await screen.findByTestId('row-context-menu-open-with'));
+
+      expect(await screen.findByTestId('open-with-menu')).toBeInTheDocument();
+      expect(screen.getByTestId('row-context-menu-open-with')).toBeInTheDocument();
+    });
+
+    it('targets the Project root itself, not its name joined onto its own path', async () => {
+      const callIpc = vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        const path = (params as { path?: string } | undefined)?.path;
+        if (method === 'workspace.listDir' && path === '') return [{ name: 'apps', kind: 'dir' }];
+        if (method === 'openWith.suggest') return { primary: [], more: [] };
+        return undefined;
+      });
+      renderTree({
+        workspaceRootPath: '/repos/monorepo',
+        projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
+        onOpenProject: vi.fn(),
+      });
+
+      fireEvent.contextMenu(await screen.findByText('apps'));
+      fireEvent.click(await screen.findByTestId('row-context-menu-reveal'));
+
+      // Not { path: 'apps', projectId: 'p1' } — the handler roots that at the
+      // Project's own path and would resolve <root>/apps/apps.
+      await waitFor(() =>
+        expect(callIpc).toHaveBeenCalledWith('openWith.reveal', { path: '', projectId: 'p1' }),
+      );
+    });
+
+    it('carries the project scope of the row into the suggestion request', async () => {
+      const callIpc = vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'project.listDir' && (params as { path: string }).path === '') {
+          return [{ name: 'README.md', kind: 'file' }];
+        }
+        if (method === 'openWith.suggest') return { primary: [], more: [] };
+        return undefined;
+      });
+      renderTree({ scopeProjectId: 'p1' });
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      fireEvent.click(await screen.findByTestId('row-context-menu-open-with'));
+
+      await waitFor(() =>
+        expect(callIpc).toHaveBeenCalledWith('openWith.suggest', {
+          path: 'README.md',
+          projectId: 'p1',
+          kind: 'file',
+        }),
+      );
+    });
+  });
 });

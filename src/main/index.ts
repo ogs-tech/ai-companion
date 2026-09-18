@@ -32,6 +32,9 @@ import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
 import { NodeFileBrowserAdapter } from './infrastructure/filesystem/node-file-browser-adapter.js';
 import { NumbersConverterAdapter } from './infrastructure/spreadsheet/numbers-converter-adapter.js';
 import { FileBrowserService } from './application/services/file-browser-service.js';
+import { OpenWithService } from './application/services/open-with-service.js';
+import { MacAppLauncher } from './infrastructure/app-launcher/mac-app-launcher.js';
+import { SystemDefaultAppLauncher } from './infrastructure/app-launcher/system-default-app-launcher.js';
 import type { CredentialStorePort } from './application/ports/credential-store-port.js';
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
@@ -338,6 +341,13 @@ async function wireIpc(): Promise<void> {
 
   const notificationPort = new ElectronNotificationAdapter();
 
+  // Application discovery is Launch Services; every other platform gets the
+  // portable subset (open with the default handler, reveal in the file manager).
+  const openWithService = new OpenWithService(
+    process.platform === 'darwin' ? new MacAppLauncher() : new SystemDefaultAppLauncher(),
+    settingsService,
+  );
+
   const buildDeps = () => ({
     settingsService,
     repoService,
@@ -359,6 +369,7 @@ async function wireIpc(): Promise<void> {
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
+    openWithService,
     notificationPort,
     workspaceTeardownService: workspaceScoped.workspaceTeardownService,
     appQuit: () => app.quit(),

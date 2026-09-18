@@ -79,7 +79,7 @@ const LANGUAGE_PREFERENCES: readonly LanguagePreference[] = [
   'en',
   'es',
 ];
-const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing'];
+const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing', 'openWith'];
 
 const invalid = (message: string): never => {
   throw new DomainError('validation', message);
@@ -139,6 +139,15 @@ function assertValidSettings(value: unknown): asserts value is Settings {
     }
     if (Object.keys(entry).some((k) => k !== 'input' && k !== 'output')) {
       invalid(`'pricing.${model}' has unexpected fields`);
+    }
+  }
+
+  // Optional, free-form in its keys (any extension) and strict in its values:
+  // a non-string here would be handed to the launcher as a bundle id.
+  const openWith = s['openWith'] === undefined ? {} : asRecord(s['openWith'], "Invalid 'openWith'");
+  for (const [key, appId] of Object.entries(openWith)) {
+    if (typeof appId !== 'string' || appId.length === 0) {
+      invalid(`'openWith.${key}' must be a non-empty bundle identifier`);
     }
   }
 }

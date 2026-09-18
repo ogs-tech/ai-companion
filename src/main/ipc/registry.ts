@@ -33,6 +33,8 @@ import { buildMarketplaceHandlers } from './marketplace-handlers.js';
 import { buildHealthHandlers } from './health-handlers.js';
 import type { HealthService } from '../application/services/health/health-service.js';
 import { buildMcpHandlers } from './mcp-handlers.js';
+import { buildOpenWithHandlers } from './open-with-handlers.js';
+import type { OpenWithService } from '../application/services/open-with-service.js';
 import type { McpService } from '../application/services/mcp-service.js';
 import type { NotificationPort } from '../application/ports/notification-port.js';
 import type { WorkspaceTeardownService } from '../application/services/workspace-teardown.js';
@@ -60,6 +62,7 @@ export interface IpcDeps {
   marketplaceService: MarketplaceService;
   healthService: HealthService;
   mcpService: McpService;
+  openWithService: OpenWithService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   appQuit: () => void;
@@ -105,6 +108,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     marketplaceService,
     healthService,
     mcpService,
+    openWithService,
     notificationPort,
     workspaceTeardownService,
     appQuit,
@@ -229,5 +233,12 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),
+    ...buildOpenWithHandlers({
+      openWithService,
+      workspaceBrowser: fileBrowserService,
+      projectService,
+      fileBrowserPort,
+      dialogPort,
+    }),
   };
 }

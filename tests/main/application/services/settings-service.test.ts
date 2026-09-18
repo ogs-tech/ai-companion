@@ -242,3 +242,44 @@ describe('SettingsService — cursor adapter', () => {
     expect(loaded?.adapters.claude).toEqual({ enabled: true });
   });
 });
+
+describe('SettingsService openWith preferences', () => {
+  it('persists a remembered application keyed by extension', async () => {
+    const save = vi.fn<(s: Settings) => Promise<void>>().mockResolvedValue(undefined);
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()), save }));
+
+    const next = await service.merge({ openWith: { '.md': 'com.microsoft.VSCode' } });
+
+    expect(next.openWith).toEqual({ '.md': 'com.microsoft.VSCode' });
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ openWith: { '.md': 'com.microsoft.VSCode' } }));
+  });
+
+  it('merges a new key alongside the ones already remembered', async () => {
+    const persisted: Settings = { ...baseSettings(), openWith: { '.md': 'com.microsoft.VSCode' } };
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(persisted) }));
+
+    const next = await service.merge({ openWith: { dir: 'com.apple.finder' } });
+
+    expect(next.openWith).toEqual({ '.md': 'com.microsoft.VSCode', dir: 'com.apple.finder' });
+  });
+
+  it('rejects an openWith entry whose value is not a bundle id string', async () => {
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()) }));
+
+    await expect(service.merge({ openWith: { '.md': 42 } } as never)).rejects.toThrow(DomainError);
+  });
+
+  it('rejects an openWith block that is not an object', async () => {
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()) }));
+
+    await expect(service.merge({ openWith: 'nope' } as never)).rejects.toThrow(DomainError);
+  });
+
+  it('leaves settings.json free of the key when nothing was ever remembered', async () => {
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()) }));
+
+    const next = await service.merge({ language: 'pt-BR' });
+
+    expect(next).not.toHaveProperty('openWith');
+  });
+});
