@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Box, Collapse, List, ListItemButton, ListItemText, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronRight, ChevronDown, Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, SquareTerminal } from 'lucide-react';
+import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
+import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
+import { TreeRow } from '../ds/TreeRow.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
@@ -120,9 +121,16 @@ function TreeNode({
 
   return (
     <>
-      <ListItemButton
-        dense
-        sx={{ pl: 1.5 + depth * 2 }}
+      <TreeRow
+        pl={1.5 + depth * 2}
+        // Reserved uniformly so folder names line up whether or not a given row
+        // can expand — root-level Project folders now can, plain root-level
+        // folders still can't ("flat, for now").
+        chevron={canExpand ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
+        glyph={entry.kind === 'dir' ? Folder : FileIcon}
+        primary={entry.name}
+        badge={matchedProject && <SessionStatusBadge anchor={{ kind: 'project', projectId: matchedProject.id }} />}
+        actionsVisibility="always"
         onClick={() => {
           if (canExpand) setExpanded((v) => !v);
           else if (entry.kind === 'file') onSelectFile(relPath, effectiveProjectId);
@@ -134,72 +142,59 @@ function TreeNode({
           // with its own projectId would resolve <project>/<project name>.
           onOpenRowMenu(e, { relPath: listingPath, kind: entry.kind, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
         }}
-      >
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
-          {/* Reserved uniformly so folder names line up whether or not a given row
-              can expand — root-level Project folders now can, plain root-level
-              folders still can't ("flat, for now"). */}
-          {canExpand ? (
-            <Icon glyph={expanded ? ChevronDown : ChevronRight} size={14} />
-          ) : (
-            <Box sx={{ width: 14 }} />
-          )}
-          <Icon glyph={entry.kind === 'dir' ? Folder : FileIcon} size={14} />
-          <ListItemText
-            primary={entry.name}
-            slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }}
-          />
-          {matchedProject && <SessionStatusBadge anchor={{ kind: 'project', projectId: matchedProject.id }} />}
-        </Stack>
-        {canUseAsProject && (
-          <Tooltip title="Usar como Project">
-            <Box
-              component="span"
-              role="button"
-              tabIndex={0}
-              aria-label={`Usar ${entry.name} como Project`}
-              data-testid={`tree-node-use-as-project-${entry.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                void handleUseAsProject();
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                if (e.key === ' ') e.preventDefault();
-                e.stopPropagation();
-                void handleUseAsProject();
-              }}
-              sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-            >
-              <Icon glyph={FolderInput} size={14} />
-            </Box>
-          </Tooltip>
-        )}
-        {matchedProject && onOpenProject && (
-          <Tooltip title="Abrir customizations do projeto">
-            <Box
-              component="span"
-              role="button"
-              tabIndex={0}
-              aria-label={`Abrir customizations do projeto ${entry.name}`}
-              data-testid={`tree-node-open-project-${entry.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenProject(matchedProject.id);
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                if (e.key === ' ') e.preventDefault();
-                e.stopPropagation();
-                onOpenProject(matchedProject.id);
-              }}
-              sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-            >
-              <Icon glyph={FolderOpen} size={14} />
-            </Box>
-          </Tooltip>
-        )}
-      </ListItemButton>
+        actions={
+          <>
+            {canUseAsProject && (
+              <Tooltip title="Usar como Project">
+                <Box
+                  component="span"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Usar ${entry.name} como Project`}
+                  data-testid={`tree-node-use-as-project-${entry.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleUseAsProject();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    if (e.key === ' ') e.preventDefault();
+                    e.stopPropagation();
+                    void handleUseAsProject();
+                  }}
+                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                >
+                  <Icon glyph={FolderInput} size={14} />
+                </Box>
+              </Tooltip>
+            )}
+            {matchedProject && onOpenProject && (
+              <Tooltip title="Abrir customizations do projeto">
+                <Box
+                  component="span"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Abrir customizations do projeto ${entry.name}`}
+                  data-testid={`tree-node-open-project-${entry.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenProject(matchedProject.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    if (e.key === ' ') e.preventDefault();
+                    e.stopPropagation();
+                    onOpenProject(matchedProject.id);
+                  }}
+                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                >
+                  <Icon glyph={FolderOpen} size={14} />
+                </Box>
+              </Tooltip>
+            )}
+          </>
+        }
+      />
       {canExpand && (
         <Collapse in={expanded} unmountOnExit>
           {childrenError ? (

@@ -1,26 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Box, Divider, IconButton, List, ListItemIcon, ListItemText, Menu, MenuItem, Stack, Tooltip,
+  Box, Divider, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
-import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
+import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import {
-  ChevronsLeft, ChevronsRight, Eye, EyeOff, File as FileIcon, FileX, Globe, MoreVertical, NotebookPen,
-  History, PanelLeft, PanelRight, Plus, RefreshCw, Sparkles, SquareTerminal, Trash2, type LucideIcon,
+  Eye, EyeOff, File as FileIcon, FileX, Globe, MoreVertical, NotebookPen,
+  History, PanelLeft, PanelRight, RefreshCw, SquareTerminal, Trash2, type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { EmptyState } from '../../components/ds/EmptyState.js';
-import { Kicker } from '../../components/ds/Kicker.js';
-import { FolderTree } from '../../components/workspace/FolderTree.js';
-import { WorkspaceBreadcrumbHeader } from '../../components/workspace/WorkspaceBreadcrumbHeader.js';
-import { WorkspaceManagementList } from '../../components/workspace/WorkspaceManagementList.js';
+import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
+import { SidePanel } from '../../components/ds/SidePanel.js';
+import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
+import { ControlPanelContent } from '../../components/workspace/ControlPanelContent.js';
 import { InstructionTreeRow, ProjectInstructionRow } from '../../components/workspace/InstructionTreeRow.js';
-import { EntityTreeGroup } from '../../components/workspace/EntityTreeGroup.js';
-import { HooksTreeGroup } from '../../components/workspace/HooksTreeGroup.js';
-import { McpTreeGroup } from '../../components/workspace/McpTreeGroup.js';
-import { PluginsTreeGroup } from '../../components/workspace/PluginsTreeGroup.js';
-import { SessionsTreeGroup } from '../../components/workspace/SessionsTreeGroup.js';
 import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
@@ -53,6 +47,7 @@ import {
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import type { Workspace } from '../../../shared/workspace.js';
+import type { Project } from '../../../shared/project.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 import { callIpc } from '../../lib/ipc.js';
 
@@ -81,32 +76,6 @@ function isDirty(tab: OpenTab): boolean {
 function entityTabGlyph(tab: Extract<OpenTab, { kind: EntityKind | 'instruction' }>): LucideIcon {
   if (tab.kind === 'instruction') return isPersonalInstruction(tab.entity) ? Globe : NotebookPen;
   return ENTITY_GROUP_ICONS[tab.kind];
-}
-
-/**
- * A thin drag handle between two panels, colored `divider` at rest and
- * `secondary.main` on hover/focus/drag — matches "fio antes de sombra"
- * (hairline first, no shadow) instead of a heavier grip affordance.
- */
-function ResizeHandle(): React.ReactElement {
-  const theme = useTheme();
-  const [active, setActive] = useState(false);
-  return (
-    <Separator
-      aria-label="Redimensionar painel"
-      onMouseEnter={() => setActive(true)}
-      onMouseLeave={() => setActive(false)}
-      onFocus={() => setActive(true)}
-      onBlur={() => setActive(false)}
-      style={{
-        width: 4,
-        flexShrink: 0,
-        cursor: 'col-resize',
-        backgroundColor: active ? theme.palette.secondary.main : theme.palette.divider,
-        transition: 'background-color 120ms ease',
-      }}
-    />
-  );
 }
 
 export function WorkspaceScreen(): React.ReactElement {
@@ -149,18 +118,13 @@ export function WorkspaceScreen(): React.ReactElement {
   // null) once the matching EditorPanel instance picks it up.
   const [propertiesRequestTabId, setPropertiesRequestTabId] = useState<string | null>(null);
 
-  const filesPanelRef = usePanelRef();
-  const [filesCollapsed, setFilesCollapsed] = useState(false);
-  // Customizations reads as an aside (icon strip when collapsed, matching
-  // the same expand/collapse affordance the old AppShell-level SessionsPanel
-  // used) rather than a resizable react-resizable-panels Panel — there's
-  // nothing to drag-resize here, just a fixed-width tree to show or hide.
-  const [customizationsExpanded, setCustomizationsExpanded] = useState(true);
-  // The Sessões block sits stacked above Customizations inside the same
-  // aside, not nested as one more of its tree rows — its own collapse is a
-  // local accordion toggle (body only), independent of `customizationsExpanded`,
-  // which still hides the whole aside down to the 40px icon strip.
-  const [sessionsExpanded, setSessionsExpanded] = useState(true);
+  const explorerPanelRef = usePanelRef();
+  const [explorerCollapsed, setExplorerCollapsed] = useState(false);
+  // Both side panels now share one collapse mechanism (resizable, collapses
+  // to 0px) via SidePanel — the Control Panel used to be a fixed-width aside
+  // with its own 40px icon-strip collapse mode; that's retired.
+  const controlPanelRef = usePanelRef();
+  const [controlPanelCollapsed, setControlPanelCollapsed] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
@@ -523,46 +487,25 @@ export function WorkspaceScreen(): React.ReactElement {
     })();
   };
 
-  const customizationRows = (
-    <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} {...(entityLocalScope ? { localScope: entityLocalScope } : {})} />
-      <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
-      <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
-      <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
-    </>
-  );
-
-  const defaultWorkspaceCustomizationRows = (
-    <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={openEntityTab} onPreview={previewEntity} onProperties={requestEntityProperties} onNewAction={newActionForEntity} />
-      <HooksTreeGroup showGlobal={false} />
-      <McpTreeGroup showGlobal={false} />
-      <PluginsTreeGroup showGlobal={false} />
-    </>
-  );
-
-  const toggleCustomizations = (): void => setCustomizationsExpanded((v) => !v);
-  const toggleSessions = (): void => setSessionsExpanded((v) => !v);
-  // Re-expands the whole aside AND makes sure the Sessões block itself isn't
-  // sitting locally collapsed — clicking this icon in the 40px strip should
-  // reliably land the user on visible session rows, not just an expanded
-  // Customizations panel with Sessões still accordioned shut underneath it.
-  const expandToSessions = (): void => {
-    setCustomizationsExpanded(true);
-    setSessionsExpanded(true);
-  };
-
   // The imperative collapse()/expand() calls drive the real (pixel-measured)
   // layout, but the boolean below is what the menu label and the
   // `data-collapsed` test hook read — set directly here rather than derived
   // solely from `onResize`, since jsdom never lays elements out (offsetWidth
   // is always 0), so the library's own resize feedback never settles there.
-  const toggleFilesPanel = (): void => {
-    const panel = filesPanelRef.current;
+  const toggleExplorerPanel = (): void => {
+    const panel = explorerPanelRef.current;
     if (!panel) return;
-    setFilesCollapsed((collapsed) => {
+    setExplorerCollapsed((collapsed) => {
+      if (collapsed) panel.expand();
+      else panel.collapse();
+      return !collapsed;
+    });
+  };
+
+  const toggleControlPanel = (): void => {
+    const panel = controlPanelRef.current;
+    if (!panel) return;
+    setControlPanelCollapsed((collapsed) => {
       if (collapsed) panel.expand();
       else panel.collapse();
       return !collapsed;
@@ -614,7 +557,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const isDefaultWorkspace = activeWorkspace?.isDefault ?? false;
   const showRemoveAction = selectedProject !== null || (showGlobalToggle && activeWorkspace !== undefined);
 
-  // Lives at the top of the Explorer Panel now (see `filesContent` below),
+  // Lives at the top of the Explorer Panel now (see `ExplorerPanelContent`),
   // anchored to the same breadcrumb row it always shared — these actions
   // (global-entity visibility, panel toggles, destructive remove) apply to
   // the whole screen, not just the tree, but the breadcrumb is still the
@@ -637,13 +580,13 @@ export function WorkspaceScreen(): React.ReactElement {
             <ListItemText>{showGlobal ? 'Ocultar entidades globais' : 'Mostrar entidades globais'}</ListItemText>
           </MenuItem>
         )}
-        <MenuItem data-testid="workspace-toggle-files" onClick={() => { toggleFilesPanel(); closeHeaderMenu(); }}>
+        <MenuItem data-testid="workspace-toggle-files" onClick={() => { toggleExplorerPanel(); closeHeaderMenu(); }}>
           <ListItemIcon><Icon glyph={PanelLeft} size={16} /></ListItemIcon>
-          <ListItemText>{filesCollapsed ? 'Mostrar arquivos' : 'Ocultar arquivos'}</ListItemText>
+          <ListItemText>{explorerCollapsed ? 'Mostrar arquivos' : 'Ocultar arquivos'}</ListItemText>
         </MenuItem>
-        <MenuItem data-testid="workspace-toggle-customizations" onClick={() => { toggleCustomizations(); closeHeaderMenu(); }}>
+        <MenuItem data-testid="workspace-toggle-customizations" onClick={() => { toggleControlPanel(); closeHeaderMenu(); }}>
           <ListItemIcon><Icon glyph={PanelRight} size={16} /></ListItemIcon>
-          <ListItemText>{customizationsExpanded ? 'Ocultar Customizations' : 'Mostrar Customizations'}</ListItemText>
+          <ListItemText>{controlPanelCollapsed ? 'Mostrar Customizations' : 'Ocultar Customizations'}</ListItemText>
         </MenuItem>
         {showRemoveAction && <Divider />}
         {selectedProject ? (
@@ -775,238 +718,48 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   );
 
-  const customizationsListContent = (
-    <List disablePadding>{isDefaultWorkspace ? defaultWorkspaceCustomizationRows : customizationRows}</List>
+  const personalInstructionRow = (
+    <InstructionTreeRow
+      kind="personal"
+      instruction={personalInstruction}
+      seed={() => blankCustomization('instruction') as Instruction}
+      onOpen={openInstructionEditor}
+      onPreview={previewEntity}
+      onNewAction={newActionForInstruction}
+    />
   );
 
-  // The Explorer Panel owns the screen's identity now — its own "EXPLORER
-  // PANEL" kicker, then the workspace/project breadcrumb (with the "⋮" menu
-  // that used to sit in a full-width header above every panel) — followed by
-  // the file/entity tree. Only the tree region scrolls; the identity block
-  // above it stays put, same fixed-header-over-scrolling-body shape the
-  // Sessões/Customizations blocks in the Control Panel already use.
-  const filesHeader = (
-    <Box sx={{ flexShrink: 0 }}>
-      <Box sx={{ px: 1.5, py: 1 }} data-testid="workspace-explorer-panel-label">
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-          <Icon glyph={PanelLeft} size={14} />
-          <Kicker>Explorer Panel</Kicker>
-          <Box sx={{ flexGrow: 1 }} />
-          <Tooltip title="Reler do disco">
-            <IconButton
-              size="small"
-              data-testid="workspace-refresh-files"
-              aria-label="Reler do disco"
-              onClick={() => void refreshFiles()}
-            >
-              <Icon glyph={RefreshCw} size={14} />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Box>
-      <Box sx={{ px: 1.5, pb: 1.25, borderBottom: 1, borderColor: 'divider' }}>
-        <WorkspaceBreadcrumbHeader
-          workspaceName={activeWorkspace?.name ?? '…'}
-          isDefaultWorkspace={activeWorkspace?.isDefault ?? false}
-          {...(selectedProject ? { projectName: selectedProject.name } : {})}
-          path={selectedProject ? selectedProject.path : (activeWorkspace?.rootPath ?? '')}
-          onNavigateToWorkspace={exitProjectScope}
-          actions={headerMenu}
-        />
-      </Box>
-    </Box>
+  const renderProjectInstructionRow = (project: Project, depth: number): React.ReactNode => (
+    <ProjectInstructionRow
+      project={project}
+      onPreview={previewEntity}
+      onOpen={(entity, isCreate) => {
+        // Opening a Project's own INSTRUCTIONS row — even browsed in place,
+        // before "entering" it — scopes the Control Panel/breadcrumb to that
+        // Project too, same as opening one of its files does (see
+        // `syncProjectFromTab`).
+        setSelectedProjectId(project.id);
+        openInstructionEditor(entity, isCreate);
+      }}
+      onProperties={(entity) => {
+        setSelectedProjectId(project.id);
+        requestInstructionProperties(entity);
+      }}
+      onNewAction={(entity) => {
+        setSelectedProjectId(project.id);
+        newActionForInstruction(entity);
+      }}
+      testId={`tree-node-instructions-${project.name}`}
+      depth={depth}
+    />
   );
 
-  const filesContent = (
-    <Box sx={(theme) => ({ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: theme.ogs.surfaces.rail })}>
-      {filesHeader}
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {isDefaultWorkspace ? (
-          <WorkspaceManagementList
-            beforeSwitch={resetTabs}
-            instructionRow={
-              <InstructionTreeRow
-                kind="personal"
-                instruction={personalInstruction}
-                seed={() => blankCustomization('instruction') as Instruction}
-                onOpen={openInstructionEditor}
-                onPreview={previewEntity}
-                onNewAction={newActionForInstruction}
-              />
-            }
-          />
-        ) : (
-          <FolderTree
-            onSelectFile={openFileTab}
-            onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
-            onPreviewFile={openFilePreviewTab}
-            onNewAction={newActionForFile}
-            projects={projects}
-            instructionRow={instructionRow}
-            renderProjectInstructionRow={(project, depth) => (
-              <ProjectInstructionRow
-                project={project}
-                onPreview={previewEntity}
-                onOpen={(entity, isCreate) => {
-                  // Opening a Project's own INSTRUCTIONS row — even browsed
-                  // in place, before "entering" it — scopes the Control
-                  // Panel/breadcrumb to that Project too, same as opening one
-                  // of its files does (see `syncProjectFromTab`).
-                  setSelectedProjectId(project.id);
-                  openInstructionEditor(entity, isCreate);
-                }}
-                onProperties={(entity) => {
-                  setSelectedProjectId(project.id);
-                  requestInstructionProperties(entity);
-                }}
-                onNewAction={(entity) => {
-                  setSelectedProjectId(project.id);
-                  newActionForInstruction(entity);
-                }}
-                testId={`tree-node-instructions-${project.name}`}
-                depth={depth}
-              />
-            )}
-            {...(activeWorkspace ? { workspaceRootPath: activeWorkspace.rootPath } : {})}
-          />
-        )}
-      </Box>
-    </Box>
-  );
-
-  // Docked to the right of the Workbench, outside the resizable Group — a
-  // fixed-width aside that collapses to a 40px icon strip (click anywhere
-  // on it to expand again), the same interaction shape the old AppShell-level
-  // SessionsPanel used, rather than a drag-resizable Panel: there's nothing
-  // here worth resizing, only a tree to show or hide.
-  const customizationsAside = (
-    <Box
-      data-testid="workspace-customizations-aside"
-      data-collapsed={!customizationsExpanded}
-      sx={{ display: 'flex', borderLeft: 1, borderColor: 'divider', flexShrink: 0 }}
-    >
-      {customizationsExpanded ? (
-        <Box sx={(theme) => ({ width: 260, height: '100%', display: 'flex', flexDirection: 'column', bgcolor: theme.ogs.surfaces.rail })}>
-          <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }} data-testid="workspace-control-panel-label">
-            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-              <Icon glyph={PanelRight} size={14} />
-              <Kicker>Control Panel</Kicker>
-            </Stack>
-          </Box>
-          {/* Stacked above Customizations, not nested inside it as one more
-              tree row — a session is reachable/actionable even when its own
-              entity/project/workspace tab isn't open, so it earns its own
-              always-visible section instead of hiding inside a collapsed
-              group. Its collapse only hides this block's own body (a local
-              accordion), unlike Customizations' below, which hides the whole
-              aside down to the 40px icon strip. */}
-          <Box
-            data-testid="workspace-sessions-panel"
-            sx={{
-              borderBottom: 1,
-              borderColor: 'divider',
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: sessionsExpanded ? 260 : 'auto',
-              overflow: 'hidden',
-            }}
-          >
-            <Stack
-              direction="row"
-              sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, flexShrink: 0 }}
-            >
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                <Icon glyph={SquareTerminal} size={14} />
-                <Kicker>Sessões</Kicker>
-              </Stack>
-              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                <Tooltip title="Nova sessão">
-                  {/* span wrapper keeps the tooltip working while the button is disabled (no project/workspace in view yet) */}
-                  <span>
-                    <IconButton
-                      size="small"
-                      data-testid="workspace-sessions-new"
-                      aria-label="Nova sessão"
-                      disabled={!selectedProject && !activeWorkspace}
-                      onClick={handleNewSession}
-                    >
-                      <Icon glyph={Plus} size={16} />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-                <IconButton
-                  size="small"
-                  data-testid="workspace-sessions-collapse"
-                  aria-label={sessionsExpanded ? 'Ocultar sessões' : 'Mostrar sessões'}
-                  onClick={toggleSessions}
-                >
-                  <Icon glyph={sessionsExpanded ? ChevronsLeft : ChevronsRight} size={16} />
-                </IconButton>
-              </Stack>
-            </Stack>
-            {sessionsExpanded && (
-              <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                <SessionsTreeGroup
-                  scope={historyScope ?? { kind: 'all' }}
-                  onOpen={openSessionTab}
-                  onRemoved={removeSessionTab}
-                  onSeeAll={openHistoryTab}
-                />
-              </Box>
-            )}
-          </Box>
-          <Stack
-            direction="row"
-            sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
-          >
-            <Kicker>Customizations</Kicker>
-            <IconButton
-              size="small"
-              data-testid="workspace-customizations-collapse"
-              aria-label="Ocultar Customizations"
-              onClick={toggleCustomizations}
-            >
-              <Icon glyph={ChevronsLeft} size={16} />
-            </IconButton>
-          </Stack>
-          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>{customizationsListContent}</Box>
-        </Box>
-      ) : (
-        <Box sx={{ width: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 1.5, gap: 2 }}>
-          <Box
-            role="button"
-            tabIndex={0}
-            aria-label="Mostrar sessões"
-            data-testid="workspace-sessions-expand"
-            onClick={expandToSessions}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              if (e.key === ' ') e.preventDefault();
-              expandToSessions();
-            }}
-            sx={{ cursor: 'pointer' }}
-          >
-            <Icon glyph={SquareTerminal} size={18} />
-          </Box>
-          <Box
-            role="button"
-            tabIndex={0}
-            aria-label="Mostrar Customizations"
-            data-testid="workspace-customizations-expand"
-            onClick={toggleCustomizations}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              if (e.key === ' ') e.preventDefault();
-              toggleCustomizations();
-            }}
-            sx={{ cursor: 'pointer' }}
-          >
-            <Icon glyph={Sparkles} size={18} />
-          </Box>
-        </Box>
-      )}
-    </Box>
+  const explorerHeaderActions = (
+    <Tooltip title="Reler do disco">
+      <IconButton size="small" data-testid="workspace-refresh-files" aria-label="Reler do disco" onClick={() => void refreshFiles()}>
+        <Icon glyph={RefreshCw} size={14} />
+      </IconButton>
+    </Tooltip>
   );
 
   return (
@@ -1016,29 +769,77 @@ export function WorkspaceScreen(): React.ReactElement {
           a widget floating inside one. The Explorer Panel leads on the left
           (file/entity tree, plus the workspace's own identity and actions —
           same convention as any file-tree-driven IDE); the Control Panel
-          trails as a collapsible aside on the right (sessions + customizations). */}
+          trails as a collapsible panel on the right (sessions + customizations),
+          both driven by the same shared `SidePanel` shell. */}
       <Box sx={{ flex: 1, minHeight: 420, overflow: 'hidden', display: 'flex' }}>
         <Group orientation="horizontal" style={{ flex: 1, minWidth: 0 }}>
-          <Panel
-            id="workspace-files-panel"
-            panelRef={filesPanelRef}
-            collapsible
-            collapsedSize="0"
+          <SidePanel
+            panelId="workspace-files-panel"
+            panelRef={explorerPanelRef}
             defaultSize="22"
             minSize="15"
             maxSize="36"
-            onResize={(size) => setFilesCollapsed(size.asPercentage === 0)}
-            style={{ overflow: 'hidden' }}
-            data-collapsed={filesCollapsed}
+            collapsed={explorerCollapsed}
+            onResize={(size) => setExplorerCollapsed(size.asPercentage === 0)}
+            glyph={PanelLeft}
+            title="Explorer Panel"
+            headerTestId="workspace-explorer-panel-label"
+            headerDivider={false}
+            headerActions={explorerHeaderActions}
           >
-            {filesContent}
-          </Panel>
+            <ExplorerPanelContent
+              activeWorkspace={activeWorkspace}
+              isDefaultWorkspace={isDefaultWorkspace}
+              selectedProject={selectedProject}
+              onNavigateToWorkspace={exitProjectScope}
+              headerMenu={headerMenu}
+              beforeSwitch={resetTabs}
+              personalInstructionRow={personalInstructionRow}
+              projects={projects}
+              onSelectFile={openFileTab}
+              onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
+              onPreviewFile={openFilePreviewTab}
+              onNewAction={newActionForFile}
+              instructionRow={instructionRow}
+              renderProjectInstructionRow={renderProjectInstructionRow}
+              {...(activeWorkspace ? { workspaceRootPath: activeWorkspace.rootPath } : {})}
+            />
+          </SidePanel>
           <ResizeHandle />
           <Panel id="workbench-canvas-panel" minSize="30" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <WorkbenchCanvas tabs={canvasTabs} activeTabId={activeTabId} onSelect={handleSelectTab} emptyState={emptyCanvasState} />
           </Panel>
+          <ResizeHandle />
+          <SidePanel
+            panelId="workspace-customizations-aside"
+            panelRef={controlPanelRef}
+            defaultSize={260}
+            minSize={200}
+            maxSize={420}
+            collapsed={controlPanelCollapsed}
+            onResize={(size) => setControlPanelCollapsed(size.asPercentage === 0)}
+            glyph={PanelRight}
+            title="Control Panel"
+            headerTestId="workspace-control-panel-label"
+          >
+            <ControlPanelContent
+              isDefaultWorkspace={isDefaultWorkspace}
+              showGlobal={showGlobal}
+              {...(entityLocalScope ? { localScope: entityLocalScope } : {})}
+              {...(mcpMatchPath ? { mcpMatchPath } : {})}
+              onEditEntity={openEntityTab}
+              onPreviewEntity={previewEntity}
+              onEntityProperties={requestEntityProperties}
+              onNewActionForEntity={newActionForEntity}
+              historyScope={historyScope}
+              onOpenSession={openSessionTab}
+              onSessionRemoved={removeSessionTab}
+              onSeeAllSessions={openHistoryTab}
+              canStartSession={selectedProject !== null || activeWorkspace !== undefined}
+              onNewSession={handleNewSession}
+            />
+          </SidePanel>
         </Group>
-        {customizationsAside}
       </Box>
 
       <WorkspaceRemoveConfirmDialog

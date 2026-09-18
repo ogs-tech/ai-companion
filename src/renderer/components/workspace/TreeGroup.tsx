@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Box, Chip, Collapse, List, ListItemButton, ListItemText, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronRight, ChevronDown, Plus, type LucideIcon } from 'lucide-react';
+import { Box, Chip, Collapse, List, Tooltip, Typography } from '@mui/material';
+import { Plus, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
+import { TreeRow } from '../ds/TreeRow.js';
 
 interface TreeGroupProps {
   testId: string;
@@ -23,48 +24,47 @@ export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, 
 
   return (
     <>
-      <ListItemButton
-        dense
-        data-testid={`tree-group-${testId}`}
+      <TreeRow
+        testId={`tree-group-${testId}`}
+        pl={1.5}
+        chevron={expanded ? 'expanded' : 'collapsed'}
+        glyph={glyph}
+        primary={label}
         onClick={() => setExpanded((v) => !v)}
-        sx={{ pl: 1.5 }}
-      >
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
-          <Icon glyph={expanded ? ChevronDown : ChevronRight} size={14} />
-          <Icon glyph={glyph} size={14} />
-          <ListItemText primary={label} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
-          <Chip size="small" label={count} sx={{ height: 18, fontSize: '0.6875rem', '& .MuiChip-label': { px: 0.75 } }} />
-        </Stack>
-        {/* Fixed-width whether or not this kind offers a create action, so every
-            group's count chip lands in the same column instead of drifting
-            right on the kinds (Hooks) with nothing trailing it. */}
-        <Box sx={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-          {onCreate && (
-            <Tooltip title={createLabel ?? 'Novo'}>
-              <Box
-                component="span"
-                role="button"
-                tabIndex={0}
-                aria-label={createLabel ?? 'Novo'}
-                data-testid={`tree-group-new-${testId}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCreate();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  if (e.key === ' ') e.preventDefault();
-                  e.stopPropagation();
-                  onCreate();
-                }}
-                sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-              >
-                <Icon glyph={Plus} size={14} />
-              </Box>
-            </Tooltip>
-          )}
-        </Box>
-      </ListItemButton>
+        actionsVisibility="always"
+        badge={<Chip size="small" label={count} sx={{ height: 18, fontSize: '0.6875rem', '& .MuiChip-label': { px: 0.75 } }} />}
+        actions={
+          // Fixed-width whether or not this kind offers a create action, so every
+          // group's count chip lands in the same column instead of drifting
+          // right on the kinds (Hooks) with nothing trailing it.
+          <Box sx={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+            {onCreate && (
+              <Tooltip title={createLabel ?? 'Novo'}>
+                <Box
+                  component="span"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={createLabel ?? 'Novo'}
+                  data-testid={`tree-group-new-${testId}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreate();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    if (e.key === ' ') e.preventDefault();
+                    e.stopPropagation();
+                    onCreate();
+                  }}
+                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                >
+                  <Icon glyph={Plus} size={14} />
+                </Box>
+              </Tooltip>
+            )}
+          </Box>
+        }
+      />
       <Collapse in={expanded} unmountOnExit>
         {count === 0 ? (
           <Typography
@@ -108,36 +108,17 @@ interface TreeGroupRowProps {
  */
 export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor }: TreeGroupRowProps): React.ReactElement {
   return (
-    <ListItemButton
-      dense
-      data-testid={testId}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      sx={{
-        pl: 1.5 + 2.5,
-        opacity: muted ? 0.65 : 1,
-        position: 'relative',
-        '&:hover .tree-group-row-actions, &:focus-within .tree-group-row-actions': { opacity: 1 },
-      }}
-    >
-      {accentColor && (
-        <Box
-          sx={(theme) => ({
-            position: 'absolute', left: 0, top: 4, bottom: 4, width: 3,
-            borderRadius: `${theme.ogs.radius.xs}px`, bgcolor: accentColor,
-          })}
-        />
-      )}
-      <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
-        <Icon glyph={glyph} size={14} />
-        <ListItemText primary={primary} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
-        {badge}
-      </Stack>
-      {actions && (
-        <Box className="tree-group-row-actions" sx={{ display: 'flex', alignItems: 'center', opacity: 0, transition: 'opacity 120ms ease' }}>
-          {actions}
-        </Box>
-      )}
-    </ListItemButton>
+    <TreeRow
+      testId={testId}
+      pl={1.5 + 2.5}
+      glyph={glyph}
+      primary={primary}
+      badge={badge}
+      actions={actions}
+      {...(accentColor !== undefined ? { accentColor } : {})}
+      {...(onClick ? { onClick } : {})}
+      {...(onContextMenu ? { onContextMenu } : {})}
+      {...(muted !== undefined ? { muted } : {})}
+    />
   );
 }

@@ -5,3 +5,6 @@ export { EmptyState } from './EmptyState.js';
 export { LoadingState } from './LoadingState.js';
 export { ErrorState } from './ErrorState.js';
 export { Icon } from './Icon.js';
+export { ResizeHandle } from './ResizeHandle.js';
+export { TreeRow, type TreeRowProps } from './TreeRow.js';
+export { SidePanel, type SidePanelProps } from './SidePanel.js';

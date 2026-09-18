@@ -1360,56 +1360,17 @@ describe('WorkspaceScreen', () => {
       await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false'));
     });
 
-    it('can also be collapsed and expanded by clicking directly on the aside itself', async () => {
+    it('collapses to 0 width the same way the Explorer Panel does, and stays in the DOM (react-resizable-panels shrinks it, never unmounts it)', async () => {
       const user = userEvent.setup();
       renderScreen();
-      await user.click(await screen.findByTestId('workspace-customizations-collapse'));
-      expect(await screen.findByTestId('workspace-customizations-expand')).toBeInTheDocument();
-      await user.click(screen.getByTestId('workspace-customizations-expand'));
-      expect(await screen.findByTestId('workspace-customizations-collapse')).toBeInTheDocument();
-    });
-
-    it('offers a separate Sessões icon in the collapsed 40px strip, reachable even when the whole aside is hidden', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
-        if (method === 'workspace.listDir') return [];
-        if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
-        }
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByTestId('workspace-customizations-collapse'));
-      expect(screen.queryByTestId('workspace-sessions-panel')).not.toBeInTheDocument();
-      expect(await screen.findByTestId('workspace-sessions-expand')).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-customizations-expand')).toBeInTheDocument();
-
-      await user.click(screen.getByTestId('workspace-sessions-expand'));
-      expect(await screen.findByTestId('workspace-sessions-panel')).toBeInTheDocument();
-      expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false');
-    });
-
-    it('the Sessões strip icon also re-expands sessões if it had been individually collapsed before the aside was hidden', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
-        if (method === 'workspace.listDir') return [];
-        if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
-        }
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByTestId('workspace-sessions-collapse'));
-      expect(screen.queryByTestId('tree-session-workspace:w1')).not.toBeInTheDocument();
-      await user.click(await screen.findByTestId('workspace-customizations-collapse'));
-
-      await user.click(await screen.findByTestId('workspace-sessions-expand'));
-      expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
+      const panel = await screen.findByTestId('workspace-customizations-aside');
+      expect(panel).toContainElement(await screen.findByTestId('workspace-control-panel-label'));
+      await openHeaderMenu(user);
+      await user.click(await screen.findByTestId('workspace-toggle-customizations'));
+      await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'true'));
+      await openHeaderMenu(user);
+      await user.click(await screen.findByTestId('workspace-toggle-customizations'));
+      await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false'));
     });
 
     it('stacks a separate Sessões panel above Customizations, with its own local collapse independent of the aside', async () => {
@@ -1425,7 +1386,7 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       const sessionsPanel = await screen.findByTestId('workspace-sessions-panel');
-      const customizationsHeader = await screen.findByTestId('workspace-customizations-collapse');
+      const customizationsHeader = await screen.findByTestId('workspace-customizations-header');
       const position = sessionsPanel.compareDocumentPosition(customizationsHeader);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
