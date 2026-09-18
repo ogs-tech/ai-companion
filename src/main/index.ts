@@ -30,6 +30,7 @@ import { SystemClock } from './infrastructure/clock/system-clock.js';
 import { ElectronDialogAdapter } from './infrastructure/dialog/electron-dialog-adapter.js';
 import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
 import { NodeFileBrowserAdapter } from './infrastructure/filesystem/node-file-browser-adapter.js';
+import { NumbersConverterAdapter } from './infrastructure/spreadsheet/numbers-converter-adapter.js';
 import { FileBrowserService } from './application/services/file-browser-service.js';
 import type { CredentialStorePort } from './application/ports/credential-store-port.js';
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
@@ -305,7 +306,7 @@ async function wireIpc(): Promise<void> {
     sharedDeps,
   );
 
-  const fileBrowserPort = new NodeFileBrowserAdapter();
+  const fileBrowserPort = new NodeFileBrowserAdapter([new NumbersConverterAdapter()]);
   let fileBrowserService = new FileBrowserService(fileBrowserPort, activeWorkspace.rootPath);
 
   const attachSessionBridges = (services: WorkspaceScopedServices): void => {

@@ -608,7 +608,9 @@ interface SelectedCell {
 }
 
 /**
- * A read-only grid for a parsed `.xlsx` workbook, styled after a real
+ * A read-only grid for a parsed workbook — a `.xlsx`, or a `.numbers`
+ * document the main process converted into one; both arrive here as the same
+ * `kind: 'spreadsheet'` preview, and nothing below distinguishes them — styled after a real
  * spreadsheet (Excel/Numbers/LibreOffice) rather than a generic data table:
  * sticky column-letter (A, B, C…) and row-number (1, 2, 3…) headers frame
  * the grid, a formula bar above it shows the selected cell's reference and
@@ -616,7 +618,7 @@ interface SelectedCell {
  * marker on the cell itself flags that it has one, since the source file's
  * cached result alone doesn't say how a value was derived) — and dragging a
  * header's edge resizes that column/row for this viewing session only:
- * there's no write-back path for `.xlsx`, so a resize is never persisted
+ * there's no write-back path for a workbook, so a resize is never persisted
  * and resets the next time the file is opened. Sheet tabs sit at the bottom
  * of the grid — where native spreadsheet apps put them — and scroll
  * horizontally when there are more sheets than fit. A merged range renders

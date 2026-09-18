@@ -1,0 +1,161 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - link "Prime Radiant Superpowers v6.3.0" [ref=f1e4] [cursor=pointer]:
+      - /url: https://github.com/obra/superpowers
+      - img "Prime Radiant" [ref=f1e5]
+      - generic [ref=f1e6]: Superpowers v6.3.0
+    - generic [ref=f1e7]: Connected
+  - generic [ref=f1e9]:
+    - heading "Resumo do design — para aprovar" [level=2] [ref=f1e10]
+    - paragraph [ref=f1e11]: Duas entregas independentes. A primeira sai sozinha; a segunda depende de uma fundação que a primeira não precisa.
+    - generic [ref=f1e13]:
+      - generic [ref=f1e14]:
+        - generic [ref=f1e15]:
+          - generic [ref=f1e16]: "1"
+          - heading "Shift+Enter quebra linha" [level=3] [ref=f1e17]
+        - paragraph [ref=f1e18]: Bounded · 1 arquivo · sem IPC, sem serviço
+        - generic [ref=f1e19]:
+          - paragraph [ref=f1e20]:
+            - strong [ref=f1e21]: "Causa:"
+            - text: o xterm manda
+            - code [ref=f1e22]: \r
+            - text: para Enter
+            - emphasis [ref=f1e23]: e
+            - text: para Shift+Enter — o PTY não consegue distinguir. Não há bug no CLI.
+          - paragraph [ref=f1e24]:
+            - strong [ref=f1e25]: "Correção:"
+            - code [ref=f1e26]: attachCustomKeyEventHandler
+            - text: intercepta Shift+Enter, devolve
+            - code [ref=f1e27]: "false"
+            - text: ", e escreve a sequência de nova linha que o"
+            - code [ref=f1e28]: claude
+            - text: entende.
+          - paragraph [ref=f1e29]:
+            - strong [ref=f1e30]: "Em aberto:"
+            - code [ref=f1e31]: \x1b\r
+            - text: (Option+Enter) ou
+            - code [ref=f1e32]: \\\r
+            - text: (backslash+return) — as duas são documentadas pelo CLI. Decido com um spike de 5 min no app real, não por leitura de binário.
+      - generic [ref=f1e33]:
+        - generic [ref=f1e34]:
+          - generic [ref=f1e35]: "2"
+          - heading "Histórico de sessões com custo" [level=3] [ref=f1e36]
+        - paragraph [ref=f1e37]: Arquitetural · porta + adapter + serviço + IPC + 2 telas
+        - generic [ref=f1e38]:
+          - paragraph [ref=f1e39]:
+            - strong [ref=f1e40]: "Fonte:"
+            - text: os
+            - code [ref=f1e41]: .jsonl
+            - text: que o próprio Claude Code já grava em
+            - code [ref=f1e42]: ~/.claude/projects/
+            - text: . Nada de persistência nova.
+          - paragraph [ref=f1e43]:
+            - strong [ref=f1e44]: "Escopo:"
+            - text: resolvido pelo campo
+            - code [ref=f1e45]: cwd
+            - text: de dentro do arquivo — nunca decodificando o nome da pasta, que é ambíguo.
+          - paragraph [ref=f1e46]:
+            - strong [ref=f1e47]: "Custo:"
+            - text: calculado de tokens × tabela de preço. O arquivo não traz dólar.
+    - generic [ref=f1e48]:
+      - 'heading "A fundação: identidade da sessão" [level=3] [ref=f1e49]'
+      - paragraph [ref=f1e50]: Hoje o app gera um UUID que o CLI nunca vê. Os dois lados não se conhecem.
+      - generic [ref=f1e53]:
+        - code [ref=f1e54]: "--session-id <uuid>"
+        - generic [ref=f1e55]:
+          - strong [ref=f1e56]: Adotar.
+          - text: No spawn. O transcript nasce com o id que o app escolheu — o join entre sessão viva e histórico vira exato, sem heurística.
+        - code [ref=f1e57]: "--resume <id>"
+        - generic [ref=f1e58]:
+          - strong [ref=f1e59]: Adotar.
+          - text: Retoma qualquer sessão por id — viva, de ontem, do app ou aberta no terminal.
+        - code [ref=f1e60]: "--continue"
+        - generic [ref=f1e61]:
+          - strong [ref=f1e62]: Aposentar
+          - text: "no fluxo novo. Já é frágil: com várias sessões no mesmo"
+          - code [ref=f1e63]: cwd
+          - text: pode grudar na conversa de outra — o próprio código avisa disso.
+        - code [ref=f1e64]: outputBuffer
+        - generic [ref=f1e65]:
+          - strong [ref=f1e66]: Manter,
+          - text: só para reattach visual. É scrollback, não contexto.
+    - generic [ref=f1e67]:
+      - heading "Onde aparece" [level=3] [ref=f1e68]
+      - generic [ref=f1e69]:
+        - generic [ref=f1e70]:
+          - generic [ref=f1e71]: Control Panel, à direita (260px)
+          - list [ref=f1e72]:
+            - listitem [ref=f1e73]:
+              - text: Linha de
+              - strong [ref=f1e74]: duas linhas
+              - text: ": nome + custo em cima; modelo · duração · quando embaixo"
+            - listitem [ref=f1e75]:
+              - text: Ordem por
+              - strong [ref=f1e76]: tempo
+              - text: — hoje é alfabética, o que quebra com 69 sessões
+            - listitem [ref=f1e77]:
+              - strong [ref=f1e78]: Scroll infinito, página de 10
+              - text: ", sentinela por"
+              - code [ref=f1e79]: IntersectionObserver
+            - listitem [ref=f1e80]: Total do escopo no rodapé + “Ver todas →”
+        - generic [ref=f1e81]:
+          - generic [ref=f1e82]: Aba Histórico, no Workbench
+          - list [ref=f1e83]:
+            - listitem [ref=f1e84]:
+              - text: Um
+              - code [ref=f1e85]: WorkbenchTab
+              - text: comum — abre e fecha como um arquivo
+            - listitem [ref=f1e86]: "Dash em cima: total do período + barras por dia"
+            - listitem [ref=f1e87]:
+              - text: Tabela de listagem reusando
+              - code [ref=f1e88]: EntityDataGrid
+            - listitem [ref=f1e89]: Filtros de projeto · modelo · período
+            - listitem [ref=f1e90]: "Id de aba único: “Ver todas” duas vezes foca, não duplica"
+    - generic [ref=f1e91]:
+      - heading "As duas decisões conservadoras" [level=3] [ref=f1e92]
+      - generic [ref=f1e93]:
+        - generic [ref=f1e94]:
+          - heading "Preço — tabela estática, nunca fetch" [level=4] [ref=f1e95]
+          - list [ref=f1e96]:
+            - listitem [ref=f1e97]: Versionada no repo, com override em Settings
+            - listitem [ref=f1e98]:
+              - code [ref=f1e99]: CLAUDE.md
+              - text: proíbe backend, API e telemetria — buscar preço remoto violaria isso
+            - listitem [ref=f1e100]:
+              - text: Modelo fora da tabela mostra
+              - strong [ref=f1e101]: —
+              - text: ", nunca um número inventado"
+            - listitem [ref=f1e102]:
+              - text: O rodapé diz
+              - emphasis [ref=f1e103]: estimado
+              - text: ", não"
+              - emphasis [ref=f1e104]: gasto
+        - generic [ref=f1e105]:
+          - heading "Total do rodapé — a parte cara" [level=4] [ref=f1e106]
+          - list [ref=f1e107]:
+            - listitem [ref=f1e108]:
+              - text: "Os 10 da página são baratos:"
+              - code [ref=f1e109]: stat()
+              - text: ordena e data, sem abrir arquivo
+            - listitem [ref=f1e110]: O total do escopo exige ler todos os 69
+            - listitem [ref=f1e111]:
+              - text: Cache em
+              - code [ref=f1e112]: .ai-companion/session-cost-cache.json
+              - text: ", chaveado por"
+              - code [ref=f1e113]: path + mtime + size
+            - listitem [ref=f1e114]: Primeira abertura parseia em background com progresso; depois só o que mudou
+    - generic [ref=f1e115]:
+      - heading "Fora de escopo, de propósito" [level=3] [ref=f1e116]
+      - paragraph [ref=f1e117]:
+        - strong [ref=f1e118]: Ler a conversa antiga
+        - text: e
+        - strong [ref=f1e119]: exportar
+        - text: — você não marcou, e o parser de transcript renderizável é o pedaço mais caro do
+        - code [ref=f1e120]: .jsonl
+        - text: (dezenas de tipos de linha). Fica para depois, sem nada no caminho.
+        - strong [ref=f1e121]:
+          - text: Remover o retry do
+          - code [ref=f1e122]: NO_CONVERSATION_MARKER
+        - text: "no adapter — vira desnecessário, mas é refactor: PR separado, como manda seu"
+        - code [ref=f1e123]: CLAUDE.md
+        - text: .

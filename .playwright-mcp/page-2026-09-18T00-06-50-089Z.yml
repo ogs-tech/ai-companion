@@ -1,0 +1,261 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - link "Prime Radiant Superpowers v6.3.0" [ref=f4e4] [cursor=pointer]:
+      - /url: https://github.com/obra/superpowers
+      - img "Prime Radiant" [ref=f4e5]
+      - generic [ref=f4e6]: Superpowers v6.3.0
+    - generic [ref=f4e7]: Connected
+  - generic [ref=f4e9]:
+    - heading "Como o histórico vai ficar" [level=2] [ref=f4e10]
+    - paragraph [ref=f4e11]: Anatomia da linha, os cinco estados, o comportamento do scroll e a aba do dash.
+    - generic [ref=f4e12]:
+      - heading "1 · A linha, em tamanho real" [level=3] [ref=f4e13]
+      - paragraph [ref=f4e14]: 260px é o orçamento inteiro. Duas linhas, quatro informações, duas colunas alinhadas.
+      - generic [ref=f4e15]:
+        - generic [ref=f4e16]:
+          - generic [ref=f4e17]:
+            - generic [ref=f4e18]: Sessões
+            - generic [ref=f4e19]: +
+          - generic [ref=f4e20]:
+            - generic [ref=f4e21]:
+              - generic [ref=f4e22]: ● feature-dev
+              - generic [ref=f4e23]: "8.10"
+            - generic [ref=f4e24]:
+              - generic [ref=f4e25]: opus-5
+              - generic [ref=f4e26]: agora · 2h12
+          - generic [ref=f4e27]:
+            - generic [ref=f4e28]:
+              - generic [ref=f4e29]: main
+              - generic [ref=f4e30]: "4.30"
+            - generic [ref=f4e31]:
+              - generic [ref=f4e32]: opus-5
+              - generic [ref=f4e33]: 09:11 · 22m
+          - generic [ref=f4e34]:
+            - generic [ref=f4e35]:
+              - generic [ref=f4e36]: spreadsheet
+              - generic [ref=f4e37]: "11.40"
+            - generic [ref=f4e38]:
+              - generic [ref=f4e39]: opus-5
+              - generic [ref=f4e40]: 08:02 · 3h40
+          - generic [ref=f4e41]:
+            - generic [ref=f4e42]:
+              - generic [ref=f4e43]: main
+              - generic [ref=f4e44]: "6.05"
+            - generic [ref=f4e45]:
+              - generic [ref=f4e46]: opus-5
+              - generic [ref=f4e47]: ontem 17:45
+          - generic [ref=f4e48]:
+            - generic [ref=f4e49]:
+              - generic [ref=f4e50]: formula-resolver
+              - generic [ref=f4e51]: "2.15"
+            - generic [ref=f4e52]:
+              - generic [ref=f4e53]: opus-5
+              - generic [ref=f4e54]: ontem 11:20
+          - generic [ref=f4e55]:
+            - generic [ref=f4e56]: 41 sessões, setembro
+            - generic [ref=f4e57]: $31.80
+          - generic [ref=f4e58]: estimado
+          - generic [ref=f4e59]: Ver todas as 41
+        - generic [ref=f4e60]:
+          - generic [ref=f4e61]:
+            - strong [ref=f4e62]: Linha 1, esquerda
+            - generic [ref=f4e63]: Nome da sessão. Peso 500 quando viva, 400 quando encerrada — nunca esmaecida, porque é o alvo do clique.
+            - strong [ref=f4e64]: Linha 1, direita
+            - generic [ref=f4e65]: Custo em JetBrains Mono. Alinhado à direita, então os algarismos empilham numa coluna e você compara sessões sem ler.
+            - strong [ref=f4e66]: Linha 2, esquerda
+            - generic [ref=f4e67]: Modelo. Coluna fixa — varrer de cima a baixo mostra onde o opus está sendo usado.
+            - strong [ref=f4e68]: Linha 2, direita
+            - generic [ref=f4e69]: Quando e quanto durou.
+            - strong [ref=f4e70]: Spine verde
+            - generic [ref=f4e71]: 2px na borda esquerda, só na sessão viva. Mesma convenção que a árvore de entidades já usa.
+            - strong [ref=f4e72]: Rodapé
+            - generic [ref=f4e73]:
+              - text: Total do escopo, com
+              - emphasis [ref=f4e74]: estimado
+              - text: embaixo em vez de um asterisco. O número nunca aparece sozinho fingindo ser extrato.
+          - paragraph [ref=f4e75]:
+            - text: Sem
+            - code [ref=f4e76]: ·
+            - text: juntando metadados e sem rótulo em caixa alta. As duas colunas alinhadas fazem o trabalho que o separador faria, e sobram ~28px de respiro por linha.
+    - generic [ref=f4e77]:
+      - heading "2 · Os cinco estados da linha" [level=3] [ref=f4e78]
+      - generic [ref=f4e79]:
+        - generic [ref=f4e80]:
+          - generic [ref=f4e82]:
+            - generic [ref=f4e83]:
+              - generic [ref=f4e84]: ● feature-dev
+              - generic [ref=f4e85]: "8.10"
+            - generic [ref=f4e86]:
+              - generic [ref=f4e87]: opus-5
+              - generic [ref=f4e88]: agora · 2h12
+          - paragraph [ref=f4e89]:
+            - strong [ref=f4e90]: Viva.
+            - text: Bolinha e spine verdes, custo sobe enquanto você trabalha. Clicar foca a aba dela.
+        - generic [ref=f4e91]:
+          - generic [ref=f4e93]:
+            - generic [ref=f4e94]:
+              - generic [ref=f4e95]: main
+              - generic [ref=f4e96]: "4.30"
+            - generic [ref=f4e97]:
+              - generic [ref=f4e98]: opus-5
+              - generic [ref=f4e99]: 09:11 · 22m
+          - paragraph [ref=f4e100]:
+            - strong [ref=f4e101]: Encerrada.
+            - text: Sem bolinha, sem spine — mas com o mesmo contraste. Clicar retoma via
+            - code [ref=f4e102]: "--resume"
+            - text: .
+        - generic [ref=f4e103]:
+          - generic [ref=f4e105]:
+            - generic [ref=f4e106]: starter-pack
+            - generic [ref=f4e109]:
+              - generic [ref=f4e110]: opus-5
+              - generic [ref=f4e111]: 14 set · 47m
+          - paragraph [ref=f4e112]:
+            - strong [ref=f4e113]: Custo chegando.
+            - text: Nome e data vêm do
+            - code [ref=f4e114]: stat()
+            - text: ", instantâneos. Só o valor espera o parse — shimmer no lugar dele, nunca a linha inteira."
+        - generic [ref=f4e115]:
+          - generic [ref=f4e117]:
+            - generic [ref=f4e118]:
+              - generic [ref=f4e119]: audit-run
+              - generic [ref=f4e120]: —
+            - generic [ref=f4e121]:
+              - generic [ref=f4e122]: sonnet-4-5
+              - generic [ref=f4e123]: 2 set · 1h10
+          - paragraph [ref=f4e124]:
+            - strong [ref=f4e125]: Preço desconhecido.
+            - text: "Modelo fora da tabela. Traço, não zero, não chute. Tooltip: “Sem preço para sonnet-4-5. Edite a tabela em Ajustes.”"
+        - generic [ref=f4e126]:
+          - generic [ref=f4e128]:
+            - generic [ref=f4e129]:
+              - generic [ref=f4e130]: main
+              - generic [ref=f4e131]: "6.05"
+            - generic [ref=f4e132]:
+              - generic [ref=f4e133]: opus-5
+              - generic [ref=f4e134]: ontem 17:45
+          - paragraph [ref=f4e135]:
+            - strong [ref=f4e136]: Foco de teclado.
+            - text: Cada linha é um botão real. Setas navegam, Enter retoma — o painel inteiro é operável sem mouse.
+    - generic [ref=f4e137]:
+      - heading "3 · O scroll" [level=3] [ref=f4e138]
+      - generic [ref=f4e139]:
+        - generic [ref=f4e140]:
+          - generic [ref=f4e141]: ⋮ sessões 1–10 acima
+          - generic [ref=f4e142]:
+            - generic [ref=f4e143]:
+              - generic [ref=f4e144]: entity-watch
+              - generic [ref=f4e145]: "3.90"
+            - generic [ref=f4e146]:
+              - generic [ref=f4e147]: opus-5
+              - generic [ref=f4e148]: 12 set · 55m
+        - list [ref=f4e164]:
+          - listitem [ref=f4e165]:
+            - text: Carrega
+            - strong [ref=f4e166]: 10 por vez
+            - text: . Uma sentinela invisível fica logo abaixo da última linha; quando ela entra na viewport, a próxima página é pedida.
+          - listitem [ref=f4e167]:
+            - text: Enquanto carrega,
+            - strong [ref=f4e168]: 3 linhas-esqueleto
+            - text: ocupam o espaço exato que as reais vão ocupar. Nada pula quando chegam.
+          - listitem [ref=f4e169]:
+            - text: O esqueleto
+            - strong [ref=f4e170]: não pisca
+            - text: — é um bloco estático. Movimento aqui seria decoração, e num painel que você olha o dia inteiro vira ruído.
+          - listitem [ref=f4e171]: "Fim da lista: uma linha discreta “41 de 41”. Sem spinner infinito, sem “carregar mais” pra clicar."
+          - listitem [ref=f4e172]:
+            - text: A aba do Workbench
+            - strong [ref=f4e173]: não desmonta
+            - text: ao trocar de aba, então o que você já rolou continua lá na volta.
+    - generic [ref=f4e174]:
+      - heading "4 · A aba Histórico" [level=3] [ref=f4e175]
+      - paragraph [ref=f4e176]: Abre pelo “Ver todas as 41”. Largura do canvas inteiro — onde o detalhamento cabe.
+      - generic [ref=f4e177]:
+        - generic [ref=f4e178]:
+          - generic [ref=f4e179]: feature-dev
+          - generic [ref=f4e180]: Histórico ✕
+        - generic [ref=f4e181]:
+          - generic [ref=f4e182]:
+            - generic [ref=f4e183]: $31.80
+            - generic [ref=f4e184]: estimado em 41 sessõesai-companion, setembro
+          - generic [ref=f4e202]:
+            - generic [ref=f4e203]: 1 set
+            - generic [ref=f4e204]: 17 set $12.40
+          - generic [ref=f4e205]:
+            - generic [ref=f4e206]: Todos os modelos
+            - generic [ref=f4e207]: Setembro
+            - generic [ref=f4e208]: Só este projeto
+            - generic [ref=f4e209]: Buscar
+          - generic [ref=f4e210]:
+            - generic [ref=f4e211]: Sessão
+            - generic [ref=f4e212]: Projeto
+            - generic [ref=f4e213]: Início
+            - generic [ref=f4e214]: Duração
+            - generic [ref=f4e215]: Tokens
+            - generic [ref=f4e216]: US$ ↓
+            - generic [ref=f4e217]: spreadsheet
+            - generic [ref=f4e218]: ai-companion
+            - generic [ref=f4e219]: hoje 08:02
+            - generic [ref=f4e220]: 3h40
+            - generic [ref=f4e221]: 2.1M
+            - generic [ref=f4e222]: "11.40"
+            - generic [ref=f4e223]: ● feature-dev
+            - generic [ref=f4e224]: ai-companion
+            - generic [ref=f4e225]: hoje 14:32
+            - generic [ref=f4e226]: 2h12
+            - generic [ref=f4e227]: 1.2M
+            - generic [ref=f4e228]: "8.10"
+            - generic [ref=f4e229]: main
+            - generic [ref=f4e230]: ai-companion
+            - generic [ref=f4e231]: ontem 17:45
+            - generic [ref=f4e232]: 1h03
+            - generic [ref=f4e233]: 0.9M
+            - generic [ref=f4e234]: "6.05"
+            - generic [ref=f4e235]: audit-run
+            - generic [ref=f4e236]: alephee-core
+            - generic [ref=f4e237]: 2 set
+            - generic [ref=f4e238]: 1h10
+            - generic [ref=f4e239]: 1.4M
+            - generic [ref=f4e240]: —
+      - generic [ref=f4e241]:
+        - generic [ref=f4e242]:
+          - strong [ref=f4e243]: A barra é um filtro.
+          - text: Clicar num dia filtra a tabela por ele; o rótulo à direita do eixo mostra o dia sob o cursor e quanto custou.
+        - generic [ref=f4e244]:
+          - strong [ref=f4e245]: Ordenada por custo, não por data.
+          - text: A pergunta é “o que saiu caro”, e a resposta fica na primeira linha. Data continua ordenável.
+        - generic [ref=f4e246]:
+          - strong [ref=f4e247]: “Só este projeto” já vem ligado.
+          - text: Desligar revela os outros 19 projetos — a listagem geral com filtros que você pediu.
+        - generic [ref=f4e248]:
+          - strong [ref=f4e249]: A sessão viva aparece aqui também,
+          - text: com a mesma bolinha verde. Uma lista só, não duas realidades.
+    - generic [ref=f4e250]:
+      - heading "5 · Quando não há nada, e quando dá erro" [level=3] [ref=f4e251]
+      - generic [ref=f4e252]:
+        - generic [ref=f4e253]:
+          - generic [ref=f4e254]:
+            - generic [ref=f4e255]: Nenhuma sessão ainda
+            - generic [ref=f4e256]:
+              - text: Abra uma com
+              - strong [ref=f4e257]: +
+              - text: e ela aparece aquicom o custo assim que a primeira resposta chegar.
+          - paragraph [ref=f4e258]: Vazio é convite, não lamento. Diz o gesto exato e o que esperar depois dele.
+        - generic [ref=f4e259]:
+          - generic [ref=f4e260]:
+            - generic [ref=f4e261]: Não consegui ler o histórico
+            - generic [ref=f4e262]:
+              - text: A pasta
+              - code [ref=f4e263]: ~/.claude/projects
+              - text: não respondeu.As sessões abertas agora continuam funcionando.
+            - generic [ref=f4e264]: Tentar de novo
+          - paragraph [ref=f4e265]:
+            - text: Diz o que falhou, onde, e o que
+            - emphasis [ref=f4e266]: continua
+            - text: funcionando. Erro não pede desculpa e não some com o resto do painel.
+    - generic [ref=f4e267]:
+      - heading "6 · O que fica de fora do visual" [level=3] [ref=f4e268]
+      - paragraph [ref=f4e269]:
+        - text: "Sem animação de entrada nas linhas, sem transição em hover de cada item, sem cartões arredondados repetidos. Este painel é lido dezenas de vezes por dia — movimento aqui vira tique, não informação. O único movimento é o que responde a você: a aba abrindo, o filtro aplicando. A única ousadia é o"
+        - strong [ref=f4e270]: $31.80
+        - text: em 40px no topo da aba. Todo o resto fica quieto para ele funcionar.

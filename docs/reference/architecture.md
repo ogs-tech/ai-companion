@@ -188,6 +188,28 @@ number renders through its own cell number format — currency, percentage, thou
 bottom of the grid, matching where Excel/Sheets/LibreOffice put sheet tabs). Any other binary content (a null
 byte in the first 8000 bytes) is `previewable: false`. Spreadsheet write-back isn't implemented yet — view only.
 
+A `.numbers` document reaches that same spreadsheet path through `SpreadsheetConverterPort`
+(`supports`/`toXlsx`, implemented by `NumbersConverterAdapter`), consulted by `NodeFileBrowserAdapter`
+before any size cap or content sniffing. The format itself is unreadable to us — an iWork Archive of
+Snappy-compressed protobuf whose schema Apple has never published and changes per release — so the adapter
+drives Numbers.app over Apple events (`osascript`, paths passed as `argv` rather than interpolated into the
+script) to export a `.xlsx`, then parses that through `readSpreadsheet`. The renderer therefore needs no
+`.numbers` branch at all: it only ever sees `kind: 'spreadsheet'`.
+
+Three constraints shape that adapter. **It converts a temp copy, never the file itself** — `open` on a
+document Numbers already has open returns *that* document, and the script's `close ... saving no` would
+discard the user's unsaved edits; copying removes the hazard structurally, where detecting "already open?"
+only narrows a race. The preview consequently reflects the saved file, not an unsaved Numbers window.
+**It drops the export-summary sheet Numbers prepends to multi-table documents** by comparing the parsed
+sheet count against the table count Numbers itself reports (`ConvertedSpreadsheet.sourceSheetCount`);
+the sheet's name is localized, and a hand-written index sheet of one's own looks identical to content
+sniffing, so anything but exactly one surplus leading sheet is left alone. **Every expected failure —
+no Numbers, denied Automation permission, a hung export past the 30s deadline — becomes
+`{previewable: false, reason}`**, not a thrown `DomainError`, so the reason lands in the renderer's
+"cannot preview" panel instead of its generic load-error state. macOS-only by construction; the 5MB cap
+applies to the converted workbook, since a `.numbers` file's embedded image assets say little about the
+size of its grid.
+
 The Workspace screen's folder tree can also be scoped to a single `Project` instead of the whole
 workspace, but scoping and browsing-in-place are two different gestures now: clicking a root-level folder
 row already registered as a `Project` just expands it in place (fetches its own listing via

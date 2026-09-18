@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { NodeFileBrowserAdapter } from '../../../../src/main/infrastructure/filesystem/node-file-browser-adapter.js';
+import { SpreadsheetConversionError } from '../../../../src/main/application/ports/spreadsheet-converter-port.js';
+import type { SpreadsheetConverterPort } from '../../../../src/main/application/ports/spreadsheet-converter-port.js';
+import type { FilePreview } from '../../../../src/shared/file-browser.js';
 
 async function writeWorkbook(
   path: string,
@@ -560,5 +563,144 @@ describe('NodeFileBrowserAdapter.realpath', () => {
 
   it('throws not_found for a path that does not exist', async () => {
     await expect(adapter.realpath(join(dir, 'nope'))).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});
+
+describe('NodeFileBrowserAdapter.readFile — converted spreadsheet (.numbers)', () => {
+  async function workbookBuffer(sheetNames: string[]): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    for (const name of sheetNames) {
+      workbook.addWorksheet(name).getCell('A1').value = `${name} data`;
+    }
+    return Buffer.from((await workbook.xlsx.writeBuffer()) as unknown as ArrayBuffer);
+  }
+
+  /**
+   * Stands in for Numbers.app, handing back a real workbook so the whole
+   * convert → parse → strip path runs on a machine that has neither macOS nor
+   * Numbers.
+   */
+  function converterOf(
+    toXlsx: () => Promise<{ xlsx: Buffer; sourceSheetCount: number }>,
+  ): SpreadsheetConverterPort {
+    return { supports: (path) => path.toLowerCase().endsWith('.numbers'), toXlsx };
+  }
+
+  function sheetNamesOf(preview: FilePreview): string[] {
+    if (!preview.previewable || preview.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet preview, got ${JSON.stringify(preview)}`);
+    }
+    return preview.sheets.map((sheet) => sheet.name);
+  }
+
+  async function previewNumbers(
+    converter: SpreadsheetConverterPort,
+    contents: Buffer | string = 'a .numbers file is a zip; its bytes never matter here',
+  ): Promise<FilePreview> {
+    const path = join(dir, 'catalog.numbers');
+    await writeFile(path, contents);
+    return new NodeFileBrowserAdapter([converter]).readFile(path);
+  }
+
+  it('previews a converted document through the same kind as a native workbook', async () => {
+    const preview = await previewNumbers(
+      converterOf(async () => ({ xlsx: await workbookBuffer(['Orçamento']), sourceSheetCount: 1 })),
+    );
+    expect(preview).toMatchObject({ previewable: true, kind: 'spreadsheet' });
+    expect(sheetNamesOf(preview)).toEqual(['Orçamento']);
+  });
+
+  it('drops the leading sheet the converter fabricated', async () => {
+    // Numbers prepends a localized export-summary sheet to multi-table
+    // documents and reports only its four real tables.
+    const preview = await previewNumbers(
+      converterOf(async () => ({
+        xlsx: await workbookBuffer([
+          'Resumo da Exportação',
+          'Orçamento',
+          'Catálogo',
+          'Config',
+          'Referência',
+        ]),
+        sourceSheetCount: 4,
+      })),
+    );
+    expect(sheetNamesOf(preview)).toEqual(['Orçamento', 'Catálogo', 'Config', 'Referência']);
+  });
+
+  it('keeps every sheet when the converted workbook matches the reported count', async () => {
+    const preview = await previewNumbers(
+      converterOf(async () => ({ xlsx: await workbookBuffer(['Folha 1']), sourceSheetCount: 1 })),
+    );
+    expect(sheetNamesOf(preview)).toEqual(['Folha 1']);
+  });
+
+  it('keeps every sheet when the surplus is not exactly one, rather than guessing', async () => {
+    // Failing safe: showing a stray sheet beats hiding one of the user's own.
+    const preview = await previewNumbers(
+      converterOf(async () => ({
+        xlsx: await workbookBuffer(['One', 'Two', 'Three']),
+        sourceSheetCount: 1,
+      })),
+    );
+    expect(sheetNamesOf(preview)).toEqual(['One', 'Two', 'Three']);
+  });
+
+  it('surfaces a conversion failure as the preview reason instead of throwing', async () => {
+    const preview = await previewNumbers(
+      converterOf(async () => {
+        throw new SpreadsheetConversionError('permission_denied', 'Grant it under Automation.');
+      }),
+    );
+    expect(preview).toEqual({ previewable: false, reason: 'Grant it under Automation.' });
+  });
+
+  it('lets an unexpected converter error propagate rather than reporting it as unpreviewable', async () => {
+    await expect(
+      previewNumbers(
+        converterOf(async () => {
+          throw new Error('boom');
+        }),
+      ),
+    ).rejects.toThrow('boom');
+  });
+
+  it('consults the converter before the size cap, since embedded assets inflate the source', async () => {
+    const preview = await previewNumbers(
+      converterOf(async () => ({ xlsx: await workbookBuffer(['Catálogo']), sourceSheetCount: 1 })),
+      Buffer.alloc(6 * 1024 * 1024),
+    );
+    expect(sheetNamesOf(preview)).toEqual(['Catálogo']);
+  });
+
+  it('applies the size cap to the converted workbook', async () => {
+    const preview = await previewNumbers(
+      converterOf(async () => ({ xlsx: Buffer.alloc(6 * 1024 * 1024), sourceSheetCount: 1 })),
+    );
+    expect(preview).toMatchObject({ previewable: false });
+    expect((preview as { reason: string }).reason).toContain('too large');
+  });
+
+  it('never strips a document down to no sheets at all', async () => {
+    // A document reporting zero tables satisfies the +1 arithmetic on its own;
+    // stripping there would leave the renderer an empty grid.
+    const preview = await previewNumbers(
+      converterOf(async () => ({ xlsx: await workbookBuffer(['Only']), sourceSheetCount: 0 })),
+    );
+    expect(sheetNamesOf(preview)).toEqual(['Only']);
+  });
+
+  it('leaves files the converter does not claim to the native readers', async () => {
+    const adapterWithConverter = new NodeFileBrowserAdapter([
+      converterOf(async () => {
+        throw new Error('the converter must not be consulted for a .txt');
+      }),
+    ]);
+    await writeFile(join(dir, 'a.txt'), 'hello world');
+    expect(await adapterWithConverter.readFile(join(dir, 'a.txt'))).toMatchObject({
+      previewable: true,
+      kind: 'text',
+      content: 'hello world',
+    });
   });
 });

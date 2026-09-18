@@ -13,6 +13,10 @@ import type {
   SpreadsheetMerge,
   SpreadsheetSheet,
 } from '../../../shared/file-browser.js';
+import {
+  SpreadsheetConversionError,
+  type SpreadsheetConverterPort,
+} from '../../application/ports/spreadsheet-converter-port.js';
 import { DomainError } from '../../domain/errors.js';
 import { createFormulaResolver, formulaOf } from './spreadsheet-formula-resolver.js';
 
@@ -283,7 +287,64 @@ async function readSpreadsheet(buffer: Buffer): Promise<FilePreview> {
   return { previewable: true, kind: 'spreadsheet', sheets, truncated };
 }
 
+/**
+ * Drops worksheets a converter fabricated rather than read from the source
+ * document — Numbers prepends a localized "export summary" sheet to every
+ * multi-table document, which would otherwise open as the preview's first tab.
+ *
+ * Identified by arithmetic against the table count the converter itself
+ * reported, never by inspecting names or content: the summary sheet's name is
+ * translated into every language Numbers ships in, and a spreadsheet of one's
+ * own may perfectly well open with a hand-written index sheet. Anything other
+ * than exactly one extra leading sheet is left alone — showing a stray sheet is
+ * a far cheaper mistake than hiding one of the user's.
+ */
+function withoutFabricatedSheets(
+  sheets: SpreadsheetSheet[],
+  sourceSheetCount: number,
+): SpreadsheetSheet[] {
+  // `sheets.length > 1` is not implied by the arithmetic: a document reporting
+  // zero tables would otherwise strip its only sheet and leave the grid empty.
+  const hasExactlyOneSurplus = sheets.length === sourceSheetCount + 1;
+  return hasExactlyOneSurplus && sheets.length > 1 ? sheets.slice(1) : sheets;
+}
+
+/** Converts a foreign spreadsheet, then parses the result exactly as a native workbook — so the renderer sees one `kind: 'spreadsheet'` and cannot tell the two apart. */
+async function readConvertedSpreadsheet(
+  absPath: string,
+  converter: SpreadsheetConverterPort,
+): Promise<FilePreview> {
+  let xlsx: Buffer;
+  let sourceSheetCount: number;
+  try {
+    ({ xlsx, sourceSheetCount } = await converter.toXlsx(absPath));
+  } catch (err) {
+    // Every expected failure — no Numbers installed, automation denied, a hung
+    // export — becomes a non-previewable reason rather than a thrown
+    // DomainError. The renderer states a reason it is given; a throw would
+    // instead surface the generic "could not load this file" error panel.
+    if (err instanceof SpreadsheetConversionError) {
+      return { previewable: false, reason: err.message };
+    }
+    throw err;
+  }
+
+  if (xlsx.length > MAX_READABLE_BYTES) {
+    return {
+      previewable: false,
+      reason: `File is too large to preview (over ${MAX_READABLE_BYTES / (1024 * 1024)}MB)`,
+    };
+  }
+
+  const preview = await readSpreadsheet(xlsx);
+  if (!preview.previewable || preview.kind !== 'spreadsheet') return preview;
+  return { ...preview, sheets: withoutFabricatedSheets(preview.sheets, sourceSheetCount) };
+}
+
 export class NodeFileBrowserAdapter implements FileBrowserPort {
+  /** Converters are consulted before any size cap or content sniffing — see `readFile`. */
+  constructor(private readonly converters: readonly SpreadsheetConverterPort[] = []) {}
+
   async listDir(absPath: string): Promise<FileBrowserEntry[]> {
     let dirents: import('node:fs').Dirent[];
     try {
@@ -323,6 +384,15 @@ export class NodeFileBrowserAdapter implements FileBrowserPort {
     if (!stat.isFile()) {
       throw new DomainError('validation', `Not a file: ${absPath}`);
     }
+    const converter = this.converters.find((candidate) => candidate.supports(absPath));
+    if (converter) {
+      // Ahead of MAX_READABLE_BYTES on purpose: a `.numbers` file embeds its own
+      // image assets — a stock template alone adds ~500KB — so its size on disk
+      // says little about the size of the grid it converts to. The cap applies
+      // to the converted workbook instead.
+      return readConvertedSpreadsheet(absPath, converter);
+    }
+
     if (stat.size > MAX_READABLE_BYTES) {
       return {
         previewable: false,
