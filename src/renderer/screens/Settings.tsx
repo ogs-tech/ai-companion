@@ -27,6 +27,12 @@ import { ConfirmDisableModal } from './settings/ConfirmDisableModal.js';
 import { RestoreConfirmDialog } from './settings/RestoreConfirmDialog.js';
 import type { SyncResult } from '../../shared/sync-result.js';
 import type { LanguagePreference, Settings as SettingsModel } from '../../shared/settings.js';
+import {
+  HARNESSES,
+  HARNESS_IDS,
+  type HarnessCapability,
+  type HarnessId,
+} from '../../shared/harness.js';
 import { workspacePathHint } from '../../shared/brand.js';
 
 const LANGUAGE_OPTIONS: { value: LanguagePreference; label: string }[] = [
@@ -37,9 +43,13 @@ const LANGUAGE_OPTIONS: { value: LanguagePreference; label: string }[] = [
   { value: 'es', label: 'Español' },
 ];
 
-const ADAPTER_KEYS = ['claude', 'cursor'] as const;
-type AdapterKey = (typeof ADAPTER_KEYS)[number];
-const ADAPTER_LABEL: Record<AdapterKey, string> = { claude: 'Claude', cursor: 'Cursor' };
+// What each harness capability promises, in this screen's own voice. The list of
+// harnesses itself comes from the registry in shared/harness.ts — adding one there
+// is enough to have it show up here.
+const CAPABILITY_LABEL: Record<HarnessCapability, string> = {
+  manage: 'sincroniza suas customizações',
+  run: 'executa sessões dentro do app',
+};
 
 interface SettingsProps {
   onBack?: () => void;
@@ -49,7 +59,7 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
   const [settings, setSettings] = useState<SettingsModel | null>(null);
   const [syncReport, setSyncReport] = useState<SyncResult[]>([]);
   const [disableModal, setDisableModal] = useState<{
-    key: AdapterKey;
+    key: HarnessId;
     count: number;
   } | null>(null);
   const [disableToast, setDisableToast] = useState<string | null>(null);
@@ -97,7 +107,7 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
   }, []);
 
   const handleAdapterToggle = async (
-    key: AdapterKey,
+    key: HarnessId,
     enabled: boolean,
   ): Promise<void> => {
     if (enabled) {
@@ -210,18 +220,26 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
           Habilite assistentes para manter suas customizações sincronizadas.
         </Typography>
         <FormGroup>
-          {ADAPTER_KEYS.map((key) => (
-            <FormControlLabel
-              key={key}
-              control={
-                <Checkbox
-                  id={`adapter-${key}`}
-                  checked={settings.adapters[key].enabled}
-                  onChange={(e) => void handleAdapterToggle(key, e.target.checked)}
-                />
-              }
-              label={ADAPTER_LABEL[key]}
-            />
+          {HARNESS_IDS.map((id) => (
+            <Box key={id}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    id={`adapter-${id}`}
+                    checked={settings.adapters[id].enabled}
+                    onChange={(e) => void handleAdapterToggle(id, e.target.checked)}
+                  />
+                }
+                label={HARNESSES[id].displayName}
+              />
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', ml: 4, mt: -0.75 }}
+              >
+                {HARNESSES[id].capabilities.map((c) => CAPABILITY_LABEL[c]).join(' · ')}
+              </Typography>
+            </Box>
           ))}
         </FormGroup>
       </Paper>
@@ -312,7 +330,7 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
 
       {disableModal !== null && (
         <ConfirmDisableModal
-          adapterName={ADAPTER_LABEL[disableModal.key]}
+          adapterName={HARNESSES[disableModal.key].displayName}
           count={disableModal.count}
           onConfirmRemove={() => void handleDisableConfirm(true)}
           onConfirmNoRemove={() => void handleDisableConfirm(false)}

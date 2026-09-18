@@ -1,35 +1,42 @@
 import {
   getDefaults,
+  type AdapterSettings,
   type Settings,
   type ThemeMode,
   type LanguagePreference,
 } from '../../../shared/settings.js';
+import {
+  HARNESSES,
+  HARNESS_IDS,
+  isHarnessId,
+  type HarnessId,
+} from '../../../shared/harness.js';
 import type { SettingsRepository } from '../ports/settings-repository.js';
 import { DomainError } from '../../domain/errors.js';
 
 const stripLegacyFields = (settings: Settings): Settings => {
-  // Drops fields from older on-disk shapes (removed `copilot` adapter key, legacy
-  // per-adapter `defaultScope`, the retired global `linkedRepos` array) by rebuilding
-  // the object from scratch, and backfills a disabled `cursor` for settings files
-  // written before it existed.
-  const adapters = settings.adapters as unknown as {
-    claude?: Record<string, unknown>;
-    cursor?: Record<string, unknown>;
-  };
-  const clean = (
-    entry: Record<string, unknown> | undefined,
-    fallbackEnabled: boolean,
-  ): { enabled: boolean } => ({
-    enabled: typeof entry?.['enabled'] === 'boolean' ? (entry['enabled'] as boolean) : fallbackEnabled,
-  });
+  // Drops fields from older on-disk shapes (adapter keys for harnesses no longer in
+  // the registry — e.g. the removed `copilot` one — legacy per-adapter `defaultScope`,
+  // the retired global `linkedRepos` array) by rebuilding the `adapters` block from
+  // HARNESS_IDS, and backfills any harness the settings file predates at that
+  // harness's own `defaultEnabled`.
+  const adapters = settings.adapters as unknown as Partial<
+    Record<HarnessId, Record<string, unknown>>
+  >;
   const { linkedRepos: _unused, ...rest } = settings as Settings & { linkedRepos?: unknown };
   void _unused;
   return {
     ...rest,
-    adapters: {
-      claude: clean(adapters.claude, true),
-      cursor: clean(adapters.cursor, false),
-    },
+    adapters: Object.fromEntries(
+      HARNESS_IDS.map((id) => {
+        const entry = adapters[id];
+        const enabled =
+          typeof entry?.['enabled'] === 'boolean'
+            ? (entry['enabled'] as boolean)
+            : HARNESSES[id].defaultEnabled;
+        return [id, { enabled }];
+      }),
+    ) as Record<HarnessId, AdapterSettings>,
   };
 };
 
@@ -95,15 +102,11 @@ function assertValidSettings(value: unknown): asserts value is Settings {
 
   const adapters = asRecord(s['adapters'], "Missing or invalid 'adapters'");
   const adapterKeys = Object.keys(adapters);
-  const ALLOWED_ADAPTERS = new Set(['claude', 'cursor']);
-  if (!adapterKeys.includes('claude')) {
-    invalid("'adapters' must contain the 'claude' adapter");
-  }
-  if (!adapterKeys.includes('cursor')) {
-    invalid("'adapters' must contain the 'cursor' adapter");
+  for (const id of HARNESS_IDS) {
+    if (!adapterKeys.includes(id)) invalid(`'adapters' must contain the '${id}' adapter`);
   }
   for (const key of adapterKeys) {
-    if (!ALLOWED_ADAPTERS.has(key)) invalid(`Unknown adapter '${key}'`);
+    if (!isHarnessId(key)) invalid(`Unknown adapter '${key}'`);
     const entry = asRecord(adapters[key], `'adapters.${key}' must be an object`);
     if (typeof entry['enabled'] !== 'boolean') {
       invalid(`'adapters.${key}.enabled' must be a boolean`);

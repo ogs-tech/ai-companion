@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import {
   ChevronsLeft, ChevronsRight, Eye, EyeOff, File as FileIcon, FileX, Globe, MoreVertical, NotebookPen,
-  History, PanelLeft, PanelRight, Plus, Sparkles, SquareTerminal, Trash2, type LucideIcon,
+  History, PanelLeft, PanelRight, Plus, RefreshCw, Sparkles, SquareTerminal, Trash2, type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { EmptyState } from '../../components/ds/EmptyState.js';
@@ -44,6 +44,7 @@ import { useDeleteProject, useFindOrCreateProjectByPath, useProjects } from '../
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
+import { useRefreshFiles } from '../../hooks/use-file-browser.js';
 import {
   useInvalidateInstructions,
   usePersonalInstruction,
@@ -164,6 +165,8 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const { data: workspaceInstruction } = useWorkspaceInstruction(activeWorkspace?.id ?? '');
+
+  const refreshFiles = useRefreshFiles();
 
   // `projectId` is the file's own scope, as resolved by FolderTree — a
   // root-level Project folder can be *browsed* expanded-in-place, from the
@@ -788,6 +791,17 @@ export function WorkspaceScreen(): React.ReactElement {
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
           <Icon glyph={PanelLeft} size={14} />
           <Kicker>Explorer Panel</Kicker>
+          <Box sx={{ flexGrow: 1 }} />
+          <Tooltip title="Reler do disco">
+            <IconButton
+              size="small"
+              data-testid="workspace-refresh-files"
+              aria-label="Reler do disco"
+              onClick={() => void refreshFiles()}
+            >
+              <Icon glyph={RefreshCw} size={14} />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Box>
       <Box sx={{ px: 1.5, pb: 1.25, borderBottom: 1, borderColor: 'divider' }}>

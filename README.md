@@ -2,15 +2,20 @@
 
 [![GitHub Repo](https://img.shields.io/badge/github-ogs--tech%2Fai--companion-blue)](https://github.com/ogs-tech/ai-companion)
 
-> **Validation spike** — local desktop app to centralize AI customizations (skills, agent profiles, global instructions, commands) in Markdown + YAML and sync them to **Claude Code** via symlinks.
->
-> **Status:** Spike — single-developer dogfooding. See [docs/explanation/prd.md](docs/explanation/prd.md) for goals and stop rules.
+> Local desktop app that manages your AI **harnesses** — one source of truth for your customizations, materialized into each harness's own config surface.
 
 ## What it does
 
-Single source of truth for AI customizations in your workspace; live copies in `~/.claude/` and `<repo>/.claude/`.
+A **harness** is the program that turns a language model into an agent that works on your code: it loads the context, exposes the tools and runs the loop. The model thinks; the harness acts. Claude Code is a harness, Cursor is another — both can run the same model and still behave differently. ([Full definition](docs/explanation/harness-model.md).)
 
-Customization types: `skill` · `agent` · `global-instruction` · `command`. Scopes: `personal` · `project`.
+This app does two things for a harness:
+
+- **`manage`** — owns your customizations (skills, agent profiles, instructions) as Markdown + YAML in one versioned folder, and materializes them into each harness's own files by symlink. Write an instruction once; Claude Code and Cursor both read it. Also covers the config a harness reads but does not own: hooks, MCP servers, plugins and marketplaces.
+- **`run`** — for a harness that exposes a CLI, opens its sessions inside the app and reads back their history and token cost.
+
+Entity kinds: `skill` (a slash-command is a skill with `explicitOnly`) · `agent` · `instruction`. Scopes: `personal` · `workspace` · `project`.
+
+Supported today: **Claude Code** (manage + run) and **Cursor** (manage, opt-in).
 
 ## Stack
 
@@ -58,15 +63,13 @@ Direct links:
 
 - **Tutorials** — [Getting started](docs/tutorials/getting-started.md)
 - **Reference** — [Architecture](docs/reference/architecture.md) · [Customization schema](docs/reference/customization-schema.md) · [IPC contract](docs/reference/ipc-contract.md)
-- **Explanation** — [PRD](docs/explanation/prd.md)
+- **Explanation** — [Harness model](docs/explanation/harness-model.md) · [PRD](docs/explanation/prd.md)
 
-## Scope (4-week spike)
+## Scope
 
-- **In:** CRUD of customizations, templates, symlink sync to Claude Code (personal + project), settings UI.
-- **Maybe in:** Schema validation, text search, token usage stats.
-- **Out:** Multi-user, auto-commit, Linux/Windows, i18n, accessibility, tools other than Claude Code.
-
-Success = author uses the app daily for ≥ 2 consecutive weeks without falling back to loose notes.
+- **In:** everything under `manage` and `run` above, plus workspaces/projects, health checks and a workspace file browser. Full breakdown in the [PRD](docs/explanation/prd.md#5-scope).
+- **Out:** being a harness itself, collaboration and team sync, any cloud component, telemetry.
+- **Adding a harness:** a registry entry plus one adapter — see [the contract](docs/explanation/harness-model.md#adding-a-harness).
 
 ## Repository
 

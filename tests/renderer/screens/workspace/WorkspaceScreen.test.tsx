@@ -1528,3 +1528,43 @@ describe('WorkspaceScreen', () => {
     });
   });
 });
+
+describe('Explorer Panel — re-reading the disk', () => {
+  const callsTo = (method: string): number =>
+    (ipc.callIpc as Mock).mock.calls.filter(([m]) => m === method).length;
+
+  it('re-lists the workspace root when the refresh button is clicked', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await waitFor(() => expect(callsTo('workspace.listDir')).toBe(1));
+
+    await user.click(await screen.findByTestId('workspace-refresh-files'));
+
+    await waitFor(() => expect(callsTo('workspace.listDir')).toBe(2));
+  });
+
+  it('re-reads an open file tab too, not just the tree', async () => {
+    const user = userEvent.setup();
+    (ipc.callIpc as Mock).mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.getActive') return projectWorkspace;
+      if (method === 'project.list') return registeredProjects;
+      if (method === 'workspace.listDir') {
+        const path = (params as { path?: string } | undefined)?.path;
+        return path ? [] : [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+      if (method === 'project.readFile')
+        return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
+      if (method === 'session.list') return [];
+      return undefined;
+    });
+    renderScreen();
+    await openProjectFile(user, 'a.md');
+    await screen.findByText('hello');
+    const readsBefore = callsTo('project.readFile');
+
+    await user.click(screen.getByTestId('workspace-refresh-files'));
+
+    await waitFor(() => expect(callsTo('project.readFile')).toBeGreaterThan(readsBefore));
+  });
+});

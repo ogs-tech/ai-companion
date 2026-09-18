@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -89,6 +89,23 @@ function useSaveShortcut(active: boolean, onSave: () => void): void {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
+  }, [active]);
+}
+
+/**
+ * Runs `onActivate` each time this tab becomes the visible one. Tabs never
+ * unmount (again, WorkbenchCanvas only toggles CSS `display`), so react-query's
+ * refetch-on-mount never fires a second time for them — without this, clicking
+ * back to a file tab after watching a `claude` session rewrite that file would
+ * still show the content from whenever the tab was first opened. The activation
+ * that comes with the first render is skipped: its initial fetch covers it.
+ */
+function useRefreshOnActivate(active: boolean, onActivate: () => void): void {
+  const wasActive = useRef(active);
+  const triggerRefresh = useEffectEvent(onActivate);
+  useEffect(() => {
+    if (active && !wasActive.current) triggerRefresh();
+    wasActive.current = active;
   }, [active]);
 }
 
@@ -307,6 +324,7 @@ function FileSubject({
     isLoading,
     isError,
     error,
+    refetch,
   } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
   const writeFile = useWriteFile();
 
@@ -315,14 +333,20 @@ function FileSubject({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // Seed the draft once, the first time a previewable text file's content
-  // arrives — an in-render adjustment (not an effect) guarded by
-  // `draft === null`, so it fires exactly once and converges: after the
-  // first `setDraft` call the guard is false on every later render, so a
-  // background refetch (e.g. the cache update after this tab's own save)
-  // never clobbers in-progress edits. A spreadsheet preview never seeds a
-  // draft — it has no text body to edit yet.
-  if (preview?.previewable && preview.kind === 'text' && draft === null) {
+  useRefreshOnActivate(active, () => {
+    void refetch();
+  });
+
+  // Take on whatever the file says on disk — an in-render adjustment, not an
+  // effect. `baseline` is the last content this tab saw *on disk*, so the guard
+  // is false while the user is merely typing (`preview.content` still matches
+  // `baseline`) and their draft survives every refetch; it is true only once the
+  // file genuinely changed underneath them — an embedded `claude` session
+  // rewriting it, a `git checkout` — and there disk wins, replacing the draft.
+  // Converges either way: after `setBaseline(preview.content)` the guard is
+  // false on every later render. A spreadsheet preview never seeds a draft — it
+  // has no text body to edit yet.
+  if (preview?.previewable && preview.kind === 'text' && preview.content !== baseline) {
     setDraft(preview.content);
     setBaseline(preview.content);
   }

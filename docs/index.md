@@ -1,18 +1,19 @@
 ---
 title: AI Companion
-description: Local desktop app to centralize AI customizations (skills, agent profiles) and sync them to Claude Code via symlinks.
+description: Local desktop app that manages your AI harnesses — one source of truth for skills, agent profiles and instructions, materialized into each harness's own config surface.
 ---
 
 # AI Companion
 
-> **Status:** Spike — validating in 4 weeks whether centralizing AI context in a local app with symlink-based sync replaces ad-hoc folders and loose notes.
+> Manages your AI **harnesses** — the programs that turn a language model into an agent working on your code (Claude Code, Cursor, …). New to the word? Start with [the harness model](explanation/harness-model.md).
 
-Single source of truth for AI customizations in your workspace; live copies in `~/.claude/` and `<repo>/.claude/`.
+Single source of truth for your AI customizations; each harness reads them from its own config surface (`~/.claude/`, `~/.cursor/`, `<repo>/.claude/`, …) through symlinks the app maintains.
 
 ## Quick links
 
 - **First time?** Start with the [Getting started tutorial](tutorials/getting-started.md).
 - **Need internals?** Open the [Architecture reference](reference/architecture.md).
+- **Want the vocabulary?** Read [the harness model](explanation/harness-model.md).
 - **Want the why?** Read the [product rationale (PRD)](explanation/prd.md).
 
 ## Documentation map
@@ -33,19 +34,20 @@ This project follows the [Diátaxis](https://diataxis.fr/) framework. Each quadr
 ### How-to — task-oriented
 
 - Create a customization _(TBD)_
-- Sync customizations to Claude Code _(TBD)_
-- Link an external repo _(TBD)_
+- Enable a harness and sync to it _(TBD)_
+- Register a project _(TBD)_
 
 ### Reference — look it up
 
 - [Architecture overview](reference/architecture.md) — Electron processes and hexagonal layout.
 - [Customization schema](reference/customization-schema.md) — YAML frontmatter contract and validation errors.
 - [IPC contract](reference/ipc-contract.md) — main ↔ renderer API surface, methods and error model.
-- Adapter targets _(TBD)_ — paths and filename rules per tool.
+- Adapter targets _(TBD)_ — paths and filename rules per harness.
 
 ### Explanation — understand the why
 
-- [Product rationale (PRD)](explanation/prd.md) — problem, hypothesis, success metrics.
+- [The harness model](explanation/harness-model.md) — what a harness is, the `manage`/`run` capabilities, how to add one.
+- [Product rationale (PRD)](explanation/prd.md) — problem, audience, scope, success metrics.
 - Why symlinks (vs. copy/sync) _(TBD)_
 - Architecture decision records (ADRs) _(TBD)_
 
@@ -62,15 +64,14 @@ This project follows the [Diátaxis](https://diataxis.fr/) framework. Each quadr
 
 Pure TypeScript — no backend, API, database, auth, or telemetry.
 
-## Scope (4-week spike)
+## Scope
 
-**Must-have:** CRUD of customizations in Markdown + YAML, adapters with symlinks to Claude Code (personal + project), settings UI.
+Stated per capability — `manage` (own a harness's customizations and materialize
+them) and `run` (spawn and observe a CLI harness's sessions). Full breakdown, and
+the non-goals that bound it, in the [PRD](explanation/prd.md#5-scope).
 
-**Should-have:** Schema validation, text search, token usage stats.
-
-**Out:** Multi-user, auto-commit, Linux/Windows, i18n, accessibility, tools other than Claude Code.
-
-**Success criterion:** the author uses the app daily for ≥ 2 consecutive weeks without falling back to loose notes.
+**Not in scope:** being a harness itself, collaboration and team sync, anything
+cloud-side.
 
 ## Repository
 

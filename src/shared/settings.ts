@@ -1,3 +1,5 @@
+import { HARNESSES, HARNESS_IDS, type HarnessId } from './harness.js';
+
 export type ThemeMode = 'system' | 'light' | 'dark';
 
 export type LanguagePreference = 'off' | 'mirror' | 'pt-BR' | 'en' | 'es';
@@ -17,10 +19,8 @@ export interface ModelRateSettings {
 }
 
 export interface Settings {
-  adapters: {
-    claude: AdapterSettings;
-    cursor: AdapterSettings;
-  };
+  /** One entry per known harness — see `harness.ts` for the registry. */
+  adapters: Record<HarnessId, AdapterSettings>;
   ui: UiSettings;
   language: LanguagePreference;
   /**
@@ -44,12 +44,19 @@ export const WorkspacePaths = [
 
 export type WorkspacePath = (typeof WorkspacePaths)[number];
 
+/**
+ * A fresh `adapters` block, one entry per registered harness at its own
+ * `defaultEnabled`. Returns a new object on every call — callers persist it.
+ */
+export function defaultAdapterSettings(): Record<HarnessId, AdapterSettings> {
+  return Object.fromEntries(
+    HARNESS_IDS.map((id) => [id, { enabled: HARNESSES[id].defaultEnabled }]),
+  ) as Record<HarnessId, AdapterSettings>;
+}
+
 export function getDefaults(): Settings {
   return {
-    adapters: {
-      claude: { enabled: true },
-      cursor: { enabled: false },
-    },
+    adapters: defaultAdapterSettings(),
     ui: { theme: 'system' },
     language: 'off',
   };

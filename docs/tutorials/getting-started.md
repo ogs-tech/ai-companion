@@ -10,7 +10,7 @@ description: Run ai-companion locally from a fresh clone in under 5 minutes.
 
 ## Prerequisites
 
-- macOS (the spike is macOS-only).
+- macOS (macOS-only today — the `.numbers` preview drives Numbers.app over Apple events).
 - Node.js 22+ and npm.
 - Git.
 

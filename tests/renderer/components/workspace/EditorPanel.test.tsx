@@ -1043,3 +1043,89 @@ describe('EditorPanel — preview subject', () => {
     expect(screen.queryByTestId('body-editor')).not.toBeInTheDocument();
   });
 });
+
+describe('EditorPanel — file subject, picking up work done outside the app', () => {
+  /** Mocks `workspace.readFile` to serve whatever the returned box currently holds. */
+  function serveFile(initial: string): { set: (content: string) => void } {
+    const box = { content: initial };
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.readFile')
+        return ok({ previewable: true, kind: 'text', content: box.content, truncated: false });
+      return ok(undefined);
+    });
+    return { set: (content: string) => (box.content = content) };
+  }
+
+  const readFileCalls = (): number =>
+    call.mock.calls.filter(([method]) => method === 'workspace.readFile').length;
+
+  it('re-reads the file when its tab becomes the active one', async () => {
+    serveFile('v1');
+    const { rerender } = renderWithQuery(
+      <EditorPanel subject="file" path="notes.md" active={false} onDirtyChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(readFileCalls()).toBe(1));
+
+    rerender(
+      <EditorPanel subject="file" path="notes.md" active onDirtyChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(readFileCalls()).toBe(2));
+  });
+
+  it('does not re-read on the activation that comes with the first render', async () => {
+    serveFile('v1');
+    renderWithQuery(
+      <EditorPanel subject="file" path="notes.md" active onDirtyChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(readFileCalls()).toBe(1));
+    expect(readFileCalls()).toBe(1);
+  });
+
+  it('shows the new content when the file changed on disk', async () => {
+    const file = serveFile('written by hand');
+    const { container, rerender } = renderWithQuery(
+      <EditorPanel subject="file" path="notes.md" active={false} onDirtyChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(cmContent(container).textContent).toBe('written by hand'));
+
+    file.set('rewritten by a claude session');
+    rerender(<EditorPanel subject="file" path="notes.md" active onDirtyChange={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(cmContent(container).textContent).toBe('rewritten by a claude session'),
+    );
+  });
+
+  it('keeps an unsaved draft when a re-read returns identical content', async () => {
+    const user = userEvent.setup();
+    serveFile('base');
+    const onDirtyChange = vi.fn();
+    const { container, rerender } = renderWithQuery(
+      <EditorPanel subject="file" path="notes.md" active onDirtyChange={onDirtyChange} />,
+    );
+    const editor = await waitFor(() => {
+      const el = cmContent(container);
+      if (!el) throw new Error('editor not ready');
+      return el;
+    });
+    editor.focus();
+    // skipClick, as elsewhere in this file: without real layout jsdom can't
+    // resolve a caret position, so where the text lands is not meaningful —
+    // only that it made the draft diverge from what's on disk.
+    await user.type(editor, ' + mine', { skipClick: true });
+    await waitFor(() => expect(onDirtyChange).toHaveBeenCalledWith(true));
+    const edited = cmContent(container).textContent;
+    expect(edited).not.toBe('base');
+
+    // Deactivate and reactivate: a full re-read round trip that finds the file
+    // byte-for-byte unchanged must leave the in-progress edit alone.
+    rerender(
+      <EditorPanel subject="file" path="notes.md" active={false} onDirtyChange={onDirtyChange} />,
+    );
+    rerender(
+      <EditorPanel subject="file" path="notes.md" active onDirtyChange={onDirtyChange} />,
+    );
+    await waitFor(() => expect(readFileCalls()).toBe(2));
+    expect(cmContent(container).textContent).toBe(edited);
+  });
+});

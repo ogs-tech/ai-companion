@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { queryClient } from '../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../src/renderer/lib/ipc.js';
-import { useDirListing, useFilePreview, useResolveAbsolutePath, useWriteFile } from '../../../src/renderer/hooks/use-file-browser.js';
+import { useDirListing, useFilePreview, useRefreshFiles, useResolveAbsolutePath, useWriteFile } from '../../../src/renderer/hooks/use-file-browser.js';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -86,5 +86,80 @@ describe('use-file-browser', () => {
 
     const { result: previewResult } = renderHook(() => useFilePreview('a.txt'), { wrapper });
     await waitFor(() => expect(previewResult.current.data).toEqual({ previewable: true, kind: 'text', content: 'new content', truncated: false }));
+  });
+});
+
+describe('use-file-browser — staying in step with the disk', () => {
+  afterEach(() => {
+    // Hand focus tracking back to the real listener for the next test file.
+    focusManager.setFocused(undefined);
+  });
+
+  it('re-reads a listing when the window regains focus, despite the app-wide default being off', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue([]);
+    const { result } = renderHook(() => useDirListing('sub'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+  });
+
+  it('useRefreshFiles re-reads a cached workspace listing', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue([]);
+    const { result } = renderHook(
+      () => ({ listing: useDirListing('sub'), refresh: useRefreshFiles() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.listing.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+  });
+
+  it('useRefreshFiles covers both scopes, since the tree mixes them', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue([]);
+    const { result } = renderHook(
+      () => ({
+        workspaceListing: useDirListing('sub'),
+        projectListing: useDirListing('sub', { projectId: 'p1' }),
+        refresh: useRefreshFiles(),
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    const callsTo = (method: string): number =>
+      spy.mock.calls.filter(([m]) => m === method).length;
+    await waitFor(() => expect(callsTo('project.listDir')).toBe(2));
+    expect(callsTo('workspace.listDir')).toBe(2);
+  });
+
+  it('useRefreshFiles re-reads open file contents too, not just listings', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue({
+      previewable: true, kind: 'text', content: 'body', truncated: false,
+    });
+    const { result } = renderHook(
+      () => ({ preview: useFilePreview('notes.md'), refresh: useRefreshFiles() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.preview.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
   });
 });

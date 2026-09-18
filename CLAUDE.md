@@ -4,10 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this app is
 
-**AI Companion** (`ai-companion`) — an Electron desktop app that centralizes AI customizations (skills, including slash-commands expressed as explicit-only skills; agent profiles; instructions) as canonical `Entity` objects backed by Markdown + YAML files, then syncs them to Claude Code (`~/.claude/`, `<repo>/.claude/`, plus `~/AGENTS.md` for instructions) via **symbolic links**, and optionally to Cursor (`~/.cursor/`, `<repo>/.cursor/`, plus a generated, marker-owned `<repo>/AGENTS.md` per linked repo for the instruction — toggle `adapters.cursor`, default off). No backend, no API, no telemetry.
+**AI Companion** (`ai-companion`) — an Electron desktop app that manages a developer's AI **harnesses**.
+
+A **harness** is the program that turns a language model into an agent that works on your code: it loads the context, exposes the tools, runs the loop (model → tool → result → model) and enforces the permissions. The model thinks; the harness acts. Claude Code is a harness; Cursor is another — both can run the same model and still behave differently. Full definition, boundary test and the list of what is *not* a harness: `docs/explanation/harness-model.md`.
+
+The app does two things for a harness, declared per harness as **capabilities** in `src/shared/harness.ts` (the registry every default, validator and toggle derives from):
+
+- **`manage`** — owns that harness's customizations (skills, including slash-commands expressed as explicit-only skills; agent profiles; instructions) as canonical `Entity` objects backed by Markdown + YAML files, and materializes them into the harness's own config surface: Claude Code (`~/.claude/`, `<repo>/.claude/`, plus `~/AGENTS.md` for instructions) via **symbolic links**, and optionally Cursor (`~/.cursor/`, `<repo>/.cursor/`, plus a generated, marker-owned `<repo>/AGENTS.md` per linked repo for the instruction — toggle `adapters.cursor`, default off).
+- **`run`** — spawns and observes that harness's own sessions: a real `claude` CLI process per session inside a PTY, plus read-only history, token cost and health read off the CLI's own JSONL transcripts. CLI-only by construction — Cursor runs its loop inside its GUI, so it is `manage`-only. That asymmetry is the domain, not a gap.
+
+Breadth lives on `manage` (most harnesses will only ever support it); depth lives on `run`. No backend, no API, no telemetry.
 
 Authoritative docs live in `docs/` (Diátaxis):
-- `docs/explanation/prd.md` — goals, scope, stop rules
+- `docs/explanation/harness-model.md` — what a harness is, the two capabilities, how to add one
+- `docs/explanation/prd.md` — problem, audience, scope
 - `docs/reference/architecture.md` — hexagonal layout
 - `docs/reference/ipc-contract.md` — every IPC method
 - `docs/reference/customization-schema.md` — canonical `Entity` field rules (filename predates the Entity rename)
@@ -64,4 +74,4 @@ Coverage targets `application/`, `ipc/`, `infrastructure/`, and `renderer/screen
 
 ## Project state
 
-Transitioning out of the time-boxed validation spike toward a maintained product. The production bar now applies: **green lint + typecheck + tests are a release gate** (no "no new errors" exception). Full scope, must/should/out-of-scope and stop rules in `docs/explanation/prd.md` — note the PRD still uses the spike framing and is due a rewrite. Don't infer scope from the code; check the PRD.
+Out of the time-boxed validation spike; positioned as a harness manager for engineering. The production bar applies: **green lint + typecheck + tests are a release gate** (no "no new errors" exception). Audience, scope and non-goals in `docs/explanation/prd.md`; the vocabulary those rest on in `docs/explanation/harness-model.md`. Don't infer scope from the code; check the PRD.
