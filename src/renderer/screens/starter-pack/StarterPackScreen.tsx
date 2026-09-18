@@ -17,11 +17,10 @@ import {
 import { Rocket, CheckCircle2, ArrowRight, ChevronDown, Search } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { ScreenHeader } from '../../components/ds/ScreenHeader.js';
-import type { Nav } from '../../components/shell/nav.js';
 import { PluginInstallPreviewDialog } from '../marketplaces/PluginInstallPreviewDialog.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { useStarterPack } from '../../hooks/use-starter-pack.js';
-import { useActiveWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
+import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 import { brand } from '../../../shared/brand.js';
 import {
   STARTER_PACK_GROUPS,
@@ -29,25 +28,15 @@ import {
   type StarterGroup,
 } from './groups.js';
 
-interface StarterPackScreenProps {
-  onNavigate: (nav: Nav) => void;
-}
-
-export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React.ReactElement {
+export function StarterPackScreen(): React.ReactElement {
   const { isLoading, profileConfigured, plugins, stateFor, install, reenable } = useStarterPack();
-  const { data: activeWorkspace } = useActiveWorkspace();
-  const switchWorkspace = useSwitchWorkspace();
+  const navigate = useAreaNavigation();
 
-  // Personal Instruction now lives inline on the Global workspace's Visão
-  // geral — jump there, switching back to Default first (mirrors AppShell's
-  // "Workspace" tab "go home" gesture) so this always lands on the Personal
-  // Instruction card regardless of which workspace is currently active.
-  const openPersonalInstruction = (): void => {
-    if (activeWorkspace && !activeWorkspace.isDefault) {
-      void switchWorkspace.mutateAsync('default');
-    }
-    onNavigate({ area: 'workspace' });
-  };
+  // Personal Instruction now lives inline on the Global workspace's own
+  // overview — this reuses the "Início" gesture (switch back to Default
+  // first when needed) so it always lands on the Personal Instruction card
+  // regardless of which workspace is currently active.
+  const openPersonalInstruction = (): void => navigate('workspace');
 
   // UI-only state — intentionally local. Resetting these on navigation is
   // expected; the install state that must persist lives in the query cache.
@@ -256,7 +245,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
           <Button
             size="small"
             endIcon={<Icon glyph={ArrowRight} size={16} />}
-            onClick={() => onNavigate({ area: 'marketplaces' })}
+            onClick={() => navigate('marketplaces')}
           >
             Ver marketplaces
           </Button>
@@ -493,7 +482,7 @@ export function StarterPackScreen({ onNavigate }: StarterPackScreenProps): React
             <Button
               size="small"
               endIcon={<Icon glyph={ArrowRight} size={16} />}
-              onClick={() => onNavigate({ area: 'marketplaces' })}
+              onClick={() => navigate('marketplaces')}
             >
               Ver todos os marketplaces
             </Button>

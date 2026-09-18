@@ -16,6 +16,8 @@ interface ExplorerPanelContentProps {
   beforeSwitch: () => boolean;
   /** Default workspace only: the Personal Instruction's own pinned row. */
   personalInstructionRow: React.ReactNode;
+  /** Default workspace only: Starter Pack/Marketplaces/Diagnóstico's own pinned rows. */
+  appAreaRows: React.ReactNode;
   projects: ReadonlyArray<Project>;
   onSelectFile: (relPath: string, projectId?: string) => void;
   onUseAsProject: (absolutePath: string) => void;
@@ -40,6 +42,7 @@ export function ExplorerPanelContent({
   headerMenu,
   beforeSwitch,
   personalInstructionRow,
+  appAreaRows,
   projects,
   onSelectFile,
   onUseAsProject,
@@ -63,7 +66,7 @@ export function ExplorerPanelContent({
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {isDefaultWorkspace ? (
-          <WorkspaceManagementList beforeSwitch={beforeSwitch} instructionRow={personalInstructionRow} />
+          <WorkspaceManagementList beforeSwitch={beforeSwitch} instructionRow={personalInstructionRow} appAreaRows={appAreaRows} />
         ) : (
           <FolderTree
             onSelectFile={onSelectFile}

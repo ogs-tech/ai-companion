@@ -31,9 +31,15 @@ interface WorkspaceManagementListProps {
   beforeSwitch?: () => boolean;
   /** Pinned row rendered above the workspace list (and its empty state) — the Global workspace's own Personal Instruction row, matching how `FolderTree` pins the current scope's `InstructionTreeRow`. */
   instructionRow?: React.ReactNode;
+  /** Pinned rows rendered below `instructionRow`, above the workspace list — Starter Pack/Marketplaces/Diagnóstico, global app destinations that only ever show here (the Global workspace), never inside a project's own tree. */
+  appAreaRows?: React.ReactNode;
 }
 
-export function WorkspaceManagementList({ beforeSwitch, instructionRow }: WorkspaceManagementListProps = {}): React.ReactElement {
+export function WorkspaceManagementList({
+  beforeSwitch,
+  instructionRow,
+  appAreaRows,
+}: WorkspaceManagementListProps = {}): React.ReactElement {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const { data: workspaces } = useWorkspaces();
   const switchWorkspace = useSwitchWorkspace();
@@ -93,7 +99,12 @@ export function WorkspaceManagementList({ beforeSwitch, instructionRow }: Worksp
 
   return (
     <Box data-testid="workspace-management-list">
-      {instructionRow && <List disablePadding>{instructionRow}</List>}
+      {(instructionRow || appAreaRows) && (
+        <List disablePadding>
+          {instructionRow}
+          {appAreaRows}
+        </List>
+      )}
       {showEmptyState ? (
         <Box sx={{ p: 1.5 }}>
           <EmptyState

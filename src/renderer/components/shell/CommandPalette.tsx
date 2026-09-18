@@ -3,12 +3,12 @@ import { Dialog, List, ListItemButton, ListItemIcon, ListItemText, TextField } f
 import type { PaperProps } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { NAV_AREAS, type Nav } from './nav.js';
+import { NAV_AREAS, type Area } from './nav.js';
+import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
-  onNavigate: (nav: Nav) => void;
 }
 
 interface Command {
@@ -18,16 +18,13 @@ interface Command {
   run: () => void;
 }
 
-export function CommandPalette({
-  open,
-  onClose,
-  onNavigate,
-}: CommandPaletteProps): React.ReactElement {
+export function CommandPalette({ open, onClose }: CommandPaletteProps): React.ReactElement {
   const [query, setQuery] = useState('');
+  const navigate = useAreaNavigation();
 
   const commands = useMemo<Command[]>(() => {
-    const go = (nav: Nav) => () => {
-      onNavigate(nav);
+    const go = (area: Area) => () => {
+      navigate(area);
       onClose();
     };
 
@@ -35,9 +32,9 @@ export function CommandPalette({
       id: `go-${a.area}`,
       label: a.label,
       glyph: a.glyph,
-      run: go({ area: a.area }),
+      run: go(a.area),
     }));
-  }, [onNavigate, onClose]);
+  }, [navigate, onClose]);
 
   const filtered = commands.filter((c) =>
     c.label.toLowerCase().includes(query.trim().toLowerCase()),

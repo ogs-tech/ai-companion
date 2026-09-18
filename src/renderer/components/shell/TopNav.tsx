@@ -1,21 +1,19 @@
 import { useSyncExternalStore } from 'react';
-import { AppBar, Button, IconButton, Stack, Tab, Tabs, Toolbar, Tooltip, Typography } from '@mui/material';
+import { AppBar, Button, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
 import { ChevronLeft, ChevronRight, Moon, Sun, Settings as SettingsGlyph } from 'lucide-react';
 import { Logo } from '../../assets/Logo.js';
 import { brand } from '../../../shared/brand.js';
 import { Icon } from '../ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from '../ds/StatusPill.js';
 import { useThemeMode } from '../../lib/theme-mode-context.js';
+import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 import {
   getWorkspaceHistorySnapshot,
   navigateWorkspaceHistory,
   subscribeWorkspaceHistory,
 } from '../../lib/workspace-history-store.js';
-import { NAV_AREAS, type Area } from './nav.js';
 
 interface TopNavProps {
-  active: Area;
-  onSelectArea: (area: Area) => void;
   onOpenSettings: () => void;
   onOpenCommandPalette: () => void;
   healthSeverity?: 'ok' | 'warning' | 'error';
@@ -40,14 +38,13 @@ const SYNC_TOOLTIP: Record<'ok' | 'warning' | 'error', string> = {
 };
 
 export function TopNav({
-  active,
-  onSelectArea,
   onOpenSettings,
   onOpenCommandPalette,
   healthSeverity,
 }: TopNavProps): React.ReactElement {
   const { resolved, setTheme } = useThemeMode();
   const isDark = resolved === 'dark';
+  const navigate = useAreaNavigation();
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
 
   return (
@@ -69,43 +66,9 @@ export function TopNav({
           </Typography>
         </Stack>
 
-        {/* Primary tabs. The active marker is a CSS underline on the selected
-            Tab — not MUI's measured floating indicator, which mis-measured on
-            font-load/reflow and could fail to slide back (e.g. to Início). */}
-        <Tabs
-          value={active}
-          textColor="inherit"
-          slotProps={{ indicator: { sx: { display: 'none' } } }}
-          sx={{ ml: 2, flexGrow: 1, minHeight: 'auto' }}
-        >
-          {NAV_AREAS.map((a) => (
-            <Tab
-              key={a.area}
-              value={a.area}
-              label={a.label}
-              data-testid={`nav-${a.area}`}
-              icon={<Icon glyph={a.glyph} size={16} />}
-              iconPosition="start"
-              // MUI's Tab only calls Tabs' onChange when the clicked tab isn't
-              // already selected — so an explicit onClick here (always fired)
-              // is what lets re-clicking "Workspace" act as a "go home" jump
-              // while already browsing one of its sub-screens.
-              onClick={() => onSelectArea(a.area)}
-              sx={(theme) => ({
-                minHeight: 56,
-                opacity: 1,
-                color: 'text.secondary',
-                '&.Mui-selected': {
-                  color: 'text.primary',
-                  boxShadow: `inset 0 -2px 0 ${theme.palette.info.main}`,
-                },
-              })}
-            />
-          ))}
-        </Tabs>
-
-        {/* Right cluster */}
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        {/* Right cluster — primary navigation now lives in the Explorer
+            Panel's pinned rows (Default workspace), not here. */}
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', ml: 'auto' }}>
           <Tooltip title="Voltar">
             {/* span wrapper keeps the tooltip working while the button is disabled */}
             <span>
@@ -153,7 +116,7 @@ export function TopNav({
                 variant={SYNC_VARIANT[healthSeverity]}
                 label={SYNC_LABEL[healthSeverity]}
                 testId="sync"
-                onClick={() => onSelectArea('diagnostico')}
+                onClick={() => navigate('diagnostico')}
               />
             </Tooltip>
           )}

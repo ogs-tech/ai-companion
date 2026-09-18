@@ -8,14 +8,15 @@ export type Area = 'workspace' | 'starter-pack' | 'marketplaces' | 'diagnostico'
 // No area carries a `sub` anymore — Skills/Agents/Hooks/MCP/Plugins all moved
 // from standalone sub-screens into tree nodes inside the one Workspace screen
 // (see WorkspaceScreen + EntityTreeGroup/HooksTreeGroup/McpTreeGroup/PluginsTreeGroup).
-export interface Nav { area: Area; }
-
+// Starter Pack/Marketplaces/Diagnóstico followed the same trend: they're
+// Workbench tabs now (see workspace-area-store.ts), opened from the Explorer
+// Panel's own pinned rows on the Default/Global workspace (WorkspaceScreen's
+// `appAreaRows`) rather than a TopNav tab. 'workspace' itself needs no tab —
+// it's what's already showing underneath — and stays "Início"'s "go home"
+// gesture (see useAreaNavigation), still used by CommandPalette and the
+// TopNav sync pill.
 export interface AreaDef { area: Area; label: string; glyph: LucideIcon; }
 
-// The 'workspace' area leads and is labeled "Início" — it's the landing area
-// (see `defaultNav` below) — with Starter Pack demoted to an ordinary page
-// reached from the tab bar instead of doubling as home. The area key stays
-// `workspace`; only this tab's display label/icon read as "home".
 export const NAV_AREAS: ReadonlyArray<AreaDef> = [
   { area: 'workspace', label: 'Início', glyph: House },
   { area: 'starter-pack', label: 'Starter Pack', glyph: Rocket },
@@ -43,5 +44,3 @@ export const ENTITY_ACCENT_COLOR = {
   agent: 'success.main',
   instruction: 'warning.main',
 } as const satisfies Record<'skill' | 'agent' | 'instruction', string>;
-
-export const defaultNav: Nav = { area: 'workspace' };

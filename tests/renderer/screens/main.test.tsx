@@ -66,12 +66,14 @@ describe('<Main> — shell navigation', () => {
     expect(await screen.findByTestId('tree-group-empty-skill')).toBeInTheDocument();
   });
 
-  it('reaches the Starter Pack screen as an ordinary page via the top nav', async () => {
+  it('opens Starter Pack as a Workbench tab from the Explorer Panel', async () => {
     setupRoute();
     render(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-screen');
-    await userEvent.click(screen.getByTestId('nav-starter-pack'));
+    // Same landmark wait as above — the pinned area rows only exist once the
+    // Default-branch (WorkspaceManagementList) shape has settled.
+    await screen.findByTestId('workspace-management-list');
+    await userEvent.click(screen.getByTestId('explorer-area-starter-pack'));
 
     expect(await screen.findByTestId('starter-pack-screen')).toBeInTheDocument();
   });

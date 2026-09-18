@@ -1,0 +1,1 @@
+/Users/odenirgomes/.ai-companion/index.md

@@ -56,13 +56,31 @@ describe('<Main> — sync status + diagnostics', () => {
     expect(pill).toHaveAttribute('data-variant', 'error');
   });
 
-  it('navigates to Diagnóstico from the TopNav', async () => {
+  it('opens Diagnóstico as a Workbench tab from the TopNav sync pill', async () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-screen');
-    await userEvent.click(screen.getByTestId('nav-diagnostico'));
+    await screen.findByTestId('workspace-management-list');
+    await userEvent.click(screen.getByTestId('status-pill-sync'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();
+  });
+
+  it('opens Diagnóstico as a Workbench tab from the Explorer Panel', async () => {
+    setupRoute('ok');
+    renderWithShell(<Main onOpenSettings={() => undefined} />);
+
+    await screen.findByTestId('workspace-management-list');
+    await userEvent.click(screen.getByTestId('explorer-area-diagnostico'));
+
+    expect(await screen.findByTestId('health-screen')).toBeInTheDocument();
+  });
+
+  it('shows a severity dot on the Explorer Panel Diagnóstico row when unhealthy', async () => {
+    setupRoute('error');
+    renderWithShell(<Main onOpenSettings={() => undefined} />);
+
+    const dot = await screen.findByTestId('explorer-area-diagnostico-severity');
+    expect(dot).toBeInTheDocument();
   });
 });

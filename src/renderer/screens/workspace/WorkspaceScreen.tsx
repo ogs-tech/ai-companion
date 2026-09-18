@@ -21,7 +21,11 @@ import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/W
 import { EditorPanel, type EditorHiddenField, type PreviewSource } from '../../components/workspace/EditorPanel.js';
 import { SessionPanel } from '../../components/SessionPanel.js';
 import { WorkspaceRemoveConfirmDialog } from '../../components/shell/WorkspaceRemoveConfirmDialog.js';
-import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../../components/shell/nav.js';
+import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR, NAV_AREAS, type AreaDef } from '../../components/shell/nav.js';
+import { TreeRow } from '../../components/ds/TreeRow.js';
+import { StarterPackScreen } from '../starter-pack/StarterPackScreen.js';
+import { MarketplaceList } from '../marketplaces/MarketplaceList.js';
+import { HealthScreen } from '../health/HealthScreen.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import { registerUnsavedTabsGuard } from '../../lib/workspace-tabs-guard.js';
@@ -31,6 +35,7 @@ import {
   type ApplyWorkspaceHistoryResult,
   type WorkspaceHistoryEntry,
 } from '../../lib/workspace-history-store.js';
+import { registerAreaOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
 import { seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
 import { entityBody } from '../../lib/entity-body.js';
 import { useActiveWorkspace, useDeleteWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
@@ -39,6 +44,7 @@ import { useInvalidateCustomization } from '../../hooks/use-customization-list.j
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
 import { useRefreshFiles } from '../../hooks/use-file-browser.js';
+import { useHealthReport } from '../../hooks/use-health-report.js';
 import {
   useInvalidateInstructions,
   usePersonalInstruction,
@@ -66,7 +72,8 @@ type OpenTab =
   | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
-  | { id: string; kind: 'history' };
+  | { id: string; kind: 'history' }
+  | { id: string; kind: WorkspaceAreaTab };
 
 /** Tabs that can hold unsaved work, and so need a discard guard before closing. */
 function isDirty(tab: OpenTab): boolean {
@@ -76,6 +83,14 @@ function isDirty(tab: OpenTab): boolean {
 function entityTabGlyph(tab: Extract<OpenTab, { kind: EntityKind | 'instruction' }>): LucideIcon {
   if (tab.kind === 'instruction') return isPersonalInstruction(tab.entity) ? Globe : NotebookPen;
   return ENTITY_GROUP_ICONS[tab.kind];
+}
+
+function isAreaTabDef(a: AreaDef): a is AreaDef & { area: WorkspaceAreaTab } {
+  return a.area !== 'workspace';
+}
+
+function isAreaTab(tab: OpenTab): tab is Extract<OpenTab, { kind: WorkspaceAreaTab }> {
+  return tab.kind === 'starter-pack' || tab.kind === 'marketplaces' || tab.kind === 'diagnostico';
 }
 
 export function WorkspaceScreen(): React.ReactElement {
@@ -89,6 +104,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const invalidateCustomization = useInvalidateCustomization();
   const invalidateInstructions = useInvalidateInstructions();
   const { data: sessions } = useSessions();
+  const { data: healthReport } = useHealthReport('personal');
   const queryClient = useQueryClient();
   useEntityChangeInvalidation();
 
@@ -216,6 +232,23 @@ export function WorkspaceScreen(): React.ReactElement {
     );
     setActiveTabId(id);
   };
+
+  // Starter Pack/Marketplaces/Diagnóstico read as ordinary, singleton
+  // Workbench tabs (one fixed id each, same idea as `HISTORY_TAB_ID` below).
+  // Their own entry point is the Explorer Panel's pinned rows (Default
+  // workspace only, built below as `appAreaRows`), which call this directly;
+  // it's also registered externally (workspace-area-store.ts) so the TopNav
+  // sync pill — outside this screen, with no prop path in — can focus the
+  // Diagnóstico tab too.
+  const openAreaTab = (kind: WorkspaceAreaTab): void => {
+    setOpenTabs((prev) => (prev.some((t) => t.id === kind) ? prev : [...prev, { id: kind, kind }]));
+    setActiveTabId(kind);
+  };
+
+  useEffect(() => {
+    registerAreaOpener(openAreaTab);
+    return () => registerAreaOpener(null);
+  });
 
   // The only thing an EditorPanel reports upward about its own edits — never
   // its draft content, never CodeMirror/Entity internals — so a tab's dirty
@@ -655,6 +688,19 @@ export function WorkspaceScreen(): React.ReactElement {
         render: () => <EditorPanel subject="preview" source={tab.source} />,
       };
     }
+    if (isAreaTab(tab)) {
+      const areaDef = NAV_AREAS.find((a) => a.area === tab.kind);
+      const areaScreen =
+        tab.kind === 'starter-pack' ? <StarterPackScreen /> : tab.kind === 'marketplaces' ? <MarketplaceList /> : <HealthScreen />;
+      return {
+        id: tab.id,
+        glyph: areaDef?.glyph ?? Eye,
+        label: areaDef?.label ?? tab.kind,
+        dense: true,
+        onClose: () => closeTab(tab.id),
+        render: () => areaScreen,
+      };
+    }
     if (tab.kind === 'session') {
       // The session itself keeps running server-side regardless of this
       // tab's fate (see `openTabs`' own comment) — closing it while its
@@ -729,6 +775,43 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   );
 
+  // Starter Pack/Marketplaces/Diagnóstico are global app destinations, not
+  // scoped to any one workspace — pinned above the workspace list only on
+  // the Default/Global workspace, the same place the Personal Instruction
+  // row above already pins itself (see WorkspaceManagementList).
+  const appAreaRows = (
+    <>
+      {NAV_AREAS.filter(isAreaTabDef).map((a) => {
+        const active = activeTabId === a.area;
+        const showSeverity = a.area === 'diagnostico' && healthReport && healthReport.worst !== 'ok';
+        return (
+          <TreeRow
+            key={a.area}
+            testId={`explorer-area-${a.area}`}
+            pl={1.5}
+            glyph={a.glyph}
+            primary={a.label}
+            onClick={() => openAreaTab(a.area)}
+            {...(active ? { accentColor: 'info.main' } : {})}
+            badge={
+              showSeverity && healthReport ? (
+                <Box
+                  data-testid="explorer-area-diagnostico-severity"
+                  sx={(theme) => ({
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    bgcolor: healthReport.worst === 'error' ? theme.palette.error.main : theme.palette.warning.main,
+                  })}
+                />
+              ) : undefined
+            }
+          />
+        );
+      })}
+    </>
+  );
+
   const renderProjectInstructionRow = (project: Project, depth: number): React.ReactNode => (
     <ProjectInstructionRow
       project={project}
@@ -795,6 +878,7 @@ export function WorkspaceScreen(): React.ReactElement {
               headerMenu={headerMenu}
               beforeSwitch={resetTabs}
               personalInstructionRow={personalInstructionRow}
+              appAreaRows={appAreaRows}
               projects={projects}
               onSelectFile={openFileTab}
               onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
