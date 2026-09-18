@@ -24,7 +24,10 @@ const setup = () => {
   const claudeSession = new FakeClaudeSessionPort();
   const scopeDeps = {
     workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/workspace', isDefault: false, createdAt: '' }) },
-    projectService: { get: async (id: string) => ({ id, name: 'Test', path: '/project', createdAt: '' }) },
+    projectService: {
+      get: async (id: string) => ({ id, name: 'Test', path: '/project', createdAt: '' }),
+      findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
+    },
   };
   const service = new SessionService(base, claudeSession, '/workspace', scopeDeps);
   return { service, base, claudeSession };
@@ -115,7 +118,7 @@ describe('session-handlers', () => {
   it('session.resume validates and forwards sessionId to service.resume', async () => {
     const { service } = setup();
     const spy = vi.spyOn(service, 'resume').mockResolvedValue({
-      sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
+      sessionId: 'workspace:w1', claudeSessionId: 'c-w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
       cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '',
     });
     const h = buildSessionHandlers(service);

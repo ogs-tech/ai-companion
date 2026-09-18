@@ -14,6 +14,38 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
+// jsdom has no layout engine and so no IntersectionObserver either — the
+// session history list watches a sentinel element with one to page itself.
+// This stub records every instance and never fires on its own, so a test
+// decides exactly when the sentinel comes into view by calling
+// `intersectionObservers.at(-1).trigger()` rather than racing a real one.
+class IntersectionObserverStub {
+  static instances: IntersectionObserverStub[] = [];
+  readonly elements: Element[] = [];
+  disconnected = false;
+  constructor(private readonly callback: (entries: { isIntersecting: boolean }[]) => void) {
+    IntersectionObserverStub.instances.push(this);
+  }
+  observe(element: Element): void {
+    this.elements.push(element);
+  }
+  unobserve(): void {}
+  disconnect(): void {
+    this.disconnected = true;
+  }
+  /** Simulates the sentinel scrolling into view. */
+  trigger(isIntersecting = true): void {
+    this.callback([{ isIntersecting }]);
+  }
+}
+
+if (typeof (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver === 'undefined') {
+  (globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver = IntersectionObserverStub;
+}
+
+/** Every IntersectionObserver created since the last reset, newest last. */
+export const intersectionObservers = IntersectionObserverStub.instances;
+
 // jsdom's Range has no getClientRects() — CodeMirror 6 (the body editor in
 // EditorPanel) calls it during an async, requestAnimationFrame-scheduled
 // layout measurement pass, which otherwise throws once that callback fires
@@ -42,4 +74,5 @@ if (typeof (window as unknown as { api?: unknown }).api === 'undefined') {
 
 afterEach(() => {
   cleanup();
+  IntersectionObserverStub.instances.length = 0;
 });

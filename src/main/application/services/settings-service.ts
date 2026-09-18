@@ -72,7 +72,7 @@ const LANGUAGE_PREFERENCES: readonly LanguagePreference[] = [
   'en',
   'es',
 ];
-const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language'];
+const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing'];
 
 const invalid = (message: string): never => {
   throw new DomainError('validation', message);
@@ -120,6 +120,23 @@ function assertValidSettings(value: unknown): asserts value is Settings {
 
   if (!LANGUAGE_PREFERENCES.includes(s['language'] as LanguagePreference)) {
     invalid(`'language' must be one of ${LANGUAGE_PREFERENCES.join(' | ')}`);
+  }
+
+  // Optional, but free-form in its keys (any model id) and strict in its
+  // values — a rate that isn't a finite, non-negative pair of numbers would
+  // silently produce a nonsense cost rather than an honest blank.
+  const pricing = s['pricing'] === undefined ? {} : asRecord(s['pricing'], "Invalid 'pricing'");
+  for (const [model, rate] of Object.entries(pricing)) {
+    const entry = asRecord(rate, `'pricing.${model}' must be an object`);
+    for (const field of ['input', 'output']) {
+      const value = entry[field];
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        invalid(`'pricing.${model}.${field}' must be a non-negative number`);
+      }
+    }
+    if (Object.keys(entry).some((k) => k !== 'input' && k !== 'output')) {
+      invalid(`'pricing.${model}' has unexpected fields`);
+    }
   }
 }
 

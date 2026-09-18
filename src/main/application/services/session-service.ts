@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
 import { sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
-import type { ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { ClaudeConversationTarget, ClaudeSessionPort } from '../ports/claude-session-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { ProjectService } from './project-service.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
@@ -25,6 +25,12 @@ export type SessionStatusListener = (sessionId: string, status: SessionStatus, e
  * sessions can be live for the same workspace/project at once; `resume`
  * relaunches one specific, already-known `sessionId` (of any anchor kind)
  * without minting a new one.
+ *
+ * Orthogonal to all of that, every session also carries a `claudeSessionId`:
+ * a UUID minted once, handed to the CLI, and never re-minted for that
+ * session again — relaunching a session resumes its conversation instead of
+ * starting a second one. That id is what ties a session to its transcript
+ * on disk, and so to its entry (and cost) in the session history.
  */
 export class SessionService {
   private readonly sessions = new Map<string, SessionSnapshot>();
@@ -42,7 +48,7 @@ export class SessionService {
     private readonly workspacePath: string,
     private readonly scopeDeps: {
       workspaceService: Pick<WorkspaceService, 'get'>;
-      projectService: Pick<ProjectService, 'get'>;
+      projectService: Pick<ProjectService, 'get' | 'findOrCreateByPath'>;
     },
     options?: { maxBufferChars?: number },
   ) {
@@ -118,8 +124,12 @@ export class SessionService {
     if (pendingResume) return pendingResume;
 
     const resumePromise = (async () => {
-      // Relaunching a session that already had its own conversation — continue it.
-      await this.spawnPty(sessionId, existing.cwd, { continueConversation: true });
+      // Relaunching a session that already had its own conversation — reattach
+      // to that exact one by id, not to whatever this cwd last talked to.
+      await this.spawnPty(sessionId, existing.cwd, {
+        mode: 'resume',
+        claudeSessionId: existing.claudeSessionId,
+      });
       existing.status = 'running';
       return this.withOutput(existing);
     })().finally(() => {
@@ -129,28 +139,91 @@ export class SessionService {
     return resumePromise;
   }
 
+  /**
+   * Adopts a conversation that exists on disk but not in this process's
+   * memory — one from a past run of the app, or started in a plain terminal —
+   * and registers it as an ordinary session, indistinguishable from any other
+   * from that point on.
+   *
+   * Its `sessionId` is the `claudeSessionId` itself: a UUID, so it can't
+   * collide with an entity anchor's key, and stable, so adopting the same
+   * conversation twice reattaches rather than forking it.
+   *
+   * Registers `cwd` as a project if it isn't one already — a live session has
+   * to be anchored somewhere, and the directory the conversation actually ran
+   * in is the only honest answer.
+   */
+  async adoptConversation(input: {
+    claudeSessionId: string;
+    cwd: string;
+    label: string;
+  }): Promise<SessionSnapshotWithOutput> {
+    const sessionId = input.claudeSessionId;
+    const existing = this.sessions.get(sessionId);
+    if (existing && existing.status === 'running') return this.withOutput(existing);
+
+    const pendingAdopt = this.pending.get(sessionId);
+    if (pendingAdopt) return pendingAdopt;
+
+    const adoptPromise = (async () => {
+      const project = await this.scopeDeps.projectService.findOrCreateByPath(input.cwd);
+      await this.spawnPty(sessionId, input.cwd, {
+        mode: 'resume',
+        claudeSessionId: input.claudeSessionId,
+      });
+      const session: SessionSnapshot = {
+        sessionId,
+        claudeSessionId: input.claudeSessionId,
+        anchor: { kind: 'project', projectId: project.id },
+        cwd: input.cwd,
+        label: input.label,
+        status: 'running',
+      };
+      this.sessions.set(sessionId, session);
+      return this.withOutput(session);
+    })().finally(() => {
+      this.pending.delete(sessionId);
+    });
+    this.pending.set(sessionId, adoptPromise);
+    return adoptPromise;
+  }
+
   private async launch(sessionId: string, anchor: SessionAnchor): Promise<SessionSnapshotWithOutput> {
     const { cwd, label } = await this.resolveAnchor(anchor);
-    const finalLabel = anchor.kind === 'entity' ? label : this.nextOrdinalLabel(anchor, label);
+    // Only an `entity` anchor can land here with a prior entry: its sessionId
+    // is the anchor key, so reopening an exited one reuses the same slot.
+    // `workspace`/`project` arrive with a freshly minted sessionId every time.
+    const previous = this.sessions.get(sessionId);
+    const finalLabel =
+      previous?.label ?? (anchor.kind === 'entity' ? label : this.nextOrdinalLabel(anchor, label));
+    // Reopening keeps the conversation it already had; a genuinely new
+    // session names a brand-new one. Either way the id is ours, not the
+    // CLI's, so the transcript's filename is known before the process starts.
+    const claudeSessionId = previous?.claudeSessionId ?? randomUUID();
 
-    // `entity` keeps trying to continue that anchor's own prior conversation
-    // (unchanged, one-session-per-anchor behavior). `workspace`/`project`
-    // always starts clean — with several sessions now able to coexist in
-    // the same cwd, `--continue` could attach to a sibling session's
-    // conversation instead of starting the fresh one the user asked for.
-    await this.spawnPty(sessionId, cwd, { continueConversation: anchor.kind === 'entity' });
+    await this.spawnPty(sessionId, cwd, {
+      mode: previous ? 'resume' : 'start',
+      claudeSessionId,
+    });
 
-    const session: SessionSnapshot = { sessionId, anchor, cwd, label: finalLabel, status: 'running' };
+    const session: SessionSnapshot = {
+      sessionId,
+      claudeSessionId,
+      anchor,
+      cwd,
+      label: finalLabel,
+      status: 'running',
+    };
     this.sessions.set(sessionId, session);
     return this.withOutput(session);
   }
 
-  private async spawnPty(sessionId: string, cwd: string, opts: { continueConversation: boolean }): Promise<void> {
+  private async spawnPty(sessionId: string, cwd: string, conversation: ClaudeConversationTarget): Promise<void> {
     try {
       await this.claudeSession.spawn(sessionId, cwd, {
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
-        continueConversation: opts.continueConversation,
+        conversation,
       });
     } catch (err) {
       throw ioError({

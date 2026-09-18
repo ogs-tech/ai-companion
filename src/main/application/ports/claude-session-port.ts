@@ -1,8 +1,23 @@
+/**
+ * Which `claude` conversation a PTY should own, named by a UUID the caller
+ * mints rather than one the CLI picks. `start` creates it (`--session-id`),
+ * so the transcript's filename is known before the process even runs;
+ * `resume` reattaches to one that already exists (`--resume`), whether it was
+ * started by this app minutes ago or in a plain terminal last week.
+ *
+ * This replaces the old `--continue` ("attach to whatever this cwd last
+ * talked to"), which could not tell two sessions sharing a cwd apart.
+ */
+export interface ClaudeConversationTarget {
+  mode: 'start' | 'resume';
+  /** A UUID. Doubles as the basename of the CLI's transcript for this conversation. */
+  claudeSessionId: string;
+}
+
 export interface ClaudeSessionSpawnOptions {
   cols: number;
   rows: number;
-  /** Whether to try attaching to this cwd's prior `claude` conversation first (`--continue`), falling back to a fresh one if there isn't any. `false` skips that attempt entirely, for a session that must always start clean even when the cwd already has other conversations. */
-  continueConversation: boolean;
+  conversation: ClaudeConversationTarget;
 }
 
 export type ClaudeSessionDataListener = (sessionId: string, chunk: string) => void;

@@ -10,6 +10,8 @@ import type { SessionService } from '../application/services/session-service.js'
 import type { FileBrowserService } from '../application/services/file-browser-service.js';
 import type { FileBrowserPort } from '../application/ports/file-browser-port.js';
 import { buildSessionHandlers } from './session-handlers.js';
+import { buildSessionHistoryHandlers } from './session-history-handlers.js';
+import type { SessionHistoryService } from '../application/services/session-history-service.js';
 import { buildWorkspaceHandlers } from './workspace-handlers.js';
 import type { WorkspaceService } from '../application/services/workspace-service.js';
 import type { Workspace } from '../../shared/workspace.js';
@@ -49,6 +51,7 @@ export interface IpcDeps {
   hookService: HookService;
   instructionService: InstructionService;
   sessionService: SessionService;
+  sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
   fileBrowserService: FileBrowserService;
@@ -93,6 +96,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     hookService,
     instructionService,
     sessionService,
+    sessionHistoryService,
     workspaceService,
     switchActiveWorkspace,
     fileBrowserService,
@@ -219,6 +223,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildHookHandlers(hookService),
     ...buildInstructionHandlers(instructionService),
     ...buildSessionHandlers(sessionService),
+    ...buildSessionHistoryHandlers(sessionHistoryService, sessionService),
     ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace, fileBrowserService),
     ...buildProjectHandlers(projectService, fileBrowserPort),
     ...buildMarketplaceHandlers(marketplaceService),

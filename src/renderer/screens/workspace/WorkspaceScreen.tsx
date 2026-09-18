@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import {
   ChevronsLeft, ChevronsRight, Eye, EyeOff, File as FileIcon, FileX, Globe, MoreVertical, NotebookPen,
-  PanelLeft, PanelRight, Plus, Sparkles, SquareTerminal, Trash2, type LucideIcon,
+  History, PanelLeft, PanelRight, Plus, Sparkles, SquareTerminal, Trash2, type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { EmptyState } from '../../components/ds/EmptyState.js';
@@ -21,6 +21,8 @@ import { HooksTreeGroup } from '../../components/workspace/HooksTreeGroup.js';
 import { McpTreeGroup } from '../../components/workspace/McpTreeGroup.js';
 import { PluginsTreeGroup } from '../../components/workspace/PluginsTreeGroup.js';
 import { SessionsTreeGroup } from '../../components/workspace/SessionsTreeGroup.js';
+import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
+import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
 import { EditorPanel, type EditorHiddenField, type PreviewSource } from '../../components/workspace/EditorPanel.js';
 import { SessionPanel } from '../../components/SessionPanel.js';
@@ -67,7 +69,13 @@ type OpenTab =
   | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
-  | { id: string; kind: 'preview'; label: string; source: PreviewSource };
+  | { id: string; kind: 'preview'; label: string; source: PreviewSource }
+  | { id: string; kind: 'history' };
+
+/** Tabs that can hold unsaved work, and so need a discard guard before closing. */
+function isDirty(tab: OpenTab): boolean {
+  return (tab.kind === 'file' || tab.kind === 'skill' || tab.kind === 'agent' || tab.kind === 'instruction') && tab.dirty === true;
+}
 
 function entityTabGlyph(tab: Extract<OpenTab, { kind: EntityKind | 'instruction' }>): LucideIcon {
   if (tab.kind === 'instruction') return isPersonalInstruction(tab.entity) ? Globe : NotebookPen;
@@ -251,7 +259,7 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const closeTab = (id: string): void => {
     const target = openTabs.find((t) => t.id === id);
-    if (target && target.kind !== 'session' && target.kind !== 'preview' && target.dirty && !window.confirm('Descartar alterações não salvas?')) return;
+    if (target && isDirty(target) && !window.confirm('Descartar alterações não salvas?')) return;
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
       if (activeTabId === id) syncProjectFromTab(next[next.length - 1]);
@@ -273,7 +281,7 @@ export function WorkspaceScreen(): React.ReactElement {
   // asked to discard unsaved tabs and the user declined, so the caller's own
   // state change (switching workspace) must not proceed either.
   const resetTabs = (): boolean => {
-    const dirtyCount = openTabs.filter((t) => t.kind !== 'session' && t.kind !== 'preview' && t.dirty).length;
+    const dirtyCount = openTabs.filter(isDirty).length;
     if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return false;
     setOpenTabs([]);
     setActiveTabId(null);
@@ -478,6 +486,22 @@ export function WorkspaceScreen(): React.ReactElement {
   // Always spawns a fresh session (coexisting with any already open for the
   // same anchor) rather than refocusing one, since `session.spawn` mints a
   // new sessionId on every call for a workspace/project anchor.
+  // What the Sessões panel and the Histórico tab both mean by "here": the
+  // project in view, or the workspace itself when no project is selected.
+  const historyScope: HistoryScope | null = selectedProject
+    ? { kind: 'project', projectId: selectedProject.id }
+    : activeWorkspace
+      ? { kind: 'workspace', workspaceId: activeWorkspace.id }
+      : null;
+
+  // One fixed id, so "Ver todas" focuses the tab that is already open rather
+  // than stacking a second copy of the same dashboard beside it.
+  const HISTORY_TAB_ID = 'history';
+  const openHistoryTab = (): void => {
+    setOpenTabs((prev) => (prev.some((t) => t.id === HISTORY_TAB_ID) ? prev : [...prev, { id: HISTORY_TAB_ID, kind: 'history' }]));
+    setActiveTabId(HISTORY_TAB_ID);
+  };
+
   const handleNewSession = (): void => {
     const anchor: SessionAnchor | null = selectedProject
       ? { kind: 'project', projectId: selectedProject.id }
@@ -663,6 +687,16 @@ export function WorkspaceScreen(): React.ReactElement {
             onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
           />
         ),
+      };
+    }
+    if (tab.kind === 'history') {
+      return {
+        id: tab.id,
+        glyph: History,
+        label: 'Histórico',
+        dense: true,
+        onClose: () => closeTab(tab.id),
+        render: () => <SessionHistoryTab projectScope={historyScope} onOpenSession={openSessionTab} />,
       };
     }
     if (tab.kind === 'preview') {
@@ -899,7 +933,12 @@ export function WorkspaceScreen(): React.ReactElement {
             </Stack>
             {sessionsExpanded && (
               <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                <SessionsTreeGroup onOpen={openSessionTab} onRemoved={removeSessionTab} />
+                <SessionsTreeGroup
+                  scope={historyScope ?? { kind: 'all' }}
+                  onOpen={openSessionTab}
+                  onRemoved={removeSessionTab}
+                  onSeeAll={openHistoryTab}
+                />
               </Box>
             )}
           </Box>

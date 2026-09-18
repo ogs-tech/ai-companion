@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { basename, isAbsolute } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import type { Project, ProjectRegistryFile } from '../../../shared/project.js';
 import type { ProjectRegistry } from '../ports/project-registry.js';
 import type { ClockPort } from '../ports/clock-port.js';
@@ -96,8 +96,17 @@ export class ProjectService {
     return this.create({ name: basename(path) || path, path });
   }
 
+  /**
+   * True when this project's marker would land on the canonical index itself — i.e. the
+   * project path is the workspace root. There is nothing to link: the file is already there.
+   */
+  private ownsCanonicalIndex(projectPath: string): boolean {
+    return resolve(projectIndexMarkerPath(projectPath)) === resolve(this.indexMarker.sourcePath);
+  }
+
   // Best-effort: a failed marker symlink must not block project registration.
   private async ensureIndexMarker(projectPath: string): Promise<void> {
+    if (this.ownsCanonicalIndex(projectPath)) return;
     try {
       await this.indexMarker.symlinkManager.create({
         source: this.indexMarker.sourcePath,
@@ -109,6 +118,10 @@ export class ProjectService {
   }
 
   private async removeIndexMarker(projectPath: string): Promise<void> {
+    // Guarded for the same reason as ensureIndexMarker, and one more: removal only skips a
+    // *real* file, so a canonical index that had been corrupted into a symlink would be
+    // deleted outright by unregistering the root project.
+    if (this.ownsCanonicalIndex(projectPath)) return;
     try {
       await this.indexMarker.symlinkManager.removeIfPointsToWorkspace(
         projectIndexMarkerPath(projectPath),

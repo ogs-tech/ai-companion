@@ -20,6 +20,8 @@ import { SkillService } from './services/skill-service.js';
 import { AgentService } from './services/agent-service.js';
 import { InstructionService } from './services/instruction-service.js';
 import { SessionService } from './services/session-service.js';
+import { SessionHistoryService } from './services/session-history-service.js';
+import type { SessionTranscriptPort } from './ports/session-transcript-port.js';
 import { ProjectService } from './services/project-service.js';
 import { FsProjectRegistry } from '../infrastructure/project/fs-project-registry.js';
 import { HealthService } from './services/health/health-service.js';
@@ -46,6 +48,7 @@ export interface WorkspaceScopedSharedDeps {
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
   claudeSessionPort: ClaudeSessionPort;
+  sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
 }
 
@@ -59,6 +62,7 @@ export interface WorkspaceScopedServices {
   agentService: AgentService;
   instructionService: InstructionService;
   sessionService: SessionService;
+  sessionHistoryService: SessionHistoryService;
   projectService: ProjectService;
   healthService: HealthService;
   workspaceTeardownService: WorkspaceTeardownService;
@@ -73,7 +77,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    claudeSessionPort, fileWatcherPort,
+    claudeSessionPort, sessionTranscriptPort, fileWatcherPort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -111,6 +115,13 @@ export function buildWorkspaceScopedServices(
     workspaceService: shared.workspaceService,
     projectService,
   });
+  // Reads the CLI's own transcripts, which live outside any workspace — but
+  // the service is per-workspace because its default scope, and its warm
+  // readings, belong to the workspace being looked at.
+  const sessionHistoryService = new SessionHistoryService(sessionTranscriptPort, settingsService, {
+    workspaceService: shared.workspaceService,
+    projectService,
+  });
 
   const healthCollectors: HealthCollector[] = [
     new McpAuthCollector(claudeRuntimeReader, clock),
@@ -134,7 +145,7 @@ export function buildWorkspaceScopedServices(
 
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
-    skillService, agentService, instructionService, sessionService, projectService,
+    skillService, agentService, instructionService, sessionService, sessionHistoryService, projectService,
     healthService, workspaceTeardownService, entityWatchService,
   };
 }

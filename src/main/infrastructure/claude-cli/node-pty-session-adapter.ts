@@ -6,15 +6,21 @@ import type {
   ClaudeSessionSpawnOptions,
 } from '../../application/ports/claude-session-port.js';
 
-const CLAUDE_CONTINUE_ARGS = ['--continue'];
-const CLAUDE_FRESH_ARGS: string[] = [];
+/** Names a conversation the CLI must create, writing its transcript to `<uuid>.jsonl`. */
+const startArgs = (claudeSessionId: string): string[] => ['--session-id', claudeSessionId];
+/** Reattaches to a conversation that already exists, by the same id. */
+const resumeArgs = (claudeSessionId: string): string[] => ['--resume', claudeSessionId];
 /**
- * `claude --continue` doesn't fall back to a fresh conversation when the cwd
- * has never had one — it prints this (in red) and exits 1. Detected so a
- * brand-new anchor's first-ever "Abrir sessão" doesn't dead-end as an
- * immediately-'exited' session; see `spawnWithArgs`'s retry.
+ * `claude` refuses rather than falling back when it's asked for a
+ * conversation it can't find: `--resume <id>` prints
+ * "No conversation found with session ID: <id>" and exits 1 (the retired
+ * `--continue` printed "No conversation found to continue"). Matching on the
+ * shared prefix lets `spawnWithArgs` retry once as a fresh `--session-id`
+ * under the *same* id, so a session whose transcript was never written — it
+ * exited before the first response — still reopens, and its id still lines
+ * up with the transcript it is about to create.
  */
-const NO_CONVERSATION_MARKER = 'No conversation found to continue';
+const NO_CONVERSATION_MARKER = 'No conversation found';
 /** Only needed to catch NO_CONVERSATION_MARKER at exit — capped so a long-running session's onData doesn't accumulate its entire output in memory for the rest of its life. */
 const DETECTION_WINDOW_CHARS = 4096;
 
@@ -22,14 +28,13 @@ const DETECTION_WINDOW_CHARS = 4096;
  * Spawns the user's locally installed `claude` CLI inside a real PTY via
  * `node-pty` so its interactive TUI renders correctly (cursor movement,
  * spinners, raw keyboard input all depend on `process.stdout.isTTY`).
- * With `opts.continueConversation`, passes `--continue` first: on a cwd
- * with a prior transcript this resumes it, covering "resume" without the
- * adapter needing to detect that case. On a cwd with none, `claude` errors
- * instead of starting fresh (see NO_CONVERSATION_MARKER) — `spawnWithArgs`
- * retries once, transparently, without `--continue`, so "first ever open"
- * still works. Without `opts.continueConversation`, `--continue` is never
- * attempted at all — for a session that must always start clean, even in a
- * cwd that already has other conversations (its own or another session's).
+ * The conversation is always named explicitly by `opts.conversation`, never
+ * inferred from the cwd: `start` passes `--session-id <uuid>` so the CLI
+ * creates that exact conversation, `resume` passes `--resume <uuid>` to
+ * reattach to it. Naming it up front is what makes a live session and its
+ * on-disk transcript (`<uuid>.jsonl`) the same thing rather than a guess,
+ * and it is why two sessions sharing a cwd can no longer capture each
+ * other's conversation the way `--continue` allowed.
  */
 export class NodePtySessionAdapter implements ClaudeSessionPort {
   private readonly ptys = new Map<string, IPty>();
@@ -58,7 +63,11 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
    * by a missing binary — it could be a fast, silent exit from the process itself.
    */
   spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
-    return this.spawnWithArgs(sessionId, cwd, opts, opts.continueConversation ? CLAUDE_CONTINUE_ARGS : CLAUDE_FRESH_ARGS);
+    const { mode, claudeSessionId } = opts.conversation;
+    if (mode === 'start') return this.spawnWithArgs(sessionId, cwd, opts, startArgs(claudeSessionId), null);
+    // A resume that finds nothing to resume falls back to creating that same
+    // conversation, rather than dead-ending as an immediately-'exited' session.
+    return this.spawnWithArgs(sessionId, cwd, opts, resumeArgs(claudeSessionId), startArgs(claudeSessionId));
   }
 
   private spawnWithArgs(
@@ -66,6 +75,8 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
     cwd: string,
     opts: ClaudeSessionSpawnOptions,
     args: readonly string[],
+    /** Args to retry once with when `args` reports no such conversation; `null` disables the retry. */
+    missingConversationFallback: readonly string[] | null,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let child: IPty;
@@ -113,10 +124,10 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
           return;
         }
 
-        if (args === CLAUDE_CONTINUE_ARGS && recentOutput.includes(NO_CONVERSATION_MARKER)) {
+        if (missingConversationFallback && recentOutput.includes(NO_CONVERSATION_MARKER)) {
           // Retry transparently under the same sessionId — SessionService and
           // the renderer never see this exit, they just see a live session.
-          this.spawnWithArgs(sessionId, cwd, opts, CLAUDE_FRESH_ARGS).catch(() => {
+          this.spawnWithArgs(sessionId, cwd, opts, missingConversationFallback, null).catch(() => {
             // The retry's own promise is fire-and-forget from here (the
             // outer spawn() already resolved on the first attempt's data);
             // a retry failing this same way would be a real `claude` problem,

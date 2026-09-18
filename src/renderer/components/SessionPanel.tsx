@@ -50,6 +50,21 @@ const TERMINAL_XTERM_THEME = {
   cursor: colorRoles.dark.azul,
 };
 
+/**
+ * What `Shift+Enter` writes to the PTY in place of xterm's own `\r`.
+ *
+ * xterm.js emits `\r` for `Enter` and `Shift+Enter` alike, so the CLI can't
+ * tell them apart and submits on both. `\x1b\r` (ESC + CR) is the sequence
+ * the `claude` CLI reads as "insert a newline, don't submit" — it is exactly
+ * what `claude /terminal-setup` binds `shift+enter` to when it patches a host
+ * terminal's keymap (in VS Code it writes a
+ * `workbench.action.terminal.sendSequence` binding with `"text": "\u001b\r"`).
+ * The CLI also documents `\\\r` (backslash + return), but that one leaves a
+ * literal backslash behind on a build that doesn't strip it, whereas an
+ * unrecognized ESC+CR degrades to nothing.
+ */
+export const TERMINAL_NEWLINE_SEQUENCE = '\x1b\r';
+
 interface SessionHeaderProps {
   pill: { variant: StatusPillVariant; label: string };
   action?: React.ReactNode;
@@ -95,6 +110,11 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   const queryClient = useQueryClient();
 
   const [sessionId, setSessionId] = useState<string | null>(sessionIdProp ?? null);
+  // The Shift+Enter handler is attached once, at terminal creation, but the
+  // session it must write to changes over the panel's life (idle → spawned,
+  // or a new sessionId prop). It reads the id from this ref at keypress time
+  // rather than forcing the handler to be re-attached on every id change.
+  const sessionIdRef = useRef<string | null>(sessionIdProp ?? null);
   const [status, setStatus] = useState<PanelStatus>(sessionIdProp ? 'starting' : 'idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -131,9 +151,32 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   }, [sessionIdProp, sessionAnchorKey(anchor)]);
 
   useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  useEffect(() => {
     const terminal = new Terminal({ convertEol: true, fontSize: 13, theme: TERMINAL_XTERM_THEME });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    // There is no React <textarea> here to intercept — the terminal is a real
+    // PTY and every keystroke is already bytes. So Shift+Enter is claimed at
+    // the DOM keyboard event, before xterm turns it into the same `\r` a
+    // plain Enter produces, and the newline sequence is written by hand.
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true;
+      if (event.key !== 'Enter' || !event.shiftKey) return true;
+      // Alt/Ctrl/Cmd+Shift+Enter are the CLI's own gestures — left alone.
+      if (event.altKey || event.ctrlKey || event.metaKey) return true;
+      const id = sessionIdRef.current;
+      if (id) void callIpc('session.write', { sessionId: id, data: TERMINAL_NEWLINE_SEQUENCE });
+      // `return false` only stops xterm's own processing — it does not cancel the DOM
+      // event, because xterm bails out before the `cancel()` its handled path calls. The
+      // browser then fires the legacy `keypress`, which Enter (alone among non-printable
+      // keys) still emits, and xterm's `_keyPress` turns its charCode 13 back into a `\r`
+      // the CLI reads as "submit". Cancelling here is what stops that second event.
+      event.preventDefault();
+      return false;
+    });
     if (containerRef.current) terminal.open(containerRef.current);
     fitAddon.fit();
     terminalRef.current = terminal;

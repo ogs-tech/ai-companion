@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SessionPanel } from '../../../src/renderer/components/SessionPanel.js';
+import { SessionPanel, TERMINAL_NEWLINE_SEQUENCE } from '../../../src/renderer/components/SessionPanel.js';
 import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../test-utils.js';
 
 interface MockTerminal {
@@ -10,7 +10,9 @@ interface MockTerminal {
   dispose: ReturnType<typeof vi.fn>;
   loadAddon: ReturnType<typeof vi.fn>;
   onData: ReturnType<typeof vi.fn>;
+  attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
   _onDataCb: ((data: string) => void) | undefined;
+  _keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
 }
 
 const mockTerminalInstances: MockTerminal[] = [];
@@ -22,9 +24,13 @@ vi.mock('@xterm/xterm', () => {
     dispose = vi.fn();
     loadAddon = vi.fn();
     _onDataCb: ((data: string) => void) | undefined;
+    _keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
     onData = vi.fn((cb: (data: string) => void) => {
       this._onDataCb = cb;
       return { dispose: vi.fn() };
+    });
+    attachCustomKeyEventHandler = vi.fn((handler: (event: KeyboardEvent) => boolean) => {
+      this._keyHandler = handler;
     });
     constructor() {
       mockTerminalInstances.push(this);
@@ -448,6 +454,108 @@ describe('<SessionPanel>', () => {
       unmount();
 
       expect(observer.disconnect).toHaveBeenCalled();
+    });
+  });
+  describe('Shift+Enter', () => {
+    /** Spawns a running session and hands back the terminal's custom key handler. */
+    async function attachedTerminal(): Promise<MockTerminal> {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') return ok(null);
+        return ok({
+          sessionId: 'entity:urn:skill:foo',
+          anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+          cwd: '/workspace',
+          status: 'running',
+        });
+      });
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      await user.click(screen.getByTestId('session-open'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', expect.anything()));
+      const terminal = mockTerminalInstances[0]!;
+      await waitFor(() => expect(terminal._keyHandler).toBeDefined());
+      call.mockClear();
+      return terminal;
+    }
+
+    function keydown(init: Partial<KeyboardEvent> & { key: string }): KeyboardEvent {
+      // `preventDefault` is not decoration: without it xterm lets the legacy keypress
+      // through and re-emits a `\r`. See session-panel-key-events.test.tsx, which pins
+      // that against the real terminal rather than this stand-in.
+      return {
+        type: 'keydown',
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        ...init,
+      } as KeyboardEvent;
+    }
+
+    it('writes ESC+CR instead of a carriage return, so the CLI inserts a newline rather than submitting', async () => {
+      const terminal = await attachedTerminal();
+
+      const event = keydown({ key: 'Enter', shiftKey: true });
+      const propagate = terminal._keyHandler!(event);
+      expect(event.preventDefault).toHaveBeenCalled();
+
+      expect(propagate).toBe(false);
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.write', {
+          sessionId: 'entity:urn:skill:foo',
+          data: TERMINAL_NEWLINE_SEQUENCE,
+        }),
+      );
+      expect(TERMINAL_NEWLINE_SEQUENCE).toBe('\x1b\r');
+    });
+
+    it('stops xterm from emitting its own \\r, so the newline is not immediately followed by a submit', async () => {
+      const terminal = await attachedTerminal();
+
+      terminal._keyHandler!(keydown({ key: 'Enter', shiftKey: true }));
+
+      await waitFor(() => expect(call).toHaveBeenCalled());
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.objectContaining({ data: '\r' }));
+    });
+
+    it('leaves a plain Enter to xterm untouched, so submitting still works', async () => {
+      const terminal = await attachedTerminal();
+
+      expect(terminal._keyHandler!(keydown({ key: 'Enter' }))).toBe(true);
+
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it.each([['altKey'], ['ctrlKey'], ['metaKey']])(
+      'leaves Shift+Enter with %s held to the CLI, which binds those itself',
+      async (modifier) => {
+        const terminal = await attachedTerminal();
+
+        expect(terminal._keyHandler!(keydown({ key: 'Enter', shiftKey: true, [modifier]: true }))).toBe(true);
+
+        expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+      },
+    );
+
+    it('ignores the keyup half of the gesture, so one press writes one newline', async () => {
+      const terminal = await attachedTerminal();
+
+      expect(terminal._keyHandler!({ ...keydown({ key: 'Enter', shiftKey: true }), type: 'keyup' } as KeyboardEvent)).toBe(
+        true,
+      );
+
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('swallows the key without writing when no session is attached yet, rather than submitting into nothing', () => {
+      call.mockImplementation(async () => ok(null));
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      const terminal = mockTerminalInstances[0]!;
+
+      expect(terminal._keyHandler!(keydown({ key: 'Enter', shiftKey: true }))).toBe(false);
+
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
     });
   });
 });

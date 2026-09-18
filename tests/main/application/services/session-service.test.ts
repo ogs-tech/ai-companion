@@ -39,7 +39,10 @@ const setup = (options?: { maxBufferChars?: number }) => {
   const claudeSession = new FakeClaudeSessionPort();
   const scopeDeps = {
     workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
-    projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
+    projectService: {
+      get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }),
+      findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
+    },
   };
   const service = new SessionService(base, claudeSession, WORKSPACE, scopeDeps, options);
   return { service, base, claudeSession };
@@ -276,17 +279,52 @@ describe('SessionService concurrent workspace/project sessions', () => {
     expect(third.label).toBe('W (3)');
   });
 
-  it('spawn for a workspace/project anchor never asks to continue a prior conversation — it is always a fresh session', async () => {
+  it('spawn for a workspace/project anchor starts a brand-new conversation, never reattaching to a sibling sharing the cwd', async () => {
     const { service, claudeSession } = setup();
     await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
-    expect(claudeSession.spawnCalls[0]?.opts.continueConversation).toBe(false);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation.mode).toBe('start');
   });
 
-  it('spawn for an entity anchor still asks to continue a prior conversation, unchanged from before this feature', async () => {
+  it("spawn for an entity anchor's first-ever session also starts a conversation — there is none to reattach to yet", async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
-    expect(claudeSession.spawnCalls[0]?.opts.continueConversation).toBe(true);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation.mode).toBe('start');
+  });
+
+  it('hands the CLI a UUID it minted, and reports the same id on the snapshot, so a session and its transcript share a name', async () => {
+    const { service, claudeSession } = setup();
+
+    const session = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+
+    expect(session.claudeSessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation.claudeSessionId).toBe(session.claudeSessionId);
+  });
+
+  it('gives two sessions of the same anchor different conversations, so neither can capture the other one', async () => {
+    const { service } = setup();
+
+    const first = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+    const second = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+
+    expect(second.claudeSessionId).not.toBe(first.claudeSessionId);
+  });
+
+  it('reopening an exited entity session resumes its original conversation instead of minting a second one', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const anchor = entityAnchor(entityUrn('skill', 'foo'));
+    const first = await service.spawn(anchor);
+    claudeSession.simulateExit(first.sessionId, 0);
+    claudeSession.spawnCalls.length = 0;
+
+    const reopened = await service.spawn(anchor);
+
+    expect(reopened.claudeSessionId).toBe(first.claudeSessionId);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
+      mode: 'resume',
+      claudeSessionId: first.claudeSessionId,
+    });
   });
 
   it('ordinal counters for different anchors are independent', async () => {
@@ -354,7 +392,7 @@ describe('SessionService.resume', () => {
     expect(second.label).toBe('W (2)');
   });
 
-  it('asks the adapter to continue the conversation it is relaunching', async () => {
+  it('reattaches to the exact conversation it is relaunching, by id', async () => {
     const { service, claudeSession } = setup();
     const session = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
     claudeSession.simulateExit(session.sessionId, 0);
@@ -362,7 +400,10 @@ describe('SessionService.resume', () => {
 
     await service.resume(session.sessionId);
 
-    expect(claudeSession.spawnCalls[0]?.opts.continueConversation).toBe(true);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
+      mode: 'resume',
+      claudeSessionId: session.claudeSessionId,
+    });
   });
 
   it('works for an entity-anchored session too, resuming it in place by its known sessionId', async () => {
@@ -419,5 +460,57 @@ describe('SessionService output buffering', () => {
     const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
     claudeSession.simulateData(session.sessionId, 'hi');
     expect(service.list()[0]).not.toHaveProperty('outputBuffer');
+  });
+  describe('adoptConversation', () => {
+    it('registers a conversation that only existed on disk as an ordinary live session', async () => {
+      const { service, claudeSession } = setup();
+
+      const adopted = await service.adoptConversation({
+        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        cwd: '/repos/from-history',
+        label: 'Sessões com dash e filtros',
+      });
+
+      expect(adopted.status).toBe('running');
+      expect(adopted.label).toBe('Sessões com dash e filtros');
+      expect(adopted.claudeSessionId).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+      expect(service.list().map((s) => s.sessionId)).toContain('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+      expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
+        mode: 'resume',
+        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      });
+    });
+
+    it('anchors it to the directory it actually ran in, registering that directory as a project if it is not one yet', async () => {
+      const { service } = setup();
+
+      const adopted = await service.adoptConversation({
+        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        cwd: '/repos/from-history',
+        label: 'x',
+      });
+
+      expect(adopted.anchor).toEqual({ kind: 'project', projectId: 'project-for:/repos/from-history' });
+      expect(adopted.cwd).toBe('/repos/from-history');
+    });
+
+    it('reattaches to an already-running adoption instead of forking a second PTY onto the same conversation', async () => {
+      const { service, claudeSession } = setup();
+      const input = { claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
+      await service.adoptConversation(input);
+
+      await service.adoptConversation(input);
+
+      expect(claudeSession.spawnCalls).toHaveLength(1);
+    });
+
+    it('is single-flight, so a double-click cannot start two PTYs under one id', async () => {
+      const { service, claudeSession } = setup();
+      const input = { claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
+
+      await Promise.all([service.adoptConversation(input), service.adoptConversation(input)]);
+
+      expect(claudeSession.spawnCalls).toHaveLength(1);
+    });
   });
 });

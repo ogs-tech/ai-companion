@@ -138,6 +138,23 @@ describe('ProjectService', () => {
       });
     });
 
+    it('skips the marker when the project path is the workspace root itself', async () => {
+      // <root>/.ai-companion/index.md is both the canonical file and where this project's
+      // marker would go, so linking it would point the file at itself and ELOOP the app on
+      // the next boot. Registering the root as a project is reachable from the history tab,
+      // which resumes a conversation by the cwd it actually ran in.
+      const { service, create } = setup();
+      await service.create({ name: 'u', path: '/home/u' });
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('skips marker removal for a workspace-root project, so the canonical index survives', async () => {
+      const { service, removeIfPointsToWorkspace } = setup();
+      const created = await service.create({ name: 'u', path: '/home/u' });
+      await service.delete(created.id);
+      expect(removeIfPointsToWorkspace).not.toHaveBeenCalled();
+    });
+
     it('delete removes the marker symlink, guarded to the workspace dataDir', async () => {
       const { service, removeIfPointsToWorkspace } = setup();
       const created = await service.create({ name: 'acme', path: '/repos/acme' });

@@ -11,6 +11,7 @@ import type { SkillService } from '../../../src/main/application/services/skill-
 import type { AgentService } from '../../../src/main/application/services/agent-service.js';
 import type { InstructionService } from '../../../src/main/application/services/instruction-service.js';
 import type { SessionService } from '../../../src/main/application/services/session-service.js';
+import type { SessionHistoryService } from '../../../src/main/application/services/session-history-service.js';
 import type { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
 import type { ProjectService } from '../../../src/main/application/services/project-service.js';
 import type { Workspace } from '../../../src/shared/workspace.js';
@@ -45,6 +46,7 @@ interface Deps {
   agentService: AgentService;
   instructionService: InstructionService;
   sessionService: SessionService;
+  sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
   fileBrowserService: FileBrowserService;
@@ -108,6 +110,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const agentService = null as unknown as AgentService;
   const instructionService = null as unknown as InstructionService;
   const sessionService = null as unknown as SessionService;
+  const sessionHistoryService = null as unknown as SessionHistoryService;
   const workspaceService = null as unknown as WorkspaceService;
   const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
   const fileBrowserService = null as unknown as FileBrowserService;
@@ -139,6 +142,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     agentService,
     instructionService,
     sessionService,
+    sessionHistoryService,
     workspaceService,
     switchActiveWorkspace,
     fileBrowserService,

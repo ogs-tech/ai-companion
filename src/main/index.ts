@@ -48,6 +48,7 @@ import { PluginProvenanceService } from './application/services/plugin-provenanc
 import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plugin-reader.js';
 import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
+import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
 import { ChokidarFileWatcher } from './infrastructure/file-watcher/chokidar-file-watcher.js';
@@ -298,6 +299,9 @@ async function wireIpc(): Promise<void> {
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeSessionPort: new NodePtySessionAdapter(),
+    // The CLI's own transcript directory — resolved here, like every other
+    // `~/.claude` path, so the adapter stays a pure reader of a given folder.
+    sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
     fileWatcherPort: new ChokidarFileWatcher(),
   };
 
@@ -346,6 +350,7 @@ async function wireIpc(): Promise<void> {
     hookService,
     instructionService: workspaceScoped.instructionService,
     sessionService: workspaceScoped.sessionService,
+    sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,
     projectService: workspaceScoped.projectService,
     switchActiveWorkspace,

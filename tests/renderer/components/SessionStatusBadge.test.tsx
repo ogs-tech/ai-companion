@@ -7,6 +7,7 @@ import type { SessionSnapshot } from '../../../src/shared/session.js';
 function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
     sessionId: 'entity:urn:skill:foo',
+    claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
     anchor: { kind: 'entity', urn: 'urn:skill:foo' },
     cwd: '/repos/acme',
     label: 'foo',

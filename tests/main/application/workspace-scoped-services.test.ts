@@ -10,6 +10,7 @@ import { InMemorySettingsRepository } from '../../../src/main/infrastructure/set
 import { PluginProvenanceService } from '../../../src/main/application/services/plugin-provenance.js';
 import { PluginCacheFile } from '../../../src/main/infrastructure/plugins/plugin-cache-file.js';
 import { ClaudeCodePluginReader } from '../../../src/main/infrastructure/plugins/claude-code-plugin-reader.js';
+import { FsClaudeTranscriptAdapter } from '../../../src/main/infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
 import { FsClaudeRuntimeReader } from '../../../src/main/infrastructure/claude-runtime/fs-claude-runtime-reader.js';
 import { PluginService } from '../../../src/main/application/services/plugin-service.js';
@@ -98,6 +99,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeSessionPort: new FakeClaudeSessionPort(),
+    sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(homedir, '.claude', 'projects')),
     fileWatcherPort: noopFileWatcherPort,
   };
 }

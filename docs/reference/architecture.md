@@ -110,6 +110,50 @@ On the renderer side, `SessionPanel` (`src/renderer/components/SessionPanel.tsx`
 
 **Native module caveat:** `node-pty` must be rebuilt against Electron's own Node ABI to run inside the app — wired into `predev`/`prebuild` as `npm run rebuild:native` (`electron-rebuild -f -w node-pty` via `@electron/rebuild`), not `postinstall` (see `package.json`). That rebuilt binary can't be loaded from plain-Node `vitest`, so `npm install` and `npm test` always see the binary built against the host Node ABI instead. Running `npm run dev` or `npm run build` leaves the binary rebuilt for Electron's ABI; run `npm install` (or `npm rebuild node-pty`) to restore the host build before running `npm test` again. Separately, `postinstall` runs `chmod +x node_modules/node-pty/prebuilds/*/spawn-helper` (harmlessly no-op on platforms without that file, via `2>/dev/null || true`): `npm install` sometimes resets the prebuilt helper binary's execute bit, which breaks `posix_spawnp` on macOS at spawn time.
 
+## Session history bounded context
+
+The `claude` CLI already persists every conversation as JSON Lines under
+`~/.claude/projects/<slug>/<uuid>.jsonl`. History is therefore a **read** problem, not a persistence one:
+this app stores nothing of its own about past sessions and never writes into the CLI's directory.
+
+**The join.** `SessionSnapshot` carries a `claudeSessionId` (always a UUID) alongside the app's own
+`sessionId`. It is minted at spawn and passed to the CLI as `--session-id <uuid>`, so the transcript's
+filename is known before the process starts — the live session and its history entry are the same thing
+rather than a heuristic match. `--continue` is retired from the spawn path: with several sessions able to
+share a `cwd` it could attach to a sibling's conversation. Reopening a session resumes its own conversation
+by id (`--resume <uuid>`), and `NodePtySessionAdapter` falls back once to `--session-id` if the CLI reports
+no such conversation — which happens when a session exited before its transcript was ever written.
+
+**Never read the middle of a file.** `SessionTranscriptPort` / `FsClaudeTranscriptAdapter`
+(`src/main/infrastructure/claude-cli/fs-claude-transcript-adapter.ts`) summarise a conversation from a
+16 KB head read plus a 256 KB tail read, whatever the file's size — and these files reach 63 MB. That
+works because of how the CLI writes them: `cwd` is on the first content-bearing line, and `cost-state`,
+`ai-title` and `last-prompt` are re-appended on *every* turn, so the last copy of each always trails the
+file. Measured on a real machine: the final `cost-state` never further than 915 bytes from EOF, the final
+title never further than 33 KB. The one exception is a transcript old enough to carry no `cost-state`,
+which falls back to summing its assistant lines and is read whole.
+
+`cwd` is always read from **inside** the file. The folder name is the `cwd` with separators replaced by
+hyphens, which is lossy — a directory whose own name contains a hyphen is indistinguishable from a
+separator — so the folder name is used as an index and never decoded.
+
+**Cost is read, not estimated, wherever possible.** The CLI's `cost-state` line carries its own
+`totalCostUSD` and a per-model `modelUsage` breakdown; that is a reading. Only a transcript predating it
+falls through to the bundled price table in `src/main/application/pricing/model-pricing.ts`, which
+normalizes model ids (`claude-opus-5[1m]`, `claude-haiku-4-5-20251001` → one rate key) and is overridable
+per model via `Settings.pricing`. An unpriced model yields `null`, never `0`; a conversation containing one
+yields `null` overall rather than a total that is silently too low.
+
+**No cache file.** Summarising every transcript on a real machine (169 conversations) measures at roughly
+260 ms, so `SessionHistoryService` keeps only an in-memory map keyed by `mtimeMs` + `sizeBytes`. A
+versioned on-disk cache would buy a fraction of a second at the price of a schema, an atomic writer and a
+class of staleness bugs.
+
+`SessionHistoryService` is workspace-scoped (its default scope and its warm readings belong to the
+workspace being looked at); the transcript port itself is a shared singleton, since `~/.claude/projects`
+is outside any workspace. Its `~/.claude/projects` path is resolved once in `src/main/index.ts`, like every
+other `~/.claude` path — adapters in this codebase never call `homedir()` themselves.
+
 ## Workspace / Project
 
 `Workspace` and `Project` are purely organizational — never an `EntityKind`, never routed through

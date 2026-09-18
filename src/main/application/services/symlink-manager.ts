@@ -39,6 +39,12 @@ export class SymlinkManager {
   async create(args: { source: string; destination: string }): Promise<SymlinkCreateResult> {
     const sourcePath = resolve(args.source);
     const destinationPath = resolve(args.destination);
+    // A link to its own path is never a valid outcome — every open() on it raises ELOOP, and
+    // the existing-symlink branch below would read it back as already-correct and never heal
+    // it. Refuse before touching the filesystem, so the real file at that path survives.
+    if (sourcePath === destinationPath) {
+      throw new DomainError('validation', `Refusing to symlink ${destinationPath} to itself`);
+    }
     try {
       await this.fs.mkdir(dirname(destinationPath), { recursive: true });
 
