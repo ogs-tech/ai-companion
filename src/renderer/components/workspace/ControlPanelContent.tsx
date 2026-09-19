@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, IconButton, List, Stack, Tooltip } from '@mui/material';
+import { Box, Chip, IconButton, List, Stack, Tooltip } from '@mui/material';
 import { ChevronDown, ChevronRight, Layers, Plus, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Kicker } from '../ds/Kicker.js';
@@ -18,9 +18,19 @@ interface LocalScope {
   scopeId: string;
 }
 
+/**
+ * A non-default workspace is always "as a Project" (a single registered Project, or none yet)
+ * or "with multiple projects" — fully derived from `projects.length`, never persisted. See
+ * docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #1.
+ */
+export type WorkspaceViewMode = 'project' | 'multi-project';
+
 interface ControlPanelContentProps {
   isDefaultWorkspace: boolean;
   showGlobal: boolean;
+  viewMode: WorkspaceViewMode;
+  /** The Project currently in view (whichever Workbench tab is active) — `undefined` when no tab is Project-scoped. Only rendered when `viewMode === 'multi-project'`; a single Project needs no disambiguation. */
+  selectedProjectName?: string;
   localScope?: LocalScope;
   mcpMatchPath?: string;
   onEditEntity: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
@@ -43,6 +53,8 @@ interface ControlPanelContentProps {
 export function ControlPanelContent({
   isDefaultWorkspace,
   showGlobal,
+  viewMode,
+  selectedProjectName,
   localScope,
   mcpMatchPath,
   onEditEntity,
@@ -142,9 +154,22 @@ export function ControlPanelContent({
       <Stack
         data-testid="workspace-customizations-header"
         direction="row"
-        sx={{ alignItems: 'center', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
+        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
       >
         <Kicker>Customizations</Kicker>
+        {/* Only meaningful once a workspace juggles more than one Project — a
+            single Project needs nothing to disambiguate. Falls back to a
+            neutral "Workspace" label whenever the active tab isn't scoped to
+            any Project (a workspace-anchored session, Starter Pack, ...). */}
+        {viewMode === 'multi-project' && (
+          <Chip
+            size="small"
+            variant="outlined"
+            data-testid="control-panel-scope-chip"
+            label={selectedProjectName ? `Projeto: ${selectedProjectName}` : 'Workspace'}
+            sx={{ height: 18, fontSize: '0.6875rem' }}
+          />
+        )}
       </Stack>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <List disablePadding>{customizationRows}</List>

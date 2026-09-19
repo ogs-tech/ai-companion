@@ -19,8 +19,10 @@ import { WorkspaceService } from './application/services/workspace-service.js';
 import { ProductMigrationService } from './application/services/product-migration-service.js';
 import {
   buildWorkspaceScopedServices,
+  buildProjectService,
   type WorkspaceScopedServices,
 } from './application/workspace-scoped-services.js';
+import { SymlinkManager } from './application/services/symlink-manager.js';
 import { createTaskQueue } from './application/task-queue.js';
 import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repository.js';
 import { FsRepoReader } from './infrastructure/repo/fs-repo-reader.js';
@@ -391,6 +393,7 @@ async function wireIpc(): Promise<void> {
     workspaceService,
     projectService: workspaceScoped.projectService,
     switchActiveWorkspace,
+    registerRootProject,
     fileBrowserService,
     fileBrowserPort,
     marketplaceService,
@@ -429,6 +432,20 @@ async function wireIpc(): Promise<void> {
       dispatch = createDispatcher(buildHandlers(buildDeps()));
       return target;
     });
+  }
+
+  /**
+   * Registers a freshly created workspace's picked root folder as its first `Project` (see
+   * docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #4). Built against
+   * that workspace's own dataDir rather than `workspaceScoped.projectService` — a brand-new
+   * workspace is never the active one yet (`workspace.create` doesn't switch to it), so writing
+   * through the active graph's `ProjectService` would register the project onto the wrong
+   * workspace's `projects.json`.
+   */
+  async function registerRootProject(rootPath: string): Promise<void> {
+    const rootDataDir = workspaceDataDir(rootPath);
+    const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, rootDataDir);
+    await buildProjectService(rootDataDir, symlinkManager, clock).findOrCreateByPath(rootPath);
   }
 
   ipcMain.handle(IPC_CHANNEL, async (_event, payload: unknown) => {

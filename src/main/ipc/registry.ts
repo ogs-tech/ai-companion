@@ -59,6 +59,7 @@ export interface IpcDeps {
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
+  registerRootProject: (rootPath: string) => Promise<void>;
   fileBrowserService: FileBrowserService;
   fileBrowserPort: FileBrowserPort;
   projectService: ProjectService;
@@ -106,6 +107,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     sessionHistoryService,
     workspaceService,
     switchActiveWorkspace,
+    registerRootProject,
     fileBrowserService,
     fileBrowserPort,
     projectService,
@@ -233,7 +235,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildSessionHandlers(sessionService),
     ...buildBrowserHandlers(sessionService, embeddedBrowserPort),
     ...buildSessionHistoryHandlers(sessionHistoryService, sessionService),
-    ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace, fileBrowserService),
+    ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace, fileBrowserService, registerRootProject),
     ...buildProjectHandlers(projectService, fileBrowserPort),
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),

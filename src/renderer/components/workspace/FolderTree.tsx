@@ -94,13 +94,21 @@ function TreeNode({
       ? projects?.find((p) => p.path === joinRootPath(workspaceRootPath, entry.name))
       : undefined;
   const canUseAsProject = isRootLevel && matchedProject === undefined;
+  // The workspace root itself may be registered as a Project (see decision
+  // #4/#6 of docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md) —
+  // every depth-0 entry, file or dir, belongs to it unless it matches a more
+  // specific child Project above (`matchedProject` always wins when both apply).
+  const rootProject =
+    depth === 0 && !scopeProjectId && workspaceRootPath !== undefined
+      ? projects?.find((p) => p.path === workspaceRootPath)
+      : undefined;
   // A root-level folder already registered as a Project expands in place too,
   // browsing its own tree without leaving the workspace-root view — full
   // navigation into the Project (Skills/Agents/Instructions/Sessions) stays
   // behind the dedicated "Gerir instructions" shortcut further below. Every
   // other root-level folder stays flat, for now — only inside a Project's own
   // tree (scoped, or expanded in place here) can you drill into subfolders.
-  const effectiveProjectId = scopeProjectId ?? matchedProject?.id;
+  const effectiveProjectId = scopeProjectId ?? matchedProject?.id ?? rootProject?.id;
   const canExpand = entry.kind === 'dir' && effectiveProjectId !== undefined;
   // A Project row's own listing is relative to ITS root ('') when expanded in
   // place from the unscoped workspace view — `relPath` there is

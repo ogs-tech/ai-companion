@@ -8,16 +8,23 @@ export function buildWorkspaceHandlers(
   service: WorkspaceService,
   switchActiveWorkspace: (id: string) => Promise<Workspace>,
   fileBrowserService: FileBrowserService,
+  /**
+   * Registers the picked root folder as that workspace's first `Project` (see
+   * `docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md` decision #4) — best-effort
+   * by design: a failure here must not fail workspace creation itself, it just leaves the fresh
+   * workspace with zero registered Projects (spec §5), which `viewMode` already handles.
+   */
+  registerRootProject: (rootPath: string) => Promise<void>,
 ): IpcHandlers {
   return {
     'workspace.list': async () => service.list(),
     'workspace.getActive': async () => service.getActive(),
     'workspace.create': async (params) => {
       const raw = asObject(params, 'workspace.create');
-      return service.create({
-        name: asString(raw['name'], 'name'),
-        rootPath: asString(raw['rootPath'], 'rootPath'),
-      });
+      const rootPath = asString(raw['rootPath'], 'rootPath');
+      const workspace = await service.create({ name: asString(raw['name'], 'name'), rootPath });
+      await registerRootProject(rootPath).catch(() => undefined);
+      return workspace;
     },
     'workspace.switchTo': async (params) => {
       const raw = asObject(params, 'workspace.switchTo');

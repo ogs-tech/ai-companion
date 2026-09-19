@@ -13,7 +13,7 @@ import { EmptyState } from '../../components/ds/EmptyState.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { SidePanel } from '../../components/ds/SidePanel.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
-import { ControlPanelContent } from '../../components/workspace/ControlPanelContent.js';
+import { ControlPanelContent, type WorkspaceViewMode } from '../../components/workspace/ControlPanelContent.js';
 import { InstructionTreeRow, ProjectInstructionRow } from '../../components/workspace/InstructionTreeRow.js';
 import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
@@ -109,6 +109,11 @@ function projectIdForEntityScope(entity: Pick<Skill | Agent | Instruction, 'scop
 export function WorkspaceScreen(): React.ReactElement {
   const { data: activeWorkspace } = useActiveWorkspace();
   const { data: projects = [] } = useProjects();
+  // Fully derived, never persisted — a non-default workspace is "as a Project"
+  // (0 or 1 registered Projects) or "with multiple projects" (2+), flipping
+  // automatically the moment a second Project is registered/removed. See
+  // docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #1.
+  const viewMode: WorkspaceViewMode = projects.length <= 1 ? 'project' : 'multi-project';
   const { data: personalInstruction } = usePersonalInstruction();
   const findOrCreateProject = useFindOrCreateProjectByPath();
   const deleteProject = useDeleteProject();
@@ -1000,6 +1005,8 @@ export function WorkspaceScreen(): React.ReactElement {
             <ControlPanelContent
               isDefaultWorkspace={isDefaultWorkspace}
               showGlobal={showGlobal}
+              viewMode={viewMode}
+              {...(selectedProject ? { selectedProjectName: selectedProject.name } : {})}
               {...(entityLocalScope ? { localScope: entityLocalScope } : {})}
               {...(mcpMatchPath ? { mcpMatchPath } : {})}
               onEditEntity={openEntityTab}

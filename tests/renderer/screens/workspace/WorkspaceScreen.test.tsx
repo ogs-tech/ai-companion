@@ -42,6 +42,13 @@ const projects = [{ id: 'p1', name: 'acme', path: '/repos/acme', createdAt: '' }
 // A project whose path matches a real top-level folder (`workspaceRootPath/apps`) — only a
 // folder registered this way expands in place (fetching its own `project.listDir`).
 const registeredProjects = [{ id: 'p1', name: 'apps', path: '/repos/acme/apps', createdAt: '' }];
+// The workspace root itself registered as a Project (path === projectWorkspace.rootPath) — see
+// docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #4/#6 — plus a second,
+// nested Project ("apps"), so `viewMode` derives to 'multi-project' (projects.length > 1).
+const rootAndAppsProjects = [
+  { id: 'p1', name: 'acme', path: '/repos/acme', createdAt: '' },
+  { id: 'p2', name: 'apps', path: '/repos/acme/apps', createdAt: '' },
+];
 
 const renderScreen = () =>
   render(
@@ -702,6 +709,110 @@ describe('WorkspaceScreen', () => {
       // not reopening the row — must re-derive the same Project scope.
       await user.click(screen.getByTestId('workbench-tab-entity-new:instruction:1'));
       expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
+    });
+  });
+
+  describe('folder tree — workspace root registered as its own Project', () => {
+    it('opens a top-level file through the root Project\'s own scoped IPC calls', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'a.md', kind: 'file' }];
+        }
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByText('a.md'));
+      await screen.findByText('hello');
+      expect(ipc.callIpc).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.md' });
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.readFile', expect.anything());
+    });
+
+    it('makes a plain top-level folder expandable and browsable through the root Project', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'src', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'index.ts', kind: 'file' }];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByText('src'));
+      expect(await screen.findByText('index.ts')).toBeInTheDocument();
+      expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: 'src' });
+    });
+
+    it('still offers "Usar como Project" on a plain subfolder even while the root is already a Project', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'src', kind: 'dir' }];
+        }
+        return undefined;
+      });
+      renderScreen();
+      expect(await screen.findByTestId('tree-node-use-as-project-src')).toBeInTheDocument();
+    });
+  });
+
+  describe('Control Panel scope chip (project vs multi-project view)', () => {
+    it('shows no scope chip while the workspace has a single registered Project ("project" view)', async () => {
+      renderScreen();
+      await screen.findByTestId('workspace-customizations-header');
+      expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
+    });
+
+    it('shows no scope chip while the workspace has zero registered Projects ("project" view too)', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return [];
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        return undefined;
+      });
+      renderScreen();
+      await screen.findByTestId('workspace-customizations-header');
+      expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
+    });
+
+    it('shows a neutral "Workspace" badge in multi-project view before any Project-scoped tab is active', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return rootAndAppsProjects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        return undefined;
+      });
+      renderScreen();
+      expect(await screen.findByTestId('control-panel-scope-chip')).toHaveTextContent('Workspace');
+    });
+
+    it('shows "Projeto: <name>" once a Project-scoped tab is active, in multi-project view', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return rootAndAppsProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
+        return undefined;
+      });
+      renderScreen();
+      await openProjectFile(user, 'a.md');
+      expect(await screen.findByTestId('control-panel-scope-chip')).toHaveTextContent('Projeto: apps');
     });
   });
 

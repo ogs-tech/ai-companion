@@ -71,6 +71,24 @@ export interface WorkspaceScopedServices {
   entityWatchService: EntityWatchService;
 }
 
+/**
+ * Standalone `ProjectService` factory — pulled out of `buildWorkspaceScopedServices` so a
+ * caller that only needs project registration (e.g. registering a fresh workspace's root
+ * folder as its first Project) doesn't have to pay for the rest of that graph (adapters,
+ * entity/session services, health collectors, ...).
+ */
+export function buildProjectService(
+  dataDir: string,
+  symlinkManager: Pick<SymlinkManager, 'create' | 'removeIfPointsToWorkspace'>,
+  clock: ClockPort,
+): ProjectService {
+  return new ProjectService(
+    new FsProjectRegistry(join(dataDir, 'projects.json')),
+    clock,
+    { symlinkManager, sourcePath: workspaceIndexMarkerPath(dataDir), dataDir },
+  );
+}
+
 /** `dataDir` is `<workspace.rootPath>/.ai-companion` — already bootstrapped by the caller. */
 export function buildWorkspaceScopedServices(
   dataDir: string,
@@ -85,11 +103,7 @@ export function buildWorkspaceScopedServices(
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
   const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, dataDir);
 
-  const projectService = new ProjectService(
-    new FsProjectRegistry(join(dataDir, 'projects.json')),
-    clock,
-    { symlinkManager, sourcePath: workspaceIndexMarkerPath(dataDir), dataDir },
-  );
+  const projectService = buildProjectService(dataDir, symlinkManager, clock);
 
   const claudeAdapter = new ClaudeAdapter({ homedir, workspaceService, projectService });
   const cursorAdapter = new CursorAdapter({ homedir, workspaceService, projectService });

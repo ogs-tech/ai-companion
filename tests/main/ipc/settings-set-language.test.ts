@@ -35,6 +35,7 @@ const baseDeps = (): IpcDeps => {
     sessionHistoryService: {} as IpcDeps['sessionHistoryService'],
     workspaceService: {} as IpcDeps['workspaceService'],
     switchActiveWorkspace: vi.fn(),
+    registerRootProject: vi.fn(),
     fileBrowserService: {} as IpcDeps['fileBrowserService'],
     fileBrowserPort: {} as IpcDeps['fileBrowserPort'],
     projectService: {} as IpcDeps['projectService'],

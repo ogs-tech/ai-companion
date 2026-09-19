@@ -52,6 +52,7 @@ interface Deps {
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
   switchActiveWorkspace: (id: string) => Promise<Workspace>;
+  registerRootProject: (rootPath: string) => Promise<void>;
   fileBrowserService: FileBrowserService;
   fileBrowserPort: FileBrowserPort;
   projectService: ProjectService;
@@ -121,6 +122,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const sessionHistoryService = null as unknown as SessionHistoryService;
   const workspaceService = null as unknown as WorkspaceService;
   const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
+  const registerRootProject = vi.fn().mockResolvedValue(undefined);
   const fileBrowserService = null as unknown as FileBrowserService;
   const fileBrowserPort = null as unknown as FileBrowserPort;
   const projectService = null as unknown as ProjectService;
@@ -154,6 +156,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     sessionHistoryService,
     workspaceService,
     switchActiveWorkspace,
+    registerRootProject,
     fileBrowserService,
     fileBrowserPort,
     projectService,
