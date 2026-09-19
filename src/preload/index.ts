@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNEL, type IpcResult } from '../shared/ipc-contract.js';
 import {
   SESSION_OUTPUT_CHANNEL,
@@ -12,6 +12,8 @@ const api = {
   call: <T>(method: string, params: unknown): Promise<IpcResult<T>> =>
     ipcRenderer.invoke(IPC_CHANNEL, { method, params }) as Promise<IpcResult<T>>,
   isDev: process.env['NODE_ENV'] === 'development',
+  /** A dropped `File`'s real filesystem path — `File.path` itself is gone under `sandbox: true`, so a drag-and-drop attach has to go through `webUtils` here instead. */
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   session: {
     onOutput: (sessionId: string, listener: (chunk: string) => void): (() => void) => {
       const wrapped = (_event: IpcRendererEvent, payload: SessionOutputEvent): void => {

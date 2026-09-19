@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { Box, Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, type PanelImperativeHandle } from 'react-resizable-panels';
@@ -8,13 +8,19 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
 import { sessionsQueryKey } from '../hooks/use-sessions.js';
-import { sessionAnchorKey, type SessionAnchor, type SessionSnapshotWithOutput } from '../../shared/session.js';
+import {
+  MAX_SESSION_ATTACHMENT_BYTES,
+  sessionAnchorKey,
+  type SessionAnchor,
+  type SessionSnapshotWithOutput,
+} from '../../shared/session.js';
 import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from './ds/StatusPill.js';
 import { EmptyState } from './ds/EmptyState.js';
 import { ResizeHandle } from './ds/ResizeHandle.js';
 import { BrowserPane } from './BrowserPane.js';
+import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
 import { SESSION_STATUS_PILL } from '../lib/session-status-pill.js';
 
@@ -71,6 +77,54 @@ const TERMINAL_XTERM_THEME = {
  */
 export const TERMINAL_NEWLINE_SEQUENCE = '\x1b\r';
 
+/**
+ * Fail fast in the app instead of waiting for the CLI to reject it: an
+ * oversized or unsupported image is rejected here for both a dropped file
+ * (which otherwise has no other restriction — a dropped `.txt` or `.pdf`
+ * passes through untouched) and a pasted one (which additionally has to be
+ * staged to disk first, so there's no point staging bytes the CLI will
+ * refuse to read anyway).
+ */
+const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
+
+function imageAttachmentError(blob: { size: number; type: string }): string | null {
+  if (!(blob.type in IMAGE_EXTENSION_BY_MIME)) return `Formato de imagem não suportado: ${blob.type || 'desconhecido'}`;
+  if (blob.size > MAX_SESSION_ATTACHMENT_BYTES) return 'Imagem maior que 5MB — o claude não consegue lê-la';
+  return null;
+}
+
+/** `FileReader` is the simplest way to get base64 out of a `Blob` in the renderer — there's no `Buffer` here. */
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler a imagem colada'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** A raw control byte (`\r`, `\n`, ESC…) in a file name would reach the PTY as a real terminal keystroke once it's part of an `@<path>` reference — e.g. a `\r` submits the line early, mid-prompt, with whatever text follows it. Rejected outright rather than stripped, since a stripped name could silently point at a different file than the one the user dropped. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point: a path containing one is rejected before it reaches the PTY.
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/;
+
+/** Backslash-escapes spaces (and literal backslashes) the way a real terminal represents a dragged-in path — otherwise a space inside a path reads as the end of the `@` reference, and joining several references becomes ambiguous. */
+function escapeAttachmentPath(path: string): string {
+  return path.replace(/[\\ ]/g, '\\$&');
+}
+
+/** The one place that knows the `@<path> ` wire format both attachment flows write into the session — kept in sync here instead of once per call site. */
+function attachmentRefData(paths: string[]): string {
+  return `${paths.map((path) => `@${escapeAttachmentPath(path)}`).join(' ')} `;
+}
+
 interface SessionHeaderProps {
   pill: { variant: StatusPillVariant; label: string };
   action?: React.ReactNode;
@@ -126,6 +180,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   const [status, setStatus] = useState<PanelStatus>(sessionIdProp ? 'starting' : 'idle');
   const [error, setError] = useState<string | null>(null);
   const [browserEnabled, setBrowserEnabled] = useState(false);
+  const [attachmentToast, setAttachmentToast] = useState<ToastMessage | null>(null);
   /** Set when the browser is toggled on while the session is already running — the CLI only reads `--mcp-config` at its own startup, so that toggle has no live effect until the session is next restarted. Cleared once it actually is. */
   const [browserNeedsRestart, setBrowserNeedsRestart] = useState(false);
   const browserPanelRef = useRef<PanelImperativeHandle | null>(null);
@@ -284,6 +339,79 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     }
   };
 
+  const showAttachmentError = (message: string): void => setAttachmentToast({ variant: 'error', message });
+
+  // Allows the subsequent `drop` to fire at all — a browser rejects it by default.
+  const handleAttachmentDragOver = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+  };
+
+  // A file dropped from Finder already has a real filesystem path — no need
+  // to stage it, just reference it the same way "New Action" pre-populates a
+  // session (`@<path>`) and let the CLI itself read it from disk.
+  const handleAttachmentDrop = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    const id = sessionIdRef.current;
+    if (!id) return;
+    const paths: string[] = [];
+    for (const file of Array.from(event.dataTransfer.files)) {
+      if (file.type.startsWith('image/')) {
+        const error = imageAttachmentError(file);
+        if (error) {
+          showAttachmentError(error);
+          continue;
+        }
+      }
+      let path: string;
+      try {
+        // Only ever throws for a `File` not backed by a real filesystem entry
+        // (e.g. one built in JS) — never for an ordinary Finder drop, but a
+        // compromised renderer isn't the only way a `File` could arrive here.
+        path = window.api.getPathForFile(file);
+      } catch {
+        showAttachmentError(`Não foi possível resolver o caminho de "${file.name}"`);
+        continue;
+      }
+      if (!path || CONTROL_CHAR_PATTERN.test(path)) {
+        showAttachmentError(`Nome de arquivo inválido: "${file.name}"`);
+        continue;
+      }
+      paths.push(path);
+    }
+    if (paths.length > 0) void callIpc('session.write', { sessionId: id, data: attachmentRefData(paths) });
+  };
+
+  // A clipboard image has no path of its own, unlike a drop — it has to be
+  // staged to disk first (`session.stageAttachment`) before it can be
+  // referenced the same way. Claimed only when the clipboard carries an
+  // image and no plain-text alternative — a rich copy (a spreadsheet range,
+  // a rendered web selection) commonly carries both, and the text is what
+  // the user meant to paste into the prompt.
+  const handleAttachmentPaste = async (event: ClipboardEvent<HTMLDivElement>): Promise<void> => {
+    const id = sessionIdRef.current;
+    const items = Array.from(event.clipboardData.items);
+    const hasText = items.some((it) => it.type === 'text/plain');
+    const item = hasText ? undefined : items.find((it) => it.type.startsWith('image/'));
+    if (!id || !item) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const file = item.getAsFile();
+    if (!file) return;
+    const error = imageAttachmentError(file);
+    if (error) {
+      showAttachmentError(error);
+      return;
+    }
+    const fileName = file.name || `screenshot.${IMAGE_EXTENSION_BY_MIME[file.type]}`;
+    try {
+      const dataBase64 = await readAsBase64(file);
+      const { absolutePath } = await callIpc<{ absolutePath: string }>('session.stageAttachment', { fileName, dataBase64 });
+      void callIpc('session.write', { sessionId: id, data: attachmentRefData([absolutePath]) });
+    } catch (err) {
+      showAttachmentError(err instanceof IpcCallError ? err.message : String(err));
+    }
+  };
+
   const handleToggleBrowser = async (): Promise<void> => {
     if (!sessionId) return;
     const next = !browserEnabled;
@@ -369,6 +497,9 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
           <Box
             ref={containerRef}
             data-testid="session-terminal"
+            onDragOver={handleAttachmentDragOver}
+            onDrop={handleAttachmentDrop}
+            onPasteCapture={(event) => void handleAttachmentPaste(event)}
             sx={{
               flexGrow: 1,
               minHeight: 0,
@@ -390,6 +521,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
           {sessionId && browserEnabled && <BrowserPane sessionId={sessionId} />}
         </Panel>
       </Group>
+      <Toast toast={attachmentToast} onDismiss={() => setAttachmentToast(null)} />
     </Box>
   );
 }

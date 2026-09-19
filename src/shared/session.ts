@@ -1,5 +1,13 @@
 export type SessionStatus = 'running' | 'exited';
 
+/**
+ * Shared by both `SessionPanel` (client-side check, fast feedback before
+ * anything is sent) and `SessionService.stageAttachment` (the same check
+ * re-enforced at the IPC boundary) so the two limits can't drift apart.
+ * Mirrors the `claude` CLI's own image-attachment ceiling.
+ */
+export const MAX_SESSION_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
 export type SessionAnchor =
   | { kind: 'entity'; urn: string }
   | { kind: 'workspace'; workspaceId: string }

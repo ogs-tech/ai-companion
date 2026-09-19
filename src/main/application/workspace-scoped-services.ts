@@ -113,10 +113,14 @@ export function buildWorkspaceScopedServices(
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const instructionService = new InstructionService(entityService, projectService);
-  const sessionService = new SessionService(entityService, claudeSessionPort, embeddedBrowserPort, dataDir, {
-    workspaceService: shared.workspaceService,
-    projectService,
-  });
+  const sessionService = new SessionService(
+    entityService,
+    claudeSessionPort,
+    embeddedBrowserPort,
+    dataDir,
+    { workspaceService: shared.workspaceService, projectService },
+    nodeFsAdapter,
+  );
   // Reads the CLI's own transcripts, which live outside any workspace — but
   // the service is per-workspace because its default scope, and its warm
   // readings, belong to the workspace being looked at.

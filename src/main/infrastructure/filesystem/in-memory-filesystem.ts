@@ -7,7 +7,7 @@ type ErrorWithCode = Error & { code?: string };
 interface FileSystemEntryRecord {
   kind: Exclude<FileSystemEntry['kind'], 'none'>;
   target?: string;
-  content?: string;
+  content?: string | Buffer;
   mode: number;
 }
 
@@ -165,7 +165,9 @@ export class InMemoryFileSystem implements WritableFileSystemPort {
       err.code = 'ENOENT';
       throw err;
     }
-    return entry.content;
+    // Mirrors `fs.readFile(path, 'utf-8')`, which decodes whatever bytes were
+    // written the same way whether they arrived as a string or a Buffer.
+    return typeof entry.content === 'string' ? entry.content : entry.content.toString('utf-8');
   }
 
   createFile(path: string, content: string): void {
@@ -174,7 +176,7 @@ export class InMemoryFileSystem implements WritableFileSystemPort {
     this.entries.set(normalized, { kind: 'file', content, mode: 0o644 });
   }
 
-  async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(path: string, content: string | Buffer): Promise<void> {
     this.checkFail('writeFile', path);
     const normalized = this.normalize(path);
     this.ensureDirectory(dirname(normalized));

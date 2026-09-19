@@ -19,8 +19,9 @@ export function mockApi(): CallSpy {
   const entity = {
     onChanged: vi.fn(() => () => {}),
   };
+  const getPathForFile = vi.fn((file: File) => `/mock/dropped/${file.name}`);
   Object.defineProperty(window, 'api', {
-    value: { call, session, entity },
+    value: { call, session, entity, getPathForFile },
     writable: true,
     configurable: true,
   });

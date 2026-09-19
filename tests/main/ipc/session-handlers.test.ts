@@ -31,8 +31,9 @@ const setup = () => {
       findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
     },
   };
-  const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps);
-  return { service, base, claudeSession, embeddedBrowser };
+  const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
+  const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps, fs);
+  return { service, base, claudeSession, embeddedBrowser, fs };
 };
 
 describe('session-handlers', () => {
@@ -87,6 +88,22 @@ describe('session-handlers', () => {
     const spy = vi.spyOn(service, 'write');
     await h['session.write']!({ sessionId: 'entity:urn:skill:foo', data: 'ls\n' });
     expect(spy).toHaveBeenCalledWith('entity:urn:skill:foo', 'ls\n');
+  });
+
+  it('session.stageAttachment validates and forwards fileName + dataBase64, returning absolutePath', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    const spy = vi.spyOn(service, 'stageAttachment');
+    const dataBase64 = Buffer.from('img').toString('base64');
+    const result = await h['session.stageAttachment']!({ fileName: 'shot.png', dataBase64 });
+    expect(spy).toHaveBeenCalledWith('shot.png', dataBase64);
+    expect(result).toMatchObject({ absolutePath: expect.stringContaining('shot.png') });
+  });
+
+  it('session.stageAttachment rejects a missing fileName', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    await expect(h['session.stageAttachment']!({ dataBase64: 'abc' })).rejects.toMatchObject({ kind: 'validation' });
   });
 
   it('session.resize validates numeric cols/rows', async () => {

@@ -8,6 +8,7 @@ declare global {
     api: {
       call<T>(method: string, params: unknown): Promise<IpcResult<T>>;
       isDev: boolean;
+      getPathForFile(file: File): string;
       session: {
         onOutput(sessionId: string, listener: (chunk: string) => void): () => void;
         onExit(sessionId: string, listener: (exitCode: number) => void): () => void;

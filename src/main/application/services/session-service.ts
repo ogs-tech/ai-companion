@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { basename, join } from 'node:path';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
-import { sessionAnchorKey } from '../../../shared/session.js';
+import { MAX_SESSION_ATTACHMENT_BYTES, sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
 import type { ClaudeConversationTarget, ClaudeSessionPort } from '../ports/claude-session-port.js';
 import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { ProjectService } from './project-service.js';
+import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
 import { DomainError, ioError } from '../../domain/errors.js';
 
@@ -13,6 +15,12 @@ const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 /** Scrollback kept per anchor so a reattaching SessionPanel can replay what it missed — in memory only, capped, never persisted to disk. */
 const DEFAULT_MAX_BUFFER_CHARS = 200_000;
+const ATTACHMENTS_DIR = 'attachments';
+/** Rejects base64 obviously too long to decode within the byte limit, before paying for the `Buffer.from` allocation at all. */
+const MAX_ATTACHMENT_BASE64_CHARS = Math.ceil((MAX_SESSION_ATTACHMENT_BYTES * 4) / 3) + 4;
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+// eslint-disable-next-line no-control-regex -- matching control characters is the point: they're stripped from a staged file name.
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/;
 
 export type SessionOutputListener = (sessionId: string, chunk: string) => void;
 export type SessionStatusListener = (sessionId: string, status: SessionStatus, exitCode: number) => void;
@@ -59,6 +67,7 @@ export class SessionService {
       workspaceService: Pick<WorkspaceService, 'get'>;
       projectService: Pick<ProjectService, 'get' | 'findOrCreateByPath'>;
     },
+    private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'>,
     options?: { maxBufferChars?: number },
   ) {
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_BUFFER_CHARS;
@@ -261,6 +270,43 @@ export class SessionService {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
     this.claudeSession.write(sessionId, data);
+  }
+
+  /**
+   * Persists a renderer-supplied blob (a pasted clipboard image — the one
+   * attachment shape with no filesystem path of its own) under this
+   * workspace's own `attachments/` folder and hands back the absolute path,
+   * so the caller can reference it the same way a dragged-in file already is:
+   * writing `@<path>` into the session via {@link write}. Not tied to any
+   * particular `sessionId` — it only ever stages into the current workspace,
+   * same as `resolveAnchor`'s `personal`-scope fallback.
+   */
+  async stageAttachment(fileName: string, dataBase64: string): Promise<string> {
+    if (dataBase64.length > MAX_ATTACHMENT_BASE64_CHARS || !BASE64_PATTERN.test(dataBase64)) {
+      throw new DomainError('validation', 'Invalid attachment payload: not base64, or too large to decode within the size limit');
+    }
+    const buffer = Buffer.from(dataBase64, 'base64');
+    if (buffer.byteLength > MAX_SESSION_ATTACHMENT_BYTES) {
+      throw new DomainError('validation', `Attachment exceeds the ${MAX_SESSION_ATTACHMENT_BYTES} byte limit`, {
+        byteLength: buffer.byteLength,
+      });
+    }
+    // `basename` alone still lets through control characters (a raw `\r`/`\x1b`
+    // in a dragged-in file name would already be neutralized before reaching
+    // here, since the renderer never gets this far for those — but a name
+    // arriving over IPC is not assumed to have been pre-sanitized) and
+    // whitespace, which breaks the `@<path>` reference this file is staged
+    // for (a bare space reads as the end of the reference).
+    const safeName = basename(fileName).replace(CONTROL_CHAR_PATTERN, '').replace(/\s+/g, '_');
+    if (safeName.length === 0 || safeName === '.' || safeName === '..') {
+      throw new DomainError('validation', `Invalid attachment file name: ${fileName}`);
+    }
+
+    const dir = join(this.workspacePath, ATTACHMENTS_DIR);
+    await this.fs.mkdir(dir, { recursive: true });
+    const absolutePath = join(dir, `${Date.now()}-${randomUUID().slice(0, 8)}-${safeName}`);
+    await this.fs.writeFile(absolutePath, buffer);
+    return absolutePath;
   }
 
   resize(sessionId: string, cols: number, rows: number): void {

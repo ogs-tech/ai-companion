@@ -5,7 +5,8 @@ export interface FileStat {
 }
 
 export interface WritableFileSystemPort extends FileSystemPort {
-  writeFile(path: string, content: string): Promise<void>;
+  /** `Buffer` content is for binary writes (e.g. a staged session attachment) — a plain string keeps its existing utf-8 text-file behavior. */
+  writeFile(path: string, content: string | Buffer): Promise<void>;
   rename(oldPath: string, newPath: string): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
   stat(path: string): Promise<FileStat | null>;

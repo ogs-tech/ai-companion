@@ -31,7 +31,8 @@ const setup = () => {
       findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
     },
   };
-  const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps);
+  const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
+  const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps, fs);
   const h = buildBrowserHandlers(service, embeddedBrowser);
   return { service, base, embeddedBrowser, h };
 };

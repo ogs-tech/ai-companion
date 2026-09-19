@@ -73,7 +73,9 @@ export class NodeFsAdapter implements WritableFileSystemPort {
     return fs.readFile(path, 'utf-8');
   }
 
-  async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(path: string, content: string | Buffer): Promise<void> {
+    // Node ignores the encoding argument once `content` is a Buffer — this
+    // one line already covers both cases.
     await fs.writeFile(path, content, 'utf-8');
   }
 

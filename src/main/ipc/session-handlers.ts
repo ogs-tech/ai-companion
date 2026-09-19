@@ -43,6 +43,14 @@ export function buildSessionHandlers(service: SessionService): IpcHandlers {
       const raw = asObject(params, 'session.write');
       service.write(asString(raw['sessionId'], 'sessionId'), asRawString(raw['data'], 'data'));
     },
+    'session.stageAttachment': async (params) => {
+      const raw = asObject(params, 'session.stageAttachment');
+      const absolutePath = await service.stageAttachment(
+        asString(raw['fileName'], 'fileName'),
+        asString(raw['dataBase64'], 'dataBase64'),
+      );
+      return { absolutePath };
+    },
     'session.resize': async (params) => {
       const raw = asObject(params, 'session.resize');
       service.resize(

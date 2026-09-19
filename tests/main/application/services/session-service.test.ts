@@ -46,8 +46,9 @@ const setup = (options?: { maxBufferChars?: number }) => {
       findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
     },
   };
-  const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, options);
-  return { service, base, claudeSession, embeddedBrowser };
+  const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
+  const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, fs, options);
+  return { service, base, claudeSession, embeddedBrowser, fs };
 };
 
 const entityAnchor = (urn: string): SessionAnchor => ({ kind: 'entity', urn });
@@ -646,5 +647,61 @@ describe('SessionService browser toggle', () => {
     await service.remove(session.sessionId);
 
     expect(embeddedBrowser.destroyCalls).toEqual([]);
+  });
+});
+
+describe('SessionService.stageAttachment', () => {
+  it('creates the workspace attachments dir and writes the decoded buffer under it', async () => {
+    const { service, fs } = setup();
+    const dataBase64 = Buffer.from('image bytes').toString('base64');
+
+    const absolutePath = await service.stageAttachment('screenshot.png', dataBase64);
+
+    expect(fs.mkdir).toHaveBeenCalledWith(`${WORKSPACE}/attachments`, { recursive: true });
+    expect(absolutePath.startsWith(`${WORKSPACE}/attachments/`)).toBe(true);
+    expect(absolutePath.endsWith('-screenshot.png')).toBe(true);
+    expect(fs.writeFile).toHaveBeenCalledWith(absolutePath, Buffer.from('image bytes'));
+  });
+
+  it('strips any directory components from a supplied file name', async () => {
+    const { service } = setup();
+    const dataBase64 = Buffer.from('x').toString('base64');
+
+    const absolutePath = await service.stageAttachment('../../etc/passwd', dataBase64);
+
+    expect(absolutePath.endsWith('-passwd')).toBe(true);
+    expect(absolutePath.includes('..')).toBe(false);
+  });
+
+  it('strips control characters and normalizes whitespace in a supplied file name', async () => {
+    const { service } = setup();
+    const dataBase64 = Buffer.from('x').toString('base64');
+
+    const absolutePath = await service.stageAttachment('Screenshot 2026-09-19\r\nat 12.00.00.png', dataBase64);
+
+    expect(absolutePath.includes('\r')).toBe(false);
+    expect(absolutePath.includes('\n')).toBe(false);
+    expect(absolutePath.endsWith('-Screenshot_2026-09-19_at_12.00.00.png')).toBe(true);
+  });
+
+  it('rejects a payload over the 5MB attachment limit', async () => {
+    const { service } = setup();
+    const dataBase64 = Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64');
+
+    await expect(service.stageAttachment('big.png', dataBase64)).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('rejects a dataBase64 string long enough to decode past the limit before ever decoding it', async () => {
+    const { service, fs } = setup();
+    const tooLong = 'A'.repeat(Math.ceil((5 * 1024 * 1024 + 1) * (4 / 3)) + 4);
+
+    await expect(service.stageAttachment('big.png', tooLong)).rejects.toMatchObject({ kind: 'validation' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects a dataBase64 string that is not valid base64', async () => {
+    const { service } = setup();
+
+    await expect(service.stageAttachment('x.png', 'not-base64!!!')).rejects.toMatchObject({ kind: 'validation' });
   });
 });

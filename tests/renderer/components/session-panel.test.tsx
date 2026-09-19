@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionPanel, TERMINAL_NEWLINE_SEQUENCE } from '../../../src/renderer/components/SessionPanel.js';
 import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../test-utils.js';
@@ -653,6 +653,208 @@ describe('<SessionPanel>', () => {
 
       expect(await screen.findByTestId('browser-pane')).toBeInTheDocument();
       expect(screen.queryByTestId('browser-restart-notice')).toBeNull();
+    });
+  });
+
+  describe('attachments', () => {
+    /** Spawns a running session and hands back the terminal container drop/paste target. */
+    async function openRunningSession(): Promise<HTMLElement> {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') return ok(null);
+        return ok({
+          sessionId: 'entity:urn:skill:foo',
+          anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+          cwd: '/workspace',
+          status: 'running',
+        });
+      });
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      await user.click(screen.getByTestId('session-open'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.spawn', expect.anything()));
+      call.mockClear();
+      return screen.getByTestId('session-terminal');
+    }
+
+    it('dropping a file writes an @path reference for its real filesystem path', async () => {
+      const terminal = await openRunningSession();
+      vi.mocked(window.api.getPathForFile).mockReturnValue('/Users/dev/notes.txt');
+      const file = { name: 'notes.txt', type: 'text/plain', size: 10 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.write', {
+          sessionId: 'entity:urn:skill:foo',
+          data: '@/Users/dev/notes.txt ',
+        }),
+      );
+    });
+
+    it('dropping multiple files writes one @path reference per file, space-separated', async () => {
+      const terminal = await openRunningSession();
+      vi.mocked(window.api.getPathForFile).mockImplementation((file: File) => `/Users/dev/${file.name}`);
+      const files = [
+        { name: 'a.txt', type: 'text/plain', size: 1 },
+        { name: 'b.txt', type: 'text/plain', size: 1 },
+      ];
+
+      fireEvent.drop(terminal, { dataTransfer: { files } });
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.write', {
+          sessionId: 'entity:urn:skill:foo',
+          data: '@/Users/dev/a.txt @/Users/dev/b.txt ',
+        }),
+      );
+    });
+
+    it('dropping an oversized image shows an error toast instead of referencing it', async () => {
+      const terminal = await openRunningSession();
+      const file = { name: 'huge.png', type: 'image/png', size: 6 * 1024 * 1024 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('5MB');
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('dropping an unsupported image type shows an error toast', async () => {
+      const terminal = await openRunningSession();
+      const file = { name: 'shot.bmp', type: 'image/bmp', size: 100 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('image/bmp');
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('escapes a space in a dropped file path so it cannot be misread as the end of the reference', async () => {
+      const terminal = await openRunningSession();
+      vi.mocked(window.api.getPathForFile).mockReturnValue('/Users/dev/Desktop/Screenshot 2026-09-19 at 12.00.00.png');
+      const file = { name: 'Screenshot 2026-09-19 at 12.00.00.png', type: 'image/png', size: 100 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.write', {
+          sessionId: 'entity:urn:skill:foo',
+          data: '@/Users/dev/Desktop/Screenshot\\ 2026-09-19\\ at\\ 12.00.00.png ',
+        }),
+      );
+    });
+
+    it('rejects a dropped file whose resolved path contains a control character, instead of writing it to the PTY', async () => {
+      const terminal = await openRunningSession();
+      vi.mocked(window.api.getPathForFile).mockReturnValue('/Users/dev/notes.txt\rmalicious command');
+      const file = { name: 'notes.txt', type: 'text/plain', size: 10 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('Nome de arquivo inválido');
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('shows an error and skips a file whose path cannot be resolved, without crashing the rest of the drop', async () => {
+      const terminal = await openRunningSession();
+      vi.mocked(window.api.getPathForFile).mockImplementation((file: File) => {
+        if (file.name === 'bad.txt') throw new Error('not backed by a real file');
+        return `/Users/dev/${file.name}`;
+      });
+      const files = [
+        { name: 'bad.txt', type: 'text/plain', size: 1 },
+        { name: 'good.txt', type: 'text/plain', size: 1 },
+      ];
+
+      fireEvent.drop(terminal, { dataTransfer: { files } });
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('bad.txt');
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.write', {
+          sessionId: 'entity:urn:skill:foo',
+          data: '@/Users/dev/good.txt ',
+        }),
+      );
+    });
+
+    it('shows an error instead of writing a bare "@" when the resolved path is empty', async () => {
+      const terminal = await openRunningSession();
+      vi.mocked(window.api.getPathForFile).mockReturnValue('');
+      const file = { name: 'ghost.txt', type: 'text/plain', size: 1 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('Nome de arquivo inválido');
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('drops on a never-opened session without writing anything', async () => {
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      const terminal = screen.getByTestId('session-terminal');
+      const file = { name: 'notes.txt', type: 'text/plain', size: 10 };
+
+      fireEvent.drop(terminal, { dataTransfer: { files: [file] } });
+
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('pasting an image from the clipboard stages it and writes an @path reference to the staged file', async () => {
+      const terminal = await openRunningSession();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.stageAttachment') {
+          return ok({ absolutePath: '/workspace/.ai-companion/attachments/1-abcd-screenshot.png' });
+        }
+        return ok(undefined);
+      });
+      const file = new File([new Uint8Array([1, 2, 3])], 'screenshot.png', { type: 'image/png' });
+      const item = { type: 'image/png', getAsFile: () => file };
+
+      fireEvent.paste(terminal, { clipboardData: { items: [item] } });
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.stageAttachment', {
+          fileName: 'screenshot.png',
+          dataBase64: expect.any(String),
+        }),
+      );
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.write', {
+          sessionId: 'entity:urn:skill:foo',
+          data: '@/workspace/.ai-companion/attachments/1-abcd-screenshot.png ',
+        }),
+      );
+    });
+
+    it('pasting an oversized image shows an error toast and never calls stageAttachment', async () => {
+      const terminal = await openRunningSession();
+      const file = new File([new Uint8Array(6 * 1024 * 1024)], 'huge.png', { type: 'image/png' });
+      const item = { type: 'image/png', getAsFile: () => file };
+
+      fireEvent.paste(terminal, { clipboardData: { items: [item] } });
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('5MB');
+      expect(call).not.toHaveBeenCalledWith('session.stageAttachment', expect.anything());
+    });
+
+    it('pasting plain text (no image item on the clipboard) never touches session.stageAttachment or session.write', async () => {
+      const terminal = await openRunningSession();
+      const item = { type: 'text/plain', getAsFile: () => null };
+
+      fireEvent.paste(terminal, { clipboardData: { items: [item] } });
+
+      expect(call).not.toHaveBeenCalledWith('session.stageAttachment', expect.anything());
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+
+    it('leaves a clipboard carrying both text and an image to xterm untouched, so the text is not silently dropped', async () => {
+      const terminal = await openRunningSession();
+      const textItem = { type: 'text/plain', getAsFile: () => null };
+      const imageItem = { type: 'image/png', getAsFile: () => new File([new Uint8Array([1])], 'shot.png', { type: 'image/png' }) };
+
+      fireEvent.paste(terminal, { clipboardData: { items: [textItem, imageItem] } });
+
+      expect(call).not.toHaveBeenCalledWith('session.stageAttachment', expect.anything());
+      expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
     });
   });
 });
