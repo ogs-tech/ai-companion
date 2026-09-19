@@ -6,6 +6,7 @@ import { InMemoryEntityRepository } from '../../../src/main/infrastructure/entit
 import { FixedClock } from '../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
 import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeEmbeddedBrowserPort } from '../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill } from '../../../src/shared/entity.js';
 
 const skill = (name = 'foo'): Skill => ({
@@ -22,6 +23,7 @@ const setup = () => {
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
+  const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
     workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/workspace', isDefault: false, createdAt: '' }) },
     projectService: {
@@ -29,8 +31,8 @@ const setup = () => {
       findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
     },
   };
-  const service = new SessionService(base, claudeSession, '/workspace', scopeDeps);
-  return { service, base, claudeSession };
+  const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps);
+  return { service, base, claudeSession, embeddedBrowser };
 };
 
 describe('session-handlers', () => {
@@ -119,7 +121,7 @@ describe('session-handlers', () => {
     const { service } = setup();
     const spy = vi.spyOn(service, 'resume').mockResolvedValue({
       sessionId: 'workspace:w1', claudeSessionId: 'c-w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
-      cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '',
+      cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
     });
     const h = buildSessionHandlers(service);
     const result = await h['session.resume']!({ sessionId: 'workspace:w1' });

@@ -8,6 +8,7 @@ import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
 import type { ClaudeSessionPort } from './ports/claude-session-port.js';
+import type { EmbeddedBrowserPort } from './ports/embedded-browser-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
@@ -48,6 +49,7 @@ export interface WorkspaceScopedSharedDeps {
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
   claudeSessionPort: ClaudeSessionPort;
+  embeddedBrowserPort: EmbeddedBrowserPort;
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
 }
@@ -77,7 +79,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    claudeSessionPort, sessionTranscriptPort, fileWatcherPort,
+    claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -111,7 +113,7 @@ export function buildWorkspaceScopedServices(
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const instructionService = new InstructionService(entityService, projectService);
-  const sessionService = new SessionService(entityService, claudeSessionPort, dataDir, {
+  const sessionService = new SessionService(entityService, claudeSessionPort, embeddedBrowserPort, dataDir, {
     workspaceService: shared.workspaceService,
     projectService,
   });

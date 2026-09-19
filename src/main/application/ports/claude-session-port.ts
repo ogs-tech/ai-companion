@@ -18,6 +18,8 @@ export interface ClaudeSessionSpawnOptions {
   cols: number;
   rows: number;
   conversation: ClaudeConversationTarget;
+  /** Absolute path to an ephemeral `--mcp-config` file (embedded-browser tool), additive to the user's own MCP servers. Omitted when the session's browser tool isn't enabled. */
+  mcpConfigPath?: string;
 }
 
 export type ClaudeSessionDataListener = (sessionId: string, chunk: string) => void;

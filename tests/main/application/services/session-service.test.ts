@@ -5,6 +5,7 @@ import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/en
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { FakeClaudeSessionPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeEmbeddedBrowserPort } from '../../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
 import type { SessionAnchor } from '../../../../src/shared/session.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
@@ -37,6 +38,7 @@ const setup = (options?: { maxBufferChars?: number }) => {
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
+  const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
     workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
     projectService: {
@@ -44,8 +46,8 @@ const setup = (options?: { maxBufferChars?: number }) => {
       findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
     },
   };
-  const service = new SessionService(base, claudeSession, WORKSPACE, scopeDeps, options);
-  return { service, base, claudeSession };
+  const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, options);
+  return { service, base, claudeSession, embeddedBrowser };
 };
 
 const entityAnchor = (urn: string): SessionAnchor => ({ kind: 'entity', urn });
@@ -143,7 +145,7 @@ describe('SessionService', () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
-    service.remove(session.sessionId);
+    await service.remove(session.sessionId);
     expect(claudeSession.killed).toEqual([session.sessionId]);
     expect(service.status(session.sessionId)).toBeUndefined();
     expect(service.list()).toEqual([]);
@@ -154,14 +156,14 @@ describe('SessionService', () => {
     await base.save({ entity: skill('foo'), isCreate: true });
     const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
     claudeSession.simulateExit(session.sessionId, 0);
-    service.remove(session.sessionId);
+    await service.remove(session.sessionId);
     expect(claudeSession.killed).toEqual([]);
     expect(service.list()).toEqual([]);
   });
 
   it('remove on an unknown sessionId is a no-op', async () => {
     const { service } = setup();
-    expect(() => service.remove('entity:urn:skill:missing')).not.toThrow();
+    await expect(service.remove('entity:urn:skill:missing')).resolves.not.toThrow();
     expect(service.list()).toEqual([]);
   });
 
@@ -273,7 +275,7 @@ describe('SessionService concurrent workspace/project sessions', () => {
     const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'w1' };
     const first = await service.spawn(anchor);
     const second = await service.spawn(anchor);
-    service.remove(second.sessionId);
+    await service.remove(second.sessionId);
     const third = await service.spawn(anchor);
     expect(first.label).toBe('W');
     expect(third.label).toBe('W (3)');
@@ -512,5 +514,137 @@ describe('SessionService output buffering', () => {
 
       expect(claudeSession.spawnCalls).toHaveLength(1);
     });
+  });
+});
+
+describe('SessionService browser toggle', () => {
+  it('setBrowserEnabled rejects not_found for an unknown sessionId', async () => {
+    const { service } = setup();
+    const err = await service.setBrowserEnabled('entity:urn:skill:missing', true).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DomainError);
+    expect((err as DomainError).kind).toBe('not_found');
+  });
+
+  it('enabling creates the embedded browser and flips the flag on the snapshot', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    expect(session.browserEnabled).toBe(false);
+
+    const updated = await service.setBrowserEnabled(session.sessionId, true);
+
+    expect(updated.browserEnabled).toBe(true);
+    expect(embeddedBrowser.createCalls).toEqual([session.sessionId]);
+    expect(service.status(session.sessionId)?.browserEnabled).toBe(true);
+  });
+
+  it('enabling twice is idempotent — only creates the view once', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+    await service.setBrowserEnabled(session.sessionId, true);
+    expect(embeddedBrowser.createCalls).toEqual([session.sessionId]);
+  });
+
+  it('disabling destroys the embedded browser and flips the flag off', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+
+    const updated = await service.setBrowserEnabled(session.sessionId, false);
+
+    expect(updated.browserEnabled).toBe(false);
+    expect(embeddedBrowser.destroyCalls).toEqual([session.sessionId]);
+  });
+
+  it('disabling when already off is a no-op', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, false);
+    expect(embeddedBrowser.destroyCalls).toEqual([]);
+  });
+
+  it('the next resume carries the ephemeral mcpConfigPath the embedded browser returned', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+    claudeSession.simulateExit(session.sessionId, 0);
+    claudeSession.spawnCalls.length = 0;
+
+    await service.resume(session.sessionId);
+
+    expect(claudeSession.spawnCalls[0]?.opts.mcpConfigPath).toMatch(/config\.json$/);
+  });
+
+  it('a session whose browser was never enabled spawns with no mcpConfigPath', async () => {
+    const { service, claudeSession } = setup();
+    await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+    expect(claudeSession.spawnCalls[0]?.opts.mcpConfigPath).toBeUndefined();
+  });
+
+  it('kill leaves the embedded browser and its config file alone — it is not a real teardown', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+
+    service.kill(session.sessionId);
+
+    expect(embeddedBrowser.destroyCalls).toEqual([]);
+    expect(service.status(session.sessionId)?.browserEnabled).toBe(true);
+  });
+
+  it('resume after kill reuses the same mcpConfigPath rather than regenerating it', async () => {
+    const { service, base, claudeSession, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+    service.kill(session.sessionId);
+
+    await service.resume(session.sessionId);
+
+    expect(embeddedBrowser.createCalls).toEqual([session.sessionId]);
+    const paths = claudeSession.spawnCalls.map((c) => c.opts.mcpConfigPath).filter(Boolean);
+    expect(new Set(paths).size).toBe(1);
+  });
+
+  it('reopening an exited entity-anchor session (spawn, not resume) carries browserEnabled and its config path forward', async () => {
+    const { service, base, claudeSession, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const anchor = entityAnchor(entityUrn('skill', 'foo'));
+    const first = await service.spawn(anchor);
+    await service.setBrowserEnabled(first.sessionId, true);
+    claudeSession.simulateExit(first.sessionId, 0);
+
+    const reopened = await service.spawn(anchor);
+
+    expect(reopened.browserEnabled).toBe(true);
+    expect(embeddedBrowser.createCalls).toEqual([first.sessionId]);
+    expect(claudeSession.spawnCalls.at(-1)?.opts.mcpConfigPath).toBeDefined();
+  });
+
+  it('remove tears down the embedded browser when it was enabled', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+
+    await service.remove(session.sessionId);
+
+    expect(embeddedBrowser.destroyCalls).toEqual([session.sessionId]);
+  });
+
+  it('remove does not touch the embedded browser when it was never enabled', async () => {
+    const { service, base, embeddedBrowser } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+
+    await service.remove(session.sessionId);
+
+    expect(embeddedBrowser.destroyCalls).toEqual([]);
   });
 });

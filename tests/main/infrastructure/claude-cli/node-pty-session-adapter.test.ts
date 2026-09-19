@@ -126,4 +126,59 @@ describe('NodePtySessionAdapter', () => {
       expect(chunks.join('')).toContain('ARGV:--resume aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
     });
   });
+
+  it('appends --mcp-config <path> only when mcpConfigPath is supplied', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-echo-args.sh'));
+    const chunks: string[] = [];
+    adapter.onData((sessionId, chunk) => chunks.push(chunk));
+
+    await adapter.spawn('sess-7', process.cwd(), {
+      cols: 80,
+      rows: 24,
+      conversation: { mode: 'start', claudeSessionId: 'c-7' },
+      mcpConfigPath: '/tmp/browser-mcp-abc/config.json',
+    });
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain(
+        'ARGV:--session-id c-7 --mcp-config /tmp/browser-mcp-abc/config.json',
+      );
+    });
+  });
+
+  it('omits --mcp-config entirely when mcpConfigPath is not supplied', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-echo-args.sh'));
+    const chunks: string[] = [];
+    adapter.onData((sessionId, chunk) => chunks.push(chunk));
+
+    await adapter.spawn('sess-8', process.cwd(), {
+      cols: 80,
+      rows: 24,
+      conversation: { mode: 'start', claudeSessionId: 'c-8' },
+    });
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('ARGV:--session-id c-8');
+    });
+    expect(chunks.join('')).not.toContain('--mcp-config');
+  });
+
+  it('carries --mcp-config into the resume-fallback retry too, so a first-run session does not lose its browser tool', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-resume-fallback-echo-args.sh'));
+    const chunks: string[] = [];
+    adapter.onData((sessionId, chunk) => chunks.push(chunk));
+
+    await adapter.spawn('sess-9', process.cwd(), {
+      cols: 80,
+      rows: 24,
+      conversation: { mode: 'resume', claudeSessionId: 'c-9' },
+      mcpConfigPath: '/tmp/browser-mcp-xyz/config.json',
+    });
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain(
+        'ARGV:--session-id c-9 --mcp-config /tmp/browser-mcp-xyz/config.json',
+      );
+    });
+  });
 });

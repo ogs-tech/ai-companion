@@ -31,6 +31,7 @@ const baseDeps = (): IpcDeps => {
       save: vi.fn().mockResolvedValue({ instruction, syncReport: [] }),
     } as unknown as IpcDeps['instructionService'],
     sessionService: {} as IpcDeps['sessionService'],
+    embeddedBrowserPort: {} as IpcDeps['embeddedBrowserPort'],
     sessionHistoryService: {} as IpcDeps['sessionHistoryService'],
     workspaceService: {} as IpcDeps['workspaceService'],
     switchActiveWorkspace: vi.fn(),

@@ -29,6 +29,14 @@ export interface SessionSnapshot {
   /** Human-readable name of the anchor (entity/workspace/project name), for display in a session list. */
   label: string;
   status: SessionStatus;
+  /**
+   * Whether this session's embedded browser tool is on — set only via
+   * `browser.enable`/`browser.disable` on an already-spawned session, always
+   * `false` on a brand-new spawn. The CLI only reads its `--mcp-config` at its
+   * own startup, so toggling this on a running session has no live effect
+   * until the session is next restarted (`session.kill` + `session.resume`).
+   */
+  browserEnabled: boolean;
 }
 
 /**

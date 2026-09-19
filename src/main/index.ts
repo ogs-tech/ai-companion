@@ -51,6 +51,7 @@ import { PluginProvenanceService } from './application/services/plugin-provenanc
 import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plugin-reader.js';
 import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
+import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
@@ -74,6 +75,20 @@ const isDev = process.env['NODE_ENV'] === 'development';
 const devLockPathValue = devLockPath(homedir());
 /** Localhost-only — Dock launcher hits GET /focus (see scripts/focus-dev.sh). */
 const DEV_FOCUS_PORT = 47174;
+/**
+ * Localhost-only CDP endpoint for every session's embedded browser tool.
+ * Fixed rather than dynamically probed for a free port, so it can be set via
+ * `appendSwitch` synchronously before `app.whenReady()` (Electron requires
+ * this switch as early as possible, ideally before any other `app` call) —
+ * matches `DEV_FOCUS_PORT` above, a similar localhost-only fixed port. Chosen
+ * to avoid colliding with Chrome's own common `--remote-debugging-port`
+ * default (9222) in case the user also runs Chrome with that enabled.
+ * Accepted trade-off (see docs/superpowers/specs/2026-09-19-embedded-session-browser-design.md#2):
+ * this exposes every window in the app over CDP while any session's browser
+ * tool is active, not just that session's own view.
+ */
+const EMBEDDED_BROWSER_CDP_PORT = 9333;
+app.commandLine.appendSwitch('remote-debugging-port', String(EMBEDDED_BROWSER_CDP_PORT));
 
 let mainWindow: BrowserWindow | null = null;
 let devFocusServer: Server | null = null;
@@ -291,6 +306,15 @@ async function wireIpc(): Promise<void> {
     shell: new ElectronShell(),
   });
 
+  const embeddedBrowserAdapter = new EmbeddedBrowserAdapter({
+    getMainWindow: () => mainWindow,
+    fs: nodeFsAdapter,
+    // Never `npx` (see spec §2.5) — the pinned dependency's own binary, in
+    // this app's own installation, resolved the packaging-aware way.
+    playwrightMcpBin: join(app.getAppPath(), 'node_modules', '.bin', 'playwright-mcp'),
+    cdpPort: EMBEDDED_BROWSER_CDP_PORT,
+  });
+
   const sharedDeps = {
     clock,
     nodeFsAdapter,
@@ -302,6 +326,7 @@ async function wireIpc(): Promise<void> {
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeSessionPort: new NodePtySessionAdapter(),
+    embeddedBrowserPort: embeddedBrowserAdapter,
     // The CLI's own transcript directory — resolved here, like every other
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
@@ -336,6 +361,7 @@ async function wireIpc(): Promise<void> {
 
   app.on('before-quit', () => {
     workspaceScoped.sessionService.killAll();
+    void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
   });
 
@@ -360,6 +386,7 @@ async function wireIpc(): Promise<void> {
     hookService,
     instructionService: workspaceScoped.instructionService,
     sessionService: workspaceScoped.sessionService,
+    embeddedBrowserPort: embeddedBrowserAdapter,
     sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,
     projectService: workspaceScoped.projectService,
@@ -390,6 +417,7 @@ async function wireIpc(): Promise<void> {
   function switchActiveWorkspace(id: string): Promise<Workspace> {
     return switchQueue(async () => {
       workspaceScoped.sessionService.killAll();
+      await embeddedBrowserAdapter.destroyAll();
       await workspaceScoped.entityWatchService.stop();
       const target = await workspaceService.switchTo(id);
       const targetDataDir = dataDirFor(target);

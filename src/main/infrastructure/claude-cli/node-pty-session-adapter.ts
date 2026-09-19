@@ -64,10 +64,23 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
    */
   spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
     const { mode, claudeSessionId } = opts.conversation;
-    if (mode === 'start') return this.spawnWithArgs(sessionId, cwd, opts, startArgs(claudeSessionId), null);
+    // Additive to whatever conversation args apply — appended once here so
+    // both the primary attempt and the resume-fallback retry below carry it,
+    // rather than each of `startArgs`/`resumeArgs` needing to know about it.
+    const withMcpConfig = (args: string[]): string[] =>
+      opts.mcpConfigPath ? [...args, '--mcp-config', opts.mcpConfigPath] : args;
+    if (mode === 'start') {
+      return this.spawnWithArgs(sessionId, cwd, opts, withMcpConfig(startArgs(claudeSessionId)), null);
+    }
     // A resume that finds nothing to resume falls back to creating that same
     // conversation, rather than dead-ending as an immediately-'exited' session.
-    return this.spawnWithArgs(sessionId, cwd, opts, resumeArgs(claudeSessionId), startArgs(claudeSessionId));
+    return this.spawnWithArgs(
+      sessionId,
+      cwd,
+      opts,
+      withMcpConfig(resumeArgs(claudeSessionId)),
+      withMcpConfig(startArgs(claudeSessionId)),
+    );
   }
 
   private spawnWithArgs(

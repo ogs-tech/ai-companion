@@ -3,6 +3,7 @@ import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, Session
 import { sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
 import type { ClaudeConversationTarget, ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { ProjectService } from './project-service.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
@@ -41,10 +42,18 @@ export class SessionService {
   private readonly maxBufferChars: number;
   /** Per-anchor count of `workspace`/`project` sessions ever spawned — numbers the label suffix, never reused even after that session is removed. */
   private readonly ordinals = new Map<string, number>();
+  /**
+   * The `--mcp-config` path handed back by `embeddedBrowser.create` for each
+   * `browserEnabled` session — survives `kill` (so a `resume` reuses the same
+   * file instead of regenerating it) and is only cleared by `disable` or
+   * `remove`, the only two calls that actually tear the view down.
+   */
+  private readonly browserMcpConfigPaths = new Map<string, string>();
 
   constructor(
     private readonly entityService: EntityService,
     private readonly claudeSession: ClaudeSessionPort,
+    private readonly embeddedBrowser: EmbeddedBrowserPort,
     private readonly workspacePath: string,
     private readonly scopeDeps: {
       workspaceService: Pick<WorkspaceService, 'get'>;
@@ -178,6 +187,7 @@ export class SessionService {
         cwd: input.cwd,
         label: input.label,
         status: 'running',
+        browserEnabled: false,
       };
       this.sessions.set(sessionId, session);
       return this.withOutput(session);
@@ -213,17 +223,23 @@ export class SessionService {
       cwd,
       label: finalLabel,
       status: 'running',
+      // A reopened entity-anchor session (spawn again after exit) is the same
+      // logical session as `previous` — same reasoning as `finalLabel`/
+      // `claudeSessionId` above, so its browser toggle carries forward too.
+      browserEnabled: previous?.browserEnabled ?? false,
     };
     this.sessions.set(sessionId, session);
     return this.withOutput(session);
   }
 
   private async spawnPty(sessionId: string, cwd: string, conversation: ClaudeConversationTarget): Promise<void> {
+    const mcpConfigPath = this.browserMcpConfigPaths.get(sessionId);
     try {
       await this.claudeSession.spawn(sessionId, cwd, {
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
         conversation,
+        ...(mcpConfigPath ? { mcpConfigPath } : {}),
       });
     } catch (err) {
       throw ioError({
@@ -264,13 +280,49 @@ export class SessionService {
    * Kills the session if it's still running, then forgets it entirely —
    * unlike `kill`, which leaves an 'exited' entry behind for `list`/`status`
    * to keep reporting. Safe to call on an already-exited or unknown
-   * `sessionId`: it just purges whatever is there (or no-ops).
+   * `sessionId`: it just purges whatever is there (or no-ops). Unlike `kill`,
+   * this is a real teardown — it also tears down the embedded browser (if
+   * one was ever enabled for this session), the one other place besides
+   * `disable` that does.
    */
-  remove(sessionId: string): void {
+  async remove(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session?.status === 'running') this.claudeSession.kill(sessionId);
+    if (this.browserMcpConfigPaths.has(sessionId)) {
+      // A failure here shouldn't strand the session forgotten-by-half —
+      // forgetting it is the point of `remove`, resource leak or not.
+      await this.embeddedBrowser.destroy(sessionId).catch(() => {});
+      this.browserMcpConfigPaths.delete(sessionId);
+    }
     this.sessions.delete(sessionId);
     this.outputBuffers.delete(sessionId);
+  }
+
+  /**
+   * Turns the embedded browser tool on/off for a session that has already
+   * been spawned at least once. Enabling materializes the `WebContentsView`
+   * + its ephemeral `--mcp-config` file up front; disabling tears both down
+   * immediately (unlike `kill`, which deliberately leaves them alone so a
+   * `resume` doesn't need to regenerate anything). The CLI only reads
+   * `--mcp-config` at its own startup, so toggling this on an already-running
+   * session has no live effect until it's next restarted.
+   */
+  async setBrowserEnabled(sessionId: string, enabled: boolean): Promise<SessionSnapshot> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new DomainError('not_found', `Unknown session '${sessionId}'`, { sessionId });
+    }
+    if (session.browserEnabled === enabled) return session;
+
+    if (enabled) {
+      const { mcpConfigPath } = await this.embeddedBrowser.create(sessionId);
+      this.browserMcpConfigPaths.set(sessionId, mcpConfigPath);
+    } else {
+      await this.embeddedBrowser.destroy(sessionId);
+      this.browserMcpConfigPaths.delete(sessionId);
+    }
+    session.browserEnabled = enabled;
+    return session;
   }
 
   status(sessionId: string): SessionSnapshotWithOutput | undefined {

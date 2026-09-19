@@ -12,6 +12,7 @@ function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
     cwd: '/repos/acme',
     label: 'foo',
     status: 'running',
+    browserEnabled: false,
     ...overrides,
   };
 }

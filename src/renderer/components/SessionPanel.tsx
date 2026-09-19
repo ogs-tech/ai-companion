@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
-import { SquareTerminal, Lock } from 'lucide-react';
+import { Group, Panel, type PanelImperativeHandle } from 'react-resizable-panels';
+import { SquareTerminal, Lock, Globe } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -12,8 +13,13 @@ import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from './ds/StatusPill.js';
 import { EmptyState } from './ds/EmptyState.js';
+import { ResizeHandle } from './ds/ResizeHandle.js';
+import { BrowserPane } from './BrowserPane.js';
 import { ogs, colorRoles } from '../tokens.js';
 import { SESSION_STATUS_PILL } from '../lib/session-status-pill.js';
+
+/** Width the browser pane opens to when toggled on — driven imperatively via `resize()`, not `defaultSize`, since a Panel's "expand to its most recent size" has no well-defined size to return to on this pane's very first toggle (it starts fully collapsed). */
+const BROWSER_PANEL_OPEN_SIZE = 40;
 
 type PanelStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error';
 
@@ -68,9 +74,10 @@ export const TERMINAL_NEWLINE_SEQUENCE = '\x1b\r';
 interface SessionHeaderProps {
   pill: { variant: StatusPillVariant; label: string };
   action?: React.ReactNode;
+  browserToggle?: React.ReactNode;
 }
 
-function SessionHeader({ pill, action }: SessionHeaderProps): React.ReactElement {
+function SessionHeader({ pill, action, browserToggle }: SessionHeaderProps): React.ReactElement {
   return (
     <Stack
       direction="row"
@@ -82,6 +89,7 @@ function SessionHeader({ pill, action }: SessionHeaderProps): React.ReactElement
       </Stack>
       <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
         <StatusPill variant={pill.variant} label={pill.label} testId="session" />
+        {browserToggle}
         {action}
       </Stack>
     </Stack>
@@ -117,6 +125,10 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   const sessionIdRef = useRef<string | null>(sessionIdProp ?? null);
   const [status, setStatus] = useState<PanelStatus>(sessionIdProp ? 'starting' : 'idle');
   const [error, setError] = useState<string | null>(null);
+  const [browserEnabled, setBrowserEnabled] = useState(false);
+  /** Set when the browser is toggled on while the session is already running — the CLI only reads `--mcp-config` at its own startup, so that toggle has no live effect until the session is next restarted. Cleared once it actually is. */
+  const [browserNeedsRestart, setBrowserNeedsRestart] = useState(false);
+  const browserPanelRef = useRef<PanelImperativeHandle | null>(null);
 
   // Attaches to a session already running server-side. When the caller
   // already knows a concrete sessionId (every Workbench tab, opened from a
@@ -134,6 +146,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
         if (active && existing) {
           if (!sessionIdProp) setSessionId(existing.sessionId);
           setStatus(existing.status === 'exited' ? 'exited' : 'running');
+          setBrowserEnabled(existing.browserEnabled);
           // Written straight to the terminal (not through React state) so it
           // lands before the live onOutput subscription below ever starts —
           // by the time this resolves, the terminal-creation effect has
@@ -233,6 +246,10 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     };
   }, [sessionId, visible]);
 
+  useEffect(() => {
+    browserPanelRef.current?.resize(browserEnabled ? BROWSER_PANEL_OPEN_SIZE : 0);
+  }, [browserEnabled]);
+
   const handleOpen = async (): Promise<void> => {
     setStatus('starting');
     setError(null);
@@ -240,6 +257,8 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor });
       setSessionId(session.sessionId);
       setStatus(session.status === 'exited' ? 'exited' : 'running');
+      setBrowserEnabled(session.browserEnabled);
+      setBrowserNeedsRestart(false);
       void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
       // The resize effect below reacts to `sessionId` changing and fits/resizes
       // itself — no need to duplicate that call here.
@@ -255,9 +274,24 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     try {
       const session = await callIpc<SessionSnapshotWithOutput>('session.resume', { sessionId: id });
       setStatus(session.status === 'exited' ? 'exited' : 'running');
+      setBrowserEnabled(session.browserEnabled);
+      // A restart is exactly what this notice was waiting for.
+      setBrowserNeedsRestart(false);
       void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
     } catch (err) {
       setStatus('error');
+      setError(err instanceof IpcCallError ? err.message : String(err));
+    }
+  };
+
+  const handleToggleBrowser = async (): Promise<void> => {
+    if (!sessionId) return;
+    const next = !browserEnabled;
+    try {
+      await callIpc(next ? 'browser.enable' : 'browser.disable', { sessionId });
+      setBrowserEnabled(next);
+      setBrowserNeedsRestart(next && status === 'running');
+    } catch (err) {
       setError(err instanceof IpcCallError ? err.message : String(err));
     }
   };
@@ -280,18 +314,35 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       </Button>
     ) : null;
 
-  // The header only ever carries an action (Abrir sessão / Tentar novamente
-  // / Retomar) for idle, error, or exited states — a running (or starting)
-  // session has nothing for it to do, so it's dropped entirely and the
-  // terminal fills the whole tab, reading as a real terminal instead of a
-  // themed app panel with a chrome bar on top.
-  const showHeader = action !== null;
+  // Once a concrete sessionId exists, the embedded browser tool can be
+  // toggled regardless of run state (idle/starting has none yet to key it by).
+  const browserToggle = sessionId ? (
+    <Tooltip title={browserEnabled ? 'Ocultar navegador' : 'Mostrar navegador'}>
+      <IconButton
+        size="small"
+        data-testid="session-browser-toggle"
+        aria-label={browserEnabled ? 'Ocultar navegador' : 'Mostrar navegador'}
+        color={browserEnabled ? 'primary' : 'default'}
+        onClick={() => void handleToggleBrowser()}
+      >
+        <Icon glyph={Globe} size={16} />
+      </IconButton>
+    </Tooltip>
+  ) : null;
+
+  // The header carries an action (Abrir sessão / Tentar novamente / Retomar)
+  // for idle, error, or exited states, and the browser toggle for any state
+  // that has a concrete sessionId — a running session with no toggle yet
+  // (the sessionId hasn't resolved) drops the header entirely so the terminal
+  // fills the whole tab, reading as a real terminal instead of a themed app
+  // panel with a chrome bar on top.
+  const showHeader = action !== null || browserToggle !== null;
 
   return (
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {showHeader && (
         <Box sx={{ px: 2, pt: 2 }}>
-          <SessionHeader pill={STATUS_PILL[status]} action={action} />
+          <SessionHeader pill={STATUS_PILL[status]} action={action} browserToggle={browserToggle} />
         </Box>
       )}
       {error && (
@@ -299,25 +350,46 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
           {error}
         </Typography>
       )}
-      {/* No padding, border, or radius here — a running session drops the
-          header above and this box is the only thing left in the tab, so any
-          inset chrome would read as "a panel with a terminal in it" rather
-          than the terminal being the page. */}
-      {/* No padding here, ever — xterm's FitAddon measures this element's own
-          clientHeight/Width (the parent it was `open()`ed into) to compute
-          rows/cols. Padding on it would size the terminal to include the
-          padded-away space, and the CLI's own bottom-most row (its input box
-          and status line) would render past `overflow: hidden` and clip. */}
-      <Box
-        ref={containerRef}
-        data-testid="session-terminal"
-        sx={{
-          flexGrow: 1,
-          minHeight: 0,
-          bgcolor: ogs.ink,
-          overflow: 'hidden',
-        }}
-      />
+      {browserNeedsRestart && (
+        <Typography variant="caption" color="text.secondary" data-testid="browser-restart-notice" sx={{ mx: 2, mb: 1.5, flexShrink: 0 }}>
+          O navegador será aplicado assim que a sessão for reiniciada.
+        </Typography>
+      )}
+      <Group orientation="horizontal" style={{ flexGrow: 1, minHeight: 0, display: 'flex' }}>
+        <Panel id="session-terminal-panel" minSize="20" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* No padding, border, or radius here — a running session drops the
+              header above and this box is the only thing left in the tab, so any
+              inset chrome would read as "a panel with a terminal in it" rather
+              than the terminal being the page. */}
+          {/* No padding here, ever — xterm's FitAddon measures this element's own
+              clientHeight/Width (the parent it was `open()`ed into) to compute
+              rows/cols. Padding on it would size the terminal to include the
+              padded-away space, and the CLI's own bottom-most row (its input box
+              and status line) would render past `overflow: hidden` and clip. */}
+          <Box
+            ref={containerRef}
+            data-testid="session-terminal"
+            sx={{
+              flexGrow: 1,
+              minHeight: 0,
+              bgcolor: ogs.ink,
+              overflow: 'hidden',
+            }}
+          />
+        </Panel>
+        <ResizeHandle />
+        <Panel
+          id="session-browser-panel"
+          panelRef={browserPanelRef}
+          collapsible
+          collapsedSize={0}
+          defaultSize={0}
+          minSize="20"
+          style={{ overflow: 'hidden' }}
+        >
+          {sessionId && browserEnabled && <BrowserPane sessionId={sessionId} />}
+        </Panel>
+      </Group>
     </Box>
   );
 }

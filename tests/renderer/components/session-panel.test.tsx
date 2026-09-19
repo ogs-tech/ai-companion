@@ -102,17 +102,25 @@ describe('<SessionPanel>', () => {
     expect(screen.getByTestId('status-pill-session')).toBeInTheDocument();
   });
 
-  it('drops the header once the session is running, so the terminal reads as the whole tab instead of a panel with a chrome bar', async () => {
+  it('drops the "Abrir sessão" action once the session is running, but keeps a thin header for the browser toggle', async () => {
     const user = userEvent.setup();
     call.mockImplementation(async (method: string) => {
       if (method === 'session.status') return ok(null);
-      return ok({ sessionId: 'entity:urn:skill:foo', anchor: { kind: 'entity', urn: 'urn:skill:foo' }, cwd: '/workspace', status: 'running' });
+      return ok({
+        sessionId: 'entity:urn:skill:foo',
+        anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+        cwd: '/workspace',
+        status: 'running',
+        browserEnabled: false,
+      });
     });
 
     renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     await user.click(screen.getByTestId('session-open'));
 
-    await waitFor(() => expect(screen.queryByTestId('status-pill-session')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('session-open')).toBeNull());
+    expect(screen.getByTestId('status-pill-session')).toBeInTheDocument();
+    expect(screen.getByTestId('session-browser-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('session-terminal')).toBeInTheDocument();
   });
 
@@ -556,6 +564,95 @@ describe('<SessionPanel>', () => {
       expect(terminal._keyHandler!(keydown({ key: 'Enter', shiftKey: true }))).toBe(false);
 
       expect(call).not.toHaveBeenCalledWith('session.write', expect.anything());
+    });
+  });
+
+  describe('browser toggle', () => {
+    it('does not render the toggle before a sessionId is known', () => {
+      call.mockImplementation(async () => ok(null));
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
+      expect(screen.queryByTestId('session-browser-toggle')).toBeNull();
+    });
+
+    it('clicking the toggle calls browser.enable with the sessionId and shows the restart notice for a running session', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({
+            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
+            label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
+          });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+      const toggle = await screen.findByTestId('session-browser-toggle');
+      await user.click(toggle);
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('browser.enable', { sessionId: 'sess-1' }));
+      expect(await screen.findByTestId('browser-restart-notice')).toBeInTheDocument();
+      expect(screen.getByTestId('browser-pane')).toBeInTheDocument();
+    });
+
+    it('clicking the toggle again calls browser.disable and hides the pane and the restart notice', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({
+            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
+            label: 'W', status: 'running', outputBuffer: '', browserEnabled: true,
+          });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+      const toggle = await screen.findByTestId('session-browser-toggle');
+      expect(await screen.findByTestId('browser-pane')).toBeInTheDocument();
+
+      await user.click(toggle);
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('browser.disable', { sessionId: 'sess-1' }));
+      expect(screen.queryByTestId('browser-pane')).toBeNull();
+      expect(screen.queryByTestId('browser-restart-notice')).toBeNull();
+    });
+
+    it('does not show the restart notice when enabling on an already-exited session — the next open/resume just spawns with it', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({
+            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
+            label: 'W', status: 'exited', outputBuffer: '', browserEnabled: false,
+          });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+      const toggle = await screen.findByTestId('session-browser-toggle');
+      await user.click(toggle);
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('browser.enable', { sessionId: 'sess-1' }));
+      expect(screen.queryByTestId('browser-restart-notice')).toBeNull();
+    });
+
+    it('a session attached with the browser already enabled renders the pane without needing a click', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'session.status') {
+          return ok({
+            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
+            label: 'W', status: 'running', outputBuffer: '', browserEnabled: true,
+          });
+        }
+        return ok(null);
+      });
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
+
+      expect(await screen.findByTestId('browser-pane')).toBeInTheDocument();
+      expect(screen.queryByTestId('browser-restart-notice')).toBeNull();
     });
   });
 });
