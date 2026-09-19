@@ -93,6 +93,11 @@ function isAreaTab(tab: OpenTab): tab is Extract<OpenTab, { kind: WorkspaceAreaT
   return tab.kind === 'starter-pack' || tab.kind === 'marketplaces' || tab.kind === 'diagnostico';
 }
 
+/** The project a project-scoped entity belongs to — `scopeId` already *is* a `Project.id` for scope `'project'` (see `anchorForEntityScope`). `null` for personal/workspace-scoped entities. */
+function projectIdForEntityScope(entity: Pick<Skill | Agent | Instruction, 'scopes' | 'scopeId'>): string | null {
+  return entity.scopes[0] === 'project' && entity.scopeId ? entity.scopeId : null;
+}
+
 export function WorkspaceScreen(): React.ReactElement {
   const { data: activeWorkspace } = useActiveWorkspace();
   const { data: projects = [] } = useProjects();
@@ -154,14 +159,17 @@ export function WorkspaceScreen(): React.ReactElement {
   // But *opening* something scoped to it — one of its files, or its own
   // INSTRUCTIONS row (see `renderProjectInstructionRow` below) — does:
   // `selectedProjectId`, and with it the whole Control Panel (Skills/Agents/
-  // Hooks/MCP/Plugins), always follows whichever file is the active Workbench
-  // tab, derived here and in `handleSelectTab`/`closeTab` below, rather than
-  // through a dedicated "enter project" gesture. No confirmation needed:
-  // unlike a real workspace switch, this never discards a tab, it just
-  // changes which scope's customizations the Control Panel is currently
-  // showing.
+  // Hooks/MCP/Plugins), always follows whichever tab is active — a file via
+  // its own `projectId`, a Skill/Agent/Instruction via its own scope — derived
+  // here and in `handleSelectTab`/`closeTab` below, rather than through a
+  // dedicated "enter project" gesture. No confirmation needed: unlike a real
+  // workspace switch, this never discards a tab, it just changes which
+  // scope's customizations the Control Panel is currently showing.
   const syncProjectFromTab = (tab: OpenTab | undefined): void => {
     if (tab?.kind === 'file') setSelectedProjectId(tab.projectId ?? null);
+    else if (tab?.kind === 'skill' || tab?.kind === 'agent' || tab?.kind === 'instruction') {
+      setSelectedProjectId(projectIdForEntityScope(tab.entity));
+    }
   };
 
   const openFileTab = (relPath: string, projectId?: string): void => {
@@ -177,12 +185,14 @@ export function WorkspaceScreen(): React.ReactElement {
     const id = isCreate ? `entity-new:${kind}:${++newTabSeq.current}` : `entity:${entity.urn}`;
     setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind, entity, isCreate }]));
     setActiveTabId(id);
+    setSelectedProjectId(projectIdForEntityScope(entity));
   };
 
   const openInstructionTab = (entity: Instruction, isCreate: boolean): void => {
     const id = isCreate ? `entity-new:instruction:${++newTabSeq.current}` : `entity:${entity.urn}`;
     setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'instruction', entity, isCreate }]));
     setActiveTabId(id);
+    setSelectedProjectId(projectIdForEntityScope(entity));
   };
 
   // Tab identity is keyed by the concrete sessionId (not the anchor), so a
@@ -279,12 +289,19 @@ export function WorkspaceScreen(): React.ReactElement {
 
   // Returns whether the reset actually happened — false means the caller
   // asked to discard unsaved tabs and the user declined, so the caller's own
-  // state change (switching workspace) must not proceed either.
+  // state change (switching workspace) must not proceed either. Every call
+  // site uses this specifically to guard a real workspace change, so it also
+  // clears `selectedProjectId` — left alone, a Project selected in the
+  // workspace being left behind would keep the Control Panel (and the
+  // breadcrumb's Home button) scoped to it even once that workspace, and its
+  // projects, are no longer in view. `applyWorkspaceHistoryEntry` restores
+  // the target entry's own `projectId` right after, overriding this.
   const resetTabs = (): boolean => {
     const dirtyCount = openTabs.filter(isDirty).length;
     if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return false;
     setOpenTabs([]);
     setActiveTabId(null);
+    setSelectedProjectId(null);
     return true;
   };
 
@@ -456,10 +473,7 @@ export function WorkspaceScreen(): React.ReactElement {
       kind="workspace"
       instruction={workspaceInstruction}
       seed={() => seedWorkspaceInstruction(activeWorkspace)}
-      onOpen={(entity, isCreate) => {
-        setSelectedProjectId(null);
-        openInstructionEditor(entity, isCreate);
-      }}
+      onOpen={openInstructionEditor}
       onPreview={previewEntity}
       onProperties={requestInstructionProperties}
       onNewAction={newActionForInstruction}
@@ -545,11 +559,26 @@ export function WorkspaceScreen(): React.ReactElement {
     });
   };
 
-  // Manual override for the derived scope above — lets the breadcrumb (and a
-  // successful project delete) pin the Control Panel back to workspace scope
-  // even while a project's file tab is still open. No `resetTabs()` guard:
-  // nothing is discarded, it's just a view switch.
+  // Manual override for the derived scope above — lets a successful project
+  // delete pin the Control Panel back to workspace scope even while a
+  // project's file tab is still open. No `resetTabs()` guard: nothing is
+  // discarded, it's just a view switch.
   const exitProjectScope = (): void => setSelectedProjectId(null);
+
+  // The breadcrumb's own "back" — not just leaving the current Project
+  // (`exitProjectScope`), but all the way back to the actual default/Home
+  // workspace, the same destination as AppShell's "Início" button. Already
+  // home, it degrades to exiting the Project, since there's no workspace left
+  // to switch to. A real switch discards open tabs (same guard every other
+  // workspace change goes through), so it asks first.
+  const goHome = (): void => {
+    if (isDefaultWorkspace) {
+      exitProjectScope();
+      return;
+    }
+    if (!resetTabs()) return;
+    switchWorkspace.mutateAsync('default').catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+  };
 
   const handleDeleteProject = async (id: string): Promise<void> => {
     try {
@@ -650,10 +679,12 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const canvasTabs: WorkbenchTab[] = openTabs.map((tab): WorkbenchTab => {
     if (tab.kind === 'file') {
+      const projectName = tab.projectId ? projects.find((p) => p.id === tab.projectId)?.name : undefined;
       return {
         id: tab.id,
         glyph: FileIcon,
         label: tab.relPath.split('/').pop() || tab.relPath,
+        breadcrumb: projectName ? `${projectName} › ${tab.relPath}` : tab.relPath,
         dense: true,
         dirty: tab.dirty ?? false,
         onClose: () => closeTab(tab.id),
@@ -722,10 +753,29 @@ export function WorkspaceScreen(): React.ReactElement {
       };
     }
     const isPersonal = tab.kind === 'instruction' && isPersonalInstruction(tab.entity);
+    // An instruction's own `entity.name` is just its project/workspace's
+    // basename (see `instruction-seed.ts`) — the same name a file/skill tab
+    // for that same scope could also carry — so the tab label alone can't
+    // tell two tabs apart. The scope name below is what actually does.
+    const scopeName =
+      tab.entity.scopes[0] === 'project'
+        ? projects.find((p) => p.id === tab.entity.scopeId)?.name
+        : tab.entity.scopes[0] === 'workspace'
+          ? activeWorkspace?.name
+          : undefined;
+    const breadcrumb =
+      tab.kind === 'instruction'
+        ? scopeName
+          ? `${scopeName} › INSTRUCTIONS`
+          : 'INSTRUCTIONS'
+        : scopeName
+          ? `${scopeName} › ${tab.kind === 'skill' ? 'Skills' : 'Agents'} › ${tab.entity.name || 'Novo'}`
+          : `${tab.kind === 'skill' ? 'Skills' : 'Agents'} › ${tab.entity.name || 'Novo'}`;
     return {
       id: tab.id,
       glyph: entityTabGlyph(tab),
       label: tab.entity.name || (tab.isCreate ? 'Novo' : tab.entity.name),
+      breadcrumb,
       accentColor: ENTITY_ACCENT_COLOR[tab.kind],
       dense: true,
       dirty: tab.dirty ?? false,
@@ -816,18 +866,13 @@ export function WorkspaceScreen(): React.ReactElement {
     <ProjectInstructionRow
       project={project}
       onPreview={previewEntity}
-      onOpen={(entity, isCreate) => {
-        // Opening a Project's own INSTRUCTIONS row — even browsed in place,
-        // before "entering" it — scopes the Control Panel/breadcrumb to that
-        // Project too, same as opening one of its files does (see
-        // `syncProjectFromTab`).
-        setSelectedProjectId(project.id);
-        openInstructionEditor(entity, isCreate);
-      }}
-      onProperties={(entity) => {
-        setSelectedProjectId(project.id);
-        requestInstructionProperties(entity);
-      }}
+      // Opening a Project's own INSTRUCTIONS row — even browsed in place,
+      // before "entering" it — scopes the Control Panel/breadcrumb to that
+      // Project too, same as opening one of its files does: `openInstructionEditor`/
+      // `requestInstructionProperties` derive it from the entity's own scope
+      // (see `projectIdForEntityScope`), same as any other entity tab.
+      onOpen={openInstructionEditor}
+      onProperties={requestInstructionProperties}
       onNewAction={(entity) => {
         setSelectedProjectId(project.id);
         newActionForInstruction(entity);
@@ -874,7 +919,7 @@ export function WorkspaceScreen(): React.ReactElement {
               activeWorkspace={activeWorkspace}
               isDefaultWorkspace={isDefaultWorkspace}
               selectedProject={selectedProject}
-              onNavigateToWorkspace={exitProjectScope}
+              onNavigateToWorkspace={goHome}
               headerMenu={headerMenu}
               beforeSwitch={resetTabs}
               personalInstructionRow={personalInstructionRow}

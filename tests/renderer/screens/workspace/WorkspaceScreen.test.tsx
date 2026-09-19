@@ -8,6 +8,7 @@ import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { WorkspaceScreen } from '../../../../src/renderer/screens/workspace/WorkspaceScreen.js';
 import { navigateWorkspaceHistory, resetWorkspaceHistoryForTests } from '../../../../src/renderer/lib/workspace-history-store.js';
+import { confirmDiscardUnsavedTabs } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
 import { mockApi } from '../../test-utils.js';
 
 // A session opens as a Workbench canvas tab (SessionPanel), which opens a
@@ -111,6 +112,11 @@ describe('WorkspaceScreen', () => {
     renderScreen();
     expect((await screen.findAllByText('Acme')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('/repos/acme')).length).toBeGreaterThan(0);
+  });
+
+  it('shows the breadcrumb\'s "Início" button for a non-default workspace even with no Project selected', async () => {
+    renderScreen();
+    expect(await screen.findByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
   });
 
   it('opening a session on the workspace root calls session.spawn with a workspace anchor, opening its Workbench tab', async () => {
@@ -382,7 +388,30 @@ describe('WorkspaceScreen', () => {
     await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
   });
 
-  it('clicking the workspace crumb reverts Control Panel scope to the workspace, even with the project file tab still open', async () => {
+  it('clicking the breadcrumb\'s "Início" button switches all the way to the default workspace, not just out of the Project', async () => {
+    const user = userEvent.setup();
+    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.getActive') return projectWorkspace;
+      if (method === 'project.list') return registeredProjects;
+      if (method === 'workspace.listDir') {
+        const path = (params as { path?: string } | undefined)?.path;
+        return path ? [] : [{ name: 'apps', kind: 'dir' }];
+      }
+      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+      if (method === 'workspace.switchTo') return globalWorkspace;
+      return undefined;
+    });
+    renderScreen();
+    await openProjectFile(user, 'a.md');
+    await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
+    await user.click(screen.getByTestId('workspace-breadcrumb-workspace-crumb'));
+    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
+    // A real workspace switch, unlike merely exiting the Project, discards open tabs.
+    expect(screen.queryByTestId('workbench-tab-file:p1:a.md')).not.toBeInTheDocument();
+  });
+
+  it('reaching Home via the external "Início" nav (not the breadcrumb button) also clears the Project scope, not just the open tabs', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
@@ -397,11 +426,14 @@ describe('WorkspaceScreen', () => {
     });
     renderScreen();
     await openProjectFile(user, 'a.md');
-    await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
-    await user.click(screen.getByTestId('workspace-breadcrumb-workspace-crumb'));
+    expect(await screen.findByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
+
+    // `useAreaNavigation`'s "Início" branch (AppShell/CommandPalette) reaches
+    // this screen only through the registered guard, then switches workspace
+    // on its own — it never touches this screen's `selectedProjectId`
+    // directly, so the guard itself must be what clears the Project scope.
+    expect(confirmDiscardUnsavedTabs()).toBe(true);
     await waitFor(() => expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument());
-    // Unlike a real workspace switch, this never discards the open tab.
-    expect(screen.getByTestId('workbench-tab-file:p1:a.md')).toBeInTheDocument();
   });
 
   describe('instructions row on a project workspace tree', () => {
@@ -452,13 +484,17 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       await openProjectFile(user, 'a.md');
-      await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
+      // The header's own path line follows the Project while its file tab is
+      // active — the "Início" button no longer works as a Project-scope
+      // proxy since it now shows for the whole non-default workspace.
+      expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
       await user.click(screen.getByTestId('workspace-instruction-row'));
       // The project file's own tab stays open alongside the new one, so
       // assert on the workspace instruction's own tab rather than the
       // (now duplicated) generic "editor-panel" testid.
       expect(await screen.findByTestId('workbench-tab-entity-new:instruction:1')).toBeInTheDocument();
-      expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument();
+      expect(screen.queryByText('/repos/acme/apps')).not.toBeInTheDocument();
+      expect(screen.getByText('/repos/acme')).toBeInTheDocument();
     });
 
     it('deleting a configured instruction asks for confirmation before calling instruction.delete', async () => {
@@ -552,6 +588,37 @@ describe('WorkspaceScreen', () => {
       expect(screen.getByTestId('workspace-instruction-row')).toBeInTheDocument();
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
     });
+
+    it('switching back to an already-open Project INSTRUCTIONS tab via the tab strip re-scopes the Control Panel to that Project, not just opening it fresh', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return registeredProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'src', kind: 'dir' }];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByText('apps'));
+      await user.click(await screen.findByTestId('tree-node-instructions-apps'));
+      // The header's own path line is what actually tracks Project scope now
+      // — the "Início" button shows for the whole non-default workspace.
+      expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
+
+      // Leaving for the pinned Workspace INSTRUCTIONS tab drops the Project
+      // scope, same as the test above.
+      await user.click(screen.getByTestId('workspace-instruction-row'));
+      expect(await screen.findByText('/repos/acme')).toBeInTheDocument();
+      expect(screen.queryByText('/repos/acme/apps')).not.toBeInTheDocument();
+
+      // Reselecting the Project's own instruction tab from the tab strip —
+      // not reopening the row — must re-derive the same Project scope.
+      await user.click(screen.getByTestId('workbench-tab-entity-new:instruction:1'));
+      expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
+    });
   });
 
   describe('Global workspace (isDefault)', () => {
@@ -565,6 +632,17 @@ describe('WorkspaceScreen', () => {
       const managementList = await screen.findByTestId('workspace-management-list');
       expect(managementList).toContainElement(await screen.findByTestId('personal-instruction-row'));
       expect(screen.queryByTestId('folder-tree')).not.toBeInTheDocument();
+    });
+
+    it('never shows the breadcrumb\'s "Início" button — there is nowhere further Home to go from the default workspace itself', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return globalWorkspace;
+        if (method === 'project.list') return projects;
+        return undefined;
+      });
+      renderScreen();
+      await screen.findByTestId('workspace-management-list');
+      expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument();
     });
 
     it('lists other project workspaces in the management card, leaving out the active Default one', async () => {
@@ -677,6 +755,11 @@ describe('WorkspaceScreen', () => {
       await screen.findByTestId('workspace-management-list');
       expect(screen.getByTestId('tree-group-skill')).toBeInTheDocument();
       expect(screen.getByTestId('tree-group-agent')).toBeInTheDocument();
+      // Hooks/MCP/Plugins are the low-frequency kinds — collapsed by default
+      // under one shared "Integrações" row instead of three always-open ones.
+      expect(screen.getByTestId('tree-group-integrations')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-group-hook')).not.toBeInTheDocument();
+      await user.click(screen.getByTestId('tree-group-integrations'));
       expect(screen.getByTestId('tree-group-hook')).toBeInTheDocument();
       expect(screen.getByTestId('tree-group-mcp')).toBeInTheDocument();
       expect(screen.getByTestId('tree-group-plugin')).toBeInTheDocument();
@@ -911,6 +994,68 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('workspace-instruction-row'));
       const tabButtons = screen.getAllByTestId(/^workbench-tab-(?!close-)/);
       expect(tabButtons).toHaveLength(1);
+    });
+  });
+
+  describe('Tab breadcrumb', () => {
+    it('shows the Project name and file path for a file tab, and updates when switching to a different tab', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return registeredProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+        return undefined;
+      });
+      renderScreen();
+      await openProjectFile(user, 'a.md');
+      expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('apps › a.md');
+
+      // The pinned Workspace INSTRUCTIONS row's own tab has no relation to
+      // "apps" — the breadcrumb must follow the newly active tab, not stick
+      // to the previous one.
+      await user.click(screen.getByTestId('workspace-instruction-row'));
+      expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('Acme › INSTRUCTIONS');
+    });
+
+    it("shows the Project name for a Project's own INSTRUCTIONS tab — disambiguating it from a same-named file/skill tab, since an instruction's own label is just its scope's basename", async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return registeredProjects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        }
+        if (method === 'project.listDir') return [];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByText('apps'));
+      await user.click(await screen.findByTestId('tree-node-instructions-apps'));
+      expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('apps › INSTRUCTIONS');
+    });
+
+    it('shows no breadcrumb for a session tab', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        if (method === 'session.spawn') {
+          return { sessionId: 'sess-w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-sessions-new'));
+      await screen.findByTestId('workbench-tab-session:sess-w1');
+      expect(screen.queryByTestId('workbench-breadcrumb')).not.toBeInTheDocument();
     });
   });
 
@@ -1185,16 +1330,25 @@ describe('WorkspaceScreen', () => {
       await waitFor(() => expect(screen.queryByTestId('workbench-tab-dirty-file:p1:a.md')).not.toBeInTheDocument());
     });
 
-    it('clicking the workspace crumb reverts scope without discarding unsaved edits — it is a view switch, not a real navigation', async () => {
+    it('clicking the breadcrumb\'s "Início" button with unsaved edits asks for confirmation first — it is a real workspace switch, not a view toggle', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
-      const confirmSpy = vi.spyOn(window, 'confirm');
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
       await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
-      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(confirmSpy).toHaveBeenCalled();
+      // Declined — nothing changed.
       expect(screen.getByTestId('workbench-tab-file:p1:a.md')).toBeInTheDocument();
       expect(screen.getByTestId('workbench-tab-dirty-file:p1:a.md')).toBeInTheDocument();
-      expect(await screen.findByTestId('workspace-instruction-row')).toBeInTheDocument();
-      expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument();
+      expect(screen.getByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
+    });
+
+    it('confirming the discard on the breadcrumb\'s "Início" button switches to the default workspace', async () => {
+      const user = userEvent.setup();
+      await openDirtyFileTab(user);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
+      expect(screen.queryByTestId('workbench-tab-file:p1:a.md')).not.toBeInTheDocument();
     });
 
     const openDirtyEntityTab = async (user: ReturnType<typeof userEvent.setup>) => {

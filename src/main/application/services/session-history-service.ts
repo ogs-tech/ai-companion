@@ -41,12 +41,24 @@ interface CachedUsage {
  * end to end, because `FsClaudeTranscriptAdapter` never reads the middle of a
  * file. A cache file would buy a fraction of a second at the price of a
  * versioned schema, an atomic writer and a whole class of staleness bugs. The
- * in-memory map below is enough: it keeps a workspace's readings warm between
- * a `list` and the `stats` call that follows it, and a transcript whose mtime
- * or size moved is simply re-read.
+ * in-memory map below is enough: it keeps a workspace's readings warm across
+ * calls — `list` and `stats` fire together on mount, not one after the
+ * other, so a read still in flight is shared rather than repeated — and a
+ * transcript whose mtime or size moved is simply re-read.
  */
 export class SessionHistoryService {
   private readonly usageCache = new Map<string, CachedUsage>();
+  /**
+   * A read in flight for one exact (path, mtime, size) version of a
+   * transcript. `list()` and `stats()` both call `rowsFor()` independently,
+   * and the renderer fires their queries together on mount — without this,
+   * a second caller starting before the first read finishes finds nothing in
+   * `usageCache` yet and issues its own, doubling every transcript's disk
+   * read on the panel's first open. Keyed on the version, not just the path,
+   * so a transcript that grows between the two concurrent calls still gets
+   * its own fresh read rather than reusing a stale one.
+   */
+  private readonly usageReads = new Map<string, Promise<TranscriptUsage>>();
 
   constructor(
     private readonly transcripts: SessionTranscriptPort,
@@ -116,10 +128,16 @@ export class SessionHistoryService {
     const refs = (await this.transcripts.listRefs()).filter((ref) => inScope(ref, root));
     const overrides = await this.rateOverrides();
 
+    // One disk round trip per file, all in flight together — a sequential
+    // loop pays each file's read latency one after another, which is the
+    // difference between an instant panel and one that visibly waits once a
+    // workspace has a few hundred conversations.
+    const entries = await Promise.all(refs.map((ref) => this.usageFor(ref).then((usage) => toEntry(ref, usage, overrides))));
+
     const rows: HistoryRow[] = [];
-    for (const ref of refs) {
-      const entry = toEntry(ref, await this.usageFor(ref), overrides);
-      if (matches(entry, filters)) rows.push({ ref, entry });
+    for (let i = 0; i < refs.length; i += 1) {
+      const entry = entries[i]!;
+      if (matches(entry, filters)) rows.push({ ref: refs[i]!, entry });
     }
 
     // Newest first, with the id as a tiebreak so two conversations written in
@@ -136,9 +154,24 @@ export class SessionHistoryService {
   private async usageFor(ref: TranscriptRef): Promise<TranscriptUsage> {
     const cached = this.usageCache.get(ref.filePath);
     if (cached && cached.mtimeMs === ref.mtimeMs && cached.sizeBytes === ref.sizeBytes) return cached.usage;
-    const usage = await this.transcripts.readUsage(ref);
-    this.usageCache.set(ref.filePath, { mtimeMs: ref.mtimeMs, sizeBytes: ref.sizeBytes, usage });
-    return usage;
+
+    const versionKey = `${ref.filePath}|${ref.mtimeMs}|${ref.sizeBytes}`;
+    const inFlight = this.usageReads.get(versionKey);
+    if (inFlight) return inFlight;
+
+    const read = this.transcripts.readUsage(ref).then(
+      (usage) => {
+        this.usageCache.set(ref.filePath, { mtimeMs: ref.mtimeMs, sizeBytes: ref.sizeBytes, usage });
+        this.usageReads.delete(versionKey);
+        return usage;
+      },
+      (err: unknown) => {
+        this.usageReads.delete(versionKey);
+        throw err;
+      },
+    );
+    this.usageReads.set(versionKey, read);
+    return read;
   }
 
   /** Keeps the warm map from growing forever as conversations are deleted from disk. */

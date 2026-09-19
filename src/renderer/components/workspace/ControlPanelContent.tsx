@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, IconButton, List, Stack, Tooltip } from '@mui/material';
-import { ChevronsLeft, ChevronsRight, Plus, SquareTerminal } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Plus, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Kicker } from '../ds/Kicker.js';
 import { EntityTreeGroup } from './EntityTreeGroup.js';
@@ -8,6 +8,7 @@ import { HooksTreeGroup } from './HooksTreeGroup.js';
 import { McpTreeGroup } from './McpTreeGroup.js';
 import { PluginsTreeGroup } from './PluginsTreeGroup.js';
 import { SessionsTreeGroup } from './SessionsTreeGroup.js';
+import { TreeGroup } from './TreeGroup.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
 import type { Agent, Skill } from '../../../shared/entity.js';
 import type { SessionSnapshot } from '../../../shared/session.js';
@@ -64,17 +65,24 @@ export function ControlPanelContent({
     <>
       <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
       <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
-      <HooksTreeGroup showGlobal={false} />
-      <McpTreeGroup showGlobal={false} />
-      <PluginsTreeGroup showGlobal={false} />
+      {/* Hooks/MCP/Plugins are the low-frequency, more technical kinds — set up once
+          rather than edited daily like Skills/Agents — so they share one collapsed
+          "Integrações" row instead of each claiming its own always-visible header. */}
+      <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
+        <HooksTreeGroup showGlobal={false} />
+        <McpTreeGroup showGlobal={false} />
+        <PluginsTreeGroup showGlobal={false} />
+      </TreeGroup>
     </>
   ) : (
     <>
       <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} {...(localScope ? { localScope } : {})} />
       <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} {...(localScope ? { localScope } : {})} />
-      <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
-      <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
-      <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
+      <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
+        <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
+        <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
+        <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
+      </TreeGroup>
     </>
   );
 
@@ -118,12 +126,15 @@ export function ControlPanelContent({
               aria-label={sessionsExpanded ? 'Ocultar sessões' : 'Mostrar sessões'}
               onClick={toggleSessions}
             >
-              <Icon glyph={sessionsExpanded ? ChevronsLeft : ChevronsRight} size={16} />
+              <Icon glyph={sessionsExpanded ? ChevronDown : ChevronRight} size={16} />
             </IconButton>
           </Stack>
         </Stack>
         {sessionsExpanded && (
-          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          // No overflow here: SessionsTreeGroup owns its own internal scroll
+          // box now, so its fixed footer ("Ver todas") stays pinned below the
+          // rows rather than sharing their scroll area.
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <SessionsTreeGroup scope={historyScope ?? { kind: 'all' }} onOpen={onOpenSession} onRemoved={onSessionRemoved} onSeeAll={onSeeAllSessions} />
           </Box>
         )}

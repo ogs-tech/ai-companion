@@ -1,10 +1,11 @@
-import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { House } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Icon } from '../ds/Icon.js';
 
 interface WorkspaceBreadcrumbHeaderProps {
   workspaceName: string;
   isDefaultWorkspace: boolean;
-  projectName?: string;
   path: string;
   onNavigateToWorkspace: () => void;
   actions?: ReactNode;
@@ -14,12 +15,12 @@ interface WorkspaceBreadcrumbHeaderProps {
 // project relationship is a real two-level hierarchy (unlike the other
 // ScreenHeader consumers, which all have a single flat title), so it reads
 // better as a clickable breadcrumb than as a stacked kicker+title+subtitle
-// block. Also gives project scope a way back to the workspace from the
-// header itself, alongside the existing "up" row inside the file tree.
+// block. The title itself never changes shape between workspace and Project
+// scope — same name, same path line — only the trailing actions gain a way
+// Home.
 export function WorkspaceBreadcrumbHeader({
   workspaceName,
   isDefaultWorkspace,
-  projectName,
   path,
   onNavigateToWorkspace,
   actions,
@@ -28,41 +29,9 @@ export function WorkspaceBreadcrumbHeader({
     <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
       <Box sx={{ minWidth: 0 }}>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-          {projectName !== undefined ? (
-            <>
-              <Typography
-                component="button"
-                type="button"
-                onClick={onNavigateToWorkspace}
-                data-testid="workspace-breadcrumb-workspace-crumb"
-                noWrap
-                sx={{
-                  font: 'inherit',
-                  border: 0,
-                  background: 'none',
-                  p: 0,
-                  cursor: 'pointer',
-                  color: 'text.secondary',
-                  flexShrink: 1,
-                  minWidth: 0,
-                  '&:hover': { color: 'text.primary', textDecoration: 'underline' },
-                }}
-                variant="h6"
-              >
-                {workspaceName}
-              </Typography>
-              <Typography variant="h6" color="text.disabled" aria-hidden="true" sx={{ flexShrink: 0 }}>
-                ›
-              </Typography>
-              <Typography variant="h6" component="h1" noWrap sx={{ minWidth: 0 }}>
-                {projectName}
-              </Typography>
-            </>
-          ) : (
-            <Typography variant="h6" component="h1" noWrap>
-              {workspaceName}
-            </Typography>
-          )}
+          <Typography variant="h6" component="h1" noWrap>
+            {workspaceName}
+          </Typography>
           {isDefaultWorkspace && (
             <Chip size="small" variant="outlined" label="Global" sx={{ height: 18, fontSize: '0.6875rem' }} />
           )}
@@ -78,8 +47,26 @@ export function WorkspaceBreadcrumbHeader({
           </Typography>
         </Tooltip>
       </Box>
-      {actions !== undefined && (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
+      {(!isDefaultWorkspace || actions !== undefined) && (
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
+          {!isDefaultWorkspace && (
+            // Shown for the whole time you're on a non-default workspace —
+            // with or without a Project additionally selected within it —
+            // since it always leads Home (same destination as the "Início"
+            // nav button), never just to this workspace's own view. A
+            // non-default workspace is a stop along the way, not the
+            // destination, whether or not you've also drilled into a Project.
+            <Tooltip title="Início">
+              <IconButton
+                size="small"
+                data-testid="workspace-breadcrumb-workspace-crumb"
+                aria-label="Início"
+                onClick={onNavigateToWorkspace}
+              >
+                <Icon glyph={House} size={18} />
+              </IconButton>
+            </Tooltip>
+          )}
           {actions}
         </Stack>
       )}

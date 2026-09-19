@@ -8,7 +8,8 @@ interface TreeGroupProps {
   testId: string;
   glyph: LucideIcon;
   label: string;
-  count: number;
+  /** Omitted for a group whose "rows" are other `TreeGroup`s rather than counted items — e.g. "Integrações" wrapping Hooks/MCP/Plugins, each of which already carries its own count. */
+  count?: number;
   onCreate?: () => void;
   createLabel?: string;
   children: React.ReactNode;
@@ -32,7 +33,9 @@ export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, 
         primary={label}
         onClick={() => setExpanded((v) => !v)}
         actionsVisibility="always"
-        badge={<Chip size="small" label={count} sx={{ height: 18, fontSize: '0.6875rem', '& .MuiChip-label': { px: 0.75 } }} />}
+        {...(count !== undefined
+          ? { badge: <Chip size="small" label={count} sx={{ height: 18, fontSize: '0.6875rem', '& .MuiChip-label': { px: 0.75 } }} /> }
+          : {})}
         actions={
           // Fixed-width whether or not this kind offers a create action, so every
           // group's count chip lands in the same column instead of drifting

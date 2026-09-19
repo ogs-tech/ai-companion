@@ -8,6 +8,7 @@ import type { Workspace } from '../../../shared/workspace.js';
 interface ExplorerPanelContentProps {
   activeWorkspace: Workspace | undefined;
   isDefaultWorkspace: boolean;
+  /** The Control Panel's own current scope, only surfaced here for the header — the tree below never filters by it, it only expands folders in place. */
   selectedProject: Project | null;
   onNavigateToWorkspace: () => void;
   /** The Explorer Panel's own "⋮" menu (global-entity visibility, panel toggles, destructive remove) — built by the parent screen, since it reaches state (both panels' collapse, `showGlobal`) that isn't local to this panel. */
@@ -58,7 +59,6 @@ export function ExplorerPanelContent({
         <WorkspaceBreadcrumbHeader
           workspaceName={activeWorkspace?.name ?? '…'}
           isDefaultWorkspace={activeWorkspace?.isDefault ?? false}
-          {...(selectedProject ? { projectName: selectedProject.name } : {})}
           path={selectedProject ? selectedProject.path : (activeWorkspace?.rootPath ?? '')}
           onNavigateToWorkspace={onNavigateToWorkspace}
           actions={headerMenu}

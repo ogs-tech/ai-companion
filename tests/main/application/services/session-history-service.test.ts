@@ -256,6 +256,50 @@ describe('SessionHistoryService', () => {
 
       expect(port.readUsageCalls).toEqual(['a', 'a']);
     });
+
+    it('reads each transcript once even when list() and stats() are called concurrently, not just sequentially', async () => {
+      // The renderer fires `useSessionHistory` and `useSessionHistoryStats`
+      // together on mount — the cache above only helps a *second* call that
+      // starts after the first already finished. A caller that starts while
+      // the first read is still in flight must reuse that same read, or the
+      // panel does every transcript's disk read twice on first open.
+      const { service, port } = setup([transcript({ id: 'a' }), transcript({ id: 'b' })]);
+
+      await Promise.all([service.list({ scope: ALL }), service.stats({ scope: ALL })]);
+
+      expect(port.readUsageCalls.filter((id) => id === 'a')).toHaveLength(1);
+      expect(port.readUsageCalls.filter((id) => id === 'b')).toHaveLength(1);
+    });
+
+    it('reads every transcript in scope concurrently, not one at a time, so a large history does not scale linearly with disk round trips', async () => {
+      // At 178 real transcripts, a one-at-a-time loop pays a full disk round
+      // trip per file in sequence before the panel can show anything —
+      // that's the wait a person mistakes for "stuck until scrolling
+      // finishes". Reading them together turns N round trips into one.
+      const transcripts = Array.from({ length: 5 }, (_, i) => transcript({ id: `s${i}` }));
+      const { service, port } = setup(transcripts);
+
+      const started: string[] = [];
+      let releaseReads: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        releaseReads = resolve;
+      });
+      const originalReadUsage = port.readUsage.bind(port);
+      port.readUsage = async (ref) => {
+        started.push(ref.claudeSessionId); // recorded before the gate, unlike readUsageCalls below
+        await gate; // every read blocks here until released together
+        return originalReadUsage(ref);
+      };
+
+      const pending = service.list({ scope: ALL });
+      // Flush the microtask queue (scope/rate-override lookups, cache checks)
+      // so every read has had the chance to start before any of them can finish.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(started).toHaveLength(5);
+
+      releaseReads!();
+      await pending;
+    });
   });
 
   describe('entries', () => {

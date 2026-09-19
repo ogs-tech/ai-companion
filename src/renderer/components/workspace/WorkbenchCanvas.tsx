@@ -20,6 +20,16 @@ export interface WorkbenchTab {
   dense?: boolean;
   /** Unsaved-changes indicator — a small dot next to the label, same signal a `closeTab`/scope-switch discard guard reads to decide whether to confirm. */
   dirty?: boolean;
+  /**
+   * Path-like context for this tab, browser-address-bar style (e.g.
+   * "brand › INSTRUCTIONS", "apps › src › a.md") — shown only while this tab
+   * is active. A tab's own label is often just the scope's name (an
+   * instruction's `entity.name` is its project/workspace's own basename), so
+   * two unrelated tabs can carry the exact same label; the breadcrumb is what
+   * actually disambiguates them. Omitted for tabs with no real path (a
+   * session, a preview, Histórico).
+   */
+  breadcrumb?: string;
   /** Rendered for every open tab on every render, not just the active one — visibility is a `display` toggle (via the `hidden` arg), never a mount/unmount, so scroll position survives switching away and back. */
   render: (hidden: boolean) => React.ReactNode;
 }
@@ -37,6 +47,7 @@ interface WorkbenchCanvasProps {
  * rendered through the same EditorPanel; sessions share the tab strip too.
  */
 export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: WorkbenchCanvasProps): React.ReactElement {
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
   return (
     <Box data-testid="workbench-canvas" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
       {tabs.length > 0 && (
@@ -108,6 +119,23 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
             );
           })}
         </Stack>
+      )}
+      {activeTab?.breadcrumb && (
+        <Box
+          data-testid="workbench-breadcrumb"
+          sx={(theme) => ({
+            px: 1.5,
+            py: 0.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            flexShrink: 0,
+            fontFamily: theme.ogs.fonts.mono,
+            fontSize: '0.75rem',
+            color: 'text.secondary',
+          })}
+        >
+          {activeTab.breadcrumb}
+        </Box>
       )}
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {tabs.length === 0

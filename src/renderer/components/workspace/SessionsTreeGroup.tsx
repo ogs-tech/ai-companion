@@ -162,7 +162,14 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
   }
 
   return (
-    <>
+    // The rows scroll in their own box; the footer below is a fixed sibling,
+    // never a descendant of it. Nesting the footer inside the same scroll
+    // area as the sentinel means reaching it scrolls the sentinel into view
+    // first, which loads another page and pushes the footer away again — at
+    // 178 sessions that is "scroll through all of them to reach Ver todas",
+    // not a rare edge case.
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       <Stack spacing={0.25} sx={{ px: 0.75, pb: 0.5 }}>
         {rows.map((row) => (
           <SessionRow
@@ -239,12 +246,13 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
 
         <Box ref={sentinelRef} data-testid="sessions-scroll-sentinel" sx={{ height: 1 }} />
       </Stack>
+      </Box>
 
       <Divider />
       <Stack
         direction="row"
         data-testid="sessions-footer"
-        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 0.75, gap: 1 }}
+        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 0.75, gap: 1, flexShrink: 0 }}
       >
         <Box sx={{ minWidth: 0 }}>
           <Typography
@@ -274,7 +282,7 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
         )}
       </Stack>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
-    </>
+    </Box>
   );
 }
 
