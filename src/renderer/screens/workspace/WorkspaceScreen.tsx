@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Box, Divider, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip,
 } from '@mui/material';
@@ -20,6 +20,7 @@ import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
 import { EditorPanel, type EditorHiddenField, type PreviewSource } from '../../components/workspace/EditorPanel.js';
 import { SessionPanel } from '../../components/SessionPanel.js';
+import { BrowserPane } from '../../components/BrowserPane.js';
 import { WorkspaceRemoveConfirmDialog } from '../../components/shell/WorkspaceRemoveConfirmDialog.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR, NAV_AREAS, type AreaDef } from '../../components/shell/nav.js';
 import { TreeRow } from '../../components/ds/TreeRow.js';
@@ -36,6 +37,12 @@ import {
   type WorkspaceHistoryEntry,
 } from '../../lib/workspace-history-store.js';
 import { registerAreaOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
+import {
+  closeBrowserTab,
+  getBrowserTabsSnapshot,
+  registerBrowserWorkbenchOpener,
+  subscribeBrowserTabs,
+} from '../../lib/browser-tabs-store.js';
 import { seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
 import { entityBody } from '../../lib/entity-body.js';
 import { useActiveWorkspace, useDeleteWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
@@ -73,6 +80,7 @@ type OpenTab =
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
   | { id: string; kind: 'history' }
+  | { id: string; kind: 'browser'; tabId: string }
   | { id: string; kind: WorkspaceAreaTab };
 
 /** Tabs that can hold unsaved work, and so need a discard guard before closing. */
@@ -259,6 +267,27 @@ export function WorkspaceScreen(): React.ReactElement {
     registerAreaOpener(openAreaTab);
     return () => registerAreaOpener(null);
   });
+
+  // A browser tab is identity-keyed by its own `tabId` (a `sessionId` for one
+  // opened via a `SessionPanel` toggle, a fresh id for a manual one) — same
+  // registered-callback shape as `openAreaTab` above, since the things that
+  // open one (that same `SessionPanel`, buried inside this very canvas; a
+  // marketplace/footer link or the TopNav button, outside this screen
+  // entirely) have no prop path in either way. `browser-tabs-store.ts` is the
+  // source of truth for which tabs exist; this only decides which of them is
+  // a Workbench tab and which one is active.
+  const openBrowserWorkbenchTab = (tabId: string): void => {
+    const id = `browser:${tabId}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'browser', tabId }]));
+    setActiveTabId(id);
+  };
+
+  useEffect(() => {
+    registerBrowserWorkbenchOpener(openBrowserWorkbenchTab);
+    return () => registerBrowserWorkbenchOpener(null);
+  });
+
+  const { tabs: browserTabs } = useSyncExternalStore(subscribeBrowserTabs, getBrowserTabsSnapshot);
 
   // The only thing an EditorPanel reports upward about its own edits — never
   // its draft content, never CodeMirror/Entity internals — so a tab's dirty
@@ -730,6 +759,23 @@ export function WorkspaceScreen(): React.ReactElement {
         dense: true,
         onClose: () => closeTab(tab.id),
         render: () => areaScreen,
+      };
+    }
+    if (tab.kind === 'browser') {
+      // The label tracks the tab's live url (kept in `browser-tabs-store.ts`,
+      // updated by `BrowserPane` as it navigates) rather than anything
+      // captured at open time, so it doesn't go stale as the tab is used.
+      const liveTab = browserTabs.find((t) => t.tabId === tab.tabId);
+      return {
+        id: tab.id,
+        glyph: Globe,
+        label: liveTab?.url || 'Nova aba',
+        dense: true,
+        onClose: () => {
+          void closeBrowserTab(tab.tabId);
+          closeTab(tab.id);
+        },
+        render: () => <BrowserPane tabId={tab.tabId} />,
       };
     }
     if (tab.kind === 'session') {

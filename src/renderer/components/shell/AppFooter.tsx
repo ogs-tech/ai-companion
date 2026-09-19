@@ -1,6 +1,7 @@
 import { Box, Link } from '@mui/material';
 import { Kicker } from '../ds/Kicker.js';
 import { brand } from '../../../shared/brand.js';
+import { openManualTab } from '../../lib/browser-tabs-store.js';
 
 /** Slim global footer carrying the company brand line (moved out of the TopNav). */
 export function AppFooter(): React.ReactElement {
@@ -21,11 +22,13 @@ export function AppFooter(): React.ReactElement {
       <Kicker>
         <Link
           href={brand.companyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
           underline="hover"
           color="inherit"
           sx={{ font: 'inherit', letterSpacing: 'inherit', textTransform: 'inherit' }}
+          onClick={(e) => {
+            e.preventDefault();
+            void openManualTab(brand.companyUrl);
+          }}
         >
           {brand.companyLine}
         </Link>

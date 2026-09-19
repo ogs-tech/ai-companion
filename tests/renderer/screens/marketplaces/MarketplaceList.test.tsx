@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MarketplaceList } from '../../../../src/renderer/screens/marketplaces/MarketplaceList.js';
+import {
+  getBrowserTabsSnapshot,
+  resetBrowserTabsForTests,
+} from '../../../../src/renderer/lib/browser-tabs-store.js';
 import {
   mockApi,
   ok,
@@ -13,6 +17,10 @@ let call: CallSpy;
 
 beforeEach(() => {
   call = mockApi();
+});
+
+afterEach(() => {
+  resetBrowserTabsForTests();
 });
 
 describe('<MarketplaceList>', () => {
@@ -59,6 +67,39 @@ describe('<MarketplaceList>', () => {
       screen.getByText('Claude Plugins Official'),
     ).toBeInTheDocument();
     expect(screen.getByText(/1 plugin/)).toBeInTheDocument();
+  });
+
+  it('clicking a GitHub-sourced item’s link opens it in the integrated browser instead of navigating away', async () => {
+    const user = userEvent.setup();
+    call.mockImplementation((method: string) => {
+      if (method === 'marketplace.list')
+        return Promise.resolve(
+          ok([
+            {
+              id: 'official',
+              source: { kind: 'github', repo: 'anthropics/claude-plugins-official' },
+              manifest: {
+                name: 'Official',
+                description: 'official catalog',
+                plugins: [{ name: 'p1', description: 'plugin 1', source: 'a' }],
+              },
+            },
+          ]),
+        );
+      if (method === 'browser.openTab') return Promise.resolve(ok({ tabId: 'tab-1' }));
+      return Promise.resolve(ok(undefined));
+    });
+    renderWithQuery(<MarketplaceList />);
+
+    const link = await screen.findByRole('link', { name: 'anthropics/claude-plugins-official' });
+    await user.click(link);
+
+    expect(call).toHaveBeenCalledWith('browser.openTab', {
+      url: 'https://github.com/anthropics/claude-plugins-official',
+    });
+    expect(getBrowserTabsSnapshot().tabs).toEqual([
+      { tabId: 'tab-1', url: 'https://github.com/anthropics/claude-plugins-official' },
+    ]);
   });
 
   it('opens import dialog when Import from URL clicked', async () => {

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from 'react';
 import { Box, Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
-import { Group, Panel, type PanelImperativeHandle } from 'react-resizable-panels';
 import { SquareTerminal, Lock, Globe } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -18,14 +17,16 @@ import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
 import { StatusPill, type StatusPillVariant } from './ds/StatusPill.js';
 import { EmptyState } from './ds/EmptyState.js';
-import { ResizeHandle } from './ds/ResizeHandle.js';
-import { BrowserPane } from './BrowserPane.js';
+import {
+  closeSessionTab,
+  getBrowserTabsSnapshot,
+  openSessionTab,
+  registerSessionTab,
+  subscribeBrowserTabs,
+} from '../lib/browser-tabs-store.js';
 import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
 import { SESSION_STATUS_PILL } from '../lib/session-status-pill.js';
-
-/** Width the browser pane opens to when toggled on — driven imperatively via `resize()`, not `defaultSize`, since a Panel's "expand to its most recent size" has no well-defined size to return to on this pane's very first toggle (it starts fully collapsed). */
-const BROWSER_PANEL_OPEN_SIZE = 40;
 
 type PanelStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error';
 
@@ -179,11 +180,15 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   const sessionIdRef = useRef<string | null>(sessionIdProp ?? null);
   const [status, setStatus] = useState<PanelStatus>(sessionIdProp ? 'starting' : 'idle');
   const [error, setError] = useState<string | null>(null);
-  const [browserEnabled, setBrowserEnabled] = useState(false);
+  // Derived, not local state: the same session's browser can also be turned
+  // off from its Workbench tab's own close button (see browser-tabs-store's
+  // `closeBrowserTab`), so this has to track the shared store rather than a
+  // copy that only this component's own toggle click ever updates.
+  const { tabs: browserTabs } = useSyncExternalStore(subscribeBrowserTabs, getBrowserTabsSnapshot);
+  const browserEnabled = sessionId !== null && browserTabs.some((tab) => tab.tabId === sessionId);
   const [attachmentToast, setAttachmentToast] = useState<ToastMessage | null>(null);
-  /** Set when the browser is toggled on while the session is already running — the CLI only reads `--mcp-config` at its own startup, so that toggle has no live effect until the session is next restarted. Cleared once it actually is. */
-  const [browserNeedsRestart, setBrowserNeedsRestart] = useState(false);
-  const browserPanelRef = useRef<PanelImperativeHandle | null>(null);
+  /** True while `browser.enable`/`browser.disable` is in flight — that call restarts the session's own `claude` process when it's running, so the toggle is disabled meanwhile rather than letting a second click queue up another restart mid-flight. */
+  const [browserToggling, setBrowserToggling] = useState(false);
 
   // Attaches to a session already running server-side. When the caller
   // already knows a concrete sessionId (every Workbench tab, opened from a
@@ -201,7 +206,11 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
         if (active && existing) {
           if (!sessionIdProp) setSessionId(existing.sessionId);
           setStatus(existing.status === 'exited' ? 'exited' : 'running');
-          setBrowserEnabled(existing.browserEnabled);
+          // Re-attaching to a session whose browser was already on: its tab
+          // already exists main-process side, so this only needs to tell the
+          // global browser store it exists — never steals focus or opens the
+          // panel the way a fresh toggle click does.
+          if (existing.browserEnabled) registerSessionTab(existing.sessionId);
           // Written straight to the terminal (not through React state) so it
           // lands before the live onOutput subscription below ever starts —
           // by the time this resolves, the terminal-creation effect has
@@ -301,10 +310,6 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     };
   }, [sessionId, visible]);
 
-  useEffect(() => {
-    browserPanelRef.current?.resize(browserEnabled ? BROWSER_PANEL_OPEN_SIZE : 0);
-  }, [browserEnabled]);
-
   const handleOpen = async (): Promise<void> => {
     setStatus('starting');
     setError(null);
@@ -312,8 +317,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor });
       setSessionId(session.sessionId);
       setStatus(session.status === 'exited' ? 'exited' : 'running');
-      setBrowserEnabled(session.browserEnabled);
-      setBrowserNeedsRestart(false);
+      if (session.browserEnabled) registerSessionTab(session.sessionId);
       void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
       // The resize effect below reacts to `sessionId` changing and fits/resizes
       // itself — no need to duplicate that call here.
@@ -329,9 +333,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     try {
       const session = await callIpc<SessionSnapshotWithOutput>('session.resume', { sessionId: id });
       setStatus(session.status === 'exited' ? 'exited' : 'running');
-      setBrowserEnabled(session.browserEnabled);
-      // A restart is exactly what this notice was waiting for.
-      setBrowserNeedsRestart(false);
+      if (session.browserEnabled) registerSessionTab(session.sessionId);
       void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
     } catch (err) {
       setStatus('error');
@@ -412,15 +414,24 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     }
   };
 
+  // Restarts the session's own `claude` process on the main-process side when
+  // it's running (the CLI only reads `--mcp-config` at its own startup) — the
+  // toggle is disabled for the duration so a second click can't queue up a
+  // restart on top of one already in flight. On success, opens (or forgets)
+  // this session's own Workbench browser tab — `browserEnabled` above is
+  // derived from that same store, so the icon's color/tooltip follow along.
   const handleToggleBrowser = async (): Promise<void> => {
     if (!sessionId) return;
     const next = !browserEnabled;
+    setBrowserToggling(true);
     try {
       await callIpc(next ? 'browser.enable' : 'browser.disable', { sessionId });
-      setBrowserEnabled(next);
-      setBrowserNeedsRestart(next && status === 'running');
+      if (next) openSessionTab(sessionId);
+      else closeSessionTab(sessionId);
     } catch (err) {
       setError(err instanceof IpcCallError ? err.message : String(err));
+    } finally {
+      setBrowserToggling(false);
     }
   };
 
@@ -444,17 +455,32 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
 
   // Once a concrete sessionId exists, the embedded browser tool can be
   // toggled regardless of run state (idle/starting has none yet to key it by).
+  // Turning it on opens the session's own tab in the Workbench's tab strip
+  // (WorkspaceScreen) — turning it off tears the tab down, not just hides it
+  // (and can also be done from that tab's own close button), so the label
+  // says "ativar"/"desativar", not "mostrar"/"ocultar".
   const browserToggle = sessionId ? (
-    <Tooltip title={browserEnabled ? 'Ocultar navegador' : 'Mostrar navegador'}>
-      <IconButton
-        size="small"
-        data-testid="session-browser-toggle"
-        aria-label={browserEnabled ? 'Ocultar navegador' : 'Mostrar navegador'}
-        color={browserEnabled ? 'primary' : 'default'}
-        onClick={() => void handleToggleBrowser()}
-      >
-        <Icon glyph={Globe} size={16} />
-      </IconButton>
+    <Tooltip
+      title={
+        browserToggling
+          ? 'Reiniciando sessão…'
+          : browserEnabled
+            ? 'Desativar navegador da sessão'
+            : 'Ativar navegador da sessão'
+      }
+    >
+      <span>
+        <IconButton
+          size="small"
+          data-testid="session-browser-toggle"
+          aria-label={browserEnabled ? 'Desativar navegador da sessão' : 'Ativar navegador da sessão'}
+          color={browserEnabled ? 'primary' : 'default'}
+          disabled={browserToggling}
+          onClick={() => void handleToggleBrowser()}
+        >
+          <Icon glyph={Globe} size={16} />
+        </IconButton>
+      </span>
     </Tooltip>
   ) : null;
 
@@ -478,49 +504,28 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
           {error}
         </Typography>
       )}
-      {browserNeedsRestart && (
-        <Typography variant="caption" color="text.secondary" data-testid="browser-restart-notice" sx={{ mx: 2, mb: 1.5, flexShrink: 0 }}>
-          O navegador será aplicado assim que a sessão for reiniciada.
-        </Typography>
-      )}
-      <Group orientation="horizontal" style={{ flexGrow: 1, minHeight: 0, display: 'flex' }}>
-        <Panel id="session-terminal-panel" minSize="20" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* No padding, border, or radius here — a running session drops the
-              header above and this box is the only thing left in the tab, so any
-              inset chrome would read as "a panel with a terminal in it" rather
-              than the terminal being the page. */}
-          {/* No padding here, ever — xterm's FitAddon measures this element's own
-              clientHeight/Width (the parent it was `open()`ed into) to compute
-              rows/cols. Padding on it would size the terminal to include the
-              padded-away space, and the CLI's own bottom-most row (its input box
-              and status line) would render past `overflow: hidden` and clip. */}
-          <Box
-            ref={containerRef}
-            data-testid="session-terminal"
-            onDragOver={handleAttachmentDragOver}
-            onDrop={handleAttachmentDrop}
-            onPasteCapture={(event) => void handleAttachmentPaste(event)}
-            sx={{
-              flexGrow: 1,
-              minHeight: 0,
-              bgcolor: ogs.ink,
-              overflow: 'hidden',
-            }}
-          />
-        </Panel>
-        <ResizeHandle />
-        <Panel
-          id="session-browser-panel"
-          panelRef={browserPanelRef}
-          collapsible
-          collapsedSize={0}
-          defaultSize={0}
-          minSize="20"
-          style={{ overflow: 'hidden' }}
-        >
-          {sessionId && browserEnabled && <BrowserPane sessionId={sessionId} />}
-        </Panel>
-      </Group>
+      {/* No padding, border, or radius here — a running session drops the
+          header above and this box is the only thing left in the tab, so any
+          inset chrome would read as "a panel with a terminal in it" rather
+          than the terminal being the page. */}
+      {/* No padding here, ever — xterm's FitAddon measures this element's own
+          clientHeight/Width (the parent it was `open()`ed into) to compute
+          rows/cols. Padding on it would size the terminal to include the
+          padded-away space, and the CLI's own bottom-most row (its input box
+          and status line) would render past `overflow: hidden` and clip. */}
+      <Box
+        ref={containerRef}
+        data-testid="session-terminal"
+        onDragOver={handleAttachmentDragOver}
+        onDrop={handleAttachmentDrop}
+        onPasteCapture={(event) => void handleAttachmentPaste(event)}
+        sx={{
+          flexGrow: 1,
+          minHeight: 0,
+          bgcolor: ogs.ink,
+          overflow: 'hidden',
+        }}
+      />
       <Toast toast={attachmentToast} onDismiss={() => setAttachmentToast(null)} />
     </Box>
   );

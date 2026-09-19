@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MarketplaceDetail } from '../../../../src/renderer/screens/marketplaces/MarketplaceDetail.js';
+import {
+  getBrowserTabsSnapshot,
+  resetBrowserTabsForTests,
+} from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, renderWithQuery, type CallSpy } from '../../test-utils.js';
 
 let call: CallSpy;
@@ -35,8 +39,13 @@ beforeEach(() => {
   call = mockApi();
   call.mockImplementation((method: string) => {
     if (method === 'plugin.list') return Promise.resolve(ok([]));
+    if (method === 'browser.openTab') return Promise.resolve(ok({ tabId: 'tab-1' }));
     return Promise.resolve(ok(undefined));
   });
+});
+
+afterEach(() => {
+  resetBrowserTabsForTests();
 });
 
 describe('<MarketplaceDetail>', () => {
@@ -55,6 +64,21 @@ describe('<MarketplaceDetail>', () => {
     ).toHaveTextContent('Instalar');
 
     expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument();
+  });
+
+  it('clicking the source link opens it in the integrated browser instead of navigating away', async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<MarketplaceDetail marketplace={marketplace} />);
+
+    const link = await screen.findByRole('link', { name: 'anthropics/claude-plugins-official' });
+    await user.click(link);
+
+    expect(call).toHaveBeenCalledWith('browser.openTab', {
+      url: 'https://github.com/anthropics/claude-plugins-official',
+    });
+    expect(getBrowserTabsSnapshot().tabs).toEqual([
+      { tabId: 'tab-1', url: 'https://github.com/anthropics/claude-plugins-official' },
+    ]);
   });
 
   it('filters plugins through the grid search input', async () => {

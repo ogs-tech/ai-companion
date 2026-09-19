@@ -7,14 +7,18 @@ import type {
 export class FakeEmbeddedBrowserPort implements EmbeddedBrowserPort {
   createCalls: string[] = [];
   destroyCalls: string[] = [];
+  openTabCalls: Array<string | undefined> = [];
+  closeTabCalls: string[] = [];
   navigateCalls: Array<[string, string]> = [];
   setBoundsCalls: Array<[string, EmbeddedBrowserBounds]> = [];
   destroyAllCalls = 0;
 
   private nextCreateFailure: Error | null = null;
   private readonly created = new Set<string>();
+  private readonly manualTabs = new Set<string>();
   private readonly statuses = new Map<string, EmbeddedBrowserStatus>();
   private pathCounter = 0;
+  private tabCounter = 0;
 
   failNextCreate(error: Error): void {
     this.nextCreateFailure = error;
@@ -38,22 +42,38 @@ export class FakeEmbeddedBrowserPort implements EmbeddedBrowserPort {
     this.statuses.delete(sessionId);
   }
 
+  async openTab(url?: string): Promise<{ tabId: string }> {
+    this.openTabCalls.push(url);
+    this.tabCounter += 1;
+    const tabId = `tab-${this.tabCounter}`;
+    this.manualTabs.add(tabId);
+    if (url) this.statuses.set(tabId, { url });
+    return { tabId };
+  }
+
+  async closeTab(tabId: string): Promise<void> {
+    this.closeTabCalls.push(tabId);
+    this.manualTabs.delete(tabId);
+    this.statuses.delete(tabId);
+  }
+
   async destroyAll(): Promise<void> {
     this.destroyAllCalls += 1;
     this.created.clear();
+    this.manualTabs.clear();
     this.statuses.clear();
   }
 
-  async navigate(sessionId: string, url: string): Promise<void> {
-    this.navigateCalls.push([sessionId, url]);
-    this.statuses.set(sessionId, { url });
+  async navigate(id: string, url: string): Promise<void> {
+    this.navigateCalls.push([id, url]);
+    this.statuses.set(id, { url });
   }
 
-  setBounds(sessionId: string, bounds: EmbeddedBrowserBounds): void {
-    this.setBoundsCalls.push([sessionId, bounds]);
+  setBounds(id: string, bounds: EmbeddedBrowserBounds): void {
+    this.setBoundsCalls.push([id, bounds]);
   }
 
-  status(sessionId: string): EmbeddedBrowserStatus | null {
-    return this.statuses.get(sessionId) ?? null;
+  status(id: string): EmbeddedBrowserStatus | null {
+    return this.statuses.get(id) ?? null;
   }
 }

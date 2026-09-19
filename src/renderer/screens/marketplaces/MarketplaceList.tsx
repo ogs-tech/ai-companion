@@ -17,6 +17,7 @@ import {
 import { Download, RefreshCw, Trash2, BadgeCheck } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
+import { openManualTab } from '../../lib/browser-tabs-store.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { DetailDrawer } from '../../components/DetailDrawer.js';
 import { MarketplaceDetail } from './MarketplaceDetail.js';
@@ -190,10 +191,12 @@ export function MarketplaceList(): React.ReactElement {
               {label.href ? (
                 <Link
                   href={label.href}
-                  target="_blank"
-                  rel="noopener"
                   underline="hover"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    void openManualTab(label.href);
+                  }}
                 >
                   {label.detail}
                 </Link>

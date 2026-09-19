@@ -66,38 +66,65 @@ describe('browser-handlers', () => {
     expect(spy).toHaveBeenCalledWith(spawned.sessionId, false);
   });
 
-  it('browser.navigate validates sessionId + url and forwards to the port', async () => {
+  it('browser.navigate validates tabId + url and forwards to the port', async () => {
     const { embeddedBrowser, h } = setup();
-    await h['browser.navigate']!({ sessionId: 'sess-1', url: 'https://example.com' });
-    expect(embeddedBrowser.navigateCalls).toEqual([['sess-1', 'https://example.com']]);
+    await h['browser.navigate']!({ tabId: 'tab-1', url: 'https://example.com' });
+    expect(embeddedBrowser.navigateCalls).toEqual([['tab-1', 'https://example.com']]);
   });
 
   it('browser.navigate rejects a missing url', async () => {
     const { h } = setup();
-    await expect(h['browser.navigate']!({ sessionId: 'sess-1' })).rejects.toMatchObject({ kind: 'validation' });
+    await expect(h['browser.navigate']!({ tabId: 'tab-1' })).rejects.toMatchObject({ kind: 'validation' });
   });
 
   it('browser.setBounds validates the bounds shape and forwards to the port', async () => {
     const { embeddedBrowser, h } = setup();
-    await h['browser.setBounds']!({ sessionId: 'sess-1', bounds: { x: 1, y: 2, width: 300, height: 400 } });
-    expect(embeddedBrowser.setBoundsCalls).toEqual([['sess-1', { x: 1, y: 2, width: 300, height: 400 }]]);
+    await h['browser.setBounds']!({ tabId: 'tab-1', bounds: { x: 1, y: 2, width: 300, height: 400 } });
+    expect(embeddedBrowser.setBoundsCalls).toEqual([['tab-1', { x: 1, y: 2, width: 300, height: 400 }]]);
   });
 
   it('browser.setBounds rejects a non-numeric bound field', async () => {
     const { h } = setup();
     await expect(
-      h['browser.setBounds']!({ sessionId: 'sess-1', bounds: { x: 1, y: 2, width: 'wide', height: 400 } }),
+      h['browser.setBounds']!({ tabId: 'tab-1', bounds: { x: 1, y: 2, width: 'wide', height: 400 } }),
     ).rejects.toMatchObject({ kind: 'validation' });
   });
 
   it('browser.status returns null before the browser was ever enabled', async () => {
     const { h } = setup();
-    expect(await h['browser.status']!({ sessionId: 'sess-1' })).toBeNull();
+    expect(await h['browser.status']!({ tabId: 'tab-1' })).toBeNull();
   });
 
   it('browser.status returns the current url once navigated', async () => {
     const { h } = setup();
-    await h['browser.navigate']!({ sessionId: 'sess-1', url: 'https://example.com' });
-    expect(await h['browser.status']!({ sessionId: 'sess-1' })).toEqual({ url: 'https://example.com' });
+    await h['browser.navigate']!({ tabId: 'tab-1', url: 'https://example.com' });
+    expect(await h['browser.status']!({ tabId: 'tab-1' })).toEqual({ url: 'https://example.com' });
   });
+
+  it('browser.openTab forwards the optional url to the port', async () => {
+    const { embeddedBrowser, h } = setup();
+
+    const result = await h['browser.openTab']!({ url: 'https://example.com' });
+
+    expect(embeddedBrowser.openTabCalls).toEqual(['https://example.com']);
+    expect(result).toEqual({ tabId: 'tab-1' });
+  });
+
+  it('browser.openTab tolerates no url at all', async () => {
+    const { embeddedBrowser, h } = setup();
+    await h['browser.openTab']!({});
+    expect(embeddedBrowser.openTabCalls).toEqual([undefined]);
+  });
+
+  it('browser.closeTab validates tabId and forwards to the port', async () => {
+    const { embeddedBrowser, h } = setup();
+    await h['browser.closeTab']!({ tabId: 'tab-1' });
+    expect(embeddedBrowser.closeTabCalls).toEqual(['tab-1']);
+  });
+
+  it('browser.closeTab rejects a missing tabId', async () => {
+    const { h } = setup();
+    await expect(h['browser.closeTab']!({})).rejects.toMatchObject({ kind: 'validation' });
+  });
+
 });

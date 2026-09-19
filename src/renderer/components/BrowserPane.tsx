@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Stack, TextField } from '@mui/material';
 import { callIpc } from '../lib/ipc.js';
+import { setTabUrl } from '../lib/browser-tabs-store.js';
 
 interface BrowserPaneProps {
-  sessionId: string;
+  tabId: string;
 }
 
 const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -16,9 +17,12 @@ const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
  * directly. This region only reports its own bounds (via `ResizeObserver`,
  * the same mechanism `SessionPanel` already uses for xterm's `FitAddon`) so
  * the main process can `setBounds` the real view to match; the actual page
- * content lives entirely outside this component's DOM.
+ * content lives entirely outside this component's DOM. Renders whichever tab
+ * the `browser-tabs-store` currently has active — mounted with `key={tabId}`
+ * by its callers so switching tabs remounts it fresh rather than reusing
+ * stale address-bar state across tabs.
  */
-export function BrowserPane({ sessionId }: BrowserPaneProps): React.ReactElement {
+export function BrowserPane({ tabId }: BrowserPaneProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [addressBarValue, setAddressBarValue] = useState('');
 
@@ -26,8 +30,11 @@ export function BrowserPane({ sessionId }: BrowserPaneProps): React.ReactElement
     let active = true;
     void (async () => {
       try {
-        const status = await callIpc<{ url: string } | null>('browser.status', { sessionId });
-        if (active && status) setAddressBarValue(status.url);
+        const status = await callIpc<{ url: string } | null>('browser.status', { tabId });
+        if (active && status) {
+          setAddressBarValue(status.url);
+          setTabUrl(tabId, status.url);
+        }
       } catch {
         // No status yet — stays blank until the first navigate.
       }
@@ -35,7 +42,7 @@ export function BrowserPane({ sessionId }: BrowserPaneProps): React.ReactElement
     return () => {
       active = false;
     };
-  }, [sessionId]);
+  }, [tabId]);
 
   useEffect(() => {
     const syncBounds = (): void => {
@@ -43,7 +50,7 @@ export function BrowserPane({ sessionId }: BrowserPaneProps): React.ReactElement
       if (!el) return;
       const rect = el.getBoundingClientRect();
       void callIpc('browser.setBounds', {
-        sessionId,
+        tabId,
         bounds: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
@@ -60,15 +67,16 @@ export function BrowserPane({ sessionId }: BrowserPaneProps): React.ReactElement
       window.removeEventListener('resize', syncBounds);
       resizeObserver.disconnect();
     };
-  }, [sessionId]);
+  }, [tabId]);
 
   const navigate = async (target: string): Promise<void> => {
     if (!target.trim()) return;
     const normalized = URL_SCHEME_RE.test(target) ? target : `https://${target}`;
-    await callIpc('browser.navigate', { sessionId, url: normalized }).catch(() => {
+    await callIpc('browser.navigate', { tabId, url: normalized }).catch(() => {
       // Surfaced nowhere yet — a failed navigation just leaves the address bar as typed.
     });
     setAddressBarValue(normalized);
+    setTabUrl(tabId, normalized);
   };
 
   return (

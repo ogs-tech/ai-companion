@@ -57,6 +57,13 @@ export class SessionService {
    * `remove`, the only two calls that actually tear the view down.
    */
   private readonly browserMcpConfigPaths = new Map<string, string>();
+  /**
+   * `sessionId`s currently mid-restart via {@link setBrowserEnabled} — the old
+   * PTY's real exit (fired asynchronously by the OS/`node-pty`, not
+   * synchronously by `kill()`) is expected and must not be reported as a
+   * genuine exit once a fresh PTY has already been spawned to replace it.
+   */
+  private readonly restarting = new Set<string>();
 
   constructor(
     private readonly entityService: EntityService,
@@ -76,6 +83,10 @@ export class SessionService {
       for (const listener of this.outputListeners) listener(sessionId, chunk);
     });
     this.claudeSession.onExit((sessionId, exitCode) => {
+      // A deliberate restart's own kill lands here late — the replacement PTY
+      // is already up (or about to be) by the time it does, so this exit is
+      // stale, not a real one.
+      if (this.restarting.has(sessionId)) return;
       const session = this.sessions.get(sessionId);
       if (session) session.status = 'exited';
       for (const listener of this.exitListeners) listener(sessionId, 'exited', exitCode);
@@ -349,9 +360,14 @@ export class SessionService {
    * been spawned at least once. Enabling materializes the `WebContentsView`
    * + its ephemeral `--mcp-config` file up front; disabling tears both down
    * immediately (unlike `kill`, which deliberately leaves them alone so a
-   * `resume` doesn't need to regenerate anything). The CLI only reads
-   * `--mcp-config` at its own startup, so toggling this on an already-running
-   * session has no live effect until it's next restarted.
+   * `resume` doesn't need to regenerate anything).
+   *
+   * The CLI only reads `--mcp-config` at its own startup, so a session that's
+   * currently running is restarted right here — killed and immediately
+   * resumed under the same `claudeSessionId`, so the conversation carries
+   * over — rather than leaving the toggle queued for whenever the session
+   * next happens to die on its own. The only observable cost is whatever the
+   * CLI was doing at that exact instant (e.g. a tool call) getting cut off.
    */
   async setBrowserEnabled(sessionId: string, enabled: boolean): Promise<SessionSnapshot> {
     const session = this.sessions.get(sessionId);
@@ -368,6 +384,23 @@ export class SessionService {
       this.browserMcpConfigPaths.delete(sessionId);
     }
     session.browserEnabled = enabled;
+
+    if (session.status === 'running') {
+      this.restarting.add(sessionId);
+      this.claudeSession.kill(sessionId);
+      try {
+        await this.spawnPty(sessionId, session.cwd, { mode: 'resume', claudeSessionId: session.claudeSessionId });
+      } catch (err) {
+        // The old PTY is already dead and the replacement never came up —
+        // this session really is exited now, and nothing else will report it
+        // since `restarting` is suppressing the stale exit event above.
+        session.status = 'exited';
+        for (const listener of this.exitListeners) listener(sessionId, 'exited', -1);
+        throw err;
+      } finally {
+        this.restarting.delete(sessionId);
+      }
+    }
     return session;
   }
 

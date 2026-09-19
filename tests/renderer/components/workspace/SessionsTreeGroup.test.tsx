@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionsTreeGroup } from '../../../../src/renderer/components/workspace/SessionsTreeGroup.js';
+import {
+  getBrowserTabsSnapshot,
+  openSessionTab,
+  resetBrowserTabsForTests,
+} from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, fail, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { intersectionObservers } from '../../setup.js';
 import type { SessionHistoryEntry, SessionHistoryPage } from '../../../../src/shared/session-history.js';
@@ -77,6 +82,10 @@ function route(overrides: Partial<Record<string, unknown>> = {}): void {
 beforeEach(() => {
   call = mockApi();
   route();
+});
+
+afterEach(() => {
+  resetBrowserTabsForTests();
 });
 
 const render = (props: Partial<React.ComponentProps<typeof SessionsTreeGroup>> = {}) =>
@@ -265,6 +274,18 @@ describe('SessionsTreeGroup', () => {
 
       await waitFor(() => expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }));
       await waitFor(() => expect(onRemoved).toHaveBeenCalledWith('workspace:w1'));
+    });
+
+    it('forgets the session’s global browser tab, if it had one open', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      route({ 'session.list': ok([runningSession]) });
+      openSessionTab('workspace:w1');
+      render();
+
+      await userEvent.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }));
+      expect(getBrowserTabsSnapshot().tabs).toEqual([]);
     });
   });
 

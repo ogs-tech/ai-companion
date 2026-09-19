@@ -12,6 +12,7 @@ import {
   useSessionHistoryStats,
 } from '../../hooks/use-session-history.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
+import { closeSessionTab } from '../../lib/browser-tabs-store.js';
 import { formatCostUsd } from '../../lib/format-session-history.js';
 import type { HistoryScope, SessionHistoryEntry } from '../../../shared/session-history.js';
 import type { SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
@@ -118,6 +119,10 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
     if (!window.confirm(`Apagar a sessão de ${session.label}? O histórico desta sessão será perdido.`)) return;
     try {
       await callIpc('session.remove', { sessionId: session.sessionId });
+      // `SessionService.remove` already tears the embedded browser down
+      // main-process side when it was enabled — this just forgets the tab on
+      // the renderer's own store, which `session.remove` has no other way to reach.
+      closeSessionTab(session.sessionId);
       await invalidate();
       onRemoved?.(session.sessionId);
     } catch (err) {

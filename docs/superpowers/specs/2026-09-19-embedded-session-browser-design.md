@@ -139,15 +139,80 @@ asserting `--mcp-config <path>` is appended only when `mcpConfigPath` is supplie
 generates/cleans up the ephemeral config file correctly and never mutates the user's own
 `McpConfigPort`-backed files.
 
-**jsdom project** (`tests/renderer/**`) — `BrowserPane` URL bar wiring; `SessionPanel` renders the
-split layout only when `browserEnabled`, and shows the "restart to apply" notice when toggled on a
-running session.
+**jsdom project** (`tests/renderer/**`) — `BrowserPane` URL bar wiring; `SessionPanel`'s toggle calls
+`browser.enable`/`browser.disable` and is disabled while the call (and the restart it triggers) is in
+flight, with its own enabled/disabled state now derived from `browser-tabs-store.ts` rather than local
+state (see the addendum below for why). Superseded by the addendum for anything about *where* the browser
+renders — see `browser-tabs-store.test.ts` and `WorkspaceScreen.test.tsx`'s `browser` tab-kind cases for
+that.
 
 ## 8. Out of scope
 
-- A standalone "Browser" area in the app's top-level navigation, independent of any session.
-- Hot-swapping MCP config into an already-running `claude` CLI process.
+- A standalone "Browser" area in the app's top-level navigation, independent of any session. **Reversed
+  the same day — see the addendum below.**
+- Hot-swapping MCP config into an already-running `claude` CLI process. **Reversed the same day** —
+  `setBrowserEnabled` now restarts the session in place instead (see `SessionService.setBrowserEnabled`'s
+  own doc comment).
 - Any change to `claude-in-chrome` or the user's real Chrome — that flow is untouched and unrelated.
 - Narrowing the CDP debug-port exposure (separate-process isolation) — noted as a possible future
   delivery if the accepted trade-off in §2.4 turns out to matter in practice.
 - The HTML live-preview feature — pre-existing, unrelated, not touched here.
+
+## 9. Addendum — browser tabs in the Workbench (2026-09-19, later the same day)
+
+The per-session-only scope call in §2.1 and the "no standalone Browser area" line in §8 held for about a
+day: testing the toggle in the running app, it was unclear it had done anything at all — the pane it
+opened was blank until a URL was typed in, easy to miss inside one session's own split panel. The
+follow-up ask was for the browser to be reachable globally, not scoped to one session, with "any
+integration with browser" (external links the app already opens — `shell.openExternal`, `target="_blank"`
+anchors) landing in it automatically instead of the OS's own browser.
+
+Two shapes were tried for "global" before landing on the one described below:
+
+1. A **side panel in `AppShell`**, wrapping every screen, with its own tab strip (`GlobalBrowser.tsx`) —
+   built, tested, working, but wrong: the app already has a tab system in its central panel (the Workbench,
+   `WorkspaceScreen`'s `OpenTab` union rendered by `WorkbenchCanvas`), and a second, parallel tab strip for
+   just one kind of content didn't belong next to it.
+2. **Browser tabs as ordinary Workbench tabs** — the shape that shipped. `GlobalBrowser.tsx` and its
+   `AppShell` wiring were removed entirely in favor of this.
+
+Kept from the original design: a session's browser is still opt-in per session, still wired to its own
+`@playwright/mcp` process over the same app-wide CDP port, still restarts the session in place to apply
+(see the "Reversed the same day" note on hot-swapping, above). What changed:
+
+- **`EmbeddedBrowserPort`/`EmbeddedBrowserAdapter` generalized from "one view per session" to a tab
+  pool** — `create`/`destroy` unchanged for a session's own tab (`tabId` is its `sessionId`), plus
+  `openTab`/`closeTab` for a manual tab (no session, no MCP config). No "active tab" concept on the
+  main-process side at all, in the end: positioning is purely a function of each tab's own `setBounds`
+  calls, and exactly one tab is ever actually shown because of how the Workbench already renders tab
+  content (see the next point) — an earlier `setActiveTab` method, explicitly zeroing whichever tab
+  used to be active, turned out to be unnecessary and was removed again.
+- **Presentation: Workbench tabs, not a separate panel.** `WorkspaceScreen`'s `OpenTab` union gained a
+  `{ kind: 'browser'; tabId: string }` case, rendering `<BrowserPane tabId={tab.tabId} />` with a live
+  label (the tab's current url, tracked in `browser-tabs-store.ts`). `WorkbenchCanvas` already keeps
+  every open tab mounted and toggles visibility with CSS (`display: none` for every tab but the active
+  one) rather than mounting/unmounting — a `BrowserPane`'s `ResizeObserver` reports zero bounds the
+  moment its own tab goes `display: none` (a `WebContentsView` at zero size *is* the correct hidden
+  state, unlike `SessionPanel`'s xterm case, which needs an explicit `visible` prop because a zero-size
+  terminal is destructive, not just hidden). `SessionPanel`'s own toggle still calls
+  `browser.enable`/`browser.disable`, but now opens (or forgets) this session's own Workbench tab through
+  a registered-opener callback (`registerBrowserWorkbenchOpener`, the same pattern `workspace-area-store.ts`
+  already uses for `TopNav`'s Diagnóstico pill) instead of rendering `BrowserPane` inline — which is what
+  actually fixed the "did that do anything?" problem: the click now visibly opens (and focuses) a real
+  tab, not an empty pane sharing screen space with the terminal.
+- **A session's browser can now also be turned off from its own tab's close button**, not just
+  `SessionPanel`'s toggle — every Workbench tab is closable the same way, and a browser tab is no
+  exception. `browser-tabs-store.ts`'s `closeBrowserTab` routes a session tab's close through
+  `browser.disable` (clearing `SessionService`'s own `browserMcpConfigPaths` entry, not just the view) and
+  a manual tab's through `browser.closeTab`. Consequence: `SessionPanel`'s `browserEnabled` is no longer
+  local state set once by its own toggle — it's derived from the shared store on every render
+  (`browserTabs.some((tab) => tab.tabId === sessionId)`), so the toggle's color/tooltip stay correct even
+  when the tab was closed out from under it.
+- **External links redirected.** Every `target="_blank"` anchor in the app (`MarketplaceList`,
+  `MarketplaceDetail`, `AppFooter`'s brand link) now opens a manual tab in the integrated browser instead
+  of the OS browser. The app's one `shell.openExternal` call site — the MCP re-auth trampoline
+  (`McpService.authenticate` → the `claude.ai` connectors OAuth page) — was deliberately left alone: the
+  embedded view has none of the user's existing OS-browser session/cookies and would likely force a fresh
+  login.
+- **Still out of scope:** narrowing the CDP debug-port exposure (§2.4, unchanged) and any change to
+  `claude-in-chrome` or the user's real Chrome.

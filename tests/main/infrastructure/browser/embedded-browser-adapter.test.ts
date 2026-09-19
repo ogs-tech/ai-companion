@@ -164,4 +164,64 @@ describe('EmbeddedBrowserAdapter', () => {
     const { adapter } = setup();
     expect(adapter.status('nope')).toBeNull();
   });
+
+  describe('manual tabs', () => {
+    it('openTab adds a view as a child of the main window, navigated to the given url, and mints a fresh tabId per call', async () => {
+      const { adapter, mainWindow } = setup();
+
+      const first = await adapter.openTab('https://example.com');
+      const second = await adapter.openTab();
+
+      expect(first.tabId).not.toBe(second.tabId);
+      expect(mainWindow.contentView.addChildView).toHaveBeenCalledTimes(2);
+      expect(mainWindow.contentView.addChildView.mock.calls[0]![0].webContents.loadURL).toHaveBeenCalledWith(
+        'https://example.com',
+      );
+      expect(mainWindow.contentView.addChildView.mock.calls[1]![0].webContents.loadURL).toHaveBeenCalledWith(
+        'about:blank',
+      );
+    });
+
+    it('closeTab tears the view down and forgets it; no-ops for an unknown tabId', async () => {
+      const { adapter, mainWindow } = setup();
+      const { tabId } = await adapter.openTab();
+
+      await adapter.closeTab(tabId);
+      await expect(adapter.closeTab('nope')).resolves.toBeUndefined();
+
+      expect(mainWindow.contentView.removeChildView).toHaveBeenCalledTimes(1);
+      expect(adapter.status(tabId)).toBeNull();
+    });
+
+    it('closeTab refuses to tear down a session tab — only destroy does', async () => {
+      const { adapter, mainWindow } = setup();
+      await adapter.create('sess-1');
+
+      await adapter.closeTab('sess-1');
+
+      expect(mainWindow.contentView.removeChildView).not.toHaveBeenCalled();
+      expect(adapter.status('sess-1')).not.toBeNull();
+    });
+
+    it('navigate and setBounds and status all work against a manual tabId the same as a sessionId', async () => {
+      const { adapter } = setup();
+      const { tabId } = await adapter.openTab();
+
+      await adapter.navigate(tabId, 'https://example.com');
+      expect(() => adapter.setBounds(tabId, { x: 1, y: 2, width: 300, height: 400 })).not.toThrow();
+      expect(adapter.status(tabId)).toEqual({ url: 'about:blank' });
+    });
+
+    it('destroyAll tears down manual tabs alongside session tabs', async () => {
+      const { adapter, mainWindow } = setup();
+      await adapter.create('sess-1');
+      const { tabId } = await adapter.openTab();
+
+      await adapter.destroyAll();
+
+      expect(mainWindow.contentView.removeChildView).toHaveBeenCalledTimes(2);
+      expect(adapter.status('sess-1')).toBeNull();
+      expect(adapter.status(tabId)).toBeNull();
+    });
+  });
 });

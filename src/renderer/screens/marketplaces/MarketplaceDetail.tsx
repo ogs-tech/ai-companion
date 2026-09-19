@@ -11,6 +11,7 @@ import {
 import { BadgeCheck } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
+import { openManualTab } from '../../lib/browser-tabs-store.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { PluginInstallPreviewDialog } from './PluginInstallPreviewDialog.js';
 import { EntityDataGrid } from '../../components/EntityDataGrid/index.js';
@@ -249,7 +250,14 @@ export function MarketplaceDetail({
       )}
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
         {label.href ? (
-          <Link href={label.href} target="_blank" rel="noopener" underline="hover">
+          <Link
+            href={label.href}
+            underline="hover"
+            onClick={(e) => {
+              e.preventDefault();
+              void openManualTab(label.href);
+            }}
+          >
             {label.detail}
           </Link>
         ) : (

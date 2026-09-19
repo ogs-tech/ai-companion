@@ -25,7 +25,7 @@ afterEach(() => {
 
 describe('<BrowserPane>', () => {
   it('renders an address bar and the view-region placeholder', () => {
-    renderWithQuery(<BrowserPane sessionId="sess-1" />);
+    renderWithQuery(<BrowserPane tabId="tab-1" />);
     expect(screen.getByTestId('browser-address-bar')).toBeInTheDocument();
     expect(screen.getByTestId('browser-view-region')).toBeInTheDocument();
   });
@@ -36,7 +36,7 @@ describe('<BrowserPane>', () => {
       return ok(null);
     });
 
-    renderWithQuery(<BrowserPane sessionId="sess-1" />);
+    renderWithQuery(<BrowserPane tabId="tab-1" />);
 
     await waitFor(() =>
       expect(screen.getByTestId('browser-address-bar')).toHaveValue('https://example.com/docs'),
@@ -44,10 +44,10 @@ describe('<BrowserPane>', () => {
   });
 
   it('reports its bounds to browser.setBounds on mount', async () => {
-    renderWithQuery(<BrowserPane sessionId="sess-1" />);
+    renderWithQuery(<BrowserPane tabId="tab-1" />);
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('browser.setBounds', {
-        sessionId: 'sess-1',
+        tabId: 'tab-1',
         bounds: { x: 0, y: 0, width: 0, height: 0 },
       }),
     );
@@ -55,31 +55,31 @@ describe('<BrowserPane>', () => {
 
   it('pressing Enter navigates to the typed address, adding https:// when no scheme is given', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<BrowserPane sessionId="sess-1" />);
+    renderWithQuery(<BrowserPane tabId="tab-1" />);
 
     const addressBar = screen.getByTestId('browser-address-bar');
     await user.type(addressBar, 'example.com{Enter}');
 
     await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('browser.navigate', { sessionId: 'sess-1', url: 'https://example.com' }),
+      expect(call).toHaveBeenCalledWith('browser.navigate', { tabId: 'tab-1', url: 'https://example.com' }),
     );
   });
 
   it('leaves an address that already has a scheme untouched', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<BrowserPane sessionId="sess-1" />);
+    renderWithQuery(<BrowserPane tabId="tab-1" />);
 
     const addressBar = screen.getByTestId('browser-address-bar');
     await user.type(addressBar, 'http://localhost:3000{Enter}');
 
     await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('browser.navigate', { sessionId: 'sess-1', url: 'http://localhost:3000' }),
+      expect(call).toHaveBeenCalledWith('browser.navigate', { tabId: 'tab-1', url: 'http://localhost:3000' }),
     );
   });
 
   it('does not navigate on an empty address', async () => {
     const user = userEvent.setup();
-    renderWithQuery(<BrowserPane sessionId="sess-1" />);
+    renderWithQuery(<BrowserPane tabId="tab-1" />);
 
     await user.type(screen.getByTestId('browser-address-bar'), '{Enter}');
 

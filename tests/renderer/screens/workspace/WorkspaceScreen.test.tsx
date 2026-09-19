@@ -8,6 +8,7 @@ import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { WorkspaceScreen } from '../../../../src/renderer/screens/workspace/WorkspaceScreen.js';
 import { navigateWorkspaceHistory, resetWorkspaceHistoryForTests } from '../../../../src/renderer/lib/workspace-history-store.js';
+import { openManualTab, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { confirmDiscardUnsavedTabs } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
 import { mockApi } from '../../test-utils.js';
 
@@ -97,6 +98,7 @@ beforeEach(() => {
   queryClient.clear();
   vi.restoreAllMocks();
   resetWorkspaceHistoryForTests();
+  resetBrowserTabsForTests();
   mockApi();
   vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
     if (method === 'workspace.getActive') return projectWorkspace;
@@ -164,6 +166,84 @@ describe('WorkspaceScreen', () => {
       expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'project', projectId: 'p1' } }),
     );
     expect(await screen.findByTestId('workbench-tab-session:sess-p1')).toBeInTheDocument();
+  });
+
+  describe('browser tabs', () => {
+    it('a session’s browser toggle opens a sibling Workbench tab rendering BrowserPane', async () => {
+      const user = userEvent.setup();
+      const session = {
+        sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme',
+        label: 'Acme', status: 'running', outputBuffer: '', browserEnabled: false,
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        if (method === 'session.spawn' || method === 'session.status') return session;
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-sessions-new'));
+      await screen.findByTestId('workbench-tab-session:sess-1');
+
+      await user.click(await screen.findByTestId('session-browser-toggle'));
+
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('browser.enable', { sessionId: 'sess-1' }));
+      expect(await screen.findByTestId('workbench-tab-browser:sess-1')).toBeInTheDocument();
+      // Two sibling tabs now — the terminal is not replaced or hidden by the browser.
+      expect(screen.getByTestId('workbench-tab-session:sess-1')).toBeInTheDocument();
+      expect(await screen.findByTestId('browser-pane')).toBeInTheDocument();
+    });
+
+    it('closing a session’s browser Workbench tab calls browser.disable, not browser.closeTab, and leaves the session tab alone', async () => {
+      const user = userEvent.setup();
+      const session = {
+        sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme',
+        label: 'Acme', status: 'running', outputBuffer: '', browserEnabled: false,
+      };
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') return [];
+        if (method === 'session.spawn' || method === 'session.status') return session;
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('workspace-sessions-new'));
+      await user.click(await screen.findByTestId('session-browser-toggle'));
+      await screen.findByTestId('workbench-tab-browser:sess-1');
+
+      await user.click(await screen.findByTestId('workbench-tab-close-browser:sess-1'));
+
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('browser.disable', { sessionId: 'sess-1' }));
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('browser.closeTab', expect.anything());
+      expect(screen.queryByTestId('workbench-tab-browser:sess-1')).toBeNull();
+      expect(screen.getByTestId('workbench-tab-session:sess-1')).toBeInTheDocument();
+    });
+
+    it('a manually opened tab (TopNav button, or a redirected external link) shows up as a Workbench tab and closes via browser.closeTab', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      await screen.findByTestId('workspace-screen');
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'browser.openTab') return { tabId: 'tab-1' };
+        return undefined;
+      });
+
+      await act(async () => {
+        await openManualTab('https://example.com');
+      });
+
+      expect(await screen.findByTestId('workbench-tab-browser:tab-1')).toBeInTheDocument();
+      expect(await screen.findByTestId('browser-pane')).toBeInTheDocument();
+
+      await user.click(await screen.findByTestId('workbench-tab-close-browser:tab-1'));
+
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('browser.closeTab', { tabId: 'tab-1' }));
+      expect(screen.queryByTestId('workbench-tab-browser:tab-1')).toBeNull();
+    });
   });
 
   describe('"New Action" context menu', () => {

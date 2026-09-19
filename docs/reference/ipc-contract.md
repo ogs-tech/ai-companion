@@ -232,27 +232,62 @@ user is currently viewing.
 |---|---|---|
 | `browser.enable` | `{ sessionId: string }` | `void` |
 | `browser.disable` | `{ sessionId: string }` | `void` |
-| `browser.navigate` | `{ sessionId: string; url: string }` | `void` |
-| `browser.setBounds` | `{ sessionId: string; bounds: { x: number; y: number; width: number; height: number } }` | `void` |
-| `browser.status` | `{ sessionId: string }` | `{ url: string } \| null` |
+| `browser.openTab` | `{ url?: string }` | `{ tabId: string }` |
+| `browser.closeTab` | `{ tabId: string }` | `void` |
+| `browser.navigate` | `{ tabId: string; url: string }` | `void` |
+| `browser.setBounds` | `{ tabId: string; bounds: { x: number; y: number; width: number; height: number } }` | `void` |
+| `browser.status` | `{ tabId: string }` | `{ url: string } \| null` |
 
-The embedded browser inside a session's `SessionPanel` — a `WebContentsView` usable both for manual
-navigation (URL bar) and, via a per-session ephemeral `--mcp-config`, as a tool the session's `claude`
-CLI process can drive directly over CDP (see
+A browser embedded as **ordinary Workbench tabs**, not a separate area of the app — opening one adds an
+`OpenTab` of `kind: 'browser'` to `WorkspaceScreen`'s own tab strip, the same one that already holds
+session/preview/history tabs. Backed by `EmbeddedBrowserPort` (`EmbeddedBrowserAdapter`,
+`src/main/infrastructure/browser/`), which owns every tab's real `WebContentsView` — no "active tab"
+bookkeeping on the main-process side; positioning is purely a function of each tab's own `setBounds`
+calls (see below). A tab comes in two flavors sharing the same `tabId` keyspace: a **session tab**,
+opened via `browser.enable` (`tabId` is the `sessionId` itself), which also wires up a per-session
+ephemeral `--mcp-config` so that session's own `claude` CLI process can drive it directly over CDP — the
+agent side of the feature; and a **manual tab**, opened via `browser.openTab` (a freshly minted `tabId`,
+no MCP config), used for the `TopNav` "open browser" button and for external links redirected into it
+(every `target="_blank"` link in the app; `shell.openExternal`'s only other call site, the MCP re-auth
+trampoline, is deliberately left alone — the embedded view has none of the user's OS-browser
+session/cookies). See
 [`docs/superpowers/specs/2026-09-19-embedded-session-browser-design.md`](../superpowers/specs/2026-09-19-embedded-session-browser-design.md)
-for the full design). `browser.enable`/`browser.disable` require an already-spawned `sessionId` (`kind:
-'not_found'` otherwise, mirroring `session.resume`) and go through `SessionService.setBrowserEnabled`,
-which flips `SessionSnapshot.browserEnabled` and materializes/tears down the view + its ephemeral MCP
-config file via `EmbeddedBrowserPort` (`EmbeddedBrowserAdapter`,
-`src/main/infrastructure/browser/`). Enabling is idempotent and additive to whatever conversation args
-apply, wiring the resulting `mcpConfigPath` into the session's *next* spawn (`ClaudeSessionSpawnOptions.mcpConfigPath`,
-appended by `NodePtySessionAdapter` as `--mcp-config <path>`) — the CLI only reads it at its own startup,
-so toggling this on an already-running session has no live effect until it's next restarted (`session.kill`
-+ `session.resume`). `session.kill` deliberately leaves the view and its config file alone (so a `resume`
-reuses the same file instead of regenerating it); only `browser.disable` and `session.remove` tear them
-down. `browser.navigate`/`browser.setBounds`/`browser.status` are pure `WebContentsView` operations with
-no session-lifecycle concern, so they talk to `EmbeddedBrowserPort` directly rather than through
-`SessionService`, and silently no-op (or return `null`) for a `sessionId` whose browser was never enabled.
+for the full design and its later addendum, which reverses that spec's original "no standalone Browser
+area" call in favor of this Workbench-tab integration.
+
+`browser.enable`/`browser.disable` require an already-spawned `sessionId` (`kind: 'not_found'` otherwise,
+mirroring `session.resume`) and go through `SessionService.setBrowserEnabled`, which flips
+`SessionSnapshot.browserEnabled` and materializes/tears down that session's tab + its ephemeral MCP config
+file. Enabling is idempotent and additive to whatever conversation args apply, wiring the resulting
+`mcpConfigPath` into the session's next spawn (`ClaudeSessionSpawnOptions.mcpConfigPath`, appended by
+`NodePtySessionAdapter` as `--mcp-config <path>`). The CLI only reads it at its own startup, so
+`setBrowserEnabled` restarts a currently-running session right there — killed and immediately resumed
+under the same `claudeSessionId`, so the conversation carries over — rather than leaving the toggle queued
+for whenever the session next happens to exit on its own; the one cost is whatever the CLI was doing at
+that instant (e.g. a tool call) getting cut off. `session.kill` deliberately leaves the tab and its config
+file alone (so a `resume` reuses the same file instead of regenerating it); only `browser.disable` and
+`session.remove` tear it down. `browser.closeTab` only ever tears down a *manual* tab — it silently
+no-ops for a `tabId` that belongs to a session, since that one has to go through `browser.disable` instead
+(to also clear `SessionService`'s own `browserMcpConfigPaths` entry). A session tab's Workbench close
+button routes there for exactly that reason: closing it is a legitimate way to turn a session's browser
+off, not just the toggle in `SessionPanel` — see `browser-tabs-store.ts`'s `closeBrowserTab`.
+`browser.navigate`/`browser.setBounds`/`browser.status` are pure `WebContentsView` operations with no
+session-lifecycle concern, so they talk to `EmbeddedBrowserPort` directly rather than through
+`SessionService`, and silently no-op (or return `null`) for a `tabId` that was never opened.
+
+Only one tab's `WebContentsView` is ever actually visible, but nothing on the main-process side enforces
+that — it falls out of how `WorkbenchCanvas` already renders every open tab's content simultaneously,
+switching visibility with CSS (`display: none` for every tab but the active one) rather than
+mounting/unmounting. Each browser tab's own `BrowserPane` reports its bounds via `ResizeObserver`; a
+`display: none` ancestor collapses that to `{0,0,0,0}`, so a hidden tab's view goes to zero size on its
+own the same way `SessionPanel` already relies on `visible` to skip xterm's `fit()` while hidden — the
+difference is a `WebContentsView` going to zero size *is* the correct hidden state, so no explicit
+"switch tab" signal is needed the way `SessionPanel`'s xterm case needs one. The renderer side of all of
+this — which tabs exist, and the registered callback that opens one into `WorkspaceScreen`'s own tab
+strip — lives in `browser-tabs-store.ts` (`src/renderer/lib/`), a module-scoped store in the same shape
+as `workspace-history-store.ts`/`workspace-area-store.ts`, since the things that open a tab (a
+`SessionPanel` toggle deep inside the Workbench; a marketplace/footer link, or the `TopNav` button,
+elsewhere entirely) have no prop path down into the screen that owns the tab strip.
 
 ### `sessionHistory`
 

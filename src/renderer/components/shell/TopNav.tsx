@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { AppBar, Button, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
-import { ChevronLeft, ChevronRight, Moon, Sun, Settings as SettingsGlyph } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Globe, Moon, Sun, Settings as SettingsGlyph } from 'lucide-react';
 import { Logo } from '../../assets/Logo.js';
 import { brand } from '../../../shared/brand.js';
 import { Icon } from '../ds/Icon.js';
@@ -12,6 +12,7 @@ import {
   navigateWorkspaceHistory,
   subscribeWorkspaceHistory,
 } from '../../lib/workspace-history-store.js';
+import { openManualTab } from '../../lib/browser-tabs-store.js';
 
 interface TopNavProps {
   onOpenSettings: () => void;
@@ -120,6 +121,18 @@ export function TopNav({
               />
             </Tooltip>
           )}
+
+          <Tooltip title="Abrir navegador">
+            <IconButton
+              data-testid="nav-browser-toggle"
+              onClick={() => void openManualTab()}
+              size="small"
+              sx={{ color: 'text.secondary' }}
+              aria-label="Abrir navegador"
+            >
+              <Icon glyph={Globe} size={18} />
+            </IconButton>
+          </Tooltip>
 
           <Tooltip title={isDark ? 'Tema claro' : 'Tema escuro'}>
             <IconButton

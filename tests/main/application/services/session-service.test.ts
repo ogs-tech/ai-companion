@@ -568,6 +568,83 @@ describe('SessionService browser toggle', () => {
     expect(embeddedBrowser.destroyCalls).toEqual([]);
   });
 
+  it('enabling on a running session restarts the PTY immediately, carrying the new mcpConfigPath', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    claudeSession.spawnCalls.length = 0;
+
+    const updated = await service.setBrowserEnabled(session.sessionId, true);
+
+    expect(claudeSession.killed).toEqual([session.sessionId]);
+    expect(claudeSession.spawnCalls).toHaveLength(1);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
+      mode: 'resume',
+      claudeSessionId: session.claudeSessionId,
+    });
+    expect(claudeSession.spawnCalls[0]?.opts.mcpConfigPath).toMatch(/config\.json$/);
+    expect(updated.status).toBe('running');
+    expect(service.status(session.sessionId)?.status).toBe('running');
+  });
+
+  it('disabling on a running session also restarts the PTY, this time with no mcpConfigPath', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    await service.setBrowserEnabled(session.sessionId, true);
+    claudeSession.killed.length = 0;
+    claudeSession.spawnCalls.length = 0;
+
+    await service.setBrowserEnabled(session.sessionId, false);
+
+    expect(claudeSession.killed).toEqual([session.sessionId]);
+    expect(claudeSession.spawnCalls[0]?.opts.mcpConfigPath).toBeUndefined();
+  });
+
+  it('toggling on an already-exited session does not touch the PTY — the next spawn/resume picks it up instead', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    claudeSession.simulateExit(session.sessionId, 0);
+    claudeSession.spawnCalls.length = 0;
+
+    await service.setBrowserEnabled(session.sessionId, true);
+
+    expect(claudeSession.killed).toEqual([]);
+    expect(claudeSession.spawnCalls).toEqual([]);
+  });
+
+  it('a stale exit from the killed PTY arriving mid-restart does not clobber the freshly-restarted session', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    const realKill = claudeSession.kill.bind(claudeSession);
+    // Worst case for the `restarting` guard: the old PTY's real exit (normally
+    // async, via node-pty/the OS) arrives essentially immediately after kill.
+    vi.spyOn(claudeSession, 'kill').mockImplementation((sessionId) => {
+      realKill(sessionId);
+      claudeSession.simulateExit(sessionId, 0);
+    });
+
+    await service.setBrowserEnabled(session.sessionId, true);
+
+    expect(service.status(session.sessionId)?.status).toBe('running');
+  });
+
+  it('a failed restart marks the session exited and notifies exit listeners — the suppressed stale exit never will', async () => {
+    const { service, base, claudeSession } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    const exits: string[] = [];
+    service.onExit((sessionId) => exits.push(sessionId));
+    claudeSession.failNextSpawn(new Error('claude CLI not found in PATH'));
+
+    await expect(service.setBrowserEnabled(session.sessionId, true)).rejects.toThrow('claude CLI not found in PATH');
+
+    expect(service.status(session.sessionId)?.status).toBe('exited');
+    expect(exits).toEqual([session.sessionId]);
+  });
+
   it('the next resume carries the ephemeral mcpConfigPath the embedded browser returned', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });

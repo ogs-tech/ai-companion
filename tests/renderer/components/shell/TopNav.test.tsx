@@ -8,6 +8,7 @@ import {
   resetWorkspaceHistoryForTests,
 } from '../../../../src/renderer/lib/workspace-history-store.js';
 import { registerAreaOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
+import { getBrowserTabsSnapshot, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
 const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
@@ -24,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetWorkspaceHistoryForTests();
+  resetBrowserTabsForTests();
   registerAreaOpener(null);
 });
 
@@ -59,6 +61,23 @@ describe('TopNav', () => {
     renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
     await userEvent.click(screen.getByTestId('theme-toggle'));
     expect(call).toHaveBeenCalledWith('settings.merge', expect.objectContaining({ ui: expect.any(Object) }));
+  });
+
+  describe('global browser button', () => {
+    it('opens a blank browser tab via IPC and registers it in the store', async () => {
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.list') return ok([]);
+        if (method === 'workspace.getActive') return ok(DEFAULT_WORKSPACE);
+        if (method === 'browser.openTab') return ok({ tabId: 'tab-1' });
+        return ok({ ui: { theme: 'light' }, adapters: { claude: { enabled: true } }, language: 'off' });
+      });
+      renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
+
+      await userEvent.click(screen.getByTestId('nav-browser-toggle'));
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('browser.openTab', {}));
+      expect(getBrowserTabsSnapshot().tabs).toEqual([{ tabId: 'tab-1', url: '' }]);
+    });
   });
 
   describe('history back/forward', () => {
