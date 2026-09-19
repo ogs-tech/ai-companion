@@ -426,14 +426,18 @@ describe('WorkspaceScreen', () => {
     });
     renderScreen();
     await openProjectFile(user, 'a.md');
-    expect(await screen.findByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
+    // The header's own path line is what tracks Project scope (the "Início"
+    // button itself stays visible either way — it now tracks the whole
+    // non-default workspace, not the Project within it).
+    expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
 
     // `useAreaNavigation`'s "Início" branch (AppShell/CommandPalette) reaches
     // this screen only through the registered guard, then switches workspace
     // on its own — it never touches this screen's `selectedProjectId`
     // directly, so the guard itself must be what clears the Project scope.
     expect(confirmDiscardUnsavedTabs()).toBe(true);
-    await waitFor(() => expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('/repos/acme')).toBeInTheDocument());
+    expect(screen.queryByText('/repos/acme/apps')).not.toBeInTheDocument();
   });
 
   describe('instructions row on a project workspace tree', () => {
