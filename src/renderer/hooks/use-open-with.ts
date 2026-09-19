@@ -78,3 +78,11 @@ export function useRevealPath() {
     mutationFn: (target: OpenWithTarget) => callIpc<void>('openWith.reveal', scopeParams(target)),
   });
 }
+
+/** Opens the row as a `file://` URL in a fresh manual tab of the app's embedded browser. */
+export function useOpenInBrowser() {
+  return useMutation({
+    mutationFn: (target: OpenWithTarget) =>
+      callIpc<{ tabId: string }>('openWith.openInBrowser', scopeParams(target)),
+  });
+}

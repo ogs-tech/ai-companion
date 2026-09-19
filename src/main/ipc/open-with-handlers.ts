@@ -1,8 +1,10 @@
+import { pathToFileURL } from 'node:url';
 import type { IpcHandlers } from './dispatcher.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
 import type { ProjectService } from '../application/services/project-service.js';
 import type { FileBrowserPort } from '../application/ports/file-browser-port.js';
 import type { DialogPort } from '../application/ports/dialog-port.js';
+import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-port.js';
 import { FileBrowserService } from '../application/services/file-browser-service.js';
 import { DomainError } from '../domain/errors.js';
 import type { OpenWithKind } from '../../shared/open-with.js';
@@ -15,6 +17,7 @@ export interface OpenWithHandlerDeps {
   projectService: ProjectService;
   fileBrowserPort: FileBrowserPort;
   dialogPort: DialogPort;
+  embeddedBrowser: EmbeddedBrowserPort;
 }
 
 function asKind(value: unknown): OpenWithKind {
@@ -25,19 +28,20 @@ function asKind(value: unknown): OpenWithKind {
 }
 
 /**
- * Opening a file in another program is the one place in the app that hands an
- * arbitrary path to the OS, so it is deliberately the renderer-facing methods
- * that never see an absolute path: they take the same workspace- or
- * project-relative path the rest of the file browser uses, and every one of
- * them resolves it through `FileBrowserService`, whose `resolveSafe` rejects
- * `..`, absolute paths and symlinks pointing outside the root.
+ * Opening a file elsewhere — another program, the Finder, the app's own
+ * embedded browser — is the one place that hands an arbitrary path off, so it
+ * is deliberately the renderer-facing methods that never see an absolute
+ * path: they take the same workspace- or project-relative path the rest of
+ * the file browser uses, and every one of them resolves it through
+ * `FileBrowserService`, whose `resolveSafe` rejects `..`, absolute paths and
+ * symlinks pointing outside the root.
  *
  * Unlike `workspace.*`/`project.*`, which duplicate each file method per
  * scope, this namespace takes an optional `projectId` and picks the root
- * itself — five methods instead of ten, with the same guarantee.
+ * itself — six methods instead of twelve, with the same guarantee.
  */
 export function buildOpenWithHandlers(deps: OpenWithHandlerDeps): IpcHandlers {
-  const { openWithService, workspaceBrowser, projectService, fileBrowserPort, dialogPort } = deps;
+  const { openWithService, workspaceBrowser, projectService, fileBrowserPort, dialogPort, embeddedBrowser } = deps;
 
   const resolvePath = async (raw: Record<string, unknown>): Promise<string> => {
     // Empty means the root itself — a Project folder browsed in place from the
@@ -90,6 +94,12 @@ export function buildOpenWithHandlers(deps: OpenWithHandlerDeps): IpcHandlers {
     'openWith.reveal': async (params) => {
       const raw = asObject(params, 'openWith.reveal');
       await openWithService.reveal(await resolvePath(raw));
+    },
+
+    'openWith.openInBrowser': async (params) => {
+      const raw = asObject(params, 'openWith.openInBrowser');
+      const absolutePath = await resolvePath(raw);
+      return embeddedBrowser.openTab(pathToFileURL(absolutePath).href);
     },
   };
 }

@@ -244,6 +244,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       projectService,
       fileBrowserPort,
       dialogPort,
+      embeddedBrowser: embeddedBrowserPort,
     }),
   };
 }

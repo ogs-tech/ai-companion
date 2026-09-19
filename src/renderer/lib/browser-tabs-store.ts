@@ -79,12 +79,27 @@ export function closeSessionTab(sessionId: string): void {
   removeTab(sessionId);
 }
 
+function commitTab(tabId: string, url: string): void {
+  tabs = [...tabs, { tabId, url }];
+  notify();
+  workbenchOpener?.(tabId);
+}
+
 /** Opens a manual tab (the "+" affordance, or a redirected external link), and opens/focuses its Workbench tab. */
 export async function openManualTab(url?: string): Promise<void> {
   const { tabId } = await callIpc<{ tabId: string }>('browser.openTab', url ? { url } : {});
-  tabs = [...tabs, { tabId, url: url ?? '' }];
-  notify();
-  workbenchOpener?.(tabId);
+  commitTab(tabId, url ?? '');
+}
+
+/**
+ * Registers and focuses a manual tab that was minted by a different IPC call
+ * than `browser.openTab` — e.g. `openWith.openInBrowser`, which resolves a
+ * file tree row to a sandboxed `file://` URL before opening the tab. Mirrors
+ * the finishing half of `openManualTab`; the actual URL is picked up once
+ * `BrowserPane` mounts and reads it back via `browser.status`.
+ */
+export function focusManualTab(tabId: string): void {
+  commitTab(tabId, '');
 }
 
 /**

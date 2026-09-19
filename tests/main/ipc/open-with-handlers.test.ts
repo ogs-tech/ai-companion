@@ -5,6 +5,7 @@ import type { FileBrowserPort } from '../../../src/main/application/ports/file-b
 import type { OpenWithService } from '../../../src/main/application/services/open-with-service.js';
 import type { ProjectService } from '../../../src/main/application/services/project-service.js';
 import type { DialogPort } from '../../../src/main/application/ports/dialog-port.js';
+import { FakeEmbeddedBrowserPort } from '../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
 
 const WORKSPACE_ROOT = '/home/user';
 const PROJECT_ROOT = '/repos/acme';
@@ -26,6 +27,7 @@ interface Harness {
     reveal: ReturnType<typeof vi.fn>;
   };
   dialogPort: { selectFolder: ReturnType<typeof vi.fn>; selectApplication: ReturnType<typeof vi.fn> };
+  embeddedBrowser: FakeEmbeddedBrowserPort;
 }
 
 function harness(selectApplicationResult: { canceled: boolean; path?: string } = { canceled: true }): Harness {
@@ -41,14 +43,16 @@ function harness(selectApplicationResult: { canceled: boolean; path?: string } =
     selectApplication: vi.fn().mockResolvedValue(selectApplicationResult),
   };
   const port = fileBrowserPort();
+  const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const handlers = buildOpenWithHandlers({
     openWithService: openWithService as unknown as OpenWithService,
     workspaceBrowser: new FileBrowserService(port, WORKSPACE_ROOT),
     projectService: { get: vi.fn().mockResolvedValue({ id: 'p1', name: 'acme', path: PROJECT_ROOT }) } as unknown as ProjectService,
     fileBrowserPort: port,
     dialogPort: dialogPort as unknown as DialogPort,
+    embeddedBrowser,
   });
-  return { handlers, openWithService, dialogPort };
+  return { handlers, openWithService, dialogPort, embeddedBrowser };
 }
 
 describe('openWith.suggest', () => {
@@ -172,5 +176,33 @@ describe('openWith.openDefault and openWith.reveal', () => {
     await handlers['openWith.reveal']!({ path: 'notes', projectId: 'p1' });
 
     expect(openWithService.reveal).toHaveBeenCalledWith('/repos/acme/notes');
+  });
+});
+
+describe('openWith.openInBrowser', () => {
+  it('opens the resolved workspace path as a file:// URL in a new manual tab', async () => {
+    const { handlers, embeddedBrowser } = harness();
+
+    const result = await handlers['openWith.openInBrowser']!({ path: 'notes/README.md' });
+
+    expect(embeddedBrowser.openTabCalls).toEqual(['file:///home/user/notes/README.md']);
+    expect(result).toEqual({ tabId: 'tab-1' });
+  });
+
+  it('resolves against the project root when a projectId is given', async () => {
+    const { handlers, embeddedBrowser } = harness();
+
+    await handlers['openWith.openInBrowser']!({ path: 'notes/README.md', projectId: 'p1' });
+
+    expect(embeddedBrowser.openTabCalls).toEqual(['file:///repos/acme/notes/README.md']);
+  });
+
+  it('refuses a path that escapes the root, without opening a tab', async () => {
+    const { handlers, embeddedBrowser } = harness();
+
+    await expect(
+      handlers['openWith.openInBrowser']!({ path: '../../etc/passwd' }),
+    ).rejects.toThrow(/escapes the workspace root/);
+    expect(embeddedBrowser.openTabCalls).toEqual([]);
   });
 });

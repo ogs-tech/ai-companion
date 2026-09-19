@@ -156,8 +156,11 @@ Git helpers (branch/repo detection) — not currently called from the renderer. 
 | `openWith.chooseApp` | `{ path: string; projectId?: string; kind: 'file' \| 'dir' }` | `{ canceled: boolean }` |
 | `openWith.openDefault` | `{ path: string; projectId?: string }` | `void` |
 | `openWith.reveal` | `{ path: string; projectId?: string }` | `void` |
+| `openWith.openInBrowser` | `{ path: string; projectId?: string }` | `{ tabId: string }` |
 
-Backs the file tree's right-click "Abrir com" submenu and its "Revelar no Finder" sibling. **This namespace deliberately breaks the `workspace.*`/`project.*` symmetry**: rather than ten methods duplicated per scope, each of these five takes an optional `projectId` and picks the root itself — the workspace's when absent, the given `Project`'s when present — then resolves `path` through the very same `FileBrowserService` containment guard (`..`, absolute paths and escaping symlinks all rejected). `path` is always scope-relative and, unlike the other file-browser methods, may be the empty string — that is the root itself, which is a real target here: a `Project` folder expanded in place inside the workspace tree is addressed relative to its own root. No renderer-supplied absolute path ever reaches the OS.
+Backs the file tree's right-click "Abrir com" submenu and its "Abrir no navegador"/"Revelar no Finder" siblings. **This namespace deliberately breaks the `workspace.*`/`project.*` symmetry**: rather than twelve methods duplicated per scope, each of these six takes an optional `projectId` and picks the root itself — the workspace's when absent, the given `Project`'s when present — then resolves `path` through the very same `FileBrowserService` containment guard (`..`, absolute paths and escaping symlinks all rejected). `path` is always scope-relative and, unlike the other file-browser methods, may be the empty string — that is the root itself, which is a real target here: a `Project` folder expanded in place inside the workspace tree is addressed relative to its own root. No renderer-supplied absolute path ever reaches the OS.
+
+`openWith.openInBrowser` resolves the row the same sandboxed way, converts the absolute path to a `file://` URL (`node:url`'s `pathToFileURL`, which handles spaces and other characters a hand-rolled encoder would get wrong) and hands it to `EmbeddedBrowserPort.openTab` — opening it as a fresh **manual tab** of the app's own embedded browser (see the `browser` namespace below), the same kind the Workbench tab strip's "+" affordance opens.
 
 `openWith.suggest` asks the platform which applications are registered for the path, then filters, dedupes and ranks them into `{ primary, more }` (`src/shared/open-with.ts`): `primary` is the first 6, `more` the rest. Each `ExternalApp` is `{ id, name, path, isDefault, isRemembered, iconDataUrl? }`, where `id` is the bundle identifier — the key everything downstream uses, because a bundle survives being moved or renamed and its display name is localized. Filtering drops bundles under `/Library/Caches/`, inside `node_modules`, or in any dot-prefixed directory (test-runner and editor-extension copies of real apps, which Launch Services reports as installed); dedupe keeps one copy per bundle id, preferring `/Applications` over a system or external-volume location. Ranking is: remembered choice → OS default → curated rank for the path's category → alphabetical (`src/main/application/open-with/catalog.ts`). The curated table only *scores*; it never hides an application the OS offered.
 
@@ -247,10 +250,12 @@ calls (see below). A tab comes in two flavors sharing the same `tabId` keyspace:
 opened via `browser.enable` (`tabId` is the `sessionId` itself), which also wires up a per-session
 ephemeral `--mcp-config` so that session's own `claude` CLI process can drive it directly over CDP — the
 agent side of the feature; and a **manual tab**, opened via `browser.openTab` (a freshly minted `tabId`,
-no MCP config), used for the `TopNav` "open browser" button and for external links redirected into it
+no MCP config), used for the `TopNav` "open browser" button, for external links redirected into it
 (every `target="_blank"` link in the app; `shell.openExternal`'s only other call site, the MCP re-auth
 trampoline, is deliberately left alone — the embedded view has none of the user's OS-browser
-session/cookies). See
+session/cookies), and for the file tree's "Abrir no navegador" row action (`openWith.openInBrowser`,
+which mints the tab itself with a sandboxed `file://` URL rather than going through `browser.openTab`).
+See
 [`docs/superpowers/specs/2026-09-19-embedded-session-browser-design.md`](../superpowers/specs/2026-09-19-embedded-session-browser-design.md)
 for the full design and its later addendum, which reverses that spec's original "no standalone Browser
 area" call in favor of this Workbench-tab integration.

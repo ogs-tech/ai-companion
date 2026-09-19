@@ -475,6 +475,57 @@ describe('FolderTree', () => {
       expect(await screen.findByTestId('row-context-menu-open-with')).toBeInTheDocument();
     });
 
+    it('offers "Abrir no navegador" on a file row', async () => {
+      listOnly([{ name: 'README.md', kind: 'file' }]);
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+
+      expect(await screen.findByTestId('row-context-menu-open-in-browser')).toBeInTheDocument();
+    });
+
+    it('does not offer "Abrir no navegador" on a folder row', async () => {
+      listOnly([{ name: 'src', kind: 'dir' }]);
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('src'));
+
+      expect(await screen.findByTestId('row-context-menu-open-with')).toBeInTheDocument();
+      expect(screen.queryByTestId('row-context-menu-open-in-browser')).not.toBeInTheDocument();
+    });
+
+    it('opens the row in the embedded browser, by relative path', async () => {
+      const callIpc = vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        const path = (params as { path?: string } | undefined)?.path;
+        if (method === 'workspace.listDir' && path === '') return [{ name: 'README.md', kind: 'file' }];
+        if (method === 'openWith.openInBrowser') return { tabId: 'tab-1' };
+        return undefined;
+      });
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      fireEvent.click(await screen.findByTestId('row-context-menu-open-in-browser'));
+
+      await waitFor(() =>
+        expect(callIpc).toHaveBeenCalledWith('openWith.openInBrowser', { path: 'README.md' }),
+      );
+    });
+
+    it('shows an error toast when opening the row in the embedded browser fails', async () => {
+      vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+        const path = (params as { path?: string } | undefined)?.path;
+        if (method === 'workspace.listDir' && path === '') return [{ name: 'README.md', kind: 'file' }];
+        if (method === 'openWith.openInBrowser') throw new Error('boom');
+        return undefined;
+      });
+      renderTree();
+
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      fireEvent.click(await screen.findByTestId('row-context-menu-open-in-browser'));
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
+    });
+
     it('reveals the row in the file manager, by relative path', async () => {
       const callIpc = listOnly([{ name: 'README.md', kind: 'file' }]);
       renderTree();

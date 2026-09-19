@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
-import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, SquareTerminal } from 'lucide-react';
+import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, Globe, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { TreeRow } from '../ds/TreeRow.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
-import { useRevealPath, type OpenWithTarget } from '../../hooks/use-open-with.js';
+import { useOpenInBrowser, useRevealPath, type OpenWithTarget } from '../../hooks/use-open-with.js';
 import { OpenWithMenu } from './OpenWithMenu.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
+import { focusManualTab } from '../../lib/browser-tabs-store.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
 import type { Project } from '../../../shared/project.js';
 
@@ -258,6 +259,7 @@ export function FolderTree({
   const [openWithAnchor, setOpenWithAnchor] = useState<HTMLElement | null>(null);
   const [openWithTarget, setOpenWithTarget] = useState<OpenWithTarget | null>(null);
   const revealPath = useRevealPath();
+  const openInBrowser = useOpenInBrowser();
 
   const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({
     relPath: target.relPath,
@@ -286,6 +288,21 @@ export function FolderTree({
             setOpenWithAnchor(anchor);
           },
         },
+        ...(rowMenuTarget.kind === 'file'
+          ? [
+              {
+                key: 'open-in-browser',
+                label: 'Abrir no navegador',
+                glyph: Globe,
+                onSelect: () => {
+                  openInBrowser
+                    .mutateAsync(asOpenWithTarget(rowMenuTarget))
+                    .then(({ tabId }) => focusManualTab(tabId))
+                    .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+                },
+              },
+            ]
+          : []),
         {
           key: 'reveal',
           label: 'Revelar no Finder',

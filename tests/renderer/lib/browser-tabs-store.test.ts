@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeBrowserTab,
   closeSessionTab,
+  focusManualTab,
   getBrowserTabsSnapshot,
   openManualTab,
   openSessionTab,
@@ -118,6 +119,19 @@ describe('browser-tabs-store', () => {
 
       expect(call).toHaveBeenCalledWith('browser.openTab', {});
       expect(getBrowserTabsSnapshot().tabs).toEqual([{ tabId: 'tab-1', url: '' }]);
+    });
+  });
+
+  describe('focusManualTab', () => {
+    it('registers the already-minted tab and asks the registered Workbench opener to focus it, without any IPC call', () => {
+      const opener = vi.fn();
+      registerBrowserWorkbenchOpener(opener);
+
+      focusManualTab('tab-1');
+
+      expect(getBrowserTabsSnapshot().tabs).toEqual([{ tabId: 'tab-1', url: '' }]);
+      expect(opener).toHaveBeenCalledWith('tab-1');
+      expect(call).not.toHaveBeenCalled();
     });
   });
 
