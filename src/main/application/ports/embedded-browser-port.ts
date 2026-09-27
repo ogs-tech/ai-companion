@@ -9,6 +9,13 @@ export interface EmbeddedBrowserStatus {
   url: string;
 }
 
+export interface EmbeddedBrowserTabInfo {
+  tabId: string;
+  /** Set for a session tab (equal to `tabId`), absent for a manual one. */
+  sessionId?: string;
+  url: string;
+}
+
 /**
  * Owns every embedded browser tab — one real, navigable `WebContentsView`
  * per tab. Each is positioned independently via `setBounds`; the renderer
@@ -47,5 +54,22 @@ export interface EmbeddedBrowserPort {
   navigate(tabId: string, url: string): Promise<void>;
   /** Positions the view within the app window. No-op if never created for that `tabId`. */
   setBounds(tabId: string, bounds: EmbeddedBrowserBounds): void;
+  /**
+   * Zeroes every tracked tab's bounds without tearing any of them down —
+   * called when the renderer's own top-level frame starts a fresh navigation
+   * (a reload), which wipes its in-memory tab list but leaves these views
+   * attached to the window at their last bounds. Without this they keep
+   * rendering, orphaned, on top of the just-reloaded (and now tab-less) UI.
+   * A tab a remounting `BrowserPane` reclaims — via `list()`-driven
+   * reconciliation, see below — gets its real bounds back the moment it does.
+   */
+  hideAll(): void;
   status(tabId: string): EmbeddedBrowserStatus | null;
+  /**
+   * Enumerates every live tab, session and manual alike — the renderer's own
+   * `browser-tabs-store` calls this once on startup to reconcile its list
+   * (wiped by the same reload `hideAll` defends against) against whichever
+   * tabs actually survived it, main-process side.
+   */
+  list(): EmbeddedBrowserTabInfo[];
 }

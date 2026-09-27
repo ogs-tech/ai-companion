@@ -6,6 +6,7 @@ import {
   getBrowserTabsSnapshot,
   openManualTab,
   openSessionTab,
+  reconcileBrowserTabs,
   registerBrowserWorkbenchOpener,
   registerSessionTab,
   resetBrowserTabsForTests,
@@ -180,6 +181,57 @@ describe('browser-tabs-store', () => {
     it('is a no-op for an unknown tabId', () => {
       setTabUrl('nope', 'https://example.com');
       expect(getBrowserTabsSnapshot().tabs).toEqual([]);
+    });
+  });
+
+  describe('reconcileBrowserTabs', () => {
+    it('registers every tab browser.list returns and opens each one as a Workbench tab, without focusing any of them', async () => {
+      const opener = vi.fn();
+      registerBrowserWorkbenchOpener(opener);
+      call.mockImplementation(async (method: string) => {
+        if (method === 'browser.list') {
+          return ok([
+            { tabId: 'sess-1', sessionId: 'sess-1', url: 'https://example.com/agent' },
+            { tabId: 'tab-1', url: 'https://example.com/manual' },
+          ]);
+        }
+        return ok(null);
+      });
+
+      await reconcileBrowserTabs();
+
+      expect(getBrowserTabsSnapshot().tabs).toEqual([
+        { tabId: 'sess-1', sessionId: 'sess-1', url: 'https://example.com/agent' },
+        { tabId: 'tab-1', url: 'https://example.com/manual' },
+      ]);
+      expect(opener).toHaveBeenCalledWith('sess-1', false);
+      expect(opener).toHaveBeenCalledWith('tab-1', false);
+    });
+
+    it('still opens a tab that registerSessionTab already reclaimed silently, without duplicating it', async () => {
+      const opener = vi.fn();
+      registerSessionTab('sess-1');
+      registerBrowserWorkbenchOpener(opener);
+      call.mockImplementation(async (method: string) => {
+        if (method === 'browser.list') return ok([{ tabId: 'sess-1', sessionId: 'sess-1', url: 'https://example.com' }]);
+        return ok(null);
+      });
+
+      await reconcileBrowserTabs();
+
+      expect(getBrowserTabsSnapshot().tabs).toHaveLength(1);
+      expect(opener).toHaveBeenCalledWith('sess-1', false);
+    });
+
+    it('does nothing when browser.list returns no tabs', async () => {
+      const listener = vi.fn();
+      subscribeBrowserTabs(listener);
+      call.mockImplementation(async (method: string) => (method === 'browser.list' ? ok([]) : ok(null)));
+
+      await reconcileBrowserTabs();
+
+      expect(getBrowserTabsSnapshot().tabs).toEqual([]);
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 

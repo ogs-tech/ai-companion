@@ -17,9 +17,9 @@ function asNumber(value: unknown, field: string): number {
  * (for `enable`) needs the resulting `mcpConfigPath` threaded into the
  * session's *next* spawn. `openTab`/`closeTab` are the manual-tab
  * equivalent — no session, no MCP config — and `navigate`/`setBounds`/
- * `status` are pure `WebContentsView` operations shared by both tab flavors
- * (`tabId` is either a `sessionId` or a manual tab's own id), so all of those
- * talk to the port directly.
+ * `status`/`list` are pure `WebContentsView` operations shared by both tab
+ * flavors (`tabId` is either a `sessionId` or a manual tab's own id), so all
+ * of those talk to the port directly.
  */
 export function buildBrowserHandlers(service: SessionService, embeddedBrowser: EmbeddedBrowserPort): IpcHandlers {
   return {
@@ -58,5 +58,6 @@ export function buildBrowserHandlers(service: SessionService, embeddedBrowser: E
       const raw = asObject(params, 'browser.status');
       return embeddedBrowser.status(asString(raw['tabId'], 'tabId'));
     },
+    'browser.list': async () => embeddedBrowser.list(),
   };
 }

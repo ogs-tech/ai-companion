@@ -25,8 +25,14 @@ let tabs: BrowserTab[] = [];
 let snapshot: BrowserTabsSnapshot = { tabs };
 const listeners = new Set<() => void>();
 
-/** Called by `WorkspaceScreen` while mounted; pass `null` on unmount — mirrors `registerAreaOpener`. */
-let workbenchOpener: ((tabId: string) => void) | null = null;
+/**
+ * Called by `WorkspaceScreen` while mounted; pass `null` on unmount — mirrors
+ * `registerAreaOpener`. `focus` defaults to `true` (open-and-select, the
+ * right behavior for a deliberate user action); `reconcileBrowserTabs` below
+ * passes `false` so recovering a tab after a reload doesn't steal focus from
+ * whatever the user was actually looking at.
+ */
+let workbenchOpener: ((tabId: string, focus?: boolean) => void) | null = null;
 
 function notify(): void {
   snapshot = { tabs };
@@ -42,7 +48,7 @@ export function getBrowserTabsSnapshot(): BrowserTabsSnapshot {
   return snapshot;
 }
 
-export function registerBrowserWorkbenchOpener(fn: ((tabId: string) => void) | null): void {
+export function registerBrowserWorkbenchOpener(fn: ((tabId: string, focus?: boolean) => void) | null): void {
   workbenchOpener = fn;
 }
 
@@ -52,16 +58,54 @@ function removeTab(tabId: string): void {
   notify();
 }
 
+/** Appends `tab` unless a tab with that `tabId` is already known. Returns whether it was added. */
+function upsertTab(tab: BrowserTab): boolean {
+  if (tabs.some((t) => t.tabId === tab.tabId)) return false;
+  tabs = [...tabs, tab];
+  return true;
+}
+
 /**
  * Re-establishes a session's already-existing tab without opening a
  * Workbench tab for it — used when a `SessionPanel` re-attaches to a session
  * whose browser was already enabled before this mount (its tab lives on,
- * main-process side; the renderer's own store just forgot about it).
+ * main-process side; the renderer's own store just forgot about it). Mostly
+ * superseded by `reconcileBrowserTabs` below, which also reopens the tab;
+ * kept as a defensive no-op-if-redundant fallback for whichever of the two
+ * happens to run first.
  */
 export function registerSessionTab(sessionId: string): void {
-  if (tabs.some((tab) => tab.tabId === sessionId)) return;
-  tabs = [...tabs, { tabId: sessionId, sessionId, url: '' }];
-  notify();
+  if (upsertTab({ tabId: sessionId, sessionId, url: '' })) notify();
+}
+
+/**
+ * Reconciles this store against whichever tabs actually survived a renderer
+ * reload — a reload doesn't touch the main-process `WebContentsView`s
+ * themselves (see `EmbeddedBrowserPort.hideAll`), only this module's own
+ * bookkeeping. Called once by `WorkspaceScreen` on mount: registers any tab
+ * this store doesn't already know about, then opens *every* returned tab
+ * (session and manual alike) as a Workbench tab — including one
+ * `registerSessionTab` already reclaimed silently before this resolved,
+ * since `workbenchOpener` is itself idempotent and calling it is the only
+ * way such a tab's Workbench pane actually becomes visible again. Never
+ * focuses any of them (`focus: false`) — several tabs can come back at once
+ * and none of them was the thing the user was just looking at, unlike a
+ * fresh `openSessionTab`/`openManualTab` call.
+ */
+export async function reconcileBrowserTabs(): Promise<void> {
+  const result = await callIpc<Array<{ tabId: string; sessionId?: string; url: string }>>('browser.list');
+  const list = Array.isArray(result) ? result : [];
+  let added = false;
+  for (const tab of list) {
+    const wasAdded = upsertTab(
+      tab.sessionId !== undefined
+        ? { tabId: tab.tabId, sessionId: tab.sessionId, url: tab.url }
+        : { tabId: tab.tabId, url: tab.url },
+    );
+    added = added || wasAdded;
+  }
+  if (added) notify();
+  for (const tab of list) workbenchOpener?.(tab.tabId, false);
 }
 
 /**
@@ -80,8 +124,7 @@ export function closeSessionTab(sessionId: string): void {
 }
 
 function commitTab(tabId: string, url: string): void {
-  tabs = [...tabs, { tabId, url }];
-  notify();
+  if (upsertTab({ tabId, url })) notify();
   workbenchOpener?.(tabId);
 }
 

@@ -7,6 +7,7 @@ import type {
   EmbeddedBrowserBounds,
   EmbeddedBrowserPort,
   EmbeddedBrowserStatus,
+  EmbeddedBrowserTabInfo,
 } from '../../application/ports/embedded-browser-port.js';
 
 interface Tab {
@@ -119,6 +120,18 @@ export class EmbeddedBrowserAdapter implements EmbeddedBrowserPort {
 
   setBounds(tabId: string, bounds: EmbeddedBrowserBounds): void {
     this.tabs.get(tabId)?.view.setBounds(bounds);
+  }
+
+  hideAll(): void {
+    for (const tab of this.tabs.values()) tab.view.setBounds(ZERO_BOUNDS);
+  }
+
+  list(): EmbeddedBrowserTabInfo[] {
+    return Array.from(this.tabs.entries(), ([tabId, tab]) => ({
+      tabId,
+      ...(tab.mcpConfigPath ? { sessionId: tabId } : {}),
+      url: tab.view.webContents.getURL(),
+    }));
   }
 
   status(tabId: string): EmbeddedBrowserStatus | null {

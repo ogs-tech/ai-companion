@@ -240,6 +240,7 @@ user is currently viewing.
 | `browser.navigate` | `{ tabId: string; url: string }` | `void` |
 | `browser.setBounds` | `{ tabId: string; bounds: { x: number; y: number; width: number; height: number } }` | `void` |
 | `browser.status` | `{ tabId: string }` | `{ url: string } \| null` |
+| `browser.list` | — | `{ tabId: string; sessionId?: string; url: string }[]` |
 
 A browser embedded as **ordinary Workbench tabs**, not a separate area of the app — opening one adds an
 `OpenTab` of `kind: 'browser'` to `WorkspaceScreen`'s own tab strip, the same one that already holds
@@ -293,6 +294,16 @@ strip — lives in `browser-tabs-store.ts` (`src/renderer/lib/`), a module-scope
 as `workspace-history-store.ts`/`workspace-area-store.ts`, since the things that open a tab (a
 `SessionPanel` toggle deep inside the Workbench; a marketplace/footer link, or the `TopNav` button,
 elsewhere entirely) have no prop path down into the screen that owns the tab strip.
+
+A renderer reload doesn't touch any of this main-process state — `EmbeddedBrowserAdapter`'s tabs keep
+running, just orphaned from the renderer's own (freshly emptied) `browser-tabs-store`. `hideAll()` (no IPC
+method, wired internally to `mainWindow.webContents`' `did-start-navigation`) zeroes every tab's bounds the
+moment such a reload starts, so an orphaned one doesn't render on top of the reloaded UI in the meantime.
+`browser.list` is how the renderer recovers from there: `WorkspaceScreen` calls it once on mount, via
+`browser-tabs-store.ts`'s `reconcileBrowserTabs`, and reopens every tab it reports — session and manual
+alike — as a Workbench tab, which is what actually restores each one's bounds (`BrowserPane`'s own mount
+effect reports its real container rect the moment it remounts). `sessionId` in a `browser.list` entry is
+present, and equal to `tabId`, only for a session tab; a manual tab's entry omits it.
 
 ### `sessionHistory`
 

@@ -112,6 +112,7 @@ beforeEach(() => {
     if (method === 'project.list') return projects;
     if (method === 'workspace.listDir') return [];
     if (method === 'session.list') return [];
+    if (method === 'browser.list') return [];
     return undefined;
   });
 });

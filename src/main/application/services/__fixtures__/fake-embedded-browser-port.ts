@@ -2,6 +2,7 @@ import type {
   EmbeddedBrowserBounds,
   EmbeddedBrowserPort,
   EmbeddedBrowserStatus,
+  EmbeddedBrowserTabInfo,
 } from '../../ports/embedded-browser-port.js';
 
 export class FakeEmbeddedBrowserPort implements EmbeddedBrowserPort {
@@ -12,6 +13,7 @@ export class FakeEmbeddedBrowserPort implements EmbeddedBrowserPort {
   navigateCalls: Array<[string, string]> = [];
   setBoundsCalls: Array<[string, EmbeddedBrowserBounds]> = [];
   destroyAllCalls = 0;
+  hideAllCalls = 0;
 
   private nextCreateFailure: Error | null = null;
   private readonly created = new Set<string>();
@@ -73,7 +75,19 @@ export class FakeEmbeddedBrowserPort implements EmbeddedBrowserPort {
     this.setBoundsCalls.push([id, bounds]);
   }
 
+  hideAll(): void {
+    this.hideAllCalls += 1;
+  }
+
   status(id: string): EmbeddedBrowserStatus | null {
     return this.statuses.get(id) ?? null;
+  }
+
+  list(): EmbeddedBrowserTabInfo[] {
+    const url = (id: string): string => this.statuses.get(id)?.url ?? 'about:blank';
+    return [
+      ...Array.from(this.created, (sessionId) => ({ tabId: sessionId, sessionId, url: url(sessionId) })),
+      ...Array.from(this.manualTabs, (tabId) => ({ tabId, url: url(tabId) })),
+    ];
   }
 }

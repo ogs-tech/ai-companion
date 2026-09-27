@@ -165,6 +165,43 @@ describe('EmbeddedBrowserAdapter', () => {
     expect(adapter.status('nope')).toBeNull();
   });
 
+  it('hideAll zeroes every tracked view’s bounds without tearing any of them down', async () => {
+    const { adapter, mainWindow } = setup();
+    await adapter.create('sess-1');
+    const { tabId } = await adapter.openTab('https://example.com');
+
+    adapter.hideAll();
+
+    const sessionView = mainWindow.contentView.addChildView.mock.calls[0]![0];
+    const manualView = mainWindow.contentView.addChildView.mock.calls[1]![0];
+    expect(sessionView.setBounds).toHaveBeenCalledWith({ x: 0, y: 0, width: 0, height: 0 });
+    expect(manualView.setBounds).toHaveBeenCalledWith({ x: 0, y: 0, width: 0, height: 0 });
+    expect(mainWindow.contentView.removeChildView).not.toHaveBeenCalled();
+    expect(adapter.status('sess-1')).not.toBeNull();
+    expect(adapter.status(tabId)).not.toBeNull();
+  });
+
+  it('hideAll is a no-op when there are no tabs', () => {
+    const { adapter } = setup();
+    expect(() => adapter.hideAll()).not.toThrow();
+  });
+
+  it('list enumerates every tab, tagging session tabs with their sessionId and leaving manual ones untagged', async () => {
+    const { adapter } = setup();
+    await adapter.create('sess-1');
+    const { tabId } = await adapter.openTab('https://example.com');
+
+    expect(adapter.list()).toEqual([
+      { tabId: 'sess-1', sessionId: 'sess-1', url: 'about:blank' },
+      { tabId, url: 'about:blank' },
+    ]);
+  });
+
+  it('list is empty when there are no tabs', () => {
+    const { adapter } = setup();
+    expect(adapter.list()).toEqual([]);
+  });
+
   describe('manual tabs', () => {
     it('openTab adds a view as a child of the main window, navigated to the given url, and mints a fresh tabId per call', async () => {
       const { adapter, mainWindow } = setup();

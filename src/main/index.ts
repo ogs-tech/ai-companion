@@ -54,6 +54,7 @@ import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plu
 import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
+import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
@@ -94,6 +95,8 @@ app.commandLine.appendSwitch('remote-debugging-port', String(EMBEDDED_BROWSER_CD
 
 let mainWindow: BrowserWindow | null = null;
 let devFocusServer: Server | null = null;
+/** Set once `wireIpc` constructs the real adapter — read by `createWindow`'s reload listener, see `hideAll`. */
+let embeddedBrowserPortForReload: EmbeddedBrowserPort | null = null;
 
 function writeDevLock(): void {
   if (!isDev) return;
@@ -316,6 +319,7 @@ async function wireIpc(): Promise<void> {
     playwrightMcpBin: join(app.getAppPath(), 'node_modules', '.bin', 'playwright-mcp'),
     cdpPort: EMBEDDED_BROWSER_CDP_PORT,
   });
+  embeddedBrowserPortForReload = embeddedBrowserAdapter;
 
   const sharedDeps = {
     clock,
@@ -478,6 +482,16 @@ function createWindow(): void {
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
+
+  // A reload (dev Cmd+R, or any other top-level navigation) wipes the
+  // renderer's in-memory browser-tabs list, but every embedded browser tab's
+  // `WebContentsView` lives in this process and survives it untouched —
+  // still attached to the window at its last bounds. Without this, an
+  // orphaned one keeps rendering on top of the freshly (and now tab-less)
+  // reloaded UI. See `EmbeddedBrowserPort.hideAll`.
+  mainWindow.webContents.on('did-start-navigation', () => {
+    embeddedBrowserPortForReload?.hideAll();
+  });
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
   if (devServerUrl) {

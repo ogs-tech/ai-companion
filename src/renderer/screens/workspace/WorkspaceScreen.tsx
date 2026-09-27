@@ -40,6 +40,7 @@ import { registerAreaOpener, type WorkspaceAreaTab } from '../../lib/workspace-a
 import {
   closeBrowserTab,
   getBrowserTabsSnapshot,
+  reconcileBrowserTabs,
   registerBrowserWorkbenchOpener,
   subscribeBrowserTabs,
 } from '../../lib/browser-tabs-store.js';
@@ -281,16 +282,23 @@ export function WorkspaceScreen(): React.ReactElement {
   // entirely) have no prop path in either way. `browser-tabs-store.ts` is the
   // source of truth for which tabs exist; this only decides which of them is
   // a Workbench tab and which one is active.
-  const openBrowserWorkbenchTab = (tabId: string): void => {
+  const openBrowserWorkbenchTab = (tabId: string, focus = true): void => {
     const id = `browser:${tabId}`;
     setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'browser', tabId }]));
-    setActiveTabId(id);
+    if (focus) setActiveTabId(id);
   };
 
   useEffect(() => {
     registerBrowserWorkbenchOpener(openBrowserWorkbenchTab);
     return () => registerBrowserWorkbenchOpener(null);
   });
+
+  // Mount-only: recovers whichever browser tabs survived a renderer reload
+  // main-process side, reopening each as a Workbench tab. Must run after the
+  // opener registration above (same-commit effect order guarantees that).
+  useEffect(() => {
+    void reconcileBrowserTabs();
+  }, []);
 
   const { tabs: browserTabs } = useSyncExternalStore(subscribeBrowserTabs, getBrowserTabsSnapshot);
 

@@ -127,4 +127,19 @@ describe('browser-handlers', () => {
     await expect(h['browser.closeTab']!({})).rejects.toMatchObject({ kind: 'validation' });
   });
 
+  it('browser.list forwards to the port, listing session and manual tabs alike', async () => {
+    const { service, base, embeddedBrowser, h } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const spawned = await service.spawn({ kind: 'entity', urn: entityUrn('skill', 'foo') });
+    await service.setBrowserEnabled(spawned.sessionId, true);
+    await embeddedBrowser.openTab('https://example.com');
+
+    const result = await h['browser.list']!({});
+
+    expect(result).toEqual([
+      { tabId: spawned.sessionId, sessionId: spawned.sessionId, url: 'about:blank' },
+      { tabId: 'tab-1', url: 'https://example.com' },
+    ]);
+  });
+
 });
