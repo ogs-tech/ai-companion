@@ -766,6 +766,77 @@ describe('WorkspaceScreen', () => {
     });
   });
 
+  describe('Launch Configurations', () => {
+    it("shows the root Project's own Launch Configurations group pinned once; running a config opens a Workbench tab", async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'launchConfig.list') {
+          return [{ projectId: 'p1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] }];
+        }
+        if (method === 'launchConfig.run') {
+          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'running', exitCode: null };
+        }
+        if (method === 'launchConfig.status') {
+          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'running', exitCode: null, outputBuffer: '' };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-launch-configs-acme'));
+      await user.click(await screen.findByTestId('tree-launch-config-acme-Run server'));
+      expect(await screen.findByTestId('workbench-tab-launch-process:proc-1')).toBeInTheDocument();
+      expect(ipc.callIpc).toHaveBeenCalledWith('launchConfig.run', { projectId: 'p1', configName: 'Run server' });
+    });
+
+    it("does not duplicate the root Project's Launch Configurations group across several expanded top-level folders", async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') {
+          const path = (params as { path?: string } | undefined)?.path;
+          return path ? [] : [{ name: 'apps', kind: 'dir' }, { name: 'libs', kind: 'dir' }];
+        }
+        if (method === 'launchConfig.list') {
+          return [{ projectId: 'p1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] }];
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByText('apps'));
+      await user.click(await screen.findByText('libs'));
+      expect(screen.getAllByTestId('tree-group-launch-configs-acme')).toHaveLength(1);
+    });
+
+    it('closing a launch-process tab removes it from the Workbench', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'project.list') return projects;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'launchConfig.list') {
+          return [{ projectId: 'p1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] }];
+        }
+        if (method === 'launchConfig.run') {
+          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'running', exitCode: null };
+        }
+        if (method === 'launchConfig.status') {
+          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'exited', exitCode: 0, outputBuffer: '' };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-launch-configs-acme'));
+      await user.click(await screen.findByTestId('tree-launch-config-acme-Run server'));
+      expect(await screen.findByTestId('workbench-tab-launch-process:proc-1')).toBeInTheDocument();
+      await user.click(screen.getByTestId('workbench-tab-close-launch-process:proc-1'));
+      expect(screen.queryByTestId('workbench-tab-launch-process:proc-1')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Control Panel scope chip (project vs multi-project view)', () => {
     it('shows no scope chip while the workspace has a single registered Project ("project" view)', async () => {
       renderScreen();

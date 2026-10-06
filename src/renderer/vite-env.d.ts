@@ -17,6 +17,11 @@ declare global {
       entity: {
         onChanged(listener: (event: EntityChangedEvent) => void): () => void;
       };
+      launchConfig: {
+        onOutput(processId: string, listener: (stream: 'stdout' | 'stderr', chunk: string) => void): () => void;
+        onExit(processId: string, listener: (exitCode: number | null, signal: string | null) => void): () => void;
+        onAnyExit(listener: (processId: string, exitCode: number | null, signal: string | null) => void): () => void;
+      };
     };
   }
 }

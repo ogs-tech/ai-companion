@@ -55,6 +55,17 @@ interface FolderTreeProps {
   scopeProjectId?: string;
   /** Renders a Project's own INSTRUCTIONS row pinned above its children once its folder node is expanded in place — lets a Project's instruction be reached without "entering" it via `onOpenProject`. `depth` matches its children's own indent level (see `TreeNode`'s `pl: 1.5 + depth * 2`), so the row reads as nested under the Project folder rather than flush with it. */
   renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
+  /**
+   * Renders a Project's own LAUNCH CONFIGURATIONS group pinned above its
+   * children once its folder node is expanded in place — gated on
+   * `matchedProject` only, never the workspace-root's own `rootProject`
+   * fallback (unlike this file's `effectiveProjectId`), since `rootProject`
+   * is recomputed identically for every depth-0 entry and would render this
+   * group once per expanded top-level folder instead of once. The
+   * workspace-root case is handled separately, via `pinnedRows`. `depth`
+   * matches `renderProjectInstructionRow`'s own formula.
+   */
+  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 interface TreeNodeProps {
@@ -70,6 +81,7 @@ interface TreeNodeProps {
   onOpenProject?: (projectId: string) => void;
   scopeProjectId?: string;
   renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
+  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 function TreeNode({
@@ -85,6 +97,7 @@ function TreeNode({
   onOpenProject,
   scopeProjectId,
   renderProjectInstructionRow,
+  renderProjectLaunchConfigsRow,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
   const resolveAbsolutePath = useResolveAbsolutePath();
@@ -220,6 +233,9 @@ function TreeNode({
               {matchedProject && renderProjectInstructionRow
                 ? renderProjectInstructionRow(matchedProject, depth + 1)
                 : null}
+              {matchedProject && renderProjectLaunchConfigsRow
+                ? renderProjectLaunchConfigsRow(matchedProject, depth + 1)
+                : null}
               {(children ?? []).map((child) => (
                 <TreeNode
                   key={child.name}
@@ -235,6 +251,7 @@ function TreeNode({
                   {...(onOpenProject !== undefined ? { onOpenProject } : {})}
                   {...(effectiveProjectId ? { scopeProjectId: effectiveProjectId } : {})}
                   {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
+                  {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
                 />
               ))}
             </List>
@@ -257,6 +274,7 @@ export function FolderTree({
   onOpenProject,
   scopeProjectId,
   renderProjectInstructionRow,
+  renderProjectLaunchConfigsRow,
 }: FolderTreeProps): React.ReactElement {
   const { data: rootEntries, isError } = useDirListing('', {
     ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
@@ -358,6 +376,7 @@ export function FolderTree({
             {...(onOpenProject !== undefined ? { onOpenProject } : {})}
             {...(scopeProjectId ? { scopeProjectId } : {})}
             {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
+            {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
           />
         ))}
       </List>

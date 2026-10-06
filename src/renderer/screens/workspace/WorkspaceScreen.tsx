@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import {
   Eye, EyeOff, File as FileIcon, FileX, Globe, MoreVertical, NotebookPen,
-  History, PanelLeft, PanelRight, RefreshCw, SquareTerminal, Trash2, type LucideIcon,
+  History, PanelLeft, PanelRight, Play, RefreshCw, SquareTerminal, Trash2, type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { EmptyState } from '../../components/ds/EmptyState.js';
@@ -20,6 +20,8 @@ import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
 import { EditorPanel, type EditorHiddenField, type PreviewSource } from '../../components/workspace/EditorPanel.js';
 import { SessionPanel } from '../../components/SessionPanel.js';
+import { LaunchConfigsTreeGroup } from '../../components/workspace/LaunchConfigsTreeGroup.js';
+import { LaunchProcessPanel } from '../../components/workspace/LaunchProcessPanel.js';
 import { BrowserPane } from '../../components/BrowserPane.js';
 import { WorkspaceRemoveConfirmDialog } from '../../components/shell/WorkspaceRemoveConfirmDialog.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR, NAV_AREAS, type AreaDef } from '../../components/shell/nav.js';
@@ -50,6 +52,7 @@ import { useActiveWorkspace, useDeleteWorkspace, useSwitchWorkspace } from '../.
 import { useDeleteProject, useFindOrCreateProjectByPath, useProjects } from '../../hooks/use-projects.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
+import { useLaunchProcesses } from '../../hooks/use-launch-process.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
 import { useRefreshFiles } from '../../hooks/use-file-browser.js';
 import { useHealthReport } from '../../hooks/use-health-report.js';
@@ -63,6 +66,7 @@ import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import type { Workspace } from '../../../shared/workspace.js';
 import type { Project } from '../../../shared/project.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
+import type { LaunchProcessSnapshot } from '../../../shared/launch-config.js';
 import { callIpc } from '../../lib/ipc.js';
 
 function errorMessage(err: unknown): string {
@@ -79,6 +83,7 @@ type OpenTab =
   | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
+  | { id: string; kind: 'launch-process'; processId: string; label: string }
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
   | { id: string; kind: 'history' }
   | { id: string; kind: 'browser'; tabId: string }
@@ -123,6 +128,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const invalidateCustomization = useInvalidateCustomization();
   const invalidateInstructions = useInvalidateInstructions();
   const { data: sessions } = useSessions();
+  const launchProcesses = useLaunchProcesses();
   const { data: healthReport } = useHealthReport('personal');
   const queryClient = useQueryClient();
   useEntityChangeInvalidation();
@@ -222,6 +228,16 @@ export function WorkspaceScreen(): React.ReactElement {
     );
     setActiveTabId(id);
   };
+
+  const openLaunchProcessTab = (process: LaunchProcessSnapshot): void => {
+    const id = `launch-process:${process.processId}`;
+    setOpenTabs((prev) =>
+      prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'launch-process', processId: process.processId, label: process.configName }],
+    );
+    setActiveTabId(id);
+  };
+
+  const onEditLaunchJson = (project: Project): void => openFileTab('.vscode/launch.json', project.id);
 
   // A rendered, read-only view of a file's Markdown — reached via the tree's
   // right-click "Preview" menu, never via the normal click-to-open path.
@@ -811,6 +827,18 @@ export function WorkspaceScreen(): React.ReactElement {
         render: (hidden) => <SessionPanel anchor={tab.anchor} sessionId={tab.sessionId} visible={!hidden} />,
       };
     }
+    if (tab.kind === 'launch-process') {
+      const running = launchProcesses.some((p) => p.processId === tab.processId && p.status === 'running');
+      return {
+        id: tab.id,
+        glyph: Play,
+        label: tab.label,
+        closeLabel: running ? 'Minimizar' : 'Fechar',
+        dense: true,
+        onClose: () => closeTab(tab.id),
+        render: (hidden) => <LaunchProcessPanel processId={tab.processId} visible={!hidden} />,
+      };
+    }
     const isPersonal = tab.kind === 'instruction' && isPersonalInstruction(tab.entity);
     // An instruction's own `entity.name` is just its project/workspace's
     // basename (see `instruction-seed.ts`) — the same name a file/skill tab
@@ -941,6 +969,22 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   );
 
+  const renderProjectLaunchConfigsRow = (project: Project, depth: number): React.ReactNode => (
+    <LaunchConfigsTreeGroup project={project} depth={depth} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
+  );
+
+  // The workspace root itself may be registered as its own Project (see
+  // docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision
+  // #4/#6) — its own Launch Configurations group is pinned once via
+  // `pinnedRows` rather than `renderProjectLaunchConfigsRow`'s nested call
+  // site, which is deliberately gated on `matchedProject` only (see that
+  // prop's own doc comment in FolderTree.tsx) to avoid rendering this group
+  // once per expanded top-level folder.
+  const rootProject = activeWorkspace ? projects.find((p) => p.path === activeWorkspace.rootPath) : undefined;
+  const pinnedRows = rootProject ? (
+    <LaunchConfigsTreeGroup project={rootProject} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
+  ) : undefined;
+
   const explorerHeaderActions = (
     <Tooltip title="Reler do disco">
       <IconButton size="small" data-testid="workspace-refresh-files" aria-label="Reler do disco" onClick={() => void refreshFiles()}>
@@ -989,7 +1033,9 @@ export function WorkspaceScreen(): React.ReactElement {
               onPreviewFile={openFilePreviewTab}
               onNewAction={newActionForFile}
               instructionRow={instructionRow}
+              {...(pinnedRows !== undefined ? { pinnedRows } : {})}
               renderProjectInstructionRow={renderProjectInstructionRow}
+              renderProjectLaunchConfigsRow={renderProjectLaunchConfigsRow}
               {...(activeWorkspace ? { workspaceRootPath: activeWorkspace.rootPath } : {})}
             />
           </SidePanel>

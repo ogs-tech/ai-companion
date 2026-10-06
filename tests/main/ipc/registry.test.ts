@@ -27,6 +27,8 @@ import type { OpenWithService } from '../../../src/main/application/services/ope
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
 import type { FileBrowserPort } from '../../../src/main/application/ports/file-browser-port.js';
 import type { Settings } from '../../../src/shared/settings.js';
+import type { LaunchConfigService } from '../../../src/main/application/services/launch-config-service.js';
+import type { LaunchProcessService } from '../../../src/main/application/services/launch-process-service.js';
 
 const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
   adapters: {
@@ -63,6 +65,8 @@ interface Deps {
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
+  launchConfigService: LaunchConfigService;
+  launchProcessService: LaunchProcessService;
   appQuit: () => void;
   settingsRepoSpy: {
     load: ReturnType<typeof vi.fn>;
@@ -134,6 +138,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const workspaceTeardownService = {
     restore: vi.fn().mockResolvedValue(undefined),
   } as unknown as WorkspaceTeardownService;
+  const launchConfigService = null as unknown as LaunchConfigService;
+  const launchProcessService = null as unknown as LaunchProcessService;
   const credentialStore: CredentialStorePort = {
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue(undefined),
@@ -167,6 +173,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     openWithService,
     notificationPort,
     workspaceTeardownService,
+    launchConfigService,
+    launchProcessService,
     appQuit: () => undefined,
     settingsRepoSpy,
     repoReaderSpy,

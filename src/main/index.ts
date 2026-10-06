@@ -58,6 +58,9 @@ import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-p
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
+import { LAUNCH_PROCESS_OUTPUT_CHANNEL, LAUNCH_PROCESS_EXIT_CHANNEL } from '../shared/launch-config.js';
+import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
+import { NodeChildProcessAdapter } from './infrastructure/launch-process/node-child-process-adapter.js';
 import { ChokidarFileWatcher } from './infrastructure/file-watcher/chokidar-file-watcher.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
@@ -337,6 +340,8 @@ async function wireIpc(): Promise<void> {
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
     fileWatcherPort: new ChokidarFileWatcher(),
+    launchConfigReaderPort: new FsLaunchConfigReader(),
+    launchProcessPort: new NodeChildProcessAdapter(),
   };
 
   let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
@@ -357,6 +362,16 @@ async function wireIpc(): Promise<void> {
   };
   attachSessionBridges(workspaceScoped);
 
+  const attachLaunchProcessBridges = (services: WorkspaceScopedServices): void => {
+    services.launchProcessService.onOutput((event) => {
+      mainWindow?.webContents.send(LAUNCH_PROCESS_OUTPUT_CHANNEL, event);
+    });
+    services.launchProcessService.onExit((event) => {
+      mainWindow?.webContents.send(LAUNCH_PROCESS_EXIT_CHANNEL, event);
+    });
+  };
+  attachLaunchProcessBridges(workspaceScoped);
+
   const attachEntityWatch = (services: WorkspaceScopedServices): void => {
     services.entityWatchService.onEntityChanged((event) => {
       mainWindow?.webContents.send(ENTITY_CHANGED_CHANNEL, event);
@@ -367,6 +382,7 @@ async function wireIpc(): Promise<void> {
 
   app.on('before-quit', () => {
     workspaceScoped.sessionService.killAll();
+    workspaceScoped.launchProcessService.killAll();
     void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
   });
@@ -406,6 +422,8 @@ async function wireIpc(): Promise<void> {
     openWithService,
     notificationPort,
     workspaceTeardownService: workspaceScoped.workspaceTeardownService,
+    launchConfigService: workspaceScoped.launchConfigService,
+    launchProcessService: workspaceScoped.launchProcessService,
     appQuit: () => app.quit(),
   });
 
@@ -424,6 +442,7 @@ async function wireIpc(): Promise<void> {
   function switchActiveWorkspace(id: string): Promise<Workspace> {
     return switchQueue(async () => {
       workspaceScoped.sessionService.killAll();
+      workspaceScoped.launchProcessService.killAll();
       await embeddedBrowserAdapter.destroyAll();
       await workspaceScoped.entityWatchService.stop();
       const target = await workspaceService.switchTo(id);
@@ -432,6 +451,7 @@ async function wireIpc(): Promise<void> {
       workspaceScoped = buildWorkspaceScopedServices(targetDataDir, sharedDeps);
       fileBrowserService = new FileBrowserService(fileBrowserPort, target.rootPath);
       attachSessionBridges(workspaceScoped);
+      attachLaunchProcessBridges(workspaceScoped);
       attachEntityWatch(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));
       return target;

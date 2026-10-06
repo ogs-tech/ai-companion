@@ -26,7 +26,10 @@ interface ExplorerPanelContentProps {
   onNewAction: (relPath: string, projectId?: string) => void;
   /** The active workspace's own pinned INSTRUCTIONS row, rendered above the file tree. */
   instructionRow: React.ReactNode;
+  /** Content pinned below `instructionRow` and above the folders/files — e.g. the workspace-root Project's own Launch Configurations group. */
+  pinnedRows?: React.ReactNode;
   renderProjectInstructionRow: (project: Project, depth: number) => React.ReactNode;
+  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
   workspaceRootPath?: string;
 }
 
@@ -50,7 +53,9 @@ export function ExplorerPanelContent({
   onPreviewFile,
   onNewAction,
   instructionRow,
+  pinnedRows,
   renderProjectInstructionRow,
+  renderProjectLaunchConfigsRow,
   workspaceRootPath,
 }: ExplorerPanelContentProps): React.ReactElement {
   return (
@@ -75,7 +80,9 @@ export function ExplorerPanelContent({
             onNewAction={onNewAction}
             projects={projects}
             instructionRow={instructionRow}
+            {...(pinnedRows !== undefined ? { pinnedRows } : {})}
             renderProjectInstructionRow={renderProjectInstructionRow}
+            {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
             {...(workspaceRootPath ? { workspaceRootPath } : {})}
           />
         )}

@@ -12,6 +12,8 @@ interface TreeGroupProps {
   count?: number;
   onCreate?: () => void;
   createLabel?: string;
+  /** Tree nesting level, matching FolderTree's `TreeNode` indent formula (`pl: 1.5 + depth * 2`) — for a group pinned inside a folder node rather than at the tree's own top level. Defaults to `0` (today's `pl: 1.5`). */
+  depth?: number;
   children: React.ReactNode;
 }
 
@@ -20,14 +22,15 @@ interface TreeGroupProps {
  * styled to match FolderTree's own folder rows so the tree reads as one
  * structure rather than a nav list bolted onto a file browser.
  */
-export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, children }: TreeGroupProps): React.ReactElement {
+export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, depth = 0, children }: TreeGroupProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
+  const pl = 1.5 + depth * 2;
 
   return (
     <>
       <TreeRow
         testId={`tree-group-${testId}`}
-        pl={1.5}
+        pl={pl}
         chevron={expanded ? 'expanded' : 'collapsed'}
         glyph={glyph}
         primary={label}
@@ -74,7 +77,7 @@ export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, 
             variant="caption"
             color="text.secondary"
             data-testid={`tree-group-empty-${testId}`}
-            sx={{ display: 'block', pl: 1.5 + 14 / 8 + 2, py: 0.75 }}
+            sx={{ display: 'block', pl: pl + 14 / 8 + 2, py: 0.75 }}
           >
             Nada aqui ainda
           </Typography>
@@ -100,6 +103,9 @@ interface TreeGroupRowProps {
   muted?: boolean;
   /** Left-edge color spine marking this row's kind — the same signature used by WorkbenchCanvas's tab strip, so a session row here and a tab there read as one visual system. */
   accentColor?: string;
+  disabled?: boolean;
+  /** See `TreeGroup`'s own `depth`. Defaults to `0`. */
+  depth?: number;
 }
 
 /**
@@ -109,11 +115,11 @@ interface TreeGroupRowProps {
  * so a row reads as calm as a plain file/agent name until the user actually
  * means to act on it.
  */
-export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor }: TreeGroupRowProps): React.ReactElement {
+export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor, disabled, depth = 0 }: TreeGroupRowProps): React.ReactElement {
   return (
     <TreeRow
       testId={testId}
-      pl={1.5 + 2.5}
+      pl={1.5 + 2.5 + depth * 2}
       glyph={glyph}
       primary={primary}
       badge={badge}
@@ -122,6 +128,7 @@ export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContext
       {...(onClick ? { onClick } : {})}
       {...(onContextMenu ? { onContextMenu } : {})}
       {...(muted !== undefined ? { muted } : {})}
+      {...(disabled !== undefined ? { disabled } : {})}
     />
   );
 }

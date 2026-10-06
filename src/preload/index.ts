@@ -7,6 +7,12 @@ import {
   type SessionExitEvent,
 } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedEvent } from '../shared/entity.js';
+import {
+  LAUNCH_PROCESS_OUTPUT_CHANNEL,
+  LAUNCH_PROCESS_EXIT_CHANNEL,
+  type LaunchProcessOutputEvent,
+  type LaunchProcessExitEvent,
+} from '../shared/launch-config.js';
 
 const api = {
   call: <T>(method: string, params: unknown): Promise<IpcResult<T>> =>
@@ -42,6 +48,28 @@ const api = {
       const wrapped = (_event: IpcRendererEvent, payload: EntityChangedEvent): void => listener(payload);
       ipcRenderer.on(ENTITY_CHANGED_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(ENTITY_CHANGED_CHANNEL, wrapped);
+    },
+  },
+  launchConfig: {
+    onOutput: (processId: string, listener: (stream: 'stdout' | 'stderr', chunk: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: LaunchProcessOutputEvent): void => {
+        if (payload.processId === processId) listener(payload.stream, payload.chunk);
+      };
+      ipcRenderer.on(LAUNCH_PROCESS_OUTPUT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(LAUNCH_PROCESS_OUTPUT_CHANNEL, wrapped);
+    },
+    onExit: (processId: string, listener: (exitCode: number | null, signal: string | null) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: LaunchProcessExitEvent): void => {
+        if (payload.processId === processId) listener(payload.exitCode, payload.signal);
+      };
+      ipcRenderer.on(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
+    },
+    /** Unfiltered — for the renderer-side launch-process store, which doesn't know every live processId up front. */
+    onAnyExit: (listener: (processId: string, exitCode: number | null, signal: string | null) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: LaunchProcessExitEvent): void => listener(payload.processId, payload.exitCode, payload.signal);
+      ipcRenderer.on(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
     },
   },
 };

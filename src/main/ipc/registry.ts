@@ -37,6 +37,9 @@ import type { HealthService } from '../application/services/health/health-servic
 import { buildMcpHandlers } from './mcp-handlers.js';
 import { buildOpenWithHandlers } from './open-with-handlers.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
+import { buildLaunchConfigHandlers } from './launch-config-handlers.js';
+import type { LaunchConfigService } from '../application/services/launch-config-service.js';
+import type { LaunchProcessService } from '../application/services/launch-process-service.js';
 import type { McpService } from '../application/services/mcp-service.js';
 import type { NotificationPort } from '../application/ports/notification-port.js';
 import type { WorkspaceTeardownService } from '../application/services/workspace-teardown.js';
@@ -69,6 +72,8 @@ export interface IpcDeps {
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
+  launchConfigService: LaunchConfigService;
+  launchProcessService: LaunchProcessService;
   appQuit: () => void;
 }
 
@@ -117,6 +122,8 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     openWithService,
     notificationPort,
     workspaceTeardownService,
+    launchConfigService,
+    launchProcessService,
     appQuit,
   } = deps;
 
@@ -248,5 +255,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       dialogPort,
       embeddedBrowser: embeddedBrowserPort,
     }),
+    ...buildLaunchConfigHandlers(launchConfigService, launchProcessService),
   };
 }

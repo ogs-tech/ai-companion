@@ -37,6 +37,10 @@ import { ClaudeAdapter } from '../infrastructure/adapters/claude-adapter.js';
 import { CursorAdapter } from '../infrastructure/adapters/cursor-adapter.js';
 import { EntityWatchService } from './services/entity-watch-service.js';
 import type { FileWatcherPort } from './ports/file-watcher-port.js';
+import { LaunchConfigService } from './services/launch-config-service.js';
+import { LaunchProcessService } from './services/launch-process-service.js';
+import type { LaunchConfigReaderPort } from './ports/launch-config-reader-port.js';
+import type { LaunchProcessPort } from './ports/launch-process-port.js';
 
 export interface WorkspaceScopedSharedDeps {
   clock: ClockPort;
@@ -52,6 +56,8 @@ export interface WorkspaceScopedSharedDeps {
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
+  launchConfigReaderPort: LaunchConfigReaderPort;
+  launchProcessPort: LaunchProcessPort;
 }
 
 export interface WorkspaceScopedServices {
@@ -69,6 +75,8 @@ export interface WorkspaceScopedServices {
   healthService: HealthService;
   workspaceTeardownService: WorkspaceTeardownService;
   entityWatchService: EntityWatchService;
+  launchConfigService: LaunchConfigService;
+  launchProcessService: LaunchProcessService;
 }
 
 /**
@@ -98,6 +106,7 @@ export function buildWorkspaceScopedServices(
     clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
     claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
+    launchConfigReaderPort, launchProcessPort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -163,9 +172,12 @@ export function buildWorkspaceScopedServices(
 
   const entityWatchService = new EntityWatchService(dataDir, entityRepository, adapterManager, fileWatcherPort);
 
+  const launchConfigService = new LaunchConfigService(projectService, launchConfigReaderPort);
+  const launchProcessService = new LaunchProcessService(launchConfigService, launchProcessPort);
+
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
     skillService, agentService, instructionService, sessionService, sessionHistoryService, projectService,
-    healthService, workspaceTeardownService, entityWatchService,
+    healthService, workspaceTeardownService, entityWatchService, launchConfigService, launchProcessService,
   };
 }

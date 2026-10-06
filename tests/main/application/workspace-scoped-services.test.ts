@@ -24,6 +24,8 @@ import { ClaudeSettingsFile } from '../../../src/main/infrastructure/settings/cl
 import { SimpleGitClient } from '../../../src/main/infrastructure/git/simple-git-client.js';
 import { OctokitClient } from '../../../src/main/infrastructure/github/octokit-client.js';
 import { FakeCredentialStorePort } from '../../../src/main/application/services/__fixtures__/fake-credential-store-port.js';
+import { FsLaunchConfigReader } from '../../../src/main/infrastructure/launch-config/fs-launch-config-reader.js';
+import { FakeLaunchProcessPort } from '../../../src/main/application/services/__fixtures__/fake-launch-process-port.js';
 import type { WorkspaceScopedSharedDeps } from '../../../src/main/application/workspace-scoped-services.js';
 import type { FileWatcherPort } from '../../../src/main/application/ports/file-watcher-port.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../src/shared/entity.js';
@@ -103,6 +105,8 @@ function buildShared(): WorkspaceScopedSharedDeps {
     embeddedBrowserPort: new FakeEmbeddedBrowserPort(),
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(homedir, '.claude', 'projects')),
     fileWatcherPort: noopFileWatcherPort,
+    launchConfigReaderPort: new FsLaunchConfigReader(),
+    launchProcessPort: new FakeLaunchProcessPort(),
   };
 }
 

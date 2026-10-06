@@ -42,6 +42,11 @@ Defined in [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts).
 
 Every method above is request/response over `ipc:call`. One exception: `session:output` and `session:exit` (defined in [`src/shared/session.ts`](../../src/shared/session.ts)) stream live PTY output and report a session's exit code while a `claude` process spawned via `session.spawn` is running — that streaming can't fit the request/response `ipc:call` envelope. **Multiple sessions can be live at once** — one per `entity`/`workspace`/`project` anchor for `entity`, but any number for `workspace`/`project` (see [`session`](#session) below) — so preload itself filters by `sessionId` before invoking the renderer's listener — there's no single "the" session to assume, and `sessionId` is only the anchor's own key (`entity:<urn>`) for `entity`; for `workspace`/`project` it's an opaque `crypto.randomUUID()` with no relationship to any `urn`. Preload exposes these as `window.api.session.onOutput(sessionId, listener) → unsubscribe` and `window.api.session.onExit(sessionId, listener) → unsubscribe`, each listener receiving only the payload (`chunk` / `exitCode`) for that session. A third accessor, `window.api.session.onAnyExit(listener) → unsubscribe`, skips the `sessionId` filter entirely — it exists for `useSessions()`, which needs to notice a session exiting in the background without already knowing every live `sessionId` up front.
 
+A third pair, `launchProcess:output`/`launchProcess:exit` (`src/shared/launch-config.ts`), streams a launched
+config's stdout/stderr and reports its exit the same way, filtered by `processId` instead of `sessionId` —
+`window.api.launchConfig.onOutput(processId, listener) → unsubscribe`, `.onExit(processId, listener) →
+unsubscribe`, and an unfiltered `.onAnyExit(listener) → unsubscribe` mirroring `session.onAnyExit`.
+
 A second exception: `entity:changed` (defined in [`src/shared/entity.ts`](../../src/shared/entity.ts)), fired whenever `EntityWatchService` (`src/main/application/services/entity-watch-service.ts`) re-syncs a Skill/Agent/Instruction edited outside the app's own `save()` — e.g. by a `claude` session writing to the entity's canonical source file directly. Payload is `{ kind: EntityKind; urn: string }`. Preload exposes it unfiltered as `window.api.entity.onChanged(listener) → unsubscribe` (the renderer doesn't know ahead of time which urn an external edit touched), used to invalidate that kind's list query so the tree picks up the change.
 
 ## Preload bridge
@@ -212,6 +217,37 @@ The renderer never offers a folder picker for this — `instruction.*` is driven
 screen (`WorkspaceScreen` → `PersonalInstructionCard` / `ScopedInstructionCard`, see
 [Architecture](architecture.md#instructions-on-visão-geral)), scoped to whichever workspace or project the
 user is currently viewing.
+
+### `launchConfig`
+
+Read-only discovery over every registered Project's `.vscode/launch.json`, plus running a `type: "node"`,
+`request: "launch"` configuration as a plain child process — see
+[the design spec](../superpowers/specs/2026-09-19-vscode-launch-config-launcher-design.md) for the full
+rationale. Not Entity-backed (no `urn`, no `scopes`) — same precedent as `hook`/`mcp`.
+
+| Method | Params | Result |
+|---|---|---|
+| `launchConfig.list` | — | `ProjectLaunchConfigs[]` (every registered Project) |
+| `launchConfig.run` | `{ projectId: string; configName: string }` | `LaunchProcessSnapshot` |
+| `launchConfig.kill` | `{ processId: string }` | `void` |
+| `launchConfig.status` | `{ processId: string }` | `LaunchProcessSnapshot & { outputBuffer: string } \| null` |
+
+`LaunchConfig` (`src/shared/launch-config.ts`): `{ name: string; type: string; request: string; program: string;
+args: string[]; cwd?: string; env?: Record<string,string>; supported: boolean }` — `supported` is `true` only for
+`type: 'node'`, `request: 'launch'`; anything else is listed but `launchConfig.run` on it throws
+`kind: 'validation'` (`resolveLaunchCommand`/`UnsupportedLaunchTypeError`,
+`src/main/domain/launch-config-command.ts`) even if called directly, re-deriving support from `type`/`request`
+rather than trusting a client-sent flag. `ProjectLaunchConfigs`: `{ projectId: string; configs: LaunchConfig[];
+error?: string }` — `error` is set (configs empty) when that Project's `launch.json` is missing, has
+parse errors, or has a malformed entry; a missing `.vscode/launch.json` file itself is *not* an error, just an
+empty `configs` array. `LaunchProcessSnapshot`: `{ processId: string; projectId: string; configName: string;
+status: 'running' \| 'exited'; exitCode?: number \| null }` — `processId` is a fresh `crypto.randomUUID()` minted
+on every `launchConfig.run` call, with no dedup (unlike a `session.spawn` entity anchor): running the same config
+twice starts two independent processes. `launchConfig.run` surfaces `kind: 'io'` for a spawn failure (missing
+`node` binary, bad cwd) and `kind: 'not_found'` for an unknown `projectId`/`configName`; `launchConfig.kill`
+never throws for an unknown or already-exited `processId` — it silently no-ops, same as `session.kill`. Backed
+by `LaunchConfigService`/`LaunchProcessService` (`src/main/application/services/`) over `LaunchConfigReaderPort`
+(`FsLaunchConfigReader`) and `LaunchProcessPort` (`NodeChildProcessAdapter`, `src/main/infrastructure/`).
 
 ### `session`
 

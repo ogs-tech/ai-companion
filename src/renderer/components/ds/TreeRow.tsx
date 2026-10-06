@@ -27,6 +27,7 @@ export interface TreeRowProps {
   /** 'hover' (default) reveals `actions` on hover/focus-within, keyboard-reachable via :focus-within; 'always' renders them plainly, for actions that should never hide. */
   actionsVisibility?: 'hover' | 'always';
   muted?: boolean;
+  disabled?: boolean;
 }
 
 /**
@@ -49,10 +50,12 @@ export function TreeRow({
   actions,
   actionsVisibility = 'hover',
   muted,
+  disabled,
 }: TreeRowProps): React.ReactElement {
   return (
     <ListItemButton
       dense
+      disabled={disabled}
       {...(testId ? { 'data-testid': testId } : {})}
       onClick={onClick}
       onContextMenu={onContextMenu}

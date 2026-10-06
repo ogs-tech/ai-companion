@@ -21,6 +21,7 @@ interface RenderTreeOptions {
   projects?: ReadonlyArray<Project>;
   onOpenProject?: (projectId: string) => void;
   renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
+  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 const renderTree = (opts: RenderTreeOptions = {}) =>
@@ -39,6 +40,7 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
           {...(opts.projects !== undefined ? { projects: opts.projects } : {})}
           {...(opts.onOpenProject !== undefined ? { onOpenProject: opts.onOpenProject } : {})}
           {...(opts.renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow: opts.renderProjectInstructionRow } : {})}
+          {...(opts.renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow: opts.renderProjectLaunchConfigsRow } : {})}
         />
       </ThemeProvider>
     </QueryClientProvider>,
@@ -375,6 +377,50 @@ describe('FolderTree', () => {
     renderTree({ renderProjectInstructionRow });
     expect(screen.queryByTestId('never-rendered')).not.toBeInTheDocument();
     expect(renderProjectInstructionRow).not.toHaveBeenCalled();
+  });
+
+  it("renders renderProjectLaunchConfigsRow pinned above a Project folder's own children, right after renderProjectInstructionRow", async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    const renderProjectInstructionRow = vi.fn((project: Project) => {
+      calls.push('instructions');
+      return <div data-testid={`instructions-${project.name}`} />;
+    });
+    const renderProjectLaunchConfigsRow = vi.fn((project: Project) => {
+      calls.push('launch-configs');
+      return <div data-testid={`launch-configs-${project.name}`} />;
+    });
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
+        return [{ name: 'apps', kind: 'dir' }];
+      }
+      return [];
+    });
+    renderTree({
+      workspaceRootPath: '/repos/monorepo',
+      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
+      renderProjectInstructionRow,
+      renderProjectLaunchConfigsRow,
+    });
+    await user.click(await screen.findByText('apps'));
+    expect(await screen.findByTestId('launch-configs-apps')).toBeInTheDocument();
+    // Both are re-invoked on every re-render (they're plain function calls in
+    // TreeNode's render body, not components) — only their relative order matters.
+    expect(calls[0]).toBe('instructions');
+    expect(calls[1]).toBe('launch-configs');
+    expect(renderProjectLaunchConfigsRow).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1', name: 'apps' }), 1);
+  });
+
+  it('does not call renderProjectLaunchConfigsRow for a root-level folder that is not a registered Project', async () => {
+    const renderProjectLaunchConfigsRow = vi.fn(() => <div data-testid="never-rendered" />);
+    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+      const path = (params as { path?: string } | undefined)?.path;
+      if (method === 'workspace.listDir' && path === '') return [{ name: 'plain', kind: 'dir' }];
+      return [];
+    });
+    renderTree({ renderProjectLaunchConfigsRow });
+    expect(screen.queryByTestId('never-rendered')).not.toBeInTheDocument();
+    expect(renderProjectLaunchConfigsRow).not.toHaveBeenCalled();
   });
 
   it('expands a grandchild of a root-level Project row using paths relative to the Project, not the workspace', async () => {

@@ -1,7 +1,7 @@
 # Integrated Launcher (.vscode/launch.json) — Design
 
-- **Date:** 2026-09-19
-- **Status:** Decisions made via `/feature-dev` clarifying Q&A in this session; spec pending author review.
+- **Date:** 2026-09-19 (validated against the codebase and revised 2026-09-27)
+- **Status:** Validated against the current codebase via `/feature-dev` (three parallel code-explorer passes); two open design gaps found during validation are now resolved (§3.9). Approved, ready for implementation.
 - **Author:** Odenir Gomes (with Claude)
 - **Scope:** Read `launch.json` (`type: "node"`, `request: "launch"` configurations only) from every
   Project registered in the active Workspace, and let the user run one as a plain child process from a
@@ -118,6 +118,9 @@ Pure functions, no I/O:
   — for `type: 'node'`: `{ command: 'node', args: [substituted(program), ...substituted(args)], cwd: substituted(cwd ?? projectPath), env }`.
   Throws a typed `UnsupportedLaunchTypeError` for anything else (the service catches this and never calls
   the port for an unsupported config — the renderer already disabled the row, this is defense in depth).
+  `UnsupportedLaunchTypeError extends DomainError`, fixing `kind: 'validation'` in its constructor — same
+  shape as every other domain error (see `src/main/domain/plugin-errors.ts`), so the dispatcher's
+  `DomainError → IpcError.kind` mapping needs no special-casing.
 
 ### 3.3 Ports — `src/main/application/ports/`
 
@@ -145,6 +148,13 @@ export interface LaunchProcessPort {
   onExit(listener: (processId: string, exitCode: number | null, signal: NodeJS.Signals | null) => void): void;
 }
 ```
+
+`onOutput`/`onExit` each store a **single** listener (last registration wins), exactly mirroring
+`ClaudeSessionPort`'s real shape (`claude-session-port.ts`'s `onData`/`onExit`, each backed by one stored
+callback in `NodePtySessionAdapter`, not an array) — events are tagged with `processId`/`stream` so one
+listener demuxes many spawned processes. The array-based multi-listener fan-out lives one layer up, in
+`LaunchProcessService` (mirroring `SessionService`'s `outputListeners`/`exitListeners` arrays), not on the
+port.
 
 ### 3.4 Infrastructure — `src/main/infrastructure/`
 
@@ -211,18 +221,46 @@ launch process" step, alongside the existing session-kill step.
   a read-only `@xterm/xterm` instance (no `write`/PTY-resize plumbing needed, unlike `SessionPanel`).
 - **`FolderTree.tsx`** — new prop `renderProjectLaunchConfigsRow?: (project: Project, depth: number) =>
   React.ReactNode`, invoked right after `renderProjectInstructionRow(matchedProject, depth + 1)` so it
-  renders directly under the Project's own Instructions row.
+  renders directly under the Project's own Instructions row. **Revised during validation:** called with
+  `matchedProject` alone, exactly like `renderProjectInstructionRow` — not `matchedProject ?? rootProject`.
+  `TreeNode` recomputes `rootProject` identically for every depth-0 entry (it means "the workspace root is
+  a Project", not "this folder is the Project"), and by the time this call site runs, `canExpand` already
+  lets any depth-0 folder expand via `effectiveProjectId`'s `rootProject` fallback (`FolderTree.tsx:111-112`)
+  — so gating the new row on `rootProject` too would render the root Project's "Launch Configurations" row
+  once per expanded top-level folder (e.g. once under `apps/`, again under `src/`), not once. Keeping the
+  gate on `matchedProject` only avoids this, at the cost of the same pre-existing limitation
+  `renderProjectInstructionRow` already has today: a workspace root registered as its own Project (via
+  `registerRootProject`) shows neither row at this nested call site. That's addressed separately, without
+  touching this existing code path — see the next bullet.
 - **`WorkspaceScreen.tsx`** — implements `renderProjectLaunchConfigsRow`: a `TreeGroup` ("Launch
   Configurations") containing one `TreeGroupRow` per config — click runs it (disabled + tooltip when
-  `!supported`), a running/idle badge (mirroring `SessionStatusBadge`), right-click opens "Stop" / "Edit
-  launch.json" (opens the file in the existing Editor tab flow) / "Reveal in Finder" (reuses
-  `useRevealPath`) via the existing `RowContextMenu`.
+  `!supported`), a running/idle badge (a new `LaunchProcessStatusBadge`, mirroring `SessionStatusBadge`'s
+  visuals but driven by `LaunchProcessStatus` since launch processes aren't `Session`s and have no
+  `SessionAnchor`), and a **hover action icon on the row itself for "Stop"** while running — matching the
+  existing convention for stopping something in progress (`SessionsTreeGroup`'s per-row stop icon), not a
+  `RowContextMenu` entry. Right-click still opens the existing `RowContextMenu` for "Edit launch.json"
+  (opens the file in the existing Editor tab flow) / "Reveal in Finder" (reuses `useRevealPath`).
+  **Root-Project case (revised during validation):** when `projects.find(p => p.path === workspaceRootPath)`
+  exists, `WorkspaceScreen` includes that Project's own "Launch Configurations" `TreeGroup` directly inside
+  the `pinnedRows` prop it already passes to `FolderTree` (rendered once, above the folder list, outside
+  the per-folder recursion — see `FolderTree.tsx:341-345`) instead of relying on the nested
+  `renderProjectLaunchConfigsRow` call site. This reaches the same end state the original spec wanted (the
+  workspace root's own launch configs are reachable) without the duplication bug above and without changing
+  `renderProjectInstructionRow`'s existing behavior.
 - **New `OpenTab` kind** — `{ kind: 'launch-process'; processId: string; label: string }`, opened on run,
   rendered as a `WorkbenchTab` hosting the read-only xterm view — a sibling to the existing `session` tab
   kind, not bolted onto `SessionPanel`.
-- **`data-testid`s**, following the existing per-component prefixing exactly: `tree-group-launch-configs-
-  ${project.id}` (group), `tree-launch-config-${project.id}-${configName}` (row), `row-context-menu-stop` /
-  `row-context-menu-edit-launch-json` (context-menu actions).
+- **`data-testid`s**, following the existing per-component prefixing exactly. **Revised during
+  validation:** the sibling `renderProjectInstructionRow` row keys its testid off `project.name`
+  (`tree-node-instructions-${project.name}`, `WorkspaceScreen.tsx:939`), not `project.id` — Project names
+  are unique per workspace (they're directory names), so there's no collision risk that would call for
+  `id` instead (unlike session rows, which use `sessionId` because session names aren't unique). Keeping
+  the same key for consistency: `tree-group-launch-configs-${project.name}` (group, passed as `TreeGroup`'s
+  `testId`, which the component itself prefixes with `tree-group-`), `tree-launch-config-${project.name}-
+  ${configName}` (row). The "Stop" hover icon follows `SessionsTreeGroup`'s own convention,
+  `tree-launch-config-stop-${project.name}-${configName}`, mirroring its `tree-session-stop-${row.key}`.
+  `row-context-menu-edit-launch-json` stays a `RowContextMenu` action (`reveal` reuses the existing
+  `row-context-menu-reveal` testid already produced by that shared menu).
 
 ## 4. Testing
 
@@ -231,8 +269,15 @@ launch process" step, alongside the existing session-kill step.
   supported/unsupported types); `resolveLaunchCommand`/`substituteVariables` pure-function tests; IPC
   handler tests (`launchConfig.*` params validation, `DomainError` → `IpcError.kind` mapping).
 - `jsdom` project: `use-launch-configs`/`use-launch-process` hook tests; `FolderTree` renders
-  `renderProjectLaunchConfigsRow` under the right Project node; the new `TreeGroup`/rows (supported vs
-  disabled-unsupported state, running badge); the launch-process tab opens and shows streamed output.
+  `renderProjectLaunchConfigsRow` under the right Project node; `WorkspaceScreen` renders the root Project's
+  own group via `pinnedRows` without duplicating it per expanded top-level folder; the new `TreeGroup`/rows
+  (supported vs disabled-unsupported state, running badge, hover "Stop" icon); the launch-process tab opens
+  and shows streamed output.
+
+Note: `vitest.config.ts`'s actual coverage thresholds are `lines 80 / functions 76 / statements 78 /
+branches 66`, slightly different from the "80/70" figures CLAUDE.md states as the project's target — the
+new files fall under the existing `coverage.include` globs either way, so this doesn't change what to test,
+only which exact numbers CI enforces.
 
 ## 5. Out of scope (candidate follow-ups)
 
