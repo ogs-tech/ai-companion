@@ -5,7 +5,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import {
-  Eye, EyeOff, File as FileIcon, FileX, Globe, MoreVertical, NotebookPen,
+  Eye, EyeOff, File as FileIcon, FileX, GitCompare, Globe, MoreVertical, NotebookPen,
   History, PanelLeft, PanelRight, Play, RefreshCw, SquareTerminal, Trash2, type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
@@ -13,6 +13,8 @@ import { EmptyState } from '../../components/ds/EmptyState.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { SidePanel } from '../../components/ds/SidePanel.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
+import { DiffView } from '../../components/workspace/git/DiffView.js';
+import type { GitDiffSource } from '../../../shared/git.js';
 import { ControlPanelContent, type WorkspaceViewMode } from '../../components/workspace/ControlPanelContent.js';
 import { InstructionTreeRow, ProjectInstructionRow } from '../../components/workspace/InstructionTreeRow.js';
 import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
@@ -87,6 +89,7 @@ type OpenTab =
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
   | { id: string; kind: 'history' }
   | { id: string; kind: 'browser'; tabId: string }
+  | { id: string; kind: 'git-diff'; projectId?: string; path: string; source: GitDiffSource }
   | { id: string; kind: WorkspaceAreaTab };
 
 /** Tabs that can hold unsaved work, and so need a discard guard before closing. */
@@ -574,6 +577,19 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(HISTORY_TAB_ID);
   };
 
+  // One tab per (target, source, path): re-clicking a changed file focuses its
+  // diff, while the staged and unstaged sides of the same file stay distinct.
+  const openGitDiffTab = ({ projectId, path, source }: { projectId?: string; path: string; source: GitDiffSource }): void => {
+    const sourceKey = source.kind === 'commit' ? `commit-${source.sha}` : source.kind;
+    const id = `git-diff:${projectId ?? 'workspace'}:${sourceKey}:${path}`;
+    setOpenTabs((prev) =>
+      prev.some((t) => t.id === id)
+        ? prev
+        : [...prev, { id, kind: 'git-diff', path, source, ...(projectId !== undefined ? { projectId } : {}) }],
+    );
+    setActiveTabId(id);
+  };
+
   const handleNewSession = (): void => {
     const anchor: SessionAnchor | null = selectedProject
       ? { kind: 'project', projectId: selectedProject.id }
@@ -754,6 +770,20 @@ export function WorkspaceScreen(): React.ReactElement {
             {...(tab.projectId ? { projectId: tab.projectId } : {})}
             onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
           />
+        ),
+      };
+    }
+    if (tab.kind === 'git-diff') {
+      const name = tab.path.slice(tab.path.lastIndexOf('/') + 1);
+      return {
+        id: tab.id,
+        glyph: GitCompare,
+        label: `${name} ${tab.source.kind === 'index' ? '(stage)' : '(alterações)'}`,
+        breadcrumb: tab.path,
+        dense: true,
+        onClose: () => closeTab(tab.id),
+        render: () => (
+          <DiffView {...(tab.projectId !== undefined ? { projectId: tab.projectId } : {})} path={tab.path} source={tab.source} />
         ),
       };
     }
@@ -1037,6 +1067,8 @@ export function WorkspaceScreen(): React.ReactElement {
               renderProjectInstructionRow={renderProjectInstructionRow}
               renderProjectLaunchConfigsRow={renderProjectLaunchConfigsRow}
               {...(activeWorkspace ? { workspaceRootPath: activeWorkspace.rootPath } : {})}
+              onSelectProject={setSelectedProjectId}
+              onOpenGitDiff={openGitDiffTab}
             />
           </SidePanel>
           <ResizeHandle />

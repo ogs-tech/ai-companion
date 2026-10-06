@@ -112,6 +112,10 @@ not symmetric, and which harnesses have which today.
   each with its own data directory and its own set of projects.
 - A file browser over the workspace's real files, with preview for text and
   spreadsheets.
+- **Git** — a git client per Project: working tree, branches, sync, history,
+  conflicts — over the user's own git install and credentials. Delivered in
+  phases ([spec](../superpowers/specs/2026-10-06-git-management-design.md));
+  the working tree (review, stage, discard, commit) ships first.
 
 ## 6. Non-goals
 
@@ -127,7 +131,6 @@ not symmetric, and which harnesses have which today.
 - **Estimating cost the harness did not record.** Where a transcript carries no
   accounting of its own and the model is unpriced, the answer is blank, never a
   number that is quietly too low.
-- **Git history in the UI.** The repo is the history; use a git client.
 
 ## 7. Success metrics
 
@@ -154,6 +157,10 @@ not symmetric, and which harnesses have which today.
 
 ## Changelog
 
+- **2026-10-06** — Reversed the "Git history in the UI" non-goal and added a
+  **Git** bullet under Organization. Sessions change files inside Projects;
+  reviewing, staging and committing that work is part of the loop the app
+  already owns, and leaving for a terminal to do it broke that loop.
 - **2026-09-17** — Repositioned from "customization manager for Claude Code" to
   **harness manager**. Introduced the harness vocabulary and the `manage`/`run`
   capability split ([harness-model.md](harness-model.md)), dropped the

@@ -13,7 +13,6 @@ import {
 } from '../shared/brand-paths.js';
 import type { Workspace } from '../shared/workspace.js';
 import { SettingsService } from './application/services/settings-service.js';
-import { RepoService } from './application/services/repo-service.js';
 import { WorkspaceBootstrapService } from './application/services/workspace-bootstrap.js';
 import { WorkspaceService } from './application/services/workspace-service.js';
 import { ProductMigrationService } from './application/services/product-migration-service.js';
@@ -25,7 +24,6 @@ import {
 import { SymlinkManager } from './application/services/symlink-manager.js';
 import { createTaskQueue } from './application/task-queue.js';
 import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repository.js';
-import { FsRepoReader } from './infrastructure/repo/fs-repo-reader.js';
 import { FsWorkspaceBootstrap } from './infrastructure/workspace/fs-workspace-bootstrap.js';
 import { FsWorkspaceRegistry } from './infrastructure/workspace/fs-workspace-registry.js';
 import { SystemClock } from './infrastructure/clock/system-clock.js';
@@ -40,6 +38,8 @@ import { SystemDefaultAppLauncher } from './infrastructure/app-launcher/system-d
 import type { CredentialStorePort } from './application/ports/credential-store-port.js';
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
+import { SimpleGitRepoClient } from './infrastructure/git/simple-git-repo-client.js';
+import { augmentPath } from './infrastructure/system/augment-path.js';
 import { PluginCacheFile } from './infrastructure/plugins/plugin-cache-file.js';
 import { ClaudeSettingsFile } from './infrastructure/settings/claude-settings-file.js';
 import { OctokitClient } from './infrastructure/github/octokit-client.js';
@@ -78,6 +78,9 @@ import { createDispatcher } from './ipc/dispatcher.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.env['NODE_ENV'] === 'development';
+// Before anything spawns `git` or `claude` — see augment-path.ts.
+const augmentedPath = augmentPath(process.env['PATH'], process.platform);
+if (augmentedPath !== undefined) process.env['PATH'] = augmentedPath;
 const devLockPathValue = devLockPath(homedir());
 /** Localhost-only — Dock launcher hits GET /focus (see scripts/focus-dev.sh). */
 const DEV_FOCUS_PORT = 47174;
@@ -193,8 +196,6 @@ async function wireIpc(): Promise<void> {
   const settingsService = new SettingsService(
     new FsSettingsRepository(join(workspacePath, 'settings.json')),
   );
-  const repoReader = new FsRepoReader();
-  const repoService = new RepoService(repoReader);
   const dialogPort = new ElectronDialogAdapter();
 
   const credentialStore: CredentialStorePort = new SafeStorageCredentials(app.getPath('userData'));
@@ -342,6 +343,7 @@ async function wireIpc(): Promise<void> {
     fileWatcherPort: new ChokidarFileWatcher(),
     launchConfigReaderPort: new FsLaunchConfigReader(),
     launchProcessPort: new NodeChildProcessAdapter(),
+    repoGitPort: new SimpleGitRepoClient(),
   };
 
   let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
@@ -398,7 +400,7 @@ async function wireIpc(): Promise<void> {
 
   const buildDeps = () => ({
     settingsService,
-    repoService,
+    gitService: workspaceScoped.gitService,
     adapterManager: workspaceScoped.adapterManager,
     dialogPort,
     pluginService,

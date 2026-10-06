@@ -68,7 +68,7 @@ Cross-cutting:
 - `adapter-manager` — orchestrates all adapters (Claude, Cursor).
 - `symlink-manager` — creates and reconciles symlinks.
 - `file-materializer` — write-side twin of `symlink-manager` for **generated** files (e.g. Cursor's per-repo `AGENTS.md`): ownership is signalled by a marker comment on the file's first line (`GENERATED_FILE_MARKER`), so the app only overwrites/removes files it owns; a foreign file (no marker) is backed up before overwrite and never deleted. Backup scheme mirrors `symlink-manager`'s (`<workspace>/_backups/<ts>/<rel-path>`).
-- `repo-service` — small git helpers (`detectGit`, `getCurrentBranch`) used when creating a new project instruction. The old global `settings.linkedRepos` list is gone, and the `repo.link` / `repo.unlink` / `repo.list` IPC methods were removed with it — a project entity now carries its own `repoPath` directly.
+- `git-service` — the `git` IPC namespace's use cases over a Project's (or the workspace root's) own repository, through `RepoGitPort`. Resolves `projectId?` → root on every call, validates repo-relative paths, and serializes mutations per repo root (reads bypass the queue). Replaced the old `repo-service` (`detectGit`/`getCurrentBranch`), which had no renderer caller. The old global `settings.linkedRepos` list is gone too — a project entity carries its own `repoPath` directly.
 - `settings-service` — load/merge/persist settings.
 - `workspace-bootstrap` — creates the `.ai-companion/` directory tree for the default workspace at startup, and again for every workspace as it's created (see `WorkspaceService.create()`); also writes the static `.ai-companion/index.md` marker (see the "Workspace / Project" section below).
 - `workspace-service` — CRUD over `Workspace` registry entries plus `getActive`/`switchTo`; self-heals a dangling `activeWorkspaceId` (falls back to the default workspace and persists the correction) rather than throwing on `getActive()`.
@@ -485,6 +485,8 @@ The plugin system extends the SDE customizations framework with package manageme
 **Core adapters** — located across `src/main/infrastructure/{git,github,plugins,settings,credentials}/`:
 
 - `SimpleGitClient` (GitPort) — wraps **simple-git** for branch tracking, tag creation, remote operations.
+- `SimpleGitRepoClient` (RepoGitPort) — the user's working tree: status, diff, stage/unstage/discard, commit, init. Parses machine formats only (`status --porcelain=v2 -z`, unified diff) with pure parsers in `infrastructure/git/parsers/`, and maps stderr to domain errors in `classify-git-error.ts`. Every git it spawns is non-interactive (`GIT_TERMINAL_PROMPT=0`, `GIT_EDITOR=true`, `LC_ALL=C`, …), lock-free for reads (`GIT_OPTIONAL_LOCKS=0`) and time-boxed (30s).
+  **Two git ports on purpose:** `GitPort` serves plugins/marketplaces; `RepoGitPort` serves the user's repos. They have different callers, error vocabularies and safety rules (e.g. the repo root must be the target itself — a Project inside a larger repo is not a repo — and hooks always run). Don't merge them.
 - `PluginCacheFile` (PluginCachePort) — reads/writes `.json` plugin metadata cache.
 - `ClaudeSettingsFile` (ClaudeSettingsPort) — manages `~/.claude/settings.json` to expose plugin modules.
 - `OctokitClient` (GitHubApiPort) — wraps Octokit for GitHub API calls (repos, releases, token auth).

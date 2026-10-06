@@ -44,6 +44,19 @@ export function asScope(value: unknown): Scope {
   return value as Scope;
 }
 
+/** A non-empty array of non-empty strings. */
+export function asStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.length === 0 || !value.every((v) => typeof v === 'string' && v.length > 0)) {
+    throw new DomainError('validation', `Missing or invalid '${field}'`);
+  }
+  return value as string[];
+}
+
+/** Absent (`undefined`/`null`) → `undefined`; otherwise must be a non-empty string. */
+export function asOptString(value: unknown, field: string): string | undefined {
+  return value === undefined || value === null ? undefined : asString(value, field);
+}
+
 export function optParams(params: unknown, label: string): Record<string, unknown> {
   return params === undefined || params === null ? {} : asObject(params, label);
 }

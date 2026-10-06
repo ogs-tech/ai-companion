@@ -103,14 +103,9 @@ Grouped by namespace. Source: [`src/main/ipc/registry.ts`](../../src/main/ipc/re
 
 `Settings` shape lives in [`src/shared/settings.ts`](../../src/shared/settings.ts).
 
-### `repo`
+### `repo` *(removed)*
 
-| Method | Params | Result |
-|---|---|---|
-| `repo.detectGit` | `{ path: string }` | `boolean` |
-| `repo.getCurrentBranch` | `{ path: string }` | `string` |
-
-Git helpers (branch/repo detection) — not currently called from the renderer. The old `repo.link` / `repo.unlink` / `repo.list` methods and their `LinkedRepoView` type were **removed** with `settings.linkedRepos` — project/workspace scope now lives on each entity's own `scopes`/`scopeId` (see the `instruction` namespace below).
+`repo.detectGit` / `repo.getCurrentBranch` were removed — superseded by `git.status` (see `git` below); neither had a renderer caller. The older `repo.link` / `repo.unlink` / `repo.list` methods and their `LinkedRepoView` type were removed with `settings.linkedRepos` — project/workspace scope now lives on each entity's own `scopes`/`scopeId` (see the `instruction` namespace below).
 
 ### `workspace`
 
@@ -217,6 +212,22 @@ The renderer never offers a folder picker for this — `instruction.*` is driven
 screen (`WorkspaceScreen` → `PersonalInstructionCard` / `ScopedInstructionCard`, see
 [Architecture](architecture.md#instructions-on-visão-geral)), scoped to whichever workspace or project the
 user is currently viewing.
+
+### `git`
+
+A git client over a repository the app already knows about. Every method takes an optional `projectId`: present → that `Project`'s `path`; absent → the active workspace's `rootPath` — the same addressing as `openWith`, so the renderer never sends an absolute path. The repo root is the target itself: a Project that is a subfolder of a larger repo reports `isRepo: false`. Types in [`src/shared/git.ts`](../../src/shared/git.ts).
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `git.status` | `{ projectId? }` | `GitStatus` | `{ isRepo: false }` for a non-repo — never throws for it. `files` is capped at 5,000 (`truncated: true` beyond). |
+| `git.diff` | `{ projectId?; path: string; source: GitDiffSource }` | `GitFileDiff` | `source.kind`: `worktree` (index → worktree; untracked files render all-added) or `index` (HEAD → index). `commit` is rejected (`validation`) until history ships. Over 1MB / 20,000 lines → `too-large`. |
+| `git.stage` | `{ projectId?; paths: string[] }` | `void` | `git add -- <paths>` (stages deletions too). |
+| `git.unstage` | `{ projectId?; paths: string[] }` | `void` | `git restore --staged`; on an unborn branch, `git rm --cached`. |
+| `git.discard` | `{ projectId?; paths: string[] }` | `void` | Tracked: back to the index (`restore --worktree`); untracked: deleted (`clean --force`). Never touches the index. The renderer confirms first. |
+| `git.commit` | `{ projectId?; message: string; amend?: boolean }` | `{ sha: string }` | `validation` for a blank message or nothing staged (unless `amend`). Hooks run; a failing hook → `io` with its output in `details.stderr`. The message goes through a temp file (`--file`), never argv. |
+| `git.init` | `{ projectId? }` | `void` | `conflict` if the target already is a repo. |
+
+Paths are repo-relative: absolute paths, `..` segments, NUL bytes and empty strings are rejected (`validation`); they always reach git after `--`. Mutations on the same repo run one at a time. Errors: `not_found` (unknown `projectId`, or not a repo — except `git.status`), `conflict` (`index.lock` contention, merge conflicts, dirty-tree refusals; may carry `details.files`), `auth` (credential failures), `io` (anything else, stderr in `details.stderr` truncated to 4KB; `message` is `GitNotFound` when git isn't on PATH and `GitTimeout` after 30s).
 
 ### `launchConfig`
 

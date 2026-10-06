@@ -1,7 +1,10 @@
-import { Box } from '@mui/material';
+import { useState } from 'react';
+import { Box, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { FolderTree } from './FolderTree.js';
 import { WorkspaceBreadcrumbHeader } from './WorkspaceBreadcrumbHeader.js';
 import { WorkspaceManagementList } from './WorkspaceManagementList.js';
+import { GitView } from './git/GitView.js';
+import type { GitDiffSource } from '../../../shared/git.js';
 import type { Project } from '../../../shared/project.js';
 import type { Workspace } from '../../../shared/workspace.js';
 
@@ -31,7 +34,12 @@ interface ExplorerPanelContentProps {
   renderProjectInstructionRow: (project: Project, depth: number) => React.ReactNode;
   renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
   workspaceRootPath?: string;
+  /** The Git view's repo picker writes the shared Project scope, so the Control Panel follows it. */
+  onSelectProject: (projectId: string | null) => void;
+  onOpenGitDiff: (args: { projectId?: string; path: string; source: GitDiffSource }) => void;
 }
+
+type ExplorerView = 'files' | 'git';
 
 /**
  * The Explorer Panel's body, below the shared `SidePanel` header: the
@@ -57,7 +65,11 @@ export function ExplorerPanelContent({
   renderProjectInstructionRow,
   renderProjectLaunchConfigsRow,
   workspaceRootPath,
+  onSelectProject,
+  onOpenGitDiff,
 }: ExplorerPanelContentProps): React.ReactElement {
+  const [view, setView] = useState<ExplorerView>('files');
+
   return (
     <>
       <Box sx={{ flexShrink: 0, px: 1.5, pb: 1.25, borderBottom: 1, borderColor: 'divider' }}>
@@ -68,10 +80,36 @@ export function ExplorerPanelContent({
           onNavigateToWorkspace={onNavigateToWorkspace}
           actions={headerMenu}
         />
+        {!isDefaultWorkspace && (
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            fullWidth
+            value={view}
+            onChange={(_, next: ExplorerView | null) => next && setView(next)}
+            aria-label="Visão do Explorer"
+            sx={{ mt: 1, '& .MuiToggleButton-root': { py: 0.25, textTransform: 'none', fontSize: '0.75rem' } }}
+          >
+            <ToggleButton value="files" data-testid="explorer-view-files">
+              Arquivos
+            </ToggleButton>
+            <ToggleButton value="git" data-testid="explorer-view-git">
+              Git
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {isDefaultWorkspace ? (
           <WorkspaceManagementList beforeSwitch={beforeSwitch} instructionRow={personalInstructionRow} appAreaRows={appAreaRows} />
+        ) : view === 'git' ? (
+          <GitView
+            projectId={selectedProject?.id}
+            visible
+            projects={projects}
+            onSelectProject={onSelectProject}
+            onOpenDiff={onOpenGitDiff}
+          />
         ) : (
           <FolderTree
             onSelectFile={onSelectFile}

@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildHandlers } from '../../../src/main/ipc/registry.js';
 import { SettingsService } from '../../../src/main/application/services/settings-service.js';
-import { RepoService } from '../../../src/main/application/services/repo-service.js';
+import type { GitService } from '../../../src/main/application/services/git-service.js';
 import type { SettingsRepository } from '../../../src/main/application/ports/settings-repository.js';
-import type { RepoReader } from '../../../src/main/application/ports/repo-reader.js';
 import type { DialogPort } from '../../../src/main/application/ports/dialog-port.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
 import type { PluginService } from '../../../src/main/application/services/plugin-service.js';
@@ -41,7 +40,7 @@ const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
 
 interface Deps {
   settingsService: SettingsService;
-  repoService: RepoService;
+  gitService: GitService;
   adapterManager: AdapterManager;
   dialogPort: DialogPort;
   pluginService: PluginService;
@@ -72,10 +71,6 @@ interface Deps {
     load: ReturnType<typeof vi.fn>;
     save: ReturnType<typeof vi.fn>;
   };
-  repoReaderSpy: {
-    exists: ReturnType<typeof vi.fn>;
-    readFile: ReturnType<typeof vi.fn>;
-  };
   dialogSpy: {
     selectFolder: ReturnType<typeof vi.fn>;
   };
@@ -89,15 +84,6 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const repo: SettingsRepository = {
     load: settingsRepoSpy.load,
     save: settingsRepoSpy.save,
-  };
-
-  const repoReaderSpy = {
-    exists: vi.fn().mockResolvedValue(true),
-    readFile: vi.fn().mockResolvedValue(''),
-  };
-  const reader: RepoReader = {
-    exists: repoReaderSpy.exists,
-    readFile: repoReaderSpy.readFile,
   };
 
   const dialogSpy = {
@@ -149,7 +135,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
 
   return {
     settingsService: new SettingsService(repo),
-    repoService: new RepoService(reader),
+    gitService: null as unknown as GitService,
     adapterManager,
     dialogPort,
     pluginService,
@@ -177,7 +163,6 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     launchProcessService,
     appQuit: () => undefined,
     settingsRepoSpy,
-    repoReaderSpy,
     dialogSpy,
   };
 };
@@ -219,26 +204,10 @@ describe('buildHandlers', () => {
     expect(deps.settingsRepoSpy.save).toHaveBeenCalledWith(merged);
   });
 
-  it('repo.detectGit delegates to RepoService.detectGit', async () => {
-    const deps = buildDeps();
-    deps.repoReaderSpy.exists.mockResolvedValueOnce(true);
-    const handlers = buildHandlers(deps);
-
-    const result = await handlers['repo.detectGit']?.({ path: '/repo' });
-
-    expect(result).toBe(true);
-    expect(deps.repoReaderSpy.exists).toHaveBeenCalledWith('/repo/.git');
-  });
-
-  it('repo.getCurrentBranch delegates to RepoService.getCurrentBranch', async () => {
-    const deps = buildDeps();
-    deps.repoReaderSpy.exists.mockResolvedValue(true);
-    deps.repoReaderSpy.readFile.mockResolvedValueOnce('ref: refs/heads/main\n');
-    const handlers = buildHandlers(deps);
-
-    const result = await handlers['repo.getCurrentBranch']?.({ path: '/repo' });
-
-    expect(result).toBe('main');
+  it('repo.detectGit / repo.getCurrentBranch are no longer registered (superseded by git.status)', () => {
+    const handlers = buildHandlers(buildDeps());
+    expect(handlers['repo.detectGit']).toBeUndefined();
+    expect(handlers['repo.getCurrentBranch']).toBeUndefined();
   });
 
   it('repo.link is no longer registered (linkedRepos removed)', () => {

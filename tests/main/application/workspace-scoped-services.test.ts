@@ -25,6 +25,7 @@ import { SimpleGitClient } from '../../../src/main/infrastructure/git/simple-git
 import { OctokitClient } from '../../../src/main/infrastructure/github/octokit-client.js';
 import { FakeCredentialStorePort } from '../../../src/main/application/services/__fixtures__/fake-credential-store-port.js';
 import { FsLaunchConfigReader } from '../../../src/main/infrastructure/launch-config/fs-launch-config-reader.js';
+import { FakeRepoGitPort } from '../../../src/main/application/services/__fixtures__/fake-repo-git-port.js';
 import { FakeLaunchProcessPort } from '../../../src/main/application/services/__fixtures__/fake-launch-process-port.js';
 import type { WorkspaceScopedSharedDeps } from '../../../src/main/application/workspace-scoped-services.js';
 import type { FileWatcherPort } from '../../../src/main/application/ports/file-watcher-port.js';
@@ -52,7 +53,8 @@ function buildShared(): WorkspaceScopedSharedDeps {
   const clock = new SystemClock();
   const settingsService = new SettingsService(new InMemorySettingsRepository());
   const homedir = '/home/test-user';
-  const workspaceService = { get: async () => { throw new Error('not stubbed in this test'); } };
+  const notStubbed = async (): Promise<never> => { throw new Error('not stubbed in this test'); };
+  const workspaceService = { get: notStubbed, getActive: notStubbed };
   const pluginCache = new PluginCacheFile({
     pluginsDir: () => join(homedir, '.ai-companion', 'plugins'),
     cacheDir: () => join(homedir, '.claude', 'plugins', 'cache', 'local'),
@@ -107,6 +109,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     fileWatcherPort: noopFileWatcherPort,
     launchConfigReaderPort: new FsLaunchConfigReader(),
     launchProcessPort: new FakeLaunchProcessPort(),
+    repoGitPort: new FakeRepoGitPort(),
   };
 }
 

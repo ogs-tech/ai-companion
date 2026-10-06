@@ -1,5 +1,5 @@
 import type { SettingsService } from '../application/services/settings-service.js';
-import type { RepoService } from '../application/services/repo-service.js';
+import type { GitService } from '../application/services/git-service.js';
 import type { AdapterManager } from '../application/services/adapter-manager.js';
 import type { DialogPort, SelectFolderParams } from '../application/ports/dialog-port.js';
 import type { PluginService } from '../application/services/plugin-service.js';
@@ -38,6 +38,7 @@ import { buildMcpHandlers } from './mcp-handlers.js';
 import { buildOpenWithHandlers } from './open-with-handlers.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
 import { buildLaunchConfigHandlers } from './launch-config-handlers.js';
+import { buildGitHandlers } from './git-handlers.js';
 import type { LaunchConfigService } from '../application/services/launch-config-service.js';
 import type { LaunchProcessService } from '../application/services/launch-process-service.js';
 import type { McpService } from '../application/services/mcp-service.js';
@@ -48,7 +49,7 @@ import { asLanguagePreference } from './_validators.js';
 
 export interface IpcDeps {
   settingsService: SettingsService;
-  repoService: RepoService;
+  gitService: GitService;
   adapterManager: AdapterManager;
   dialogPort: DialogPort;
   pluginService: PluginService;
@@ -77,10 +78,6 @@ export interface IpcDeps {
   appQuit: () => void;
 }
 
-interface RepoPathParams {
-  path: string;
-}
-
 const asString = (value: unknown, field: string): string => {
   if (typeof value !== 'string' || value.length === 0) {
     throw new DomainError('validation', `Missing or invalid '${field}'`);
@@ -98,7 +95,7 @@ const asObject = (value: unknown, label: string): Record<string, unknown> => {
 export function buildHandlers(deps: IpcDeps): IpcHandlers {
   const {
     settingsService,
-    repoService,
+    gitService,
     adapterManager,
     dialogPort,
     pluginService,
@@ -150,16 +147,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       });
 
       return { settings, syncReport };
-    },
-
-    'repo.detectGit': (params) => {
-      const { path } = params as RepoPathParams;
-      return repoService.detectGit(asString(path, 'path'));
-    },
-
-    'repo.getCurrentBranch': (params) => {
-      const { path } = params as RepoPathParams;
-      return repoService.getCurrentBranch(asString(path, 'path'));
     },
 
     'dialog.selectFolder': (params) => {
@@ -256,5 +243,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       embeddedBrowser: embeddedBrowserPort,
     }),
     ...buildLaunchConfigHandlers(launchConfigService, launchProcessService),
+    ...buildGitHandlers(gitService),
   };
 }

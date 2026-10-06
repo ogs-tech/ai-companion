@@ -41,13 +41,15 @@ import { LaunchConfigService } from './services/launch-config-service.js';
 import { LaunchProcessService } from './services/launch-process-service.js';
 import type { LaunchConfigReaderPort } from './ports/launch-config-reader-port.js';
 import type { LaunchProcessPort } from './ports/launch-process-port.js';
+import type { RepoGitPort } from './ports/repo-git-port.js';
+import { GitService } from './services/git-service.js';
 
 export interface WorkspaceScopedSharedDeps {
   clock: ClockPort;
   nodeFsAdapter: NodeFsAdapter;
   settingsService: SettingsService;
   homedir: string;
-  workspaceService: Pick<WorkspaceService, 'get'>;
+  workspaceService: Pick<WorkspaceService, 'get' | 'getActive'>;
   pluginProvenance: PluginProvenanceService;
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
@@ -58,6 +60,7 @@ export interface WorkspaceScopedSharedDeps {
   fileWatcherPort: FileWatcherPort;
   launchConfigReaderPort: LaunchConfigReaderPort;
   launchProcessPort: LaunchProcessPort;
+  repoGitPort: RepoGitPort;
 }
 
 export interface WorkspaceScopedServices {
@@ -77,6 +80,7 @@ export interface WorkspaceScopedServices {
   entityWatchService: EntityWatchService;
   launchConfigService: LaunchConfigService;
   launchProcessService: LaunchProcessService;
+  gitService: GitService;
 }
 
 /**
@@ -106,7 +110,7 @@ export function buildWorkspaceScopedServices(
     clock, nodeFsAdapter, settingsService, homedir, workspaceService,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
     claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
-    launchConfigReaderPort, launchProcessPort,
+    launchConfigReaderPort, launchProcessPort, repoGitPort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -174,10 +178,14 @@ export function buildWorkspaceScopedServices(
 
   const launchConfigService = new LaunchConfigService(projectService, launchConfigReaderPort);
   const launchProcessService = new LaunchProcessService(launchConfigService, launchProcessPort);
+  // Per-workspace like the other project-resolving services; its per-root
+  // mutation queues are dropped with the old graph on a switch.
+  const gitService = new GitService(repoGitPort, { projectService, workspaceService });
 
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
     skillService, agentService, instructionService, sessionService, sessionHistoryService, projectService,
     healthService, workspaceTeardownService, entityWatchService, launchConfigService, launchProcessService,
+    gitService,
   };
 }
