@@ -162,4 +162,4 @@ new DomainError('validation', 'Entity failed validation', {
 
 - [Architecture overview](architecture.md) — where the validator sits in the layers.
 - [IPC contract](ipc-contract.md) — `skill.*` / `agent.*` / `instruction.*` methods that carry these entities over IPC.
-- [PRD — schema validation as should-have](../explanation/prd.md#4-scope) — why the schema is currently lenient (`passthrough`) and what it would tighten if promoted from should-have.
+- [PRD — schema validation as should-have](../explanation/prd.md#5-scope) — why the schema is currently lenient (`passthrough`) and what it would tighten if promoted from should-have.

@@ -30,26 +30,45 @@ This project follows the [Diátaxis](https://diataxis.fr/) framework. Each quadr
 ### Tutorials — learn by doing
 
 - [Getting started](tutorials/getting-started.md) — clone, install, run the app for the first time.
+- [Your first skill, end to end](tutorials/first-skill-end-to-end.md) — create a skill, see it linked into
+  Claude Code, use and edit it from a session, check its cost.
 
 ### How-to — task-oriented
 
-- Create a customization _(TBD)_
-- Enable a harness and sync to it _(TBD)_
-- Register a project _(TBD)_
+Using the app:
+
+- [Manage workspaces and projects](how-to/manage-workspaces-and-projects.md)
+- [Create skills, slash-commands and agents](how-to/create-skills-and-agents.md)
+- [Write instructions](how-to/write-instructions.md) — personal, per-workspace, per-Project; reply language.
+- [Configure MCP servers and hooks](how-to/configure-mcp-servers-and-hooks.md)
+- [Install plugins and marketplaces](how-to/install-plugins-and-marketplaces.md) — Starter Pack,
+  marketplaces, Git URLs, publishing.
+- [Enable or disable a harness](how-to/enable-cursor-adapter.md) — Cursor sync on/off, cleanup.
+- [Run and review sessions](how-to/run-and-review-sessions.md) — terminals, session browser, history, cost.
+- [Use the Git panel](how-to/use-the-git-panel.md)
+- [Run launch configurations](how-to/run-launch-configs.md)
+- [Connect GitHub](how-to/connect-github.md)
+- [Diagnose and reset](how-to/diagnose-and-reset.md) — Diagnóstico, backups, factory reset.
+
+Contributing:
+
+- [Add an IPC method](how-to/add-an-ipc-method.md)
+- [Add a harness adapter](how-to/add-a-harness-adapter.md)
+- [Add an entity kind](how-to/add-an-entity-kind.md)
 
 ### Reference — look it up
 
 - [Architecture overview](reference/architecture.md) — Electron processes and hexagonal layout.
-- [Customization schema](reference/customization-schema.md) — YAML frontmatter contract and validation errors.
+- [Entity schema](reference/customization-schema.md) — canonical `Entity` fields, scopes and validation errors.
 - [IPC contract](reference/ipc-contract.md) — main ↔ renderer API surface, methods and error model.
-- Adapter targets _(TBD)_ — paths and filename rules per harness.
+- [Adapter targets](reference/adapter-targets.md) — every path each harness adapter writes, and conflict handling.
+- [On-disk layout](reference/on-disk-layout.md) — every file the app owns, edits or reads.
 
 ### Explanation — understand the why
 
 - [The harness model](explanation/harness-model.md) — what a harness is, the `manage`/`run` capabilities, how to add one.
 - [Product rationale (PRD)](explanation/prd.md) — problem, audience, scope, success metrics.
-- Why symlinks (vs. copy/sync) _(TBD)_
-- Architecture decision records (ADRs) _(TBD)_
+- [Why symlinks](explanation/why-symlinks.md) — links instead of copies, and where the app writes files instead.
 
 ## Stack
 

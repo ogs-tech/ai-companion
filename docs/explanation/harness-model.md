@@ -116,8 +116,11 @@ the table above cannot drift from the code without the tests noticing.
    'symlink'`; reach for `strategy: 'write'` only when the harness's format
    cannot be a symlink, and then always with an `ownershipMarker` so
    `FileMaterializer` never overwrites a file the app does not own.
-4. **Wire it in the composition root** (`src/main/index.ts`) into the
-   `AdapterManager`'s adapter map.
+4. **Wire it into the `AdapterManager`'s adapter map** in
+   `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`),
+   rebuilt on every workspace switch.
+
+Step by step, with tests: [Add a harness adapter](../how-to/add-a-harness-adapter.md).
 
 Adding `run` to a harness is a larger piece of work and is not covered by these
 steps — see the named debt below.

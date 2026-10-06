@@ -352,29 +352,26 @@ refetch, so screens stayed on stale data until something happened to force a rem
 
 ### Instructions on Visão geral
 
-There is no standalone Instructions screen — instruction management is inline on the Workspace screen's
-Visão Geral, scoped to whatever the user is currently looking at:
+There is no standalone Instructions screen — instruction management is inline in the Workspace screen's
+Explorer panel, as an **INSTRUCTIONS** tree row (`InstructionTreeRow` /
+`ProjectInstructionRow`, `components/workspace/InstructionTreeRow.tsx`), scoped to whatever the user is
+looking at:
 
-- **Global workspace** → `PersonalInstructionCard` (`components/workspace/`) manages the Personal
-  singleton (`scopes: ['personal']`) via `usePersonalInstruction()`.
-- **Project workspace, no `Project` selected** → `ScopedInstructionCard` with `scopeKind="workspace"`
-  manages one instruction scoped directly to the active `Workspace` (`scopes: ['workspace']`, `scopeId:
-  workspace.id`, resolved by `resolveScopePath` to `workspace.rootPath`) via `useWorkspaceInstruction`.
-- **Project workspace, a `Project` selected** (via `FolderTree`'s "Gerir instructions" shortcut, or
-  clicking anywhere on that folder's row) → the same `ScopedInstructionCard`, `scopeKind="project"`,
-  manages an instruction scoped to that `Project` (`scopes: ['project']`, `scopeId: project.id`) via
-  `useProjectInstruction`.
+- **Global workspace** → the `personal` row manages the Personal singleton (`scopes: ['personal']`) via
+  `usePersonalInstruction()`.
+- **Project workspace, no `Project` selected** → a `workspace` row manages one instruction scoped directly
+  to the active `Workspace` (`scopes: ['workspace']`, `scopeId: workspace.id`, resolved by
+  `resolveScopePath` to `workspace.rootPath`) via `useWorkspaceInstruction`.
+- **Inside a `Project` folder** → `FolderTree`'s `renderProjectInstructionRow` pins a
+  `ProjectInstructionRow` above the expanded folder's children, managing an instruction scoped to that
+  `Project` (`scopes: ['project']`, `scopeId: project.id`) via `useProjectInstruction`.
 
-Both scoped-instruction hooks (`hooks/use-instructions.ts`) `select` off the shared `useInstructionsList`
+The scoped-instruction hooks (`hooks/use-instructions.ts`) `select` off the shared `useInstructionsList`
 query cache instead of issuing their own IPC call. Creating one seeds a blank entity via
 `seedWorkspaceInstruction`/`seedProjectInstruction` (`lib/instruction-seed.ts`) with a slugified `name`
-and no folder picker — the scope's path is already known (`workspace.rootPath` / `project.path`). Opening
-either card's "Configurar"/"Editar" swaps `WorkspaceScreen`'s whole body for `CustomizationEditor`, the
-same full-screen-swap pattern the old Instructions screen used, with `scope` always hidden (personal also
+and no folder picker — the scope's path is already known (`workspace.rootPath` / `project.path`). Clicking
+a row opens the instruction in a Workbench tab (`EditorPanel`), with `scope` always hidden (personal also
 hides `name`/`description`/`version` — the singleton's identity is fixed and its sidecar isn't persisted).
-This required no backend/schema/adapter changes: `workspace`-scoped instructions were already documented
-and implemented (`resolveScopePath`, `entity-schema.ts`, both adapters) — only the renderer had never
-exercised that scope.
 
 ## Renderer structure
 
@@ -427,11 +424,12 @@ or scoped elsewhere) via an `EntityTreeGroupProps.localScope` prop; `HooksTreeGr
 apply the same local/global split on their own data shapes (Hooks have no scoping at all yet, so every hook
 counts as global inside a project workspace; MCP's own `project-local`/`project-shared` scope is matched
 against the current `Project.path`/`Workspace.rootPath` instead of an `Entity.scopeId`). `PluginsTreeGroup`
-is coarser still: a plugin's own `scope` is `'personal' | 'project'` with no `scopeId`/path of its own — the
-backend resolves `'project'` scope to whichever *Workspace* is currently active (`plugin-service` sits in
-`workspace-scoped-services`, rebuilt on `workspace.switchTo`), not to whichever `Project` is selected inside
-it — so unlike Skills/Agents/MCP, drilling into a specific `Project` within a workspace doesn't narrow the
-Plugins list further; `isProjectContext` (true) vs. omitted plays the same "is a Workspace/Project in view
+is coarser still: a plugin's own `scope` is `'personal' | 'project'` with no `scopeId`/path of its own —
+and the backend resolves `'project'` scope from the **process's working directory** (`process.cwd()` in
+`src/main/index.ts`; `plugin-service` is built once at startup, not in `workspace-scoped-services`), not from
+the active Workspace or the selected `Project` — a known issue, see
+[On-disk layout → Known issues](on-disk-layout.md#known-issues). Unlike Skills/Agents/MCP, drilling into a
+specific `Project` within a workspace doesn't narrow the Plugins list further; `isProjectContext` (true) vs. omitted plays the same "is a Workspace/Project in view
 at all" role the other groups use, just without per-`Project` granularity. The global bucket is hidden by
 default inside a non-default workspace and revealed by the "Mostrar/Ocultar globais" toggle in
 `ScreenHeader`'s `actions` (`WorkspaceScreen`'s `showGlobal` state) — omitted entirely on the Default
@@ -526,4 +524,6 @@ The plugin system extends the SDE customizations framework with package manageme
 - [Getting started](../tutorials/getting-started.md) — to run the app first.
 - [Entity schema](customization-schema.md)
 - [IPC contract](ipc-contract.md)
+- [Adapter targets](adapter-targets.md) — every path each adapter writes.
+- [On-disk layout](on-disk-layout.md) — every file the app owns, edits or reads.
 - Why symlinks _(TBD)_

@@ -6,13 +6,14 @@ description: Run ai-companion locally from a fresh clone in under 5 minutes.
 # Getting started
 
 > **Audience:** first-time user with Node.js and Git installed.
-> **Outcome:** the app is running on your machine and pointing to a workspace folder.
+> **Outcome:** the app is running on your machine with its default workspace set up.
 
 ## Prerequisites
 
 - macOS (macOS-only today — the `.numbers` preview drives Numbers.app over Apple events).
 - Node.js 22+ and npm.
 - Git.
+- The [`claude` CLI](https://docs.claude.com/en/docs/claude-code), installed and signed in — needed for sessions and history, not for managing customizations.
 
 ## 1. Clone and install
 
@@ -50,33 +51,36 @@ Then from anywhere in Terminal:
 ai-companion-dev
 ```
 
-## 3. First-launch onboarding
+## 3. First launch
 
-On first launch the app has no workspace yet, so the **Onboarding** screen asks you to pick one. The workspace is just a folder on disk where your customizations live as `.md` files with YAML frontmatter.
+There is no setup wizard. On first launch the app:
 
-Pick (or create) any folder you control — for example `~/ai-workspace`. The app then:
+1. Creates its data dir, `~/.ai-companion/` (renaming a legacy `~/.superset-ai-app/` if one exists).
+2. Registers the **Global** workspace, rooted at your home folder.
+3. Writes default settings: Claude Code sync **on**, Cursor sync **off**.
+4. Registers the official plugin marketplace.
 
-1. Persists your choice via `workspace.setActive`.
-2. Bootstraps the folder layout via `workspace.bootstrap`.
-3. Merges default settings (adapters, linked repos, UI).
-
-After this, the **Main** screen opens with an empty customization list.
+It then opens on the **Início** tab, showing the Global workspace.
 
 ## 4. Verify
 
 You're ready when:
 
-- The main window shows the customization list (empty on first run).
-- `Settings` shows your workspace path and the configured adapter targets (`~/.claude/`).
-- The workspace folder on disk exists and is writable.
+- **Início** shows the Global workspace, with **Novo workspace** in its workspace list and an
+  **INSTRUCTIONS** row in the Explorer.
+- **Settings** (gear icon) → **Adapters** shows Claude switched on.
+- `ls ~/.ai-companion` lists `skills/`, `agents/`, `_backups/`, `settings.json` and `workspaces.json`.
 
 ## What's next
 
-- Create your first customization _(how-to TBD)_.
+- Follow [Your first skill, end to end](first-skill-end-to-end.md) — create a skill, see it land in
+  `~/.claude/`, and use it from a session.
+- Browse the [how-to guides](../index.md#how-to--task-oriented) for specific tasks.
 - Read the [architecture reference](../reference/architecture.md) to understand the layers underneath.
 
 ## Troubleshooting
 
 - **Window doesn't open** — check that no other process is holding port **47173** (dev renderer; see `electron.vite.config.ts`) and rerun `npm run dev`.
-- **I/O error screen** — the bootstrap step failed (workspace not writable, missing parent, etc.). Pick a different folder; the same retry button reruns the failed step.
+- **I/O error screen** — the app could not create or read `~/.ai-companion/` (permissions, a file in its place, …). Fix the cause, then use the screen's retry button.
+- **`npm test` fails to load `node-pty` after running the app** — `npm run dev`/`npm run build` rebuild `node-pty` for Electron's Node ABI. Run `npm install` (or `npm rebuild node-pty`) to restore the host build before testing.
 - **Stale build artifacts** — delete `out/` and rerun.

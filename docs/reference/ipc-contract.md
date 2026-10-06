@@ -209,8 +209,8 @@ Saving or deleting a plugin-provided skill (`source.kind === 'plugin'`) raises `
 `Instruction` is a discriminated union on `scopes[0]`: `PersonalInstruction` (`name === 'default'`, `scopes === ['personal']`), `ProjectInstruction` (any other slug, `scopes === ['project']`, `scopeId` resolving to a `Project.id`), or `WorkspaceInstruction` (same slug shape, `scopes === ['workspace']`, `scopeId` resolving to a `Workspace.id`). `scopeId` is resolved to an absolute path at point of use via `resolveScopePath` (`src/main/application/resolve-scope-path.ts`) — never persisted as a path on the entity itself; a legacy, read-only `repoPath` is tolerated on parse for pre-`scopeId` on-disk data. Enforced by `personalInstructionId` / `projectInstructionSlug` (`src/main/domain/instruction-id.ts`, the latter validates any non-personal slug regardless of scope) and by `instructionEntitySchema` (branch via `superRefine`). Storage is **frontmatter-free**; the personal singleton lives at `instructions/default.md`, project/workspace instructions at `instructions/project/<slug>/{INSTRUCTION.md,meta.json}` — see [Entity schema](customization-schema.md#instruction). `save`'s sync report fans out to Claude (`~/.claude/CLAUDE.md` + `~/AGENTS.md` for personal, `<resolved path>/.claude/CLAUDE.md` + `<resolved path>/AGENTS.md` for project/workspace) and — when Cursor is enabled — either the Cursor plugin files (personal) or `<resolved path>/AGENTS.md` (project/workspace). `delete` removes the entity plus its symlinks / generated files by default; pass `removeSymlinks: false` to keep the sync artefacts.
 
 The renderer never offers a folder picker for this — `instruction.*` is driven entirely from the Workspace
-screen (`WorkspaceScreen` → `PersonalInstructionCard` / `ScopedInstructionCard`, see
-[Architecture](architecture.md#instructions-on-visão-geral)), scoped to whichever workspace or project the
+screen's **INSTRUCTIONS** rows (`InstructionTreeRow` / `ProjectInstructionRow` in
+`src/renderer/components/workspace/InstructionTreeRow.tsx`), scoped to whichever workspace or Project the
 user is currently viewing.
 
 ### `git`
@@ -567,11 +567,11 @@ Schema-level validation (entity field rules) runs deeper, inside the services �
 
 ## Adding a new method
 
-1. Define params and result types in `src/shared/ipc-contract.ts` (or a focused shared module).
-2. Add the handler in `src/main/ipc/registry.ts` under the appropriate namespace, validating raw params with the helpers (`asString`, `asObject`, `asScope`, …) from [`_validators.ts`](../../src/main/ipc/_validators.ts).
+1. Define params and result types in `src/shared/` (the area's own module, or `src/shared/ipc-contract.ts`).
+2. Add the handler to `src/main/ipc/<namespace>-handlers.ts` (`build<Namespace>Handlers`), validating raw params with the helpers (`asString`, `asObject`, `asScope`, …) from [`_validators.ts`](../../src/main/ipc/_validators.ts). A new namespace is also spread into `buildHandlers` in `src/main/ipc/registry.ts`.
 3. Use `callIpc<Result>('namespace.method', params)` from the renderer.
 
-There is no separate registration file for the channel itself — the dispatcher receives the full handler map and looks up `method` directly.
+There is no separate registration file for the channel itself — the dispatcher receives the full handler map and looks up `method` directly. Step-by-step guide: [Add an IPC method](../how-to/add-an-ipc-method.md).
 
 ## See also
 
