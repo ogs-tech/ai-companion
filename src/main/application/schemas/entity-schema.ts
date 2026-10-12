@@ -3,7 +3,7 @@ import { z } from 'zod';
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'name must match ^[a-z0-9][a-z0-9-]*$');
 const version = z.string().regex(/^\d+\.\d+\.\d+(-[\w.-]+)?$/, 'version must follow semver');
 const scopes = z
-  .array(z.enum(['personal', 'project', 'workspace']))
+  .array(z.enum(['personal', 'workspace']))
   .min(1, 'scopes must have at least 1 entry')
   .refine((arr) => new Set(arr).size === arr.length, { message: 'scopes must not contain duplicates' });
 const metadata = z.object({
@@ -24,17 +24,18 @@ const entityBase = z.object({
   source,
 });
 
-type SingleScope = 'personal' | 'project' | 'workspace';
+type SingleScope = 'personal' | 'workspace';
 
 const scopeTuple = (kindLabel: string) =>
-  z.tuple([z.enum(['personal', 'project', 'workspace'])], {
-    message: `${kindLabel} scopes must be exactly ["personal"], ["project"] or ["workspace"]`,
+  z.tuple([z.enum(['personal', 'workspace'])], {
+    message: `${kindLabel} scopes must be exactly ["personal"] or ["workspace"]`,
   });
 
 /**
- * Shared by skill/agent/instruction: `scopeId` is required for 'project'/
- * 'workspace' and forbidden for 'personal'. Storage location never depends on
- * scope — only the adapter sync destination does (resolveScopePath).
+ * Shared by skill/agent/instruction: `scopeId` is required for 'workspace'
+ * and forbidden for 'personal'. Scope picks both the store the canonical file
+ * lives in (Global or the workspace's data dir — see ScopedEntityRepository)
+ * and the adapter sync destination (resolveScopePath).
  */
 function requireScopeIdWhenScoped(scope: SingleScope, scopeId: string | undefined, ctx: z.RefinementCtx): void {
   if (scope === 'personal') {

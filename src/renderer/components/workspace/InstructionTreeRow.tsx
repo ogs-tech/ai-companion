@@ -6,14 +6,12 @@ import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import { useInvalidateInstructions, useProjectInstruction } from '../../hooks/use-instructions.js';
+import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
-import { seedProjectInstruction } from '../../lib/instruction-seed.js';
 import type { Instruction } from '../../../shared/entity.js';
-import type { Project } from '../../../shared/project.js';
 
-type InstructionRowKind = 'personal' | 'workspace' | 'project';
+type InstructionRowKind = 'personal' | 'workspace';
 
 const ROW_COPY: Record<InstructionRowKind, { label: string; glyph: LucideIcon; removeLabel?: (name: string) => string }> = {
   personal: { label: 'INSTRUCTIONS', glyph: Globe },
@@ -21,11 +19,6 @@ const ROW_COPY: Record<InstructionRowKind, { label: string; glyph: LucideIcon; r
     label: 'INSTRUCTIONS',
     glyph: NotebookPen,
     removeLabel: (name) => `Remover as instructions deste workspace (${name})?`,
-  },
-  project: {
-    label: 'INSTRUCTIONS',
-    glyph: NotebookPen,
-    removeLabel: (name) => `Remover as instructions deste projeto (${name})?`,
   },
 };
 
@@ -40,16 +33,15 @@ interface InstructionTreeRowProps {
   onProperties?: (entity: Instruction) => void;
   /** Right-click → "New Action" — opens a brand-new session with a draft first message referencing this instruction. Gated on `instruction` being configured (nothing to reference otherwise), but — unlike Properties — offered for `kind="personal"` too, since starting a session from it is meaningful even though there's nothing to edit. */
   onNewAction?: (entity: Instruction) => void;
-  /** Overrides the default `data-testid` (`${kind}-instruction-row`) — needed when several `kind="project"` rows for different projects can be mounted at once (one per expanded folder), so each needs its own unique id. */
+  /** Overrides the default `data-testid` (`${kind}-instruction-row`). */
   testId?: string;
-  /** Tree nesting level, matching `FolderTree`'s `TreeNode` indent formula (`pl: 1.5 + depth * 2`) — lets a row pinned inside a folder node (e.g. a Project's own INSTRUCTIONS) line up with its sibling files/folders instead of sitting flush with its parent. Defaults to `0` (top-level, unindented). */
+  /** Tree nesting level, matching `FolderTree`'s `TreeNode` indent formula (`pl: 1.5 + depth * 2`). Defaults to `0` (top-level, unindented). */
   depth?: number;
 }
 
 /**
- * A pinned tree-node row for the personal/workspace/project instruction —
- * sits at the top of a file list (FolderTree, or the Global workspace's
- * management list), styled identically to a folder/file row (same icon size,
+ * A pinned tree-node row for the personal/workspace instruction —
+ * sits at the top of a file list (FolderTree, or Início's management list), styled identically to a folder/file row (same icon size,
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
@@ -143,43 +135,5 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>
-  );
-}
-
-interface ProjectInstructionRowProps {
-  project: Project;
-  onOpen: (entity: Instruction, isCreate: boolean) => void;
-  /** See `InstructionTreeRowProps.onPreview`. */
-  onPreview?: (entity: Instruction) => void;
-  /** See `InstructionTreeRowProps.onProperties`. */
-  onProperties?: (entity: Instruction) => void;
-  /** See `InstructionTreeRowProps.onNewAction`. */
-  onNewAction?: (entity: Instruction) => void;
-  /** See `InstructionTreeRowProps.testId` — pass a per-project id whenever more than one of these can be mounted at once (e.g. several Project folders expanded in the same tree). */
-  testId?: string;
-  /** See `InstructionTreeRowProps.depth`. */
-  depth?: number;
-}
-
-/**
- * Owns the `useProjectInstruction` query for one specific Project, so it can
- * be mounted once per Project folder — every instance narrows the same
- * shared `instruction.list` cache (see `useScopedInstruction`), so having
- * several on screen at once costs no extra fetches.
- */
-export function ProjectInstructionRow({ project, onOpen, onPreview, onProperties, onNewAction, testId, depth }: ProjectInstructionRowProps): React.ReactElement {
-  const { data: projectInstruction } = useProjectInstruction(project.id);
-  return (
-    <InstructionTreeRow
-      kind="project"
-      instruction={projectInstruction}
-      seed={() => seedProjectInstruction(project)}
-      onOpen={onOpen}
-      {...(onPreview ? { onPreview } : {})}
-      {...(onProperties ? { onProperties } : {})}
-      {...(onNewAction ? { onNewAction } : {})}
-      {...(testId ? { testId } : {})}
-      {...(depth !== undefined ? { depth } : {})}
-    />
   );
 }

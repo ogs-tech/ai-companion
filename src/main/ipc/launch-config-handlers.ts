@@ -8,10 +8,10 @@ export function buildLaunchConfigHandlers(
   processService: LaunchProcessService,
 ): IpcHandlers {
   return {
-    'launchConfig.list': async () => configService.listAll(),
+    'launchConfig.list': async () => configService.list(),
     'launchConfig.run': async (params) => {
       const raw = asObject(params, 'launchConfig.run');
-      return processService.run(asString(raw['projectId'], 'projectId'), asString(raw['configName'], 'configName'));
+      return processService.run(asString(raw['configName'], 'configName'));
     },
     'launchConfig.kill': async (params) => {
       const raw = asObject(params, 'launchConfig.kill');

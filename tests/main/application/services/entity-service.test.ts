@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EntityService } from '../../../../src/main/application/services/entity-service.js';
-import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
+import { scopedRepository } from '../../helpers/scoped-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../../src/shared/entity.js';
@@ -11,15 +11,17 @@ const skill = (name = 'demo'): Skill => ({
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'b',
 });
 
-const setup = () => {
-  const repo = new InMemoryEntityRepository();
+const workspaceSkill = (name = 'demo', scopeId = 'ws-1'): Skill => ({ ...skill(name), scopes: ['workspace'], scopeId });
+
+const setup = (options: { workspaceId?: string } = {}) => {
+  const { scoped: repo, global, workspace } = scopedRepository(options);
   const clock = new FixedClock(FROZEN);
   const adapterManager = {
     syncEntity: vi.fn().mockResolvedValue([]),
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const service = new EntityService(repo, clock, adapterManager);
-  return { repo, clock, service, adapterManager };
+  return { repo, global, workspace, clock, service, adapterManager };
 };
 
 describe('EntityService.save', () => {
@@ -64,6 +66,54 @@ describe('EntityService.save', () => {
     // Rename `a` -> `b`: incoming urn still points at the old record, name is the taken one.
     const renamedOntoExisting: Skill = { ...a, name: 'b' };
     await expect(service.save({ entity: renamedOntoExisting })).rejects.toMatchObject({ kind: 'validation' });
+  });
+});
+
+describe('EntityService — scope routing', () => {
+  it('stores personal entities in Global and workspace entities in the open workspace', async () => {
+    const { service, global, workspace } = setup({ workspaceId: 'ws-1' });
+    await service.save({ entity: skill('mine'), isCreate: true });
+    await service.save({ entity: workspaceSkill('local'), isCreate: true });
+    expect((await global.list()).map((e) => e.name)).toEqual(['mine']);
+    expect((await workspace!.list()).map((e) => e.name)).toEqual(['local']);
+  });
+
+  it('list returns Global ∪ the open workspace', async () => {
+    const { service } = setup({ workspaceId: 'ws-1' });
+    await service.save({ entity: skill('mine'), isCreate: true });
+    await service.save({ entity: workspaceSkill('local'), isCreate: true });
+    expect((await service.list('skill')).map((e) => e.name).sort()).toEqual(['local', 'mine']);
+  });
+
+  it('rejects a workspace entity when no workspace is open', async () => {
+    const { service } = setup();
+    await expect(service.save({ entity: workspaceSkill(), isCreate: true })).rejects.toMatchObject({
+      kind: 'validation',
+      details: { reason: 'no-active-workspace' },
+    });
+  });
+
+  it('rejects a workspace entity whose scopeId is not the open workspace', async () => {
+    const { service } = setup({ workspaceId: 'ws-1' });
+    await expect(service.save({ entity: workspaceSkill('x', 'ws-2'), isCreate: true })).rejects.toMatchObject({
+      kind: 'validation',
+      details: { reason: 'scope-id-mismatch' },
+    });
+  });
+
+  it('keeps names unique across Global and the workspace', async () => {
+    const { service } = setup({ workspaceId: 'ws-1' });
+    await service.save({ entity: skill('dup'), isCreate: true });
+    await expect(service.save({ entity: workspaceSkill('dup'), isCreate: true })).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('a scope change moves the file to the other store and removes the old destinations', async () => {
+    const { service, global, workspace, adapterManager } = setup({ workspaceId: 'ws-1' });
+    const saved = (await service.save({ entity: skill('mover'), isCreate: true })).entity as Skill;
+    await service.save({ entity: { ...saved, scopes: ['workspace'], scopeId: 'ws-1' } });
+    expect(await global.exists('urn:skill:mover')).toBe(false);
+    expect((await workspace!.get('urn:skill:mover')).scopes).toEqual(['workspace']);
+    expect(adapterManager.removeEntity).toHaveBeenCalledWith({ entity: expect.objectContaining({ scopes: ['personal'] }) });
   });
 });
 

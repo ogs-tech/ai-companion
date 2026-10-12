@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, unlink, writeFile, access } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import type { Entity, EntityKind, Instruction, InstructionSidecar } from '../../../shared/entity.js';
+import type { Entity, EntityKind, Instruction, InstructionSidecar, Scope } from '../../../shared/entity.js';
 import { WORKSPACE_SOURCE, parseUrn } from '../../../shared/entity.js';
 import type { EntityListQuery, EntityRepository } from '../../application/ports/entity-repository.js';
 import { renderEntityFile, parseEntityFile } from '../../application/entity/entity-serializer.js';
@@ -28,8 +28,17 @@ function isPersonalName(name: string): boolean {
   return name === PERSONAL_INSTRUCTION_NAME;
 }
 
+/**
+ * One data dir's canonical entity files. Each instance holds a single scope —
+ * `personal` for Global (`~/.ai-companion`), `workspace` for one workspace's
+ * `<root>/.ai-companion` — and refuses to write any other, a guard against a
+ * routing bug in `ScopedEntityRepository` landing a file in the wrong dir.
+ */
 export class FsEntityRepository implements EntityRepository {
-  constructor(private readonly workspace: WorkspacePathProvider) {}
+  constructor(
+    private readonly workspace: WorkspacePathProvider,
+    readonly role: Scope,
+  ) {}
 
   private async root(): Promise<string> {
     return typeof this.workspace === 'string' ? this.workspace : this.workspace();
@@ -74,7 +83,9 @@ export class FsEntityRepository implements EntityRepository {
       if (kind !== 'skill' && kind !== 'agent' && kind !== 'instruction') continue;
       out.push(...(await this.listByKind(kind)));
     }
-    return out;
+    // A file of the other scope (e.g. a pre-migration leftover) is not this
+    // repository's to serve — same reason `save` refuses to write one.
+    return out.filter((entity) => entity.scopes[0] === this.role);
   }
 
   private async listByKind(kind: 'skill' | 'agent' | 'instruction'): Promise<Entity[]> {
@@ -121,7 +132,7 @@ export class FsEntityRepository implements EntityRepository {
     } catch (err) {
       if (!(err instanceof DomainError) || err.kind !== 'not_found') throw err;
     }
-    // Project instructions live under instructions/project/<slug>/.
+    // Workspace instructions live under instructions/project/<slug>/ (legacy dir name).
     const projectRoot = join(await this.root(), FOLDER.instruction, PROJECT_INSTRUCTIONS_SUBDIR);
     let entries: import('node:fs').Dirent[];
     try {
@@ -178,7 +189,7 @@ export class FsEntityRepository implements EntityRepository {
         throw err;
       }
     }
-    // Project instruction: read both body and meta.json.
+    // Workspace instruction: read both body and meta.json.
     const paths = await this.projectInstructionPaths(name);
     let raw: string;
     let sidecarRaw: string;
@@ -192,7 +203,7 @@ export class FsEntityRepository implements EntityRepository {
       sidecarRaw = await readFile(paths.meta, 'utf8');
     } catch (err) {
       if (isEnoent(err)) {
-        throw new DomainError('not_found', `Project instruction meta.json missing for ${urn}`);
+        throw new DomainError('not_found', `Instruction meta.json missing for ${urn}`);
       }
       throw err;
     }
@@ -207,6 +218,12 @@ export class FsEntityRepository implements EntityRepository {
   }
 
   async save(entity: Entity): Promise<Entity> {
+    if (entity.scopes[0] !== this.role) {
+      throw new DomainError(
+        'internal',
+        `FsEntityRepository(${this.role}) refused to store ${entity.urn || entity.name} with scope '${String(entity.scopes[0])}'`,
+      );
+    }
     if (entity.kind === 'instruction') return this.saveInstruction(entity as Instruction);
     const path = await this.fileFor(entity.kind, entity.name);
     const dir = dirname(path);
@@ -225,18 +242,17 @@ export class FsEntityRepository implements EntityRepository {
       await writeFileAtomic(path, body);
       return entity;
     }
-    // Project/workspace: write body + meta.json atomically-per-file.
+    // Workspace: write body + meta.json atomically-per-file.
     const paths = await this.projectInstructionPaths(entity.name);
     await mkdir(paths.dir, { recursive: true });
     const body = renderEntityFile(entity);
-    const scope = entity.scopes[0];
     const sidecar: InstructionSidecar = {
       description: entity.description,
       version: entity.metadata.version,
       ...(entity.metadata.tags !== undefined ? { tags: entity.metadata.tags } : {}),
       createdAt: entity.metadata.createdAt,
       updatedAt: entity.metadata.updatedAt,
-      ...(scope === 'project' || scope === 'workspace' ? { scope } : {}),
+      scope: 'workspace',
       ...(entity.scopeId !== undefined ? { scopeId: entity.scopeId } : {}),
     };
     await writeFileAtomic(paths.body, body);
@@ -370,9 +386,8 @@ function parseSidecar(raw: string, urn: string): InstructionSidecar {
     createdAt: str('createdAt'),
     updatedAt: str('updatedAt'),
     ...(Array.isArray(obj['tags']) ? { tags: obj['tags'] as string[] } : {}),
-    ...(scopeRaw === 'project' || scopeRaw === 'workspace' ? { scope: scopeRaw } : {}),
+    ...(scopeRaw === 'workspace' ? { scope: scopeRaw } : {}),
     ...(typeof obj['scopeId'] === 'string' ? { scopeId: obj['scopeId'] } : {}),
-    ...(typeof obj['repoPath'] === 'string' ? { repoPath: obj['repoPath'] } : {}),
   };
   return sidecar;
 }

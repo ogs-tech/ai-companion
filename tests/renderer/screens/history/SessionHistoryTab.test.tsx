@@ -5,7 +5,7 @@ import { SessionHistoryTab } from '../../../../src/renderer/screens/history/Sess
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import type { SessionHistoryEntry } from '../../../../src/shared/session-history.js';
 
-const PROJECT_SCOPE = { kind: 'project', projectId: 'p1' } as const;
+const PROJECT_SCOPE = { kind: 'workspace', workspaceId: 'ws-1' } as const;
 
 const entry = (overrides: Partial<SessionHistoryEntry> = {}): SessionHistoryEntry => ({
   claudeSessionId: 'c1',

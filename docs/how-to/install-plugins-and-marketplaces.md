@@ -61,6 +61,7 @@ There is no UI to *create* an owned plugin yet (`plugin.createOwned` has no call
 
 ## Scope caveat
 
-Plugins installed with `project` scope resolve their paths from the directory the app was launched from,
-not the active workspace — see [On-disk layout → Known issues](../reference/on-disk-layout.md#known-issues).
-Prefer personal scope (the default) until this is fixed.
+Plugins installed with `project` scope resolve their paths against the **open workspace's** folder
+(`<workspace>/.claude/…`, `<workspace>/.ai-companion/plugins/`), so they're only offered while a workspace is
+open — at Início only personal scope exists. See
+[On-disk layout → Claude Code's `project` tier](../reference/on-disk-layout.md#claude-codes-project-tier).

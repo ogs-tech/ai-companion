@@ -8,7 +8,7 @@ description: Create, switch and remove workspaces; register folders as Projects 
 A **workspace** is a root folder with its own set of customizations (its own `.ai-companion/` data dir).
 A **Project** is a folder registered inside a workspace, so entities, sessions, Git and Launch
 Configurations can be scoped to it. Neither is ever synced to a harness. Background:
-[Architecture → Workspace / Project](../reference/architecture.md#workspace--project).
+[Architecture → Global / Workspace](../reference/architecture.md#global--workspace).
 
 ## Create a workspace
 

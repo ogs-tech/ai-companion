@@ -17,24 +17,17 @@ function setup() {
 }
 
 describe('git handlers', () => {
-  it('git.status accepts no params and an optional projectId', async () => {
+  it('git.status targets the open workspace and takes no target params', async () => {
     const { service, handlers } = setup();
     await handlers['git.status']!(undefined);
-    await handlers['git.status']!({ projectId: 'p1' });
-    expect(service.status.mock.calls).toEqual([[undefined], ['p1']]);
-  });
-
-  it('rejects an empty projectId', async () => {
-    const { handlers } = setup();
-    await expect(handlers['git.status']!({ projectId: '' })).rejects.toMatchObject({
-      kind: 'validation',
-    });
+    await handlers['git.status']!({});
+    expect(service.status.mock.calls).toEqual([[], []]);
   });
 
   it('git.diff validates the source', async () => {
     const { service, handlers } = setup();
     await handlers['git.diff']!({ path: 'a.ts', source: { kind: 'index' } });
-    expect(service.diff).toHaveBeenCalledWith(undefined, 'a.ts', { kind: 'index' });
+    expect(service.diff).toHaveBeenCalledWith('a.ts', { kind: 'index' });
     await expect(
       handlers['git.diff']!({ path: 'a.ts', source: { kind: 'nope' } }),
     ).rejects.toMatchObject({
@@ -51,9 +44,9 @@ describe('git handlers', () => {
     '%s requires a non-empty string array',
     async (m) => {
       const { service, handlers } = setup();
-      await handlers[m]!({ projectId: 'p1', paths: ['a', 'b'] });
+      await handlers[m]!({ paths: ['a', 'b'] });
       const fn = service[m.slice(4) as 'stage' | 'unstage' | 'discard'];
-      expect(fn).toHaveBeenCalledWith('p1', ['a', 'b']);
+      expect(fn).toHaveBeenCalledWith(['a', 'b']);
       for (const bad of [undefined, [], ['a', ''], ['a', 1], 'a']) {
         await expect(handlers[m]!({ paths: bad })).rejects.toMatchObject({ kind: 'validation' });
       }
@@ -63,7 +56,7 @@ describe('git handlers', () => {
   it('git.commit defaults amend to false and type-checks it', async () => {
     const { service, handlers } = setup();
     await expect(handlers['git.commit']!({ message: 'm' })).resolves.toEqual({ sha: 'abc' });
-    expect(service.commit).toHaveBeenCalledWith(undefined, 'm', false);
+    expect(service.commit).toHaveBeenCalledWith('m', false);
     await expect(handlers['git.commit']!({ message: 'm', amend: 'yes' })).rejects.toMatchObject({
       kind: 'validation',
     });

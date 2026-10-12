@@ -30,7 +30,6 @@ const agentEntity = (name: string, scopes: Scope[] = ['personal']): Agent => ({
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 const instructionEntity = (): Instruction => ({

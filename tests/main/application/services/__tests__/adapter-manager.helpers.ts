@@ -41,7 +41,7 @@ export const setupAdapterManager = async (
     entityRepository,
     symlinkManager,
     fileMaterializer,
-    workspacePath,
+    entityDataDir: () => workspacePath,
     adapters: new Map(adapters.map((adapter) => [adapter.adapterId, adapter])),
   });
   return {

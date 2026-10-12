@@ -8,8 +8,6 @@ import {
 } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { registerAreaOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
-
-const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
 const SETTINGS = {
   ui: { theme: 'light' },
   adapters: { claude: { enabled: true }, cursor: { enabled: false } },
@@ -20,7 +18,7 @@ let call: CallSpy;
 beforeEach(() => {
   call = mockApi();
   call.mockImplementation(async (method: string) => {
-    if (method === 'workspace.getActive') return ok(DEFAULT_WORKSPACE);
+    if (method === 'workspace.getActive') return ok(null);
     if (method === 'browser.openTab') return ok({ tabId: 'tab-1' });
     if (method === 'settings.get') return ok(SETTINGS);
     return ok(null);

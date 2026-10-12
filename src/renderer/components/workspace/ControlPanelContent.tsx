@@ -14,23 +14,14 @@ import type { Agent, Skill } from '../../../shared/entity.js';
 import type { SessionSnapshot } from '../../../shared/session.js';
 
 interface LocalScope {
-  scope: 'workspace' | 'project';
+  scope: 'workspace';
   scopeId: string;
 }
 
-/**
- * A non-default workspace is always "as a Project" (a single registered Project, or none yet)
- * or "with multiple projects" — fully derived from `projects.length`, never persisted. See
- * docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #1.
- */
-export type WorkspaceViewMode = 'project' | 'multi-project';
-
 interface ControlPanelContentProps {
-  isDefaultWorkspace: boolean;
+  /** True at Início (no workspace open) — only Global entities exist, nothing to filter. */
+  isHome: boolean;
   showGlobal: boolean;
-  viewMode: WorkspaceViewMode;
-  /** The Project currently in view (whichever Workbench tab is active) — `undefined` when no tab is Project-scoped. Only rendered when `viewMode === 'multi-project'`; a single Project needs no disambiguation. */
-  selectedProjectName?: string;
   localScope?: LocalScope;
   mcpMatchPath?: string;
   onEditEntity: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
@@ -51,10 +42,8 @@ interface ControlPanelContentProps {
  * Customizations tree (Skills/Agents/Hooks/MCP/Plugins).
  */
 export function ControlPanelContent({
-  isDefaultWorkspace,
+  isHome,
   showGlobal,
-  viewMode,
-  selectedProjectName,
   localScope,
   mcpMatchPath,
   onEditEntity,
@@ -73,7 +62,7 @@ export function ControlPanelContent({
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const toggleSessions = (): void => setSessionsExpanded((v) => !v);
 
-  const customizationRows = isDefaultWorkspace ? (
+  const customizationRows = isHome ? (
     <>
       <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
       <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
@@ -100,22 +89,9 @@ export function ControlPanelContent({
 
   return (
     <>
-      {/* Only meaningful once a workspace juggles more than one Project — a
-          single Project needs nothing to disambiguate. Falls back to a
-          neutral "Workspace" label whenever the active tab isn't scoped to
-          any Project (a workspace-anchored session, Starter Pack, ...). */}
-      {viewMode === 'multi-project' && (
-        <Typography
-          data-testid="control-panel-scope-chip"
-          noWrap
-          sx={{ flexShrink: 0, px: 1.5, pt: 0.75, textAlign: 'right', fontSize: '0.6875rem', color: 'text.secondary' }}
-        >
-          {selectedProjectName ? `Projeto: ${selectedProjectName}` : 'Workspace'}
-        </Typography>
-      )}
       {/* Stacked above Customizations, not nested inside it as one more tree
           row — a session is reachable/actionable even when its own
-          entity/project/workspace tab isn't open, so it earns its own
+          entity/workspace tab isn't open, so it earns its own
           always-visible section instead of hiding inside a collapsed group.
           Its collapse only hides this block's own body (a local accordion),
           unlike the panel's own collapse, which hides this whole component. */}

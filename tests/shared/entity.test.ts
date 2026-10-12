@@ -5,7 +5,6 @@ import {
   isPluginSource,
   isWorkspaceSource,
   isPersonalInstruction,
-  isProjectInstruction,
   isWorkspaceInstruction,
   WORKSPACE_SOURCE,
   type Instruction,
@@ -66,13 +65,11 @@ describe('Instruction scoping', () => {
     content: '# Body\n',
   };
 
-  it('isPersonalInstruction / isProjectInstruction read scopes[0]', () => {
+  it('isPersonalInstruction reads scopes[0]', () => {
     const personal: Instruction = { ...base, name: 'default', scopes: ['personal'] };
-    const project: Instruction = { ...base, name: 'acme', scopes: ['project'], scopeId: 'proj-1' };
+    const workspaceScoped: Instruction = { ...base, name: 'acme', scopes: ['workspace'], scopeId: 'ws-1' };
     expect(isPersonalInstruction(personal)).toBe(true);
-    expect(isProjectInstruction(personal)).toBe(false);
-    expect(isProjectInstruction(project)).toBe(true);
-    expect(isPersonalInstruction(project)).toBe(false);
+    expect(isPersonalInstruction(workspaceScoped)).toBe(false);
   });
 
   it('accepts a workspace-scoped instruction with scopeId', () => {
@@ -83,20 +80,10 @@ describe('Instruction scoping', () => {
     expect(workspaceScoped.scopeId).toBe('ws-1');
   });
 
-  it('isWorkspaceInstruction reads scopes[0], distinct from personal/project', () => {
+  it('isWorkspaceInstruction reads scopes[0], distinct from personal', () => {
     const personal: Instruction = { ...base, name: 'default', scopes: ['personal'] };
-    const project: Instruction = { ...base, name: 'acme', scopes: ['project'], scopeId: 'proj-1' };
     const workspaceScoped: Instruction = { ...base, name: 'ws-wide', scopes: ['workspace'], scopeId: 'ws-1' };
     expect(isWorkspaceInstruction(workspaceScoped)).toBe(true);
     expect(isWorkspaceInstruction(personal)).toBe(false);
-    expect(isWorkspaceInstruction(project)).toBe(false);
-  });
-
-  it('carries legacyRepoPath instead of scopeId for pre-migration data', () => {
-    const legacy: Instruction = {
-      ...base, name: 'legacy-acme', scopes: ['project'], legacyRepoPath: '/repos/legacy-acme',
-    };
-    expect(legacy.scopeId).toBeUndefined();
-    expect(legacy.legacyRepoPath).toBe('/repos/legacy-acme');
   });
 });

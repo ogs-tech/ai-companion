@@ -50,9 +50,10 @@ nothing to diverge.
   back up, so it refuses to replace them (`error`, `reason: 'backup-directory'`).
 - **Edits from anywhere land in the source.** The same property as above, seen from the other side: there
   is no way to make a harness-local tweak that the canonical copy does not see.
-- **Every link names one workspace.** Links point at a specific data dir. Switching workspace does not
-  re-point or prune them yet, so `~/.claude/` can keep pointing at the previous workspace's entities until
-  they are re-synced — a [known gap](../reference/architecture.md#workspace--project).
+- **Every link names one data dir.** Links point at Global's data dir (`personal` entities) or at one
+  workspace's (`workspace` entities, linked into that workspace's own folder). Nothing prunes stale links
+  yet — `syncAll` only covers Global plus the open workspace — a
+  [known gap](../reference/architecture.md#global--workspace).
 - **The harness must follow links.** Claude Code and Cursor do. A harness that did not would fail the
   [boundary test's](harness-model.md#the-boundary-test) practical side and need a `write` adapter instead.
 

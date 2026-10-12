@@ -1,43 +1,36 @@
-import type { LaunchConfig, ProjectLaunchConfigs } from '../../../shared/launch-config.js';
+import type { LaunchConfig, WorkspaceLaunchConfigs } from '../../../shared/launch-config.js';
+import type { Workspace } from '../../../shared/workspace.js';
 import type { LaunchConfigReaderPort } from '../ports/launch-config-reader-port.js';
-import type { ProjectService } from './project-service.js';
-import type { Project } from '../../../shared/project.js';
 import { DomainError } from '../../domain/errors.js';
 
+/** The open workspace's own `.vscode/launch.json`, read at its root. */
 export class LaunchConfigService {
   constructor(
-    private readonly projectService: Pick<ProjectService, 'list' | 'get'>,
+    /** `null` at Início — there is no launch.json to read. */
+    private readonly activeWorkspace: Pick<Workspace, 'id' | 'rootPath'> | null,
     private readonly reader: LaunchConfigReaderPort,
   ) {}
 
-  private async resolve(project: Project): Promise<ProjectLaunchConfigs> {
-    const result = await this.reader.read(project.path);
+  async list(): Promise<WorkspaceLaunchConfigs | null> {
+    const workspace = this.activeWorkspace;
+    if (workspace === null) return null;
+    const result = await this.reader.read(workspace.rootPath);
     return 'error' in result
-      ? { projectId: project.id, configs: [], error: result.error }
-      : { projectId: project.id, configs: result.configs };
+      ? { workspaceId: workspace.id, configs: [], error: result.error }
+      : { workspaceId: workspace.id, configs: result.configs };
   }
 
-  async listForProject(projectId: string): Promise<ProjectLaunchConfigs> {
-    const project = await this.projectService.get(projectId);
-    return this.resolve(project);
-  }
-
-  /** Every registered Project's launch configs — one project's malformed launch.json never blocks the others. */
-  async listAll(): Promise<ProjectLaunchConfigs[]> {
-    const projects = await this.projectService.list();
-    return Promise.all(projects.map((project) => this.resolve(project)));
-  }
-
-  async getConfig(projectId: string, configName: string): Promise<{ config: LaunchConfig; projectPath: string }> {
-    const project = await this.projectService.get(projectId);
-    const result = await this.reader.read(project.path);
+  async getConfig(configName: string): Promise<{ config: LaunchConfig; workspaceId: string; rootPath: string }> {
+    const workspace = this.activeWorkspace;
+    if (workspace === null) throw new DomainError('validation', 'No workspace is open — launch configs need one');
+    const result = await this.reader.read(workspace.rootPath);
     if ('error' in result) {
-      throw new DomainError('io', `Cannot read launch configs for project '${projectId}': ${result.error}`);
+      throw new DomainError('io', `Cannot read launch configs for workspace '${workspace.id}': ${result.error}`);
     }
     const config = result.configs.find((c) => c.name === configName);
     if (!config) {
-      throw new DomainError('not_found', `Launch config '${configName}' not found for project '${projectId}'`);
+      throw new DomainError('not_found', `Launch config '${configName}' not found in workspace '${workspace.id}'`);
     }
-    return { config, projectPath: project.path };
+    return { config, workspaceId: workspace.id, rootPath: workspace.rootPath };
   }
 }

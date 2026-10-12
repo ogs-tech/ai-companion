@@ -24,10 +24,9 @@ describe('FsWorkspaceRegistry', () => {
   it('save then load round-trips the registry', async () => {
     const registry = new FsWorkspaceRegistry(join(dir, 'nested', 'workspaces.json'));
     const file: WorkspaceRegistryFile = {
-      workspaces: [
-        { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '2026-01-01T00:00:00.000Z' },
-      ],
-      activeWorkspaceId: 'default',
+      schemaVersion: 2,
+      workspaces: [{ id: 'ws-1', name: 'Acme', rootPath: '/repos/acme', createdAt: '2026-01-01T00:00:00.000Z' }],
+      activeWorkspaceId: 'ws-1',
     };
     await registry.save(file);
     expect(await registry.load()).toEqual(file);
@@ -35,7 +34,7 @@ describe('FsWorkspaceRegistry', () => {
 
   it('save creates the parent directory if missing', async () => {
     const registry = new FsWorkspaceRegistry(join(dir, 'a', 'b', 'workspaces.json'));
-    await registry.save({ workspaces: [], activeWorkspaceId: '' });
-    expect(await registry.load()).toEqual({ workspaces: [], activeWorkspaceId: '' });
+    await registry.save({ schemaVersion: 2, workspaces: [], activeWorkspaceId: null });
+    expect(await registry.load()).toEqual({ schemaVersion: 2, workspaces: [], activeWorkspaceId: null });
   });
 });

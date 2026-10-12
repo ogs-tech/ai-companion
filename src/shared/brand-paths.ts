@@ -30,8 +30,3 @@ const INDEX_MARKER_FILE = 'index.md';
 export function workspaceIndexMarkerPath(dataDir: string): string {
   return `${dataDir}/${INDEX_MARKER_FILE}`;
 }
-
-/** `<projectPath>/.ai-companion/index.md` — a symlink back to workspaceIndexMarkerPath. */
-export function projectIndexMarkerPath(projectPath: string): string {
-  return `${projectPath}/${brand.workspaceDirName}/${INDEX_MARKER_FILE}`;
-}

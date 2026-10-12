@@ -82,11 +82,7 @@ const settingsService = (settings?: Partial<Settings>) => ({
 
 const scopeDeps = {
   workspaceService: {
-    get: async (id: string) => ({ id, name: 'W', rootPath: '/repos', isDefault: false, createdAt: '' }),
-  },
-  projectService: {
-    get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }),
-    findOrCreateByPath: async (path: string) => ({ id: `p:${path}`, name: 'x', path, createdAt: '' }),
+    get: async (id: string) => ({ id, name: id, rootPath: id === 'acme' ? '/repos/acme' : '/repos', createdAt: '' }),
   },
 };
 
@@ -97,34 +93,34 @@ const setup = (transcripts: FakeTranscript[], settings?: Partial<Settings>) => {
 };
 
 const ALL = { kind: 'all' } as const;
-const PROJECT = { kind: 'project', projectId: 'p1' } as const;
+const ACME = { kind: 'workspace', workspaceId: 'acme' } as const;
 
 describe('SessionHistoryService', () => {
   describe('scope', () => {
-    it('keeps only conversations that ran in the project, or anywhere below it', async () => {
+    it('keeps only conversations that ran in the workspace, or anywhere below it', async () => {
       const { service } = setup([
         transcript({ id: 'inside', cwd: '/repos/acme' }),
         transcript({ id: 'nested', cwd: '/repos/acme/packages/ui' }),
         transcript({ id: 'elsewhere', cwd: '/repos/other' }),
       ]);
 
-      const page = await service.list({ scope: PROJECT });
+      const page = await service.list({ scope: ACME });
 
       expect(page.entries.map((e) => e.claudeSessionId).sort()).toEqual(['inside', 'nested']);
     });
 
-    it('does not mistake a sibling directory that merely shares a prefix for a child of the project', async () => {
+    it('does not mistake a sibling directory that merely shares a prefix for a child of the workspace', async () => {
       const { service } = setup([
         transcript({ id: 'inside', cwd: '/repos/acme' }),
         transcript({ id: 'sibling', cwd: '/repos/acme-archive' }),
       ]);
 
-      const page = await service.list({ scope: PROJECT });
+      const page = await service.list({ scope: ACME });
 
       expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['inside']);
     });
 
-    it("covers every project under the workspace's root", async () => {
+    it("covers every folder under a workspace's root, nested workspaces included", async () => {
       const { service } = setup([
         transcript({ id: 'a', cwd: '/repos/acme' }),
         transcript({ id: 'b', cwd: '/repos/other' }),

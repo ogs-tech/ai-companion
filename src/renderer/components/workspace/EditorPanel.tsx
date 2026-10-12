@@ -42,7 +42,7 @@ import { fonts } from '../../tokens.js';
 export type { EditableEntity, EditorHiddenField };
 
 export type PreviewSource =
-  | { kind: 'file'; path: string; projectId?: string }
+  | { kind: 'file'; path: string }
   | { kind: 'entity'; body: string };
 
 const SAVE_BY_KIND: Record<
@@ -126,7 +126,6 @@ export type EditorPanelProps =
   | {
       subject: 'file';
       path: string;
-      projectId?: string;
       /** See the `entity` variant's `active`. */
       active?: boolean;
       onDirtyChange: (dirty: boolean) => void;
@@ -315,7 +314,6 @@ type FileSubjectProps = Extract<EditorPanelProps, { subject: 'file' }>;
 
 function FileSubject({
   path,
-  projectId,
   active = true,
   onDirtyChange,
 }: FileSubjectProps): React.ReactElement {
@@ -325,7 +323,7 @@ function FileSubject({
     isError,
     error,
     refetch,
-  } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
+  } = useFilePreview(path);
   const writeFile = useWriteFile();
 
   const [draft, setDraft] = useState<string | null>(null);
@@ -370,7 +368,7 @@ function FileSubject({
     if (draft === null) return;
     setSaving(true);
     try {
-      await writeFile.mutateAsync({ path, content: draft, ...(projectId ? { projectId } : {}) });
+      await writeFile.mutateAsync({ path, content: draft });
       setBaseline(draft);
       setToast({ variant: 'success', message: `${fileTitle(path)} salvo` });
     } catch (err) {
@@ -463,28 +461,14 @@ function PreviewSubject({ source }: PreviewSubjectProps): React.ReactElement {
           language="markdown"
         />
       ) : (
-        <FilePreviewBody
-          path={source.path}
-          {...(source.projectId ? { projectId: source.projectId } : {})}
-        />
+        <FilePreviewBody path={source.path} />
       )}
     </Box>
   );
 }
 
-function FilePreviewBody({
-  path,
-  projectId,
-}: {
-  path: string;
-  projectId?: string;
-}): React.ReactElement {
-  const {
-    data: preview,
-    isLoading,
-    isError,
-    error,
-  } = useFilePreview(path, { ...(projectId ? { projectId } : {}) });
+function FilePreviewBody({ path }: { path: string }): React.ReactElement {
+  const { data: preview, isLoading, isError, error } = useFilePreview(path);
 
   if (isError) {
     return (

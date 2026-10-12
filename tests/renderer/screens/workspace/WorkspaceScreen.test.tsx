@@ -33,22 +33,18 @@ vi.mock('@xterm/addon-fit', () => ({
   },
 }));
 
-// Most tests exercise a dedicated (non-default) project workspace, since
-// that's the case where the file browser actually renders — see the
-// "Global workspace" describe block below for the isDefault:true nudge.
-const projectWorkspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
-const globalWorkspace = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
-const projects = [{ id: 'p1', name: 'acme', path: '/repos/acme', createdAt: '' }];
-// A project whose path matches a real top-level folder (`workspaceRootPath/apps`) — only a
-// folder registered this way expands in place (fetching its own `project.listDir`).
-const registeredProjects = [{ id: 'p1', name: 'apps', path: '/repos/acme/apps', createdAt: '' }];
-// The workspace root itself registered as a Project (path === projectWorkspace.rootPath) — see
-// docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #4/#6 — plus a second,
-// nested Project ("apps"), so `viewMode` derives to 'multi-project' (projects.length > 1).
-const rootAndAppsProjects = [
-  { id: 'p1', name: 'acme', path: '/repos/acme', createdAt: '' },
-  { id: 'p2', name: 'apps', path: '/repos/acme/apps', createdAt: '' },
-];
+// Most tests exercise an open workspace, since that's where the file browser
+// renders — see the "Início" describe block below for `workspace.getActive`
+// answering `null` (no workspace open).
+const projectWorkspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' };
+
+/** `workspace.listDir` over a small tree: an `apps/` folder holding `a.md`. */
+const appsTree = (params: unknown): unknown => {
+  const path = (params as { path?: string } | undefined)?.path ?? '';
+  if (path === '') return [{ name: 'apps', kind: 'dir' }];
+  if (path === 'apps') return [{ name: 'a.md', kind: 'file' }];
+  return [];
+};
 
 const renderScreen = () =>
   render(
@@ -66,31 +62,24 @@ const openHeaderMenu = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(await screen.findByTestId('workspace-header-menu-button'));
 };
 
-// Expands the "apps" Project folder in place and opens one of its files —
-// opening the file is what derives Control Panel/Instructions scope onto
-// that Project now (there's no dedicated "enter project" gesture anymore).
-const openProjectFile = async (user: ReturnType<typeof userEvent.setup>, fileName: string) => {
+// Expands the "apps" folder and opens one of its files.
+const openFolderFile = async (user: ReturnType<typeof userEvent.setup>, fileName: string) => {
   await user.click(await screen.findByText('apps'));
   await user.click(await screen.findByText(fileName));
 };
 
 // Shared by the "Unsaved changes guard" and "Workbench history" suites — both
-// need a dirty in-project file tab.
+// need a dirty file tab.
 const openDirtyFileTab = async (user: ReturnType<typeof userEvent.setup>) => {
   (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
     if (method === 'workspace.getActive') return projectWorkspace;
-    if (method === 'project.list') return registeredProjects;
-    if (method === 'workspace.listDir') {
-      const path = (params as { path?: string } | undefined)?.path;
-      return path ? [] : [{ name: 'apps', kind: 'dir' }];
-    }
-    if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-    if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
-    if (method === 'project.writeFile') return undefined;
+    if (method === 'workspace.listDir') return appsTree(params);
+    if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
+    if (method === 'workspace.writeFile') return undefined;
     return undefined;
   });
   renderScreen();
-  await openProjectFile(user, 'a.md');
+  await openFolderFile(user, 'a.md');
   await screen.findByText('hello');
   const editor = document.querySelector('[data-testid="body-editor"] .cm-content') as HTMLElement;
   editor.focus();
@@ -98,7 +87,7 @@ const openDirtyFileTab = async (user: ReturnType<typeof userEvent.setup>) => {
   // resolve a caret position, which needs real layout — jsdom has none,
   // so let the .focus() above stand in for it instead.
   await user.type(editor, 'x', { skipClick: true });
-  await waitFor(() => expect(screen.getByTestId('workbench-tab-dirty-file:p1:a.md')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTestId('workbench-tab-dirty-file:apps/a.md')).toBeInTheDocument());
 };
 
 beforeEach(() => {
@@ -109,7 +98,6 @@ beforeEach(() => {
   mockApi();
   vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
     if (method === 'workspace.getActive') return projectWorkspace;
-    if (method === 'project.list') return projects;
     if (method === 'workspace.listDir') return [];
     if (method === 'session.list') return [];
     if (method === 'browser.list') return [];
@@ -124,7 +112,7 @@ describe('WorkspaceScreen', () => {
     expect((await screen.findAllByText('/repos/acme')).length).toBeGreaterThan(0);
   });
 
-  it('shows the breadcrumb\'s "Início" button for a non-default workspace even with no Project selected', async () => {
+  it('shows the breadcrumb\'s "Início" button while a workspace is open', async () => {
     renderScreen();
     expect(await screen.findByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
   });
@@ -133,8 +121,7 @@ describe('WorkspaceScreen', () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
       if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return projects;
-      if (method === 'workspace.listDir') return [];
+        if (method === 'workspace.listDir') return [];
       if (method === 'session.list') return [];
       if (method === 'session.spawn') {
         return { sessionId: 'sess-w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
@@ -150,32 +137,6 @@ describe('WorkspaceScreen', () => {
     expect(await screen.findByTestId('session-panel')).toBeInTheDocument();
   });
 
-  it('opening a session for the selected project calls session.spawn with a project anchor', async () => {
-    const user = userEvent.setup();
-    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-      if (method === 'session.list') return [];
-      if (method === 'session.spawn') {
-        return { sessionId: 'sess-p1', anchor: { kind: 'project', projectId: 'p1' }, cwd: '/repos/acme/apps', label: 'apps', status: 'running', outputBuffer: '' };
-      }
-      return undefined;
-    });
-    renderScreen();
-    await openProjectFile(user, 'a.md');
-    await user.click(await screen.findByTestId('workspace-sessions-new'));
-    await waitFor(() =>
-      expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'project', projectId: 'p1' } }),
-    );
-    expect(await screen.findByTestId('workbench-tab-session:sess-p1')).toBeInTheDocument();
-  });
-
   describe('browser tabs', () => {
     it('a session’s browser toggle opens a sibling Workbench tab rendering BrowserPane', async () => {
       const user = userEvent.setup();
@@ -185,7 +146,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'session.spawn' || method === 'session.status') return session;
@@ -212,7 +172,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'session.spawn' || method === 'session.status') return session;
@@ -265,7 +224,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'instruction.list') return [workspaceInstruction];
@@ -296,32 +254,29 @@ describe('WorkspaceScreen', () => {
       );
     });
 
-    it('on a project-scoped Skill row: anchors the session to the skill\'s OWN project scope, not whatever the Control Panel currently shows', async () => {
+    it('on a workspace-scoped Skill row: anchors the session to the skill\'s own workspace', async () => {
       const user = userEvent.setup();
-      const projectSkill = {
+      const workspaceSkill = {
         urn: 'urn:skill:helper', kind: 'skill', name: 'helper', description: '',
-        scopes: ['project'], scopeId: 'p1',
+        scopes: ['workspace'], scopeId: 'w1',
         metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
         source: { kind: 'workspace' }, content: '',
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
-        if (method === 'skill.list') return [projectSkill];
+        if (method === 'skill.list') return [workspaceSkill];
         if (method === 'skill.resolvePath') return { absolutePath: '/repos/acme/.ai-companion/skills/helper/SKILL.md' };
         if (method === 'session.spawn') {
           return {
-            sessionId: 'sess-skill', anchor: { kind: 'project', projectId: 'p1' },
-            cwd: '/repos/acme', label: 'acme', status: 'running', outputBuffer: 'ready\n',
+            sessionId: 'sess-skill', anchor: { kind: 'workspace', workspaceId: 'w1' },
+            cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: 'ready\n',
           };
         }
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('workspace-header-menu-button'));
-      await user.click(screen.getByTestId('workspace-toggle-global'));
       await user.click(await screen.findByTestId('tree-group-skill'));
       const row = await screen.findByTestId('tree-skill-helper');
       fireEvent.contextMenu(row);
@@ -329,7 +284,7 @@ describe('WorkspaceScreen', () => {
       await user.click(item);
 
       await waitFor(() =>
-        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'project', projectId: 'p1' } }),
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'workspace', workspaceId: 'w1' } }),
       );
       await waitFor(() =>
         expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
@@ -339,21 +294,16 @@ describe('WorkspaceScreen', () => {
       );
     });
 
-    it('on a file row inside a Project: uses the relative path directly (no resolvePath round trip) and defers the write until the session emits its first output', async () => {
+    it('on a file row: uses its workspace-relative path directly (no resolvePath round trip) and defers the write until the session emits its first output', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
+        if (method === 'workspace.listDir') return appsTree(params);
         if (method === 'session.list') return [];
         if (method === 'session.spawn') {
           return {
-            sessionId: 'sess-file', anchor: { kind: 'project', projectId: 'p1' },
-            cwd: '/repos/acme/apps', label: 'apps', status: 'running', outputBuffer: '',
+            sessionId: 'sess-file', anchor: { kind: 'workspace', workspaceId: 'w1' },
+            cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '',
           };
         }
         return undefined;
@@ -366,9 +316,9 @@ describe('WorkspaceScreen', () => {
       await user.click(item);
 
       await waitFor(() =>
-        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'project', projectId: 'p1' } }),
+        expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'workspace', workspaceId: 'w1' } }),
       );
-      expect(ipc.callIpc).not.toHaveBeenCalledWith('project.resolvePath', expect.anything());
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.resolvePath', expect.anything());
       // Nothing written yet — outputBuffer was empty, so it's waiting on the session's first live output.
       expect(ipc.callIpc).not.toHaveBeenCalledWith('session.write', expect.anything());
 
@@ -384,209 +334,84 @@ describe('WorkspaceScreen', () => {
       await waitFor(() =>
         expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
           sessionId: 'sess-file',
-          data: '@a.md — describe the new action you want to create based on this',
+          data: '@apps/a.md — describe the new action you want to create based on this',
         }),
       );
     });
   });
 
-  it('deleting the selected project calls project.delete and reverts to the workspace-level header', async () => {
+  it('"Abrir como workspace" on a folder opens it via workspace.open and discards the open tabs', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+      if (method === 'workspace.listDir') return appsTree(params);
+      if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+      if (method === 'workspace.resolvePath') return { absolutePath: '/repos/acme/apps' };
+      if (method === 'workspace.open') return { id: 'w2', name: 'apps', rootPath: '/repos/acme/apps', createdAt: '' };
       return undefined;
     });
     renderScreen();
-    await openProjectFile(user, 'a.md');
-    await openHeaderMenu(user);
-    await user.click(await screen.findByTestId('project-delete-p1'));
-    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('project.delete', { id: 'p1' }));
-    expect(await screen.findByTestId('workspace-sessions-new')).toBeInTheDocument();
+    await openFolderFile(user, 'a.md');
+    await user.click(await screen.findByTestId('tree-node-open-as-workspace-apps'));
+    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.open', { path: '/repos/acme/apps' }));
+    expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('toast')).toHaveTextContent('Workspace aberto: apps');
   });
 
-  it('shows an error toast when deleting the selected project fails', async () => {
+  it('shows an error toast when "Abrir como workspace" fails', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-      if (method === 'project.delete') throw new Error('Project not found');
+      if (method === 'workspace.listDir') return appsTree(params);
+      if (method === 'workspace.resolvePath') return { absolutePath: '/repos/acme/apps' };
+      if (method === 'workspace.open') throw new Error('boom');
       return undefined;
     });
     renderScreen();
-    await openProjectFile(user, 'a.md');
-    await openHeaderMenu(user);
-    await user.click(await screen.findByTestId('project-delete-p1'));
-    expect(await screen.findByTestId('toast')).toHaveTextContent('Project not found');
-  });
-
-  it('shows an error toast when "Use as Project" fails', async () => {
-    const user = userEvent.setup();
-    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return projects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'workspace.resolvePath') return { absolutePath: '/repos/apps' };
-      if (method === 'project.findOrCreateByPath') throw new Error('boom');
-      return undefined;
-    });
-    renderScreen();
-    await user.click(await screen.findByTestId('tree-node-use-as-project-apps'));
+    await user.click(await screen.findByTestId('tree-node-open-as-workspace-apps'));
     expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
   });
 
-  it('opening a file inside a Project scopes the Control Panel to it, without changing the Explorer Panel\'s own root listing', async () => {
+  it('clicking the breadcrumb\'s "Início" button goes home (workspace.goHome), discarding open tabs', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }, { name: 'workspace-root-dir', kind: 'dir' }];
-      }
-      if (method === 'project.listDir' && (params as { projectId: string }).projectId === 'p1') {
-        return [{ name: 'project-scoped-file.md', kind: 'file' }];
-      }
-      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+      if (method === 'workspace.listDir') return appsTree(params);
+      if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       return undefined;
     });
     renderScreen();
-    expect(await screen.findByText('workspace-root-dir')).toBeInTheDocument();
-    await openProjectFile(user, 'project-scoped-file.md');
-    expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: '' });
-    // The Explorer Panel keeps showing the unscoped workspace root — only the
-    // Control Panel's scope (proxied here by the breadcrumb switching to show
-    // the Project) follows the opened file.
-    expect(await screen.findByText('workspace-root-dir')).toBeInTheDocument();
-    await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
+    await openFolderFile(user, 'a.md');
+    await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
+    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
+    expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
   });
 
-  it('clicking the breadcrumb\'s "Início" button switches all the way to the default workspace, not just out of the Project', async () => {
+  it('reaching Home via the external "Início" nav (not the breadcrumb button) clears the open tabs through the registered guard', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-      if (method === 'workspace.switchTo') return globalWorkspace;
+      if (method === 'workspace.listDir') return appsTree(params);
+      if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
       return undefined;
     });
     renderScreen();
-    await openProjectFile(user, 'a.md');
-    await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
-    await user.click(screen.getByTestId('workspace-breadcrumb-workspace-crumb'));
-    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
-    // A real workspace switch, unlike merely exiting the Project, discards open tabs.
-    expect(screen.queryByTestId('workbench-tab-file:p1:a.md')).not.toBeInTheDocument();
-  });
-
-  it('reaching Home via the external "Início" nav (not the breadcrumb button) also clears the Project scope, not just the open tabs', async () => {
-    const user = userEvent.setup();
-    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
-      if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-      return undefined;
-    });
-    renderScreen();
-    await openProjectFile(user, 'a.md');
-    // The header's own path line is what tracks Project scope (the "Início"
-    // button itself stays visible either way — it now tracks the whole
-    // non-default workspace, not the Project within it).
-    expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
+    await openFolderFile(user, 'a.md');
+    expect(await screen.findByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
 
     // `useAreaNavigation`'s "Início" branch (AppShell/CommandPalette) reaches
-    // this screen only through the registered guard, then switches workspace
-    // on its own — it never touches this screen's `selectedProjectId`
-    // directly, so the guard itself must be what clears the Project scope.
+    // this screen only through the registered guard, then goes home on its own.
     expect(confirmDiscardUnsavedTabs()).toBe(true);
-    await waitFor(() => expect(screen.getByText('/repos/acme')).toBeInTheDocument());
-    expect(screen.queryByText('/repos/acme/apps')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
   });
 
-  describe('instructions row on a project workspace tree', () => {
-    it('shows the Workspace Instruction row, empty, when no project is selected', async () => {
+  describe('instructions row on a workspace tree', () => {
+    it('shows the Workspace Instruction row, empty, and opens the editor on click', async () => {
       const user = userEvent.setup();
       renderScreen();
       await screen.findByTestId('workspace-instruction-row');
       await user.click(screen.getByTestId('workspace-instruction-row'));
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
-    });
-
-    it('keeps the Workspace Instruction row pinned even once a project file is opened — a Project\'s own instruction is reached via its nested row instead', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-        return undefined;
-      });
-      renderScreen();
-      await screen.findByTestId('workspace-instruction-row');
-      await openProjectFile(user, 'a.md');
-      // The Control Panel/breadcrumb scope did follow the opened file...
-      await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
-      // ...but the pinned row at the top of the tree is still the workspace's.
-      expect(screen.getByTestId('workspace-instruction-row')).toBeInTheDocument();
-      // "apps"'s own instruction is reachable via its nested row instead.
-      expect(await screen.findByTestId('tree-node-instructions-apps')).toBeInTheDocument();
-    });
-
-    it('opening the pinned Workspace Instruction row also drops any Project scope in view', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-        return undefined;
-      });
-      renderScreen();
-      await openProjectFile(user, 'a.md');
-      // The header's own path line follows the Project while its file tab is
-      // active — the "Início" button no longer works as a Project-scope
-      // proxy since it now shows for the whole non-default workspace.
-      expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
-      await user.click(screen.getByTestId('workspace-instruction-row'));
-      // The project file's own tab stays open alongside the new one, so
-      // assert on the workspace instruction's own tab rather than the
-      // (now duplicated) generic "editor-panel" testid.
-      expect(await screen.findByTestId('workbench-tab-entity-new:instruction:1')).toBeInTheDocument();
-      expect(screen.queryByText('/repos/acme/apps')).not.toBeInTheDocument();
-      expect(screen.getByText('/repos/acme')).toBeInTheDocument();
     });
 
     it('deleting a configured instruction asks for confirmation before calling instruction.delete', async () => {
@@ -600,7 +425,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'instruction.list') return [workspaceInstruction];
         if (method === 'instruction.delete') return { ok: true };
@@ -616,283 +440,114 @@ describe('WorkspaceScreen', () => {
     });
   });
 
-  describe('folder tree "already a Project" shortcut', () => {
-    it('does not show the old "enter project" icon shortcut — a Project\'s Skills/Agents/etc are reached by opening one of its files', async () => {
+  describe('folder tree', () => {
+    it('offers "Abrir como workspace" on folders and no Project shortcuts at all', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
+        if (method === 'workspace.listDir') return appsTree(params);
         return undefined;
       });
       renderScreen();
-      await screen.findByTestId('folder-tree');
+      expect(await screen.findByTestId('tree-node-open-as-workspace-apps')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-node-open-project-apps')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tree-node-use-as-project-apps')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tree-node-instructions-apps')).not.toBeInTheDocument();
     });
 
-    it('clicking the folder row expands it in place instead of selecting that Project, showing its own INSTRUCTIONS row nested inside — no "entering" required', async () => {
+    it('expands any folder and opens its files through the workspace\'s own IPC calls', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'src', kind: 'dir' }];
+        if (method === 'workspace.listDir') return appsTree(params);
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByText('apps'));
-      expect(await screen.findByText('src')).toBeInTheDocument();
-      expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: '' });
-      // The screen's own scope never changed (no project selected), so the
-      // top-of-tree row is still the workspace's, not the project's.
-      expect(screen.queryByTestId('project-instruction-row')).not.toBeInTheDocument();
-      // But "apps"'s own INSTRUCTIONS row is now reachable nested under its
-      // folder, pinned above "src" — this is the new capability.
-      expect(await screen.findByTestId('tree-node-instructions-apps')).toBeInTheDocument();
-      expect(screen.getByTestId('tree-node-instructions-apps')).toHaveTextContent('INSTRUCTIONS');
-    });
-
-    it('clicking a Project\'s own INSTRUCTIONS row while it\'s only browsed in place scopes the Control Panel to that Project too, same as opening one of its files', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'src', kind: 'dir' }];
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByText('apps'));
-      await user.click(await screen.findByTestId('tree-node-instructions-apps'));
-      // The Control Panel/breadcrumb now follows the Project, exactly like
-      // opening a file from it would — the pinned top-of-tree row stays the
-      // workspace's throughout.
-      await screen.findByTestId('workspace-breadcrumb-workspace-crumb');
-      expect(screen.getByTestId('workspace-instruction-row')).toBeInTheDocument();
-      expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
-    });
-
-    it('switching back to an already-open Project INSTRUCTIONS tab via the tab strip re-scopes the Control Panel to that Project, not just opening it fresh', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'src', kind: 'dir' }];
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByText('apps'));
-      await user.click(await screen.findByTestId('tree-node-instructions-apps'));
-      // The header's own path line is what actually tracks Project scope now
-      // — the "Início" button shows for the whole non-default workspace.
-      expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
-
-      // Leaving for the pinned Workspace INSTRUCTIONS tab drops the Project
-      // scope, same as the test above.
-      await user.click(screen.getByTestId('workspace-instruction-row'));
-      expect(await screen.findByText('/repos/acme')).toBeInTheDocument();
-      expect(screen.queryByText('/repos/acme/apps')).not.toBeInTheDocument();
-
-      // Reselecting the Project's own instruction tab from the tab strip —
-      // not reopening the row — must re-derive the same Project scope.
-      await user.click(screen.getByTestId('workbench-tab-entity-new:instruction:1'));
-      expect(await screen.findByText('/repos/acme/apps')).toBeInTheDocument();
-    });
-  });
-
-  describe('folder tree — workspace root registered as its own Project', () => {
-    it('opens a top-level file through the root Project\'s own scoped IPC calls', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'a.md', kind: 'file' }];
-        }
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByText('a.md'));
+      await openFolderFile(user, 'a.md');
       await screen.findByText('hello');
-      expect(ipc.callIpc).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.md' });
-      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.readFile', expect.anything());
-    });
-
-    it('makes a plain top-level folder expandable and browsable through the root Project', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'src', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'index.ts', kind: 'file' }];
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByText('src'));
-      expect(await screen.findByText('index.ts')).toBeInTheDocument();
-      expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: 'src' });
-    });
-
-    it('still offers "Usar como Project" on a plain subfolder even while the root is already a Project', async () => {
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'src', kind: 'dir' }];
-        }
-        return undefined;
-      });
-      renderScreen();
-      expect(await screen.findByTestId('tree-node-use-as-project-src')).toBeInTheDocument();
+      expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'apps' });
+      expect(ipc.callIpc).toHaveBeenCalledWith('workspace.readFile', { path: 'apps/a.md' });
     });
   });
 
   describe('Launch Configurations', () => {
-    it("shows the root Project's own Launch Configurations group pinned once; running a config opens a Workbench tab", async () => {
+    it("shows the workspace's Launch Configurations group pinned once; running a config opens a Workbench tab", async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'launchConfig.list') {
-          return [{ projectId: 'p1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] }];
+          return { workspaceId: 'w1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] };
         }
         if (method === 'launchConfig.run') {
-          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'running', exitCode: null };
+          return { processId: 'proc-1', workspaceId: 'w1', configName: 'Run server', status: 'running', exitCode: null };
         }
         if (method === 'launchConfig.status') {
-          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'running', exitCode: null, outputBuffer: '' };
+          return { processId: 'proc-1', workspaceId: 'w1', configName: 'Run server', status: 'running', exitCode: null, outputBuffer: '' };
         }
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-launch-configs-acme'));
-      await user.click(await screen.findByTestId('tree-launch-config-acme-Run server'));
+      await user.click(await screen.findByTestId('tree-group-launch-configs-Acme'));
+      await user.click(await screen.findByTestId('tree-launch-config-Acme-Run server'));
       expect(await screen.findByTestId('workbench-tab-launch-process:proc-1')).toBeInTheDocument();
-      expect(ipc.callIpc).toHaveBeenCalledWith('launchConfig.run', { projectId: 'p1', configName: 'Run server' });
+      expect(ipc.callIpc).toHaveBeenCalledWith('launchConfig.run', { configName: 'Run server' });
     });
 
-    it("does not duplicate the root Project's Launch Configurations group across several expanded top-level folders", async () => {
+    it("does not duplicate the Launch Configurations group across several expanded top-level folders", async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') {
           const path = (params as { path?: string } | undefined)?.path;
           return path ? [] : [{ name: 'apps', kind: 'dir' }, { name: 'libs', kind: 'dir' }];
         }
         if (method === 'launchConfig.list') {
-          return [{ projectId: 'p1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] }];
+          return { workspaceId: 'w1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] };
         }
         return undefined;
       });
       renderScreen();
       await user.click(await screen.findByText('apps'));
       await user.click(await screen.findByText('libs'));
-      expect(screen.getAllByTestId('tree-group-launch-configs-acme')).toHaveLength(1);
+      expect(screen.getAllByTestId('tree-group-launch-configs-Acme')).toHaveLength(1);
     });
 
     it('closing a launch-process tab removes it from the Workbench', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'launchConfig.list') {
-          return [{ projectId: 'p1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] }];
+          return { workspaceId: 'w1', configs: [{ name: 'Run server', type: 'node', request: 'launch', program: 'server.js', args: [], supported: true }] };
         }
         if (method === 'launchConfig.run') {
-          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'running', exitCode: null };
+          return { processId: 'proc-1', workspaceId: 'w1', configName: 'Run server', status: 'running', exitCode: null };
         }
         if (method === 'launchConfig.status') {
-          return { processId: 'proc-1', projectId: 'p1', configName: 'Run server', status: 'exited', exitCode: 0, outputBuffer: '' };
+          return { processId: 'proc-1', workspaceId: 'w1', configName: 'Run server', status: 'exited', exitCode: 0, outputBuffer: '' };
         }
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-launch-configs-acme'));
-      await user.click(await screen.findByTestId('tree-launch-config-acme-Run server'));
+      await user.click(await screen.findByTestId('tree-group-launch-configs-Acme'));
+      await user.click(await screen.findByTestId('tree-launch-config-Acme-Run server'));
       expect(await screen.findByTestId('workbench-tab-launch-process:proc-1')).toBeInTheDocument();
       await user.click(screen.getByTestId('workbench-tab-close-launch-process:proc-1'));
       expect(screen.queryByTestId('workbench-tab-launch-process:proc-1')).not.toBeInTheDocument();
     });
   });
 
-  describe('Control Panel scope chip (project vs multi-project view)', () => {
-    it('shows no scope chip while the workspace has a single registered Project ("project" view)', async () => {
-      renderScreen();
-      await screen.findByTestId('workspace-customizations');
-      expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
-    });
-
-    it('shows no scope chip while the workspace has zero registered Projects ("project" view too)', async () => {
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return [];
-        if (method === 'workspace.listDir') return [];
-        if (method === 'session.list') return [];
-        return undefined;
-      });
-      renderScreen();
-      await screen.findByTestId('workspace-customizations');
-      expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
-    });
-
-    it('shows a neutral "Workspace" badge in multi-project view before any Project-scoped tab is active', async () => {
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return rootAndAppsProjects;
-        if (method === 'workspace.listDir') return [];
-        if (method === 'session.list') return [];
-        return undefined;
-      });
-      renderScreen();
-      expect(await screen.findByTestId('control-panel-scope-chip')).toHaveTextContent('Workspace');
-    });
-
-    it('shows "Projeto: <name>" once a Project-scoped tab is active, in multi-project view', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return rootAndAppsProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
-        return undefined;
-      });
-      renderScreen();
-      await openProjectFile(user, 'a.md');
-      expect(await screen.findByTestId('control-panel-scope-chip')).toHaveTextContent('Projeto: apps');
-    });
+  it('never shows a Control Panel scope chip — a workspace is a single folder', async () => {
+    renderScreen();
+    await screen.findByTestId('workspace-customizations');
+    expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
   });
 
-  describe('Global workspace (isDefault)', () => {
+  describe('Início (no workspace open)', () => {
     it('shows the Personal Instruction row pinned inside the Explorer Panel\'s workspace list, not a file browser tree', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
         return undefined;
       });
       renderScreen();
@@ -901,10 +556,9 @@ describe('WorkspaceScreen', () => {
       expect(screen.queryByTestId('folder-tree')).not.toBeInTheDocument();
     });
 
-    it('never shows the breadcrumb\'s "Início" button — there is nowhere further Home to go from the default workspace itself', async () => {
+    it('never shows the breadcrumb\'s "Início" button — there is nowhere further Home to go', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
         return undefined;
       });
       renderScreen();
@@ -912,30 +566,27 @@ describe('WorkspaceScreen', () => {
       expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument();
     });
 
-    it('lists other project workspaces in the management card, leaving out the active Default one', async () => {
-      const acmeWorkspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
+    it('lists every registered workspace in the management card', async () => {
+      const acmeWorkspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace, acmeWorkspace];
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [acmeWorkspace];
         return undefined;
       });
       renderScreen();
       expect(await screen.findByTestId('workspace-list-row-w1')).toHaveTextContent('Acme');
-      expect(screen.queryByTestId('workspace-list-row-default')).not.toBeInTheDocument();
     });
 
     it('switching workspaces from the management card refreshes the screen in place, with no extra navigation needed', async () => {
       const user = userEvent.setup();
-      const acmeWorkspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
-      let active: typeof globalWorkspace | typeof acmeWorkspace = globalWorkspace;
+      const acmeWorkspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' };
+      let active: typeof acmeWorkspace | null = null;
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return active;
-        if (method === 'workspace.list') return [globalWorkspace, acmeWorkspace];
-        if (method === 'project.list') return active.id === 'default' ? projects : [];
+        if (method === 'workspace.list') return [acmeWorkspace];
         if (method === 'workspace.listDir') return [];
         if (method === 'workspace.switchTo') {
-          active = (params as { id: string }).id === 'w1' ? acmeWorkspace : globalWorkspace;
+          active = (params as { id: string }).id === 'w1' ? acmeWorkspace : null;
           return active;
         }
         return undefined;
@@ -943,9 +594,8 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       await screen.findByTestId('workspace-list-row-w1');
       await user.click(screen.getByTestId('workspace-list-row-w1'));
-      // The screen re-renders in place for the newly active (non-default)
-      // workspace — its name shows up and the Global-only management card is
-      // gone — with no re-navigation to "Visão geral" required.
+      // The screen re-renders in place for the newly opened workspace — its
+      // name shows up and the Início-only management card is gone — with no re-navigation to "Visão geral" required.
       await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0));
       expect(screen.queryByTestId('workspace-management-list')).not.toBeInTheDocument();
     });
@@ -953,9 +603,8 @@ describe('WorkspaceScreen', () => {
     it('shows the Personal Instruction row, empty, and opens the editor on click', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace];
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
         if (method === 'instruction.list') return [];
         return undefined;
       });
@@ -964,12 +613,11 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
     });
 
-    it('shows the workspace list in its own toggleable Files panel, matching the non-default workspace treatment', async () => {
+    it('shows the workspace list in its own toggleable Files panel, matching the open-workspace treatment', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace];
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
         return undefined;
       });
       renderScreen();
@@ -993,9 +641,8 @@ describe('WorkspaceScreen', () => {
         source: { kind: 'workspace' as const }, content: '## Section A\n',
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace];
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
         if (method === 'instruction.list') return [personal];
         if (method === 'instruction.get') return personal;
         return undefined;
@@ -1009,12 +656,11 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Skills/Agents/Hooks/MCP/Plugins tree nodes', () => {
-    it('shows every entity-kind tree node on the Default workspace overview, with no global toggle', async () => {
+    it('shows every entity-kind tree node at Início, with no global toggle', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace];
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
         if (method === 'session.list') return [];
         return undefined;
       });
@@ -1035,11 +681,10 @@ describe('WorkspaceScreen', () => {
       expect(screen.queryByTestId('workspace-toggle-global')).not.toBeInTheDocument();
     });
 
-    it('inside a non-default workspace, offers a toggle to reveal global entities, hidden by default', async () => {
+    it('inside a workspace, offers a toggle to reveal global entities, hidden by default', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'skill.list') {
           return [
@@ -1070,7 +715,6 @@ describe('WorkspaceScreen', () => {
       let spawnCount = 0;
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'session.spawn') {
@@ -1100,7 +744,6 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'session.spawn') {
@@ -1120,7 +763,6 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
           return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
@@ -1142,7 +784,6 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'session.spawn') {
@@ -1162,7 +803,6 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
           return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
@@ -1180,7 +820,6 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
           return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'exited' }];
@@ -1201,7 +840,6 @@ describe('WorkspaceScreen', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
           return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
@@ -1251,7 +889,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'instruction.list') return [workspaceInstruction];
         return undefined;
@@ -1265,22 +902,20 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Tab breadcrumb', () => {
-    it('shows the Project name and file path for a file tab, and updates when switching to a different tab', async () => {
+    it('shows the file path for a file tab, and updates when switching to a different tab', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
         if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+          const path = (params as { path?: string } | undefined)?.path ?? '';
+          return path === '' ? [{ name: 'apps', kind: 'dir' }] : path === 'apps' ? [{ name: 'a.md', kind: 'file' }] : [];
         }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
         return undefined;
       });
       renderScreen();
-      await openProjectFile(user, 'a.md');
-      expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('apps › a.md');
+      await openFolderFile(user, 'a.md');
+      expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('apps/a.md');
 
       // The pinned Workspace INSTRUCTIONS row's own tab has no relation to
       // "apps" — the breadcrumb must follow the newly active tab, not stick
@@ -1289,29 +924,10 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('Acme › INSTRUCTIONS');
     });
 
-    it("shows the Project name for a Project's own INSTRUCTIONS tab — disambiguating it from a same-named file/skill tab, since an instruction's own label is just its scope's basename", async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
-        if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
-        }
-        if (method === 'project.listDir') return [];
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByText('apps'));
-      await user.click(await screen.findByTestId('tree-node-instructions-apps'));
-      expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('apps › INSTRUCTIONS');
-    });
-
     it('shows no breadcrumb for a session tab', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'session.spawn') {
@@ -1331,27 +947,25 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
         if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+          const path = (params as { path?: string } | undefined)?.path ?? '';
+          return path === '' ? [{ name: 'apps', kind: 'dir' }] : path === 'apps' ? [{ name: 'a.md', kind: 'file' }] : [];
         }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: '# Hello' };
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: '# Hello' };
         return undefined;
       });
       renderScreen();
-      await openProjectFile(user, 'a.md');
-      await screen.findByTestId('workbench-tab-file:p1:a.md');
+      await openFolderFile(user, 'a.md');
+      await screen.findByTestId('workbench-tab-file:apps/a.md');
 
       const folderTree = await screen.findByTestId('folder-tree');
       fireEvent.contextMenu(await within(folderTree).findByText('a.md'));
       await user.click(await screen.findByTestId('row-context-menu-preview'));
 
       // Both tabs coexist — opening the preview never disturbed the editing tab.
-      expect(await screen.findByTestId('workbench-tab-preview:file:p1:a.md')).toBeInTheDocument();
-      expect(screen.getByTestId('workbench-tab-file:p1:a.md')).toBeInTheDocument();
-      expect(screen.queryByTestId('workbench-tab-dirty-preview:file:p1:a.md')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('workbench-tab-preview:file:apps/a.md')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
+      expect(screen.queryByTestId('workbench-tab-dirty-preview:file:apps/a.md')).not.toBeInTheDocument();
       expect(screen.getByTestId('markdown-preview')).toBeInTheDocument();
     });
 
@@ -1364,7 +978,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'skill.list') return [acmeSkill];
         return undefined;
@@ -1395,7 +1008,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'instruction.list') return [workspaceInstruction];
         return undefined;
@@ -1420,7 +1032,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'skill.list') return [acmeSkill];
         return undefined;
@@ -1445,7 +1056,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'instruction.list') return [workspaceInstruction];
         return undefined;
@@ -1465,9 +1075,8 @@ describe('WorkspaceScreen', () => {
         source: { kind: 'workspace' as const }, content: '# Personal',
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace];
-        if (method === 'project.list') return projects;
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
         if (method === 'instruction.list') return [personal];
         if (method === 'instruction.get') return personal;
         return undefined;
@@ -1496,31 +1105,29 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
         if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+          const path = (params as { path?: string } | undefined)?.path ?? '';
+          return path === '' ? [{ name: 'apps', kind: 'dir' }] : path === 'apps' ? [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }] : [];
         }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }];
-        if (method === 'project.readFile') {
+        if (method === 'workspace.readFile') {
           const path = (params as { path: string }).path;
           return { previewable: true, kind: 'text', truncated: false, content: `content of ${path}` };
         }
         return undefined;
       });
       renderScreen();
-      await openProjectFile(user, 'a.md');
-      expect(await screen.findByText('content of a.md')).toBeVisible();
+      await openFolderFile(user, 'a.md');
+      expect(await screen.findByText('content of apps/a.md')).toBeVisible();
 
       await user.click(await screen.findByText('b.md'));
-      expect(await screen.findByText('content of b.md')).toBeVisible();
-      expect(screen.getByText('content of a.md')).not.toBeVisible();
+      expect(await screen.findByText('content of apps/b.md')).toBeVisible();
+      expect(screen.getByText('content of apps/a.md')).not.toBeVisible();
 
       const tabButtons = screen.getAllByTestId(/^workbench-tab-(?!close-)/);
       expect(tabButtons).toHaveLength(2);
       await user.click(tabButtons[0]!);
-      expect(screen.getByText('content of a.md')).toBeVisible();
-      expect(screen.getByText('content of b.md')).not.toBeVisible();
+      expect(screen.getByText('content of apps/a.md')).toBeVisible();
+      expect(screen.getByText('content of apps/b.md')).not.toBeVisible();
     });
 
     it('saving a newly created skill updates its tab in place instead of opening a duplicate', async () => {
@@ -1532,7 +1139,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'skill.save') return { skill: savedSkill, syncReport: [] };
         return undefined;
@@ -1549,17 +1155,15 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
         if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+          const path = (params as { path?: string } | undefined)?.path ?? '';
+          return path === '' ? [{ name: 'apps', kind: 'dir' }] : path === 'apps' ? [{ name: 'a.md', kind: 'file' }] : [];
         }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
         return undefined;
       });
       renderScreen();
-      await openProjectFile(user, 'a.md');
+      await openFolderFile(user, 'a.md');
       await screen.findByText('hello');
       await user.click(screen.getByLabelText(/^Fechar /));
       expect(screen.queryByText('hello')).not.toBeInTheDocument();
@@ -1579,7 +1183,7 @@ describe('WorkspaceScreen', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
       await user.click(screen.getByLabelText(/^Fechar /));
       expect(confirmSpy).toHaveBeenCalled();
-      expect(screen.getByTestId('workbench-tab-file:p1:a.md')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
     });
 
     it('closes a tab with unsaved edits once the user confirms discarding them', async () => {
@@ -1587,14 +1191,14 @@ describe('WorkspaceScreen', () => {
       await openDirtyFileTab(user);
       vi.spyOn(window, 'confirm').mockReturnValue(true);
       await user.click(screen.getByLabelText(/^Fechar /));
-      expect(screen.queryByTestId('workbench-tab-file:p1:a.md')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
     });
 
     it('clears the dirty dot once the edit is saved', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
       await user.keyboard('{Control>}s{/Control}');
-      await waitFor(() => expect(screen.queryByTestId('workbench-tab-dirty-file:p1:a.md')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('workbench-tab-dirty-file:apps/a.md')).not.toBeInTheDocument());
     });
 
     it('clicking the breadcrumb\'s "Início" button with unsaved edits asks for confirmation first — it is a real workspace switch, not a view toggle', async () => {
@@ -1604,24 +1208,23 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
       expect(confirmSpy).toHaveBeenCalled();
       // Declined — nothing changed.
-      expect(screen.getByTestId('workbench-tab-file:p1:a.md')).toBeInTheDocument();
-      expect(screen.getByTestId('workbench-tab-dirty-file:p1:a.md')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-dirty-file:apps/a.md')).toBeInTheDocument();
       expect(screen.getByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
     });
 
-    it('confirming the discard on the breadcrumb\'s "Início" button switches to the default workspace', async () => {
+    it('confirming the discard on the breadcrumb\'s "Início" button goes home', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
       vi.spyOn(window, 'confirm').mockReturnValue(true);
       await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
-      expect(screen.queryByTestId('workbench-tab-file:p1:a.md')).not.toBeInTheDocument();
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
+      expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
     });
 
     const openDirtyEntityTab = async (user: ReturnType<typeof userEvent.setup>) => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         return undefined;
       });
@@ -1656,7 +1259,6 @@ describe('WorkspaceScreen', () => {
       };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'skill.save') return { skill: savedSkill, syncReport: [] };
         return undefined;
@@ -1680,31 +1282,29 @@ describe('WorkspaceScreen', () => {
     const renderWithTwoFiles = async (user: ReturnType<typeof userEvent.setup>) => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return registeredProjects;
         if (method === 'workspace.listDir') {
-          const path = (params as { path?: string } | undefined)?.path;
-          return path ? [] : [{ name: 'apps', kind: 'dir' }];
+          const path = (params as { path?: string } | undefined)?.path ?? '';
+          return path === '' ? [{ name: 'apps', kind: 'dir' }] : path === 'apps' ? [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }] : [];
         }
-        if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }, { name: 'b.md', kind: 'file' }];
-        if (method === 'project.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
         return undefined;
       });
       renderScreen();
-      await openProjectFile(user, 'a.md');
-      await screen.findByTestId('workbench-tab-file:p1:a.md');
+      await openFolderFile(user, 'a.md');
+      await screen.findByTestId('workbench-tab-file:apps/a.md');
       await user.click(await screen.findByText('b.md'));
-      await screen.findByTestId('workbench-tab-file:p1:b.md');
+      await screen.findByTestId('workbench-tab-file:apps/b.md');
     };
 
     it('going back re-selects the previously active Workbench tab', async () => {
       const user = userEvent.setup();
       await renderWithTwoFiles(user);
-      expect(screen.getByTestId('workbench-tab-file:p1:b.md')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('workbench-tab-file:apps/b.md')).toHaveAttribute('aria-pressed', 'true');
       await act(async () => {
         await navigateWorkspaceHistory('back');
       });
-      expect(screen.getByTestId('workbench-tab-file:p1:a.md')).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('workbench-tab-file:p1:b.md')).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('workbench-tab-file:apps/b.md')).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('going forward after going back re-selects the later tab again', async () => {
@@ -1714,14 +1314,14 @@ describe('WorkspaceScreen', () => {
         await navigateWorkspaceHistory('back');
         await navigateWorkspaceHistory('forward');
       });
-      expect(screen.getByTestId('workbench-tab-file:p1:b.md')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('workbench-tab-file:apps/b.md')).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('skips a history step pointing at a tab that has since been closed', async () => {
       const user = userEvent.setup();
       await renderWithTwoFiles(user);
-      await user.click(screen.getByTestId('workbench-tab-close-file:p1:a.md'));
-      expect(screen.queryByTestId('workbench-tab-file:p1:a.md')).not.toBeInTheDocument();
+      await user.click(screen.getByTestId('workbench-tab-close-file:apps/a.md'));
+      expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
       // History is [root, a.md (which also derives project scope), b.md];
       // a.md's step is now stale (its tab closed), so going back from b.md
       // skips it and lands on the root step instead — b.md stays open, just
@@ -1729,8 +1329,8 @@ describe('WorkspaceScreen', () => {
       await act(async () => {
         await navigateWorkspaceHistory('back');
       });
-      expect(screen.getByTestId('workbench-tab-file:p1:b.md')).toBeInTheDocument();
-      expect(screen.getByTestId('workbench-tab-file:p1:b.md')).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('workbench-tab-file:apps/b.md')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-file:apps/b.md')).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('a same-scope history step never prompts to discard unsaved edits (the tab stays open, just unfocused)', async () => {
@@ -1742,13 +1342,13 @@ describe('WorkspaceScreen', () => {
       const editor = editors[1]?.querySelector('.cm-content') as HTMLElement;
       editor.focus();
       await user.type(editor, 'x', { skipClick: true });
-      await waitFor(() => expect(screen.getByTestId('workbench-tab-dirty-file:p1:b.md')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('workbench-tab-dirty-file:apps/b.md')).toBeInTheDocument());
       const confirmSpy = vi.spyOn(window, 'confirm');
       await act(async () => {
         await navigateWorkspaceHistory('back');
       });
       expect(confirmSpy).not.toHaveBeenCalled();
-      expect(screen.getByTestId('workbench-tab-file:p1:b.md')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-file:apps/b.md')).toBeInTheDocument();
     });
   });
 
@@ -1808,7 +1408,6 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'project.list') return projects;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
           return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
@@ -1839,13 +1438,12 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('removing the active workspace from its Visão geral header', () => {
-    const acme = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
+    const acme = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' };
 
-    it('shows a remove action for the active workspace when it is not Default', async () => {
+    it('shows a remove action for the open workspace', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return acme;
-        if (method === 'project.list') return [];
         if (method === 'workspace.listDir') return [];
         return undefined;
       });
@@ -1854,12 +1452,11 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('workspace-context-remove')).toBeInTheDocument();
     });
 
-    it('does not show a remove action for the Default workspace', async () => {
+    it('does not show a remove action at Início', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return globalWorkspace;
-        if (method === 'workspace.list') return [globalWorkspace];
-        if (method === 'project.list') return [];
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
         return undefined;
       });
       renderScreen();
@@ -1868,28 +1465,25 @@ describe('WorkspaceScreen', () => {
       expect(screen.queryByTestId('workspace-context-remove')).not.toBeInTheDocument();
     });
 
-    it('confirming removal switches back to Default, then deletes the workspace', async () => {
+    it('confirming removal deletes the open workspace (which goes home server-side)', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return acme;
-        if (method === 'project.list') return [];
         if (method === 'workspace.listDir') return [];
-        if (method === 'workspace.switchTo') return globalWorkspace;
         return undefined;
       });
       renderScreen();
       await openHeaderMenu(user);
       await user.click(await screen.findByTestId('workspace-context-remove'));
       await user.click(await screen.findByTestId('workspace-remove-confirm-btn'));
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
       await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.delete', { id: 'w1' }));
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
     });
 
-    it('canceling the confirmation calls neither switchTo nor delete', async () => {
+    it('canceling the confirmation does not delete', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return acme;
-        if (method === 'project.list') return [];
         if (method === 'workspace.listDir') return [];
         return undefined;
       });
@@ -1906,9 +1500,7 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return acme;
-        if (method === 'project.list') return [];
         if (method === 'workspace.listDir') return [];
-        if (method === 'workspace.switchTo') return globalWorkspace;
         if (method === 'workspace.delete') throw new Error('boom');
         return undefined;
       });
@@ -1939,24 +1531,22 @@ describe('Explorer Panel — re-reading the disk', () => {
     const user = userEvent.setup();
     (ipc.callIpc as Mock).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'project.list') return registeredProjects;
       if (method === 'workspace.listDir') {
-        const path = (params as { path?: string } | undefined)?.path;
-        return path ? [] : [{ name: 'apps', kind: 'dir' }];
+        const path = (params as { path?: string } | undefined)?.path ?? '';
+        return path === '' ? [{ name: 'apps', kind: 'dir' }] : path === 'apps' ? [{ name: 'a.md', kind: 'file' }] : [];
       }
-      if (method === 'project.listDir') return [{ name: 'a.md', kind: 'file' }];
-      if (method === 'project.readFile')
+      if (method === 'workspace.readFile')
         return { previewable: true, kind: 'text', truncated: false, content: 'hello' };
       if (method === 'session.list') return [];
       return undefined;
     });
     renderScreen();
-    await openProjectFile(user, 'a.md');
+    await openFolderFile(user, 'a.md');
     await screen.findByText('hello');
-    const readsBefore = callsTo('project.readFile');
+    const readsBefore = callsTo('workspace.readFile');
 
     await user.click(screen.getByTestId('workspace-refresh-files'));
 
-    await waitFor(() => expect(callsTo('project.readFile')).toBeGreaterThan(readsBefore));
+    await waitFor(() => expect(callsTo('workspace.readFile')).toBeGreaterThan(readsBefore));
   });
 });

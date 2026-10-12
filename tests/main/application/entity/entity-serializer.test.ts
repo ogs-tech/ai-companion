@@ -28,17 +28,17 @@ describe('renderEntityFile — skill', () => {
 });
 
 describe('parseEntityFile — skill round-trip', () => {
-  it('round-trips scopeId through frontmatter for a project-scoped skill', () => {
+  it('round-trips scopeId through frontmatter for a workspace-scoped skill', () => {
     const skill: Skill = {
-      urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'project skill',
-      scopes: ['project'], scopeId: 'proj-1', metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body',
+      urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'workspace skill',
+      scopes: ['workspace'], scopeId: 'ws-1', metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body',
     };
     const raw = renderEntityFile(skill);
-    expect(raw).toContain('scopeId: proj-1');
+    expect(raw).toContain('scopeId: ws-1');
 
     const parsed = parseEntityFile({ kind: 'skill', name: 'acme', raw, source: WORKSPACE_SOURCE }) as Skill;
-    expect(parsed.scopes).toEqual(['project']);
-    expect(parsed.scopeId).toBe('proj-1');
+    expect(parsed.scopes).toEqual(['workspace']);
+    expect(parsed.scopeId).toBe('ws-1');
     // scopeId must not also leak into ext (it's a known key, not passthrough).
     expect(parsed.ext).toBeUndefined();
   });
@@ -138,21 +138,6 @@ describe('instruction — frontmatter-free', () => {
     expect(ins.metadata.version).toBe('1.2.3');
   });
 
-  it('emits a project instruction with scopeId when sidecar.scopeId is present', () => {
-    const raw = '# Body\n';
-    const ins = parseEntityFile({
-      kind: 'instruction', name: 'acme', raw, source: WORKSPACE_SOURCE,
-      instructionSidecar: {
-        description: 'Acme rules', version: '0.1.0', createdAt: '', updatedAt: '',
-        scope: 'project', scopeId: 'proj-1',
-      },
-    }) as Instruction;
-    expect(ins.name).toBe('acme');
-    expect(ins.scopes).toEqual(['project']);
-    expect(ins.scopeId).toBe('proj-1');
-    expect(ins.legacyRepoPath).toBeUndefined();
-  });
-
   it('emits a workspace-scoped instruction when sidecar.scope is "workspace"', () => {
     const raw = '# Body\n';
     const ins = parseEntityFile({
@@ -166,21 +151,7 @@ describe('instruction — frontmatter-free', () => {
     expect(ins.scopeId).toBe('ws-1');
   });
 
-  it('flags a legacy repoPath sidecar as scopes:["project"] with legacyRepoPath, no scopeId', () => {
-    const raw = '# Body\n';
-    const ins = parseEntityFile({
-      kind: 'instruction', name: 'acme', raw, source: WORKSPACE_SOURCE,
-      instructionSidecar: {
-        description: 'Acme rules', version: '0.1.0', createdAt: '', updatedAt: '',
-        repoPath: '/Users/me/projects/acme',
-      },
-    }) as Instruction;
-    expect(ins.scopes).toEqual(['project']);
-    expect(ins.scopeId).toBeUndefined();
-    expect(ins.legacyRepoPath).toBe('/Users/me/projects/acme');
-  });
-
-  it('throws when a non-personal instruction has neither scopeId nor legacy repoPath', () => {
+  it('throws when a non-personal instruction has no scopeId (pre-migration repoPath-only data included)', () => {
     expect(() =>
       parseEntityFile({ kind: 'instruction', name: 'acme', raw: 'x', source: WORKSPACE_SOURCE }),
     ).toThrow(/scopeId/);

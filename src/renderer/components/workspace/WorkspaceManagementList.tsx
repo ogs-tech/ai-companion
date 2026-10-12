@@ -19,19 +19,17 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * Other project workspaces you can jump into or remove. This only ever
- * renders from the Global overview, so the active workspace is always
- * Default itself — already named by the screen around this list — and is
- * left out here rather than repeated as an unswitchable, undeletable row.
+ * The workspaces you can jump into or remove. This only ever renders at
+ * Início, where no workspace is open, so every registered one is listed.
  * Rows are styled identically to a FolderTree folder row (same icon size,
  * same trailing action-icon treatment) so it reads as one tree, not a card.
  */
 interface WorkspaceManagementListProps {
   /** Checked before switching into another workspace — returns false to abort (e.g. the caller has unsaved Workbench tabs and the user declined to discard them). Defaults to always-allow. */
   beforeSwitch?: () => boolean;
-  /** Pinned row rendered above the workspace list (and its empty state) — the Global workspace's own Personal Instruction row, matching how `FolderTree` pins the current scope's `InstructionTreeRow`. */
+  /** Pinned row rendered above the workspace list (and its empty state) — Início's own Personal Instruction row, matching how `FolderTree` pins the current scope's `InstructionTreeRow`. */
   instructionRow?: React.ReactNode;
-  /** Pinned rows rendered below `instructionRow`, above the workspace list — Starter Pack/Marketplaces/Diagnóstico, global app destinations that only ever show here (the Global workspace), never inside a project's own tree. */
+  /** Pinned rows rendered below `instructionRow`, above the workspace list — Starter Pack/Marketplaces/Diagnóstico, global app destinations that only ever show here (Início), never inside a workspace's own tree. */
   appAreaRows?: React.ReactNode;
 }
 
@@ -46,7 +44,7 @@ export function WorkspaceManagementList({
   const createWorkspace = useCreateWorkspace();
   const deleteWorkspace = useDeleteWorkspace();
 
-  const otherWorkspaces = (workspaces ?? []).filter((w) => !w.isDefault);
+  const otherWorkspaces = workspaces ?? [];
   // Only commit to the empty-state layout once the list has actually
   // settled — while `workspaces` is still undefined (first paint), this
   // renders the same List+button shape the loaded/non-empty case does, so
@@ -109,8 +107,8 @@ export function WorkspaceManagementList({
         <Box sx={{ p: 1.5 }}>
           <EmptyState
             glyph={FolderPlus}
-            title="Nenhum outro workspace"
-            description="Um workspace agrupa as customizations e sessões de um projeto ou pasta específica. Crie um para começar."
+            title="Nenhum workspace ainda"
+            description="Um workspace é uma pasta: agrupa as customizations e sessões dela. Crie um para começar."
             cta={newWorkspaceButton}
             testId="workspace-management-empty"
           />

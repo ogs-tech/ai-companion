@@ -13,55 +13,59 @@ entities to, see [Adapter targets](adapter-targets.md); for the shape of the ent
 
 | Dir | What it is |
 |---|---|
-| `~/.ai-companion/` | The **home data dir**. Holds app-global state *and* doubles as the data dir of the default ("Global") workspace, whose `rootPath` is `~`. |
-| `<workspace.rootPath>/.ai-companion/` | A **workspace data dir**, one per non-default workspace. Created on `workspace.create` and re-bootstrapped (self-healed) every time that workspace is activated. |
+| `~/.ai-companion/` | The **Global data dir** ("Início"). Holds app-global state *and* every `personal` entity. Always loaded, whichever workspace is open. Global is not a workspace — the home dir can't be opened as one. |
+| `<workspace.rootPath>/.ai-companion/` | A **workspace data dir**, one per workspace (any folder the user opened). Holds that workspace's `workspace`-scoped entities. Created when the workspace is registered (`workspace.create`/`workspace.open`) and re-bootstrapped (self-healed) every time it is activated. |
 
 The dir name comes from `brand.workspaceDirName` (`src/shared/brand.ts`). On first launch,
 `ProductMigrationService` renames a legacy `~/.superset-ai-app/` (and `~/.cursor/plugins/superset-ai/`)
 to the current names.
 
-## Home data dir — app-global files
+## Global data dir — app-global files
 
-Only ever read from `~/.ai-companion/`, whichever workspace is active.
+Only ever read from `~/.ai-companion/`, whichever workspace is open.
 
 | Path | Owner | Contents |
 |---|---|---|
 | `settings.json` | `SettingsService` | `Settings` (`src/shared/settings.ts`): `adapters.<harness>.enabled`, `ui.theme`, `language`, optional `pricing` overrides, optional `openWith` memory. |
-| `workspaces.json` | `WorkspaceService` | Every `Workspace` (`id`, `name`, `rootPath`, `isDefault`, `createdAt`) plus `activeWorkspaceId`. Seeded with the default workspace on first read. |
+| `workspaces.json` | `WorkspaceService` | `{ schemaVersion: 2, workspaces, activeWorkspaceId }` — every `Workspace` (`id`, `name`, `rootPath` as a real path, `createdAt`); `activeWorkspaceId: null` means Início. Written empty on a fresh install, or by the boot migration from the project-era shape. |
 | `plugins/` | `PluginCacheFile` | Personal-scope plugins: imported clones and owned plugins, each with `_meta.json`. |
 | `marketplaces-cache/` | `MarketplaceService` | Personal-scope marketplace clones. |
 | `mcp-disabled.json` | `McpDisabledStash` | Inline MCP server definitions parked while disabled (restored on enable). |
+| `_backups/<timestamp>/…` | `SymlinkManager`, `FileMaterializer` | Copies of whatever a sync overwrote — always here, whichever workspace is open. Never pruned automatically. |
+| `_backups/migration-v2-<timestamp>/` | `WorkspaceModelMigration` | Pre-migration copies of the project-era files (absolute paths preserved beneath it) plus `log.json`. Written once, by the boot migration. |
 | `dev.lock` | dev launcher | Present only while `npm run dev` runs. |
 
-## Per-workspace files
+## Entity files (every data dir)
 
-Present in every data dir (the home one included, for the default workspace). Everything here is
-rebuilt against a different directory on `workspace.switchTo`.
+Laid out the same in Global's and in each workspace's data dir: `personal` entities live in Global's,
+`workspace` entities in the owning workspace's. Global's is always loaded; a workspace's only while it's
+open.
 
 | Path | Owner | Contents |
 |---|---|---|
 | `index.md` | `WorkspaceBootstrapService` | Static "this folder is managed by AI Companion" marker. |
 | `skills/<name>/SKILL.md` | `FsEntityRepository` | Skill — YAML frontmatter + Markdown body. The whole `<name>/` dir is what gets symlinked. |
 | `agents/<name>.md` | `FsEntityRepository` | Agent — YAML frontmatter + system prompt. |
-| `instructions/default.md` | `FsEntityRepository` | The personal instruction. Frontmatter-free: the file *is* the body. |
-| `instructions/project/<slug>/INSTRUCTION.md` | `FsEntityRepository` | A project- or workspace-scoped instruction body (frontmatter-free). |
-| `instructions/project/<slug>/meta.json` | `FsEntityRepository` | Its sidecar: description, version, timestamps, `scopes`, `scopeId`. |
-| `projects.json` | `ProjectService` | Every `Project` (`id`, `name`, `path`, `createdAt`) registered in this workspace. |
-| `_backups/<timestamp>/…` | `SymlinkManager`, `FileMaterializer` | Copies of whatever a sync overwrote. Never pruned automatically. |
-| `attachments/` | `SessionService` | Images pasted into a session terminal, staged so the CLI can read them by path. |
+| `instructions/default.md` | `FsEntityRepository` | The personal instruction (Global only). Frontmatter-free: the file *is* the body. |
+| `instructions/project/<slug>/INSTRUCTION.md` | `FsEntityRepository` | A workspace instruction body (frontmatter-free; workspace data dirs only — `project/` is a legacy dir name). |
+| `instructions/project/<slug>/meta.json` | `FsEntityRepository` | Its sidecar: description, version, timestamps, `scope: 'workspace'`, `scopeId`. |
+| `attachments/` | `SessionService` | Images pasted into a session terminal, staged so the CLI can read them by path — in the open workspace's data dir, or Global's at Início. |
 
-The data dir is watched recursively (`EntityWatchService`): editing an entity file by hand, or from a
-`claude` session, re-syncs its adapter targets without going through the app's editor.
+Global's data dir and the open workspace's are watched recursively (`EntityWatchService`): editing an
+entity file by hand, or from a `claude` session, re-syncs its adapter targets without going through the
+app's editor.
 
-## Inside a registered Project
+## Inside a workspace folder
+
+Besides its `.ai-companion/` data dir, the app touches a workspace's folder (`<rootPath>`) only here:
 
 | Path | Contents |
 |---|---|
-| `<project.path>/.ai-companion/index.md` | Symlink back to the owning workspace's `index.md`. Created on `project.create`, removed on `project.delete` and on factory reset. |
-| `<project.path>/.vscode/launch.json` | **Read only** — the source of Launch Configurations. |
-| `<project.path>/.git/` | Read and written only through the Git panel's explicit actions (`git.*`). |
+| `<rootPath>/.ai-companion/plugins/`, `<rootPath>/.ai-companion/marketplaces-cache/` | Claude Code `project`-tier plugins and marketplace clones, while that workspace is open. |
+| `<rootPath>/.vscode/launch.json` | **Read only** — the source of Launch Configurations. |
+| `<rootPath>/.git/` | Read and written only through the Git panel's explicit actions (`git.*`). |
 
-Adapter targets inside a project (`.claude/…`, `.cursor/…`, `AGENTS.md`) are listed in
+Adapter targets inside a workspace (`.claude/…`, `.cursor/…`, `AGENTS.md`) are listed in
 [Adapter targets](adapter-targets.md).
 
 ## Files the app edits outside its data dir
@@ -71,8 +75,8 @@ writes is surgical — only the keys listed are touched.
 
 | Path | Keys touched | By |
 |---|---|---|
-| `~/.claude/settings.json` | `hooks`, `enabledPlugins`, `extraKnownMarketplaces` | `HookService`, `PluginInstaller`, `MarketplaceService` (through `ClaudeSettingsFile`) |
-| `~/.claude/plugins/cache/local/<id>` | symlink to the plugin in `~/.ai-companion/plugins/` | `PluginInstaller` |
+| `~/.claude/settings.json` (`project` tier: the open workspace's `<rootPath>/.claude/settings.json`) | `hooks`, `enabledPlugins`, `extraKnownMarketplaces` | `HookService`, `PluginInstaller`, `MarketplaceService` (through `ClaudeSettingsFile`) |
+| `~/.claude/plugins/cache/local/<id>` (`project` tier: `<rootPath>/.claude/plugins/cache/local/<id>`) | symlink to the plugin in `~/.ai-companion/plugins/` (or the workspace's) | `PluginInstaller` |
 | `~/.claude.json` | `mcpServers`, `projects[<path>].mcpServers`, `projects[<path>].disabledMcpjsonServers` | `McpService` (atomic write, previous file kept as `~/.claude.json.bak`) |
 | `<repo>/.mcp.json` | project-shared MCP servers | `McpService` |
 
@@ -90,19 +94,16 @@ writes is surgical — only the keys listed are touched.
 |---|---|
 | `~/Library/Application Support/<app name>/credentials.enc` | The GitHub PAT, encrypted with Electron `safeStorage` (macOS Keychain-backed). Never returned over IPC. |
 
-## Known issues
+## Claude Code's `project` tier
 
-- **`project` scope for plugins, hooks and marketplaces follows the process's working directory, not
-  the active workspace.** `src/main/index.ts` resolves their `project` paths from `process.cwd()`
-  (`<cwd>/.ai-companion/plugins/`, `<cwd>/.claude/settings.json`, …), and those services are built once
-  at startup, not per workspace. In practice `project`-scope plugin/hook/marketplace data lands wherever
-  the app was launched from.
+Claude Code's `project` tier (plugins, hooks, marketplaces) resolves against the **open workspace's root**;
+at Início, with no workspace open, it isn't available and those calls fail `validation`.
 
 ## Factory reset
 
 **Settings → Zona de perigo → Restaurar para estado inicial** (`app.restore`) removes every adapter symlink
-and owned generated file, every Project's `index.md` symlink, then the **active workspace's** data dir (the whole `~/.ai-companion/` when the Global workspace is
-active — which is the case for a full reset), and finally
+and owned generated file, then Global's whole data dir `~/.ai-companion/` (each workspace's own
+`<rootPath>/.ai-companion/` stays in its folder), and finally
 resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to `{}` — **including
-entries you added from Claude Code itself**, not only the app's own — before quitting. Backups go with the
-data dir, so copy `_backups/` out first if you need them.
+entries you added from Claude Code itself**, not only the app's own — before quitting. Backups live in Global's
+data dir and go with it, so copy `~/.ai-companion/_backups/` out first if you need them.

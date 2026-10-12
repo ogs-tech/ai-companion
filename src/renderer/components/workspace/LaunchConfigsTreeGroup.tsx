@@ -6,51 +6,45 @@ import { Toast, type ToastMessage } from '../Toast.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { LaunchProcessStatusBadge } from '../LaunchProcessStatusBadge.js';
-import { useProjectLaunchConfigs } from '../../hooks/use-launch-configs.js';
+import { useLaunchConfigs } from '../../hooks/use-launch-configs.js';
 import { useRunLaunchConfig, useKillLaunchProcess, useLaunchProcesses } from '../../hooks/use-launch-process.js';
 import { useRevealPath } from '../../hooks/use-open-with.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import type { LaunchProcessSnapshot } from '../../../shared/launch-config.js';
-import type { Project } from '../../../shared/project.js';
+import type { Workspace } from '../../../shared/workspace.js';
 
 const LAUNCH_JSON_REL_PATH = '.vscode/launch.json';
 
 interface LaunchConfigsTreeGroupProps {
-  project: Project;
-  /** See `TreeGroup`'s own `depth` — omitted (0) for the workspace-root's pinned copy, `depth+1` when nested under a matched child Project's own folder. */
+  workspace: Workspace;
+  /** See `TreeGroup`'s own `depth`. */
   depth?: number;
   onOpenProcess: (process: LaunchProcessSnapshot) => void;
-  onEditLaunchJson: (project: Project) => void;
+  onEditLaunchJson: () => void;
 }
 
-/**
- * One Project's own "Launch Configurations" group — used both nested under
- * its matched folder in `FolderTree` (via `renderProjectLaunchConfigsRow`)
- * and, for the workspace-root Project, pinned once at the top via
- * `FolderTree`'s `pinnedRows` slot (see the design spec's §3.9 for why the
- * root case can't reuse the nested call site without duplicating).
- */
-export function LaunchConfigsTreeGroup({ project, depth = 0, onOpenProcess, onEditLaunchJson }: LaunchConfigsTreeGroupProps): React.ReactElement | null {
-  const entry = useProjectLaunchConfigs(project.id);
+/** The open workspace's "Launch Configurations" group, pinned at the top of its file tree. */
+export function LaunchConfigsTreeGroup({ workspace, depth = 0, onOpenProcess, onEditLaunchJson }: LaunchConfigsTreeGroupProps): React.ReactElement | null {
+  const { data: entry } = useLaunchConfigs();
   const processes = useLaunchProcesses();
   const runConfig = useRunLaunchConfig();
   const killProcess = useKillLaunchProcess();
   const revealPath = useRevealPath();
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const rowMenu = useRowContextMenu<Project>();
+  const rowMenu = useRowContextMenu<Workspace>();
 
   if (!entry || (entry.configs.length === 0 && entry.error === undefined)) return null;
 
   const rowMenuActions: RowContextMenuAction[] = rowMenu.state
     ? [
-        { key: 'edit-launch-json', label: 'Edit launch.json', glyph: NotebookPen, onSelect: () => onEditLaunchJson(project) },
+        { key: 'edit-launch-json', label: 'Edit launch.json', glyph: NotebookPen, onSelect: onEditLaunchJson },
         {
           key: 'reveal',
           label: 'Reveal in Finder',
           glyph: FolderSearch,
           onSelect: () => {
             revealPath
-              .mutateAsync({ relPath: LAUNCH_JSON_REL_PATH, kind: 'file', projectId: project.id })
+              .mutateAsync({ relPath: LAUNCH_JSON_REL_PATH, kind: 'file' })
               .catch((err: unknown) => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) }));
           },
         },
@@ -58,21 +52,21 @@ export function LaunchConfigsTreeGroup({ project, depth = 0, onOpenProcess, onEd
     : [];
 
   const latestProcessFor = (configName: string): LaunchProcessSnapshot | undefined => {
-    const matches = processes.filter((p) => p.projectId === project.id && p.configName === configName);
+    const matches = processes.filter((p) => p.workspaceId === workspace.id && p.configName === configName);
     return matches[matches.length - 1];
   };
 
   return (
     <>
       <TreeGroup
-        testId={`launch-configs-${project.name}`}
+        testId={`launch-configs-${workspace.name}`}
         glyph={Play}
         label="Launch Configurations"
         depth={depth}
         {...(entry.error === undefined ? { count: entry.configs.length } : {})}
       >
         {entry.error ? (
-          <Box sx={{ px: 1.5, py: 0.75, fontSize: '0.75rem', opacity: 0.75 }} data-testid={`launch-configs-error-${project.name}`}>
+          <Box sx={{ px: 1.5, py: 0.75, fontSize: '0.75rem', opacity: 0.75 }} data-testid={`launch-configs-error-${workspace.name}`}>
             {entry.error}
           </Box>
         ) : (
@@ -82,24 +76,24 @@ export function LaunchConfigsTreeGroup({ project, depth = 0, onOpenProcess, onEd
             const row = (
               <TreeGroupRow
                 key={config.name}
-                testId={`tree-launch-config-${project.name}-${config.name}`}
+                testId={`tree-launch-config-${workspace.name}-${config.name}`}
                 glyph={Play}
                 primary={config.name}
                 muted={!config.supported}
                 depth={depth}
-                onContextMenu={(e) => rowMenu.openMenu(e, project)}
+                onContextMenu={(e) => rowMenu.openMenu(e, workspace)}
                 {...(config.supported
                   ? {
                       onClick: () => {
                         if (running && process) {
                           onOpenProcess(process);
                         } else {
-                          runConfig.mutate({ projectId: project.id, configName: config.name }, { onSuccess: onOpenProcess });
+                          runConfig.mutate({ configName: config.name }, { onSuccess: onOpenProcess });
                         }
                       },
                     }
                   : { disabled: true })}
-                badge={<LaunchProcessStatusBadge status={process?.status} testId={`${project.name}-${config.name}`} />}
+                badge={<LaunchProcessStatusBadge status={process?.status} testId={`${workspace.name}-${config.name}`} />}
                 actions={
                   running && process ? (
                     <Tooltip title="Parar">
@@ -108,7 +102,7 @@ export function LaunchConfigsTreeGroup({ project, depth = 0, onOpenProcess, onEd
                         role="button"
                         tabIndex={0}
                         aria-label={`Parar ${config.name}`}
-                        data-testid={`tree-launch-config-stop-${project.name}-${config.name}`}
+                        data-testid={`tree-launch-config-stop-${workspace.name}-${config.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           killProcess.mutate(process.processId);

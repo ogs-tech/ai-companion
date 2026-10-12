@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Box, Button, Collapse, MenuItem, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Collapse, Typography } from '@mui/material';
 import { GitBranch } from 'lucide-react';
 import { Icon } from '../../ds/Icon.js';
 import { ChangeList, groupChanges } from './ChangeList.js';
@@ -15,19 +15,11 @@ import {
   useGitUnstage,
 } from '../../../hooks/use-git.js';
 import type { GitBranchHead, GitDiffSource, GitFileChange } from '../../../../shared/git.js';
-import type { Project } from '../../../../shared/project.js';
-
-const WORKSPACE_ROOT = '__workspace__';
 
 interface GitViewProps {
-  /** Target repo; `undefined` = the active workspace's root. */
-  projectId: string | undefined;
   /** Status polls only while the view is on screen. */
   visible: boolean;
-  /** More than one registered Project → a picker at the top, since status is per repo. */
-  projects: ReadonlyArray<Project>;
-  onSelectProject: (projectId: string | null) => void;
-  onOpenDiff: (args: { projectId?: string; path: string; source: GitDiffSource }) => void;
+  onOpenDiff: (args: { path: string; source: GitDiffSource }) => void;
 }
 
 interface ErrorReport {
@@ -50,20 +42,14 @@ function toReport(err: unknown): ErrorReport {
   };
 }
 
-/** The Explorer Panel's "Git" view: working-tree status, stage/unstage/discard, commit. */
-export function GitView({
-  projectId,
-  visible,
-  projects,
-  onSelectProject,
-  onOpenDiff,
-}: GitViewProps): React.ReactElement {
-  const status = useGitStatus(projectId, { visible });
-  const stage = useGitStage(projectId);
-  const unstage = useGitUnstage(projectId);
-  const discard = useGitDiscard(projectId);
-  const commit = useGitCommit(projectId);
-  const init = useGitInit(projectId);
+/** The Explorer Panel's "Git" view over the open workspace's repo: status, stage/unstage/discard, commit. */
+export function GitView({ visible, onOpenDiff }: GitViewProps): React.ReactElement {
+  const status = useGitStatus({ visible });
+  const stage = useGitStage();
+  const unstage = useGitUnstage();
+  const discard = useGitDiscard();
+  const commit = useGitCommit();
+  const init = useGitInit();
   const [error, setError] = useState<ErrorReport | null>(null);
   const [pendingDiscard, setPendingDiscard] = useState<GitFileChange[] | null>(null);
 
@@ -79,30 +65,6 @@ export function GitView({
   };
   const fireAndReport = (promise: Promise<unknown>): void =>
     void run(promise).catch(() => undefined);
-
-  const picker =
-    projects.length > 1 ? (
-      <Box sx={{ px: 1.5, pt: 1 }}>
-        <TextField
-          select
-          size="small"
-          fullWidth
-          label="Repositório"
-          value={projectId ?? WORKSPACE_ROOT}
-          onChange={(e) =>
-            onSelectProject(e.target.value === WORKSPACE_ROOT ? null : e.target.value)
-          }
-          slotProps={{ htmlInput: { 'data-testid': 'git-project-picker' } }}
-        >
-          <MenuItem value={WORKSPACE_ROOT}>Raiz do workspace</MenuItem>
-          {projects.map((p) => (
-            <MenuItem key={p.id} value={p.id}>
-              {p.name}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Box>
-    ) : null;
 
   const body = (() => {
     if (status.isPending) return <Message testId="git-loading">Lendo status…</Message>;
@@ -175,11 +137,7 @@ export function GitView({
           files={data.files}
           busy={busy}
           onOpen={(file, source) =>
-            onOpenDiff({
-              ...(projectId !== undefined ? { projectId } : {}),
-              path: file.path,
-              source: { kind: source },
-            })
+            onOpenDiff({ path: file.path, source: { kind: source } })
           }
           onStage={(paths) => fireAndReport(stage.mutateAsync({ paths }))}
           onUnstage={(paths) => fireAndReport(unstage.mutateAsync({ paths }))}
@@ -191,7 +149,6 @@ export function GitView({
 
   return (
     <Box data-testid="git-view">
-      {picker}
       {error && <ErrorAlert report={error} onClose={() => setError(null)} />}
       {body}
       <DiscardConfirmDialog

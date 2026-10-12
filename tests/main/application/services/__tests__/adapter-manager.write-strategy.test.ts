@@ -19,7 +19,7 @@ class WriteOnlyAdapter implements Adapter {
   readonly adapterId = 'cursor';
   constructor(private readonly destination: string, private readonly content: string) {}
   resolveEntityDestinations(): AdapterDestination[] {
-    return [{ scope: 'project', destination: this.destination, strategy: 'write', content: this.content }];
+    return [{ scope: 'workspace', destination: this.destination, strategy: 'write', content: this.content }];
   }
 }
 
@@ -28,7 +28,7 @@ const settings: Settings = {
 };
 
 const skill: Skill = {
-  urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['project'],
+  urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['workspace'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'b',
 };
 
@@ -45,7 +45,7 @@ const setup = async () => {
     settingsService, entityRepository,
     symlinkManager: new SymlinkManager(fs, clock, '/workspace'),
     fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
-    workspacePath: '/workspace',
+    entityDataDir: () => '/workspace',
     adapters: new Map<string, Adapter>([['cursor', new WriteOnlyAdapter('/repos/app/AGENTS.md', content)]]),
   });
   return { manager, fs, content };

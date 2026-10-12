@@ -40,7 +40,6 @@ const baseSettings = (
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 const setup = async () => {
@@ -58,7 +57,7 @@ const setup = async () => {
     entityRepository,
     symlinkManager,
     fileMaterializer,
-    workspacePath: WORKSPACE,
+    entityDataDir: () => WORKSPACE,
     adapters: new Map<string, Adapter>([
       [claudeAdapter.adapterId, claudeAdapter],
     ]),

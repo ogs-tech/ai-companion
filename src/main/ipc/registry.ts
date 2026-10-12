@@ -8,17 +8,13 @@ import type { AgentService } from '../application/services/agent-service.js';
 import type { InstructionService } from '../application/services/instruction-service.js';
 import type { SessionService } from '../application/services/session-service.js';
 import type { FileBrowserService } from '../application/services/file-browser-service.js';
-import type { FileBrowserPort } from '../application/ports/file-browser-port.js';
 import { buildSessionHandlers } from './session-handlers.js';
 import { buildBrowserHandlers } from './browser-handlers.js';
 import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-port.js';
 import { buildSessionHistoryHandlers } from './session-history-handlers.js';
 import type { SessionHistoryService } from '../application/services/session-history-service.js';
-import { buildWorkspaceHandlers } from './workspace-handlers.js';
+import { buildWorkspaceHandlers, type WorkspaceActivation } from './workspace-handlers.js';
 import type { WorkspaceService } from '../application/services/workspace-service.js';
-import type { Workspace } from '../../shared/workspace.js';
-import { buildProjectHandlers } from './project-handlers.js';
-import type { ProjectService } from '../application/services/project-service.js';
 import type { HookService } from '../application/services/hook-service.js';
 import type { MarketplaceService } from '../application/services/marketplace-service.js';
 import type { CredentialStorePort } from '../application/ports/credential-store-port.js';
@@ -62,11 +58,9 @@ export interface IpcDeps {
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
-  switchActiveWorkspace: (id: string) => Promise<Workspace>;
-  registerRootProject: (rootPath: string) => Promise<void>;
-  fileBrowserService: FileBrowserService;
-  fileBrowserPort: FileBrowserPort;
-  projectService: ProjectService;
+  workspaceActivation: WorkspaceActivation;
+  /** `null` at Início — no workspace is open, so there is no file tree. */
+  fileBrowserService: FileBrowserService | null;
   marketplaceService: MarketplaceService;
   healthService: HealthService;
   mcpService: McpService;
@@ -108,11 +102,8 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     embeddedBrowserPort,
     sessionHistoryService,
     workspaceService,
-    switchActiveWorkspace,
-    registerRootProject,
+    workspaceActivation,
     fileBrowserService,
-    fileBrowserPort,
-    projectService,
     marketplaceService,
     healthService,
     mcpService,
@@ -229,16 +220,13 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildSessionHandlers(sessionService),
     ...buildBrowserHandlers(sessionService, embeddedBrowserPort),
     ...buildSessionHistoryHandlers(sessionHistoryService, sessionService),
-    ...buildWorkspaceHandlers(workspaceService, switchActiveWorkspace, fileBrowserService, registerRootProject),
-    ...buildProjectHandlers(projectService, fileBrowserPort),
+    ...buildWorkspaceHandlers(workspaceService, workspaceActivation, fileBrowserService),
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),
     ...buildOpenWithHandlers({
       openWithService,
       workspaceBrowser: fileBrowserService,
-      projectService,
-      fileBrowserPort,
       dialogPort,
       embeddedBrowser: embeddedBrowserPort,
     }),

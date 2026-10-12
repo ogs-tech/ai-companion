@@ -35,15 +35,14 @@ const personal: Instruction = {
 
 const project: Instruction = {
   urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
-  description: 'Acme project rules', scopes: ['project'],
+  description: 'Acme project rules', scopes: ['workspace'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'Only in acme.',
   scopeId: 'acme',
 };
 
 const scopeDeps = {
-  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
+  workspaceService: { get: async (id: string) => ({ id, name: 'acme', rootPath: '/repos/acme', createdAt: '' }) },
 };
 
 const settings: Settings = {
@@ -65,7 +64,7 @@ function makeManager(fs: InMemoryFileSystem, entities: Entity[]): AdapterManager
     settingsService, entityRepository,
     symlinkManager: new SymlinkManager(fs, clock, '/workspace'),
     fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
-    workspacePath: '/workspace',
+    entityDataDir: () => '/workspace',
     adapters: new Map<string, Adapter>([
       ['claude', new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps })],
       ['cursor', new CursorAdapter({ homedir: '/home/u', ...scopeDeps })],
@@ -92,7 +91,7 @@ describe('Cursor instruction sync (e2e)', () => {
     expect(await fs.pathExists(rulePath)).toBe(false);
   });
 
-  it('materializes a project instruction as <repoPath>/AGENTS.md and removes it on removeAll', async () => {
+  it('materializes a workspace instruction as <repoPath>/AGENTS.md and removes it on removeAll', async () => {
     const fs = new InMemoryFileSystem();
     const manager = makeManager(fs, [project]);
 

@@ -18,7 +18,7 @@ describe('AdapterManager.syncEntity counts destinations by scope', () => {
       kind: 'instruction',
       name: 'acme',
       description: 'acme rules',
-      scopes: ['project'],
+      scopes: ['workspace'],
       metadata: meta,
       source: WORKSPACE_SOURCE,
       content: 'body',

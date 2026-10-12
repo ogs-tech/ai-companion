@@ -11,7 +11,7 @@ import type { LaunchProcessSnapshot } from '../../shared/launch-config.js';
 
 export function useRunLaunchConfig() {
   return useMutation({
-    mutationFn: (args: { projectId: string; configName: string }) => callIpc<LaunchProcessSnapshot>('launchConfig.run', args),
+    mutationFn: (args: { configName: string }) => callIpc<LaunchProcessSnapshot>('launchConfig.run', args),
     onSuccess: (snapshot) => registerLaunchProcess(snapshot),
   });
 }

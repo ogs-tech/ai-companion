@@ -48,36 +48,36 @@ describe('EntityValidator', () => {
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('accepts a valid project instruction (scopes=[project] + scopeId)', () => {
+  it('accepts a valid workspace instruction (scopes=[workspace] + scopeId)', () => {
     const good: Instruction = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
-      description: 'acme project rules', scopes: ['project'], metadata: meta,
-      source: WORKSPACE_SOURCE, content: 'b', scopeId: 'proj-1',
+      description: 'acme workspace rules', scopes: ['workspace'], metadata: meta,
+      source: WORKSPACE_SOURCE, content: 'b', scopeId: 'ws-1',
     };
     expect(() => v.validate(good)).not.toThrow();
   });
 
-  it('rejects a project instruction with the reserved name "default"', () => {
+  it('rejects a workspace instruction with the reserved name "default"', () => {
     const bad = {
       urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
-      description: '', scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
+      description: '', scopes: ['workspace'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
       scopeId: 'proj-1',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('rejects a project instruction without scopeId', () => {
+  it('rejects a workspace instruction without scopeId', () => {
     const bad = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
-      description: '', scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
+      description: '', scopes: ['workspace'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
   });
 
-  it('rejects a project instruction with an empty-string scopeId', () => {
+  it('rejects a workspace instruction with an empty-string scopeId', () => {
     const bad = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
-      description: '', scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
+      description: '', scopes: ['workspace'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
       scopeId: '',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
@@ -86,7 +86,7 @@ describe('EntityValidator', () => {
   it('rejects an instruction with multi-element scopes tuple', () => {
     const bad = {
       urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
-      description: '', scopes: ['personal', 'project'], metadata: meta,
+      description: '', scopes: ['personal', 'workspace'], metadata: meta,
       source: WORKSPACE_SOURCE, content: 'b',
     } as unknown as Instruction;
     expect(() => v.validate(bad)).toThrow();
@@ -122,9 +122,7 @@ describe('EntityValidator', () => {
     expect(() => v.validate(skill)).toThrow();
   });
 
-  // TODO(follow-up): remove this block when skill/agent regain a per-entity
-  // repoPath and can once again target 'project' scope.
-  it('temporarily rejects a project-scoped skill (linkedRepos removal)', () => {
+  it('rejects the removed project scope', () => {
     const skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
       scopes: ['project'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' } as unknown as Skill;
     expect(() => v.validate(skill)).toThrow();

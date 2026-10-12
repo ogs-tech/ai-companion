@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SkillService } from '../../../../src/main/application/services/skill-service.js';
 import { EntityService } from '../../../../src/main/application/services/entity-service.js';
 import { PluginProvenanceService } from '../../../../src/main/application/services/plugin-provenance.js';
-import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
+import { scopedRepository } from '../../helpers/scoped-repository.js';
 import { InMemoryFileSystem } from '../../../../src/main/infrastructure/filesystem/in-memory-filesystem.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import { FakePluginCachePort } from '../../../../src/main/application/services/__fixtures__/fake-plugin-cache-port.js';
@@ -32,7 +32,7 @@ const registry = (installPath: string): ClaudeCodePluginRegistryPort => ({
 const makeSkillService = (fs: InMemoryFileSystem, claudeCodeRegistry: ClaudeCodePluginRegistryPort) => {
   const cache = new FakePluginCachePort();
   const base = new EntityService(
-    new InMemoryEntityRepository(),
+    scopedRepository().scoped,
     new FixedClock(FROZEN),
     fakeAdapterManager(),
   );

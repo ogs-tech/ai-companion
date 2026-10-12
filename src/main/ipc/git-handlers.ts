@@ -5,7 +5,6 @@ import { DomainError } from '../domain/errors.js';
 import {
   asBoolean,
   asObject,
-  asOptString,
   asRawString,
   asString,
   asStringArray,
@@ -26,49 +25,35 @@ function asDiffSource(value: unknown): GitDiffSource {
 export function buildGitHandlers(service: GitService): IpcHandlers {
   return {
     'git.status': async (params) => {
-      const raw = optParams(params, 'git.status');
-      return service.status(asOptString(raw['projectId'], 'projectId'));
+      optParams(params, 'git.status');
+      return service.status();
     },
     'git.diff': async (params) => {
       const raw = asObject(params, 'git.diff');
-      return service.diff(
-        asOptString(raw['projectId'], 'projectId'),
-        asString(raw['path'], 'path'),
-        asDiffSource(raw['source']),
-      );
+      return service.diff(asString(raw['path'], 'path'), asDiffSource(raw['source']));
     },
     'git.stage': async (params) => {
       const raw = asObject(params, 'git.stage');
-      return service.stage(
-        asOptString(raw['projectId'], 'projectId'),
-        asStringArray(raw['paths'], 'paths'),
-      );
+      return service.stage(asStringArray(raw['paths'], 'paths'));
     },
     'git.unstage': async (params) => {
       const raw = asObject(params, 'git.unstage');
-      return service.unstage(
-        asOptString(raw['projectId'], 'projectId'),
-        asStringArray(raw['paths'], 'paths'),
-      );
+      return service.unstage(asStringArray(raw['paths'], 'paths'));
     },
     'git.discard': async (params) => {
       const raw = asObject(params, 'git.discard');
-      return service.discard(
-        asOptString(raw['projectId'], 'projectId'),
-        asStringArray(raw['paths'], 'paths'),
-      );
+      return service.discard(asStringArray(raw['paths'], 'paths'));
     },
     'git.commit': async (params) => {
       const raw = asObject(params, 'git.commit');
       return service.commit(
-        asOptString(raw['projectId'], 'projectId'),
         asRawString(raw['message'], 'message'),
         raw['amend'] === undefined ? false : asBoolean(raw['amend'], 'amend'),
       );
     },
     'git.init': async (params) => {
-      const raw = optParams(params, 'git.init');
-      return service.init(asOptString(raw['projectId'], 'projectId'));
+      optParams(params, 'git.init');
+      return service.init();
     },
   };
 }

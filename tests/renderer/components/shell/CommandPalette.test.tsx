@@ -4,9 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { CommandPalette } from '../../../../src/renderer/components/shell/CommandPalette.js';
 import { registerAreaOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
-
-const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
-const OTHER_WORKSPACE = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' };
+const OTHER_WORKSPACE = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' };
 
 const noop = () => undefined;
 let call: CallSpy;
@@ -21,13 +19,13 @@ afterEach(() => {
 
 describe('CommandPalette', () => {
   it('is hidden when closed', () => {
-    call.mockImplementation(async () => ok(DEFAULT_WORKSPACE));
+    call.mockImplementation(async () => ok(null));
     renderWithShell(<CommandPalette open={false} onClose={noop} />);
     expect(screen.queryByTestId('command-palette')).toBeNull();
   });
 
   it('filters commands by query and opens the Marketplaces Workbench tab on select', async () => {
-    call.mockImplementation(async () => ok(DEFAULT_WORKSPACE));
+    call.mockImplementation(async () => ok(null));
     const opener = vi.fn();
     registerAreaOpener(opener);
     const onClose = vi.fn();
@@ -42,10 +40,10 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('jumps back to the Default workspace via its "Início" quick-jump entry', async () => {
+  it('jumps back to the Início via its "Início" quick-jump entry', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.getActive') return ok(OTHER_WORKSPACE);
-      if (method === 'workspace.switchTo') return ok(DEFAULT_WORKSPACE);
+      if (method === 'workspace.goHome') return ok(undefined);
       return ok(undefined);
     });
     renderWithShell(<CommandPalette open onClose={noop} />);
@@ -54,6 +52,6 @@ describe('CommandPalette', () => {
     await userEvent.type(screen.getByTestId('command-palette-input'), 'Início');
     await userEvent.click(screen.getByText('Início'));
 
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.switchTo', { id: 'default' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.goHome', {}));
   });
 });

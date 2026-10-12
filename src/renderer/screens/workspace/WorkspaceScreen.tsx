@@ -15,8 +15,8 @@ import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
 import { DiffView } from '../../components/workspace/git/DiffView.js';
 import type { GitDiffSource } from '../../../shared/git.js';
-import { ControlPanelContent, type WorkspaceViewMode } from '../../components/workspace/ControlPanelContent.js';
-import { InstructionTreeRow, ProjectInstructionRow } from '../../components/workspace/InstructionTreeRow.js';
+import { ControlPanelContent } from '../../components/workspace/ControlPanelContent.js';
+import { InstructionTreeRow } from '../../components/workspace/InstructionTreeRow.js';
 import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
@@ -50,8 +50,7 @@ import {
 } from '../../lib/browser-tabs-store.js';
 import { seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
 import { entityBody } from '../../lib/entity-body.js';
-import { useActiveWorkspace, useDeleteWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
-import { useDeleteProject, useFindOrCreateProjectByPath, useProjects } from '../../hooks/use-projects.js';
+import { useActiveWorkspace, useDeleteWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useLaunchProcesses } from '../../hooks/use-launch-process.js';
@@ -66,7 +65,6 @@ import {
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import type { Workspace } from '../../../shared/workspace.js';
-import type { Project } from '../../../shared/project.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 import type { LaunchProcessSnapshot } from '../../../shared/launch-config.js';
 import { callIpc } from '../../lib/ipc.js';
@@ -81,7 +79,7 @@ const SCOPED_HIDDEN: ReadonlySet<EditorHiddenField> = new Set(['scope']);
 type EntityKind = 'skill' | 'agent';
 
 type OpenTab =
-  | { id: string; kind: 'file'; relPath: string; projectId?: string; dirty?: boolean }
+  | { id: string; kind: 'file'; relPath: string; dirty?: boolean }
   | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
@@ -89,7 +87,7 @@ type OpenTab =
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
   | { id: string; kind: 'history' }
   | { id: string; kind: 'browser'; tabId: string }
-  | { id: string; kind: 'git-diff'; projectId?: string; path: string; source: GitDiffSource }
+  | { id: string; kind: 'git-diff'; path: string; source: GitDiffSource }
   | { id: string; kind: WorkspaceAreaTab };
 
 /** Tabs that can hold unsaved work, and so need a discard guard before closing. */
@@ -110,23 +108,14 @@ function isAreaTab(tab: OpenTab): tab is Extract<OpenTab, { kind: WorkspaceAreaT
   return tab.kind === 'starter-pack' || tab.kind === 'marketplaces' || tab.kind === 'diagnostico';
 }
 
-/** The project a project-scoped entity belongs to — `scopeId` already *is* a `Project.id` for scope `'project'` (see `anchorForEntityScope`). `null` for personal/workspace-scoped entities. */
-function projectIdForEntityScope(entity: Pick<Skill | Agent | Instruction, 'scopes' | 'scopeId'>): string | null {
-  return entity.scopes[0] === 'project' && entity.scopeId ? entity.scopeId : null;
-}
-
 export function WorkspaceScreen(): React.ReactElement {
+  // `null` = Início (Global, no workspace open); `undefined` while loading.
   const { data: activeWorkspace } = useActiveWorkspace();
-  const { data: projects = [] } = useProjects();
-  // Fully derived, never persisted — a non-default workspace is "as a Project"
-  // (0 or 1 registered Projects) or "with multiple projects" (2+), flipping
-  // automatically the moment a second Project is registered/removed. See
-  // docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #1.
-  const viewMode: WorkspaceViewMode = projects.length <= 1 ? 'project' : 'multi-project';
+  const isHome = activeWorkspace === null;
   const { data: personalInstruction } = usePersonalInstruction();
-  const findOrCreateProject = useFindOrCreateProjectByPath();
-  const deleteProject = useDeleteProject();
   const switchWorkspace = useSwitchWorkspace();
+  const openWorkspace = useOpenWorkspace();
+  const goHomeMutation = useGoHome();
   const deleteWorkspace = useDeleteWorkspace();
   const invalidateCustomization = useInvalidateCustomization();
   const invalidateInstructions = useInvalidateInstructions();
@@ -136,9 +125,8 @@ export function WorkspaceScreen(): React.ReactElement {
   const queryClient = useQueryClient();
   useEntityChangeInvalidation();
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  // Hidden by default inside a project workspace, to keep the tree focused on
+  // Hidden by default inside a workspace, to keep the tree focused on
   // what's actually local to it — plugin-provided and Personal-scope entities
   // are already visible everywhere else, so they're the ones worth hiding.
   const [showGlobal, setShowGlobal] = useState(false);
@@ -171,55 +159,30 @@ export function WorkspaceScreen(): React.ReactElement {
   const [controlPanelCollapsed, setControlPanelCollapsed] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
-  const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const { data: workspaceInstruction } = useWorkspaceInstruction(activeWorkspace?.id ?? '');
 
   const refreshFiles = useRefreshFiles();
 
-  // `projectId` is the file's own scope, as resolved by FolderTree — a
-  // root-level Project folder can be *browsed* expanded-in-place, from the
-  // unscoped workspace view, purely to look around, without changing scope.
-  // But *opening* something scoped to it — one of its files, or its own
-  // INSTRUCTIONS row (see `renderProjectInstructionRow` below) — does:
-  // `selectedProjectId`, and with it the whole Control Panel (Skills/Agents/
-  // Hooks/MCP/Plugins), always follows whichever tab is active — a file via
-  // its own `projectId`, a Skill/Agent/Instruction via its own scope — derived
-  // here and in `handleSelectTab`/`closeTab` below, rather than through a
-  // dedicated "enter project" gesture. No confirmation needed: unlike a real
-  // workspace switch, this never discards a tab, it just changes which
-  // scope's customizations the Control Panel is currently showing.
-  const syncProjectFromTab = (tab: OpenTab | undefined): void => {
-    if (tab?.kind === 'file') setSelectedProjectId(tab.projectId ?? null);
-    else if (tab?.kind === 'skill' || tab?.kind === 'agent' || tab?.kind === 'instruction') {
-      setSelectedProjectId(projectIdForEntityScope(tab.entity));
-    }
-  };
-
-  const openFileTab = (relPath: string, projectId?: string): void => {
-    const id = `file:${projectId ?? ''}:${relPath}`;
-    setOpenTabs((prev) =>
-      prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'file', relPath, ...(projectId ? { projectId } : {}) }],
-    );
+  const openFileTab = (relPath: string): void => {
+    const id = `file:${relPath}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'file', relPath }]));
     setActiveTabId(id);
-    setSelectedProjectId(projectId ?? null);
   };
 
   const openEntityTab = (kind: EntityKind, entity: Skill | Agent, isCreate: boolean): void => {
     const id = isCreate ? `entity-new:${kind}:${++newTabSeq.current}` : `entity:${entity.urn}`;
     setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind, entity, isCreate }]));
     setActiveTabId(id);
-    setSelectedProjectId(projectIdForEntityScope(entity));
   };
 
   const openInstructionTab = (entity: Instruction, isCreate: boolean): void => {
     const id = isCreate ? `entity-new:instruction:${++newTabSeq.current}` : `entity:${entity.urn}`;
     setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'instruction', entity, isCreate }]));
     setActiveTabId(id);
-    setSelectedProjectId(projectIdForEntityScope(entity));
   };
 
   // Tab identity is keyed by the concrete sessionId (not the anchor), so a
-  // workspace/project anchor with several coexisting sessions gets one tab
+  // workspace/personal anchor with several coexisting sessions gets one tab
   // per session — the caller always already has this id in hand, from a
   // spawn/resume response or an existing SessionSnapshot row.
   const openSessionTab = (session: Pick<SessionSnapshot, 'sessionId' | 'anchor' | 'label'>): void => {
@@ -240,15 +203,15 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(id);
   };
 
-  const onEditLaunchJson = (project: Project): void => openFileTab('.vscode/launch.json', project.id);
+  const onEditLaunchJson = (): void => openFileTab('.vscode/launch.json');
 
   // A rendered, read-only view of a file's Markdown — reached via the tree's
   // right-click "Preview" menu, never via the normal click-to-open path.
   // Kept as its own tab (rather than a mode toggle inside the file's own
   // editing tab) so opening it never disturbs an already-open, in-progress
   // edit of the same file.
-  const openFilePreviewTab = (relPath: string, projectId?: string): void => {
-    const id = `preview:file:${projectId ?? ''}:${relPath}`;
+  const openFilePreviewTab = (relPath: string): void => {
+    const id = `preview:file:${relPath}`;
     setOpenTabs((prev) =>
       prev.some((t) => t.id === id)
         ? prev
@@ -258,12 +221,11 @@ export function WorkspaceScreen(): React.ReactElement {
               id,
               kind: 'preview',
               label: relPath.split('/').pop() || relPath,
-              source: { kind: 'file', path: relPath, ...(projectId ? { projectId } : {}) },
+              source: { kind: 'file', path: relPath },
             },
           ],
     );
     setActiveTabId(id);
-    setSelectedProjectId(projectId ?? null);
   };
 
   // Same idea as `openFilePreviewTab`, for a Skill/Agent/Instruction body —
@@ -278,8 +240,8 @@ export function WorkspaceScreen(): React.ReactElement {
 
   // Starter Pack/Marketplaces/Diagnóstico read as ordinary, singleton
   // Workbench tabs (one fixed id each, same idea as `HISTORY_TAB_ID` below).
-  // Their own entry point is the Explorer Panel's pinned rows (Default
-  // workspace only, built below as `appAreaRows`), which call this directly;
+  // Their own entry point is the Explorer Panel's pinned rows (Início
+  // only, built below as `appAreaRows`), which call this directly;
   // it's also registered externally (workspace-area-store.ts) so the TopNav
   // sync pill — outside this screen, with no prop path in — can focus the
   // Diagnóstico tab too.
@@ -333,36 +295,19 @@ export function WorkspaceScreen(): React.ReactElement {
     if (target && isDirty(target) && !window.confirm('Descartar alterações não salvas?')) return;
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
-      if (activeTabId === id) syncProjectFromTab(next[next.length - 1]);
       setActiveTabId((cur) => (cur === id ? (next[next.length - 1]?.id ?? null) : cur));
       return next;
     });
   };
 
-  // The Workbench canvas' own tab strip selects among already-open tabs —
-  // routed through here (instead of the bare `setActiveTabId` setter) so
-  // switching back to an already-open file tab re-syncs the Control Panel's
-  // scope too, the same as opening one fresh.
-  const handleSelectTab = (id: string): void => {
-    setActiveTabId(id);
-    syncProjectFromTab(openTabs.find((t) => t.id === id));
-  };
-
   // Returns whether the reset actually happened — false means the caller
   // asked to discard unsaved tabs and the user declined, so the caller's own
-  // state change (switching workspace) must not proceed either. Every call
-  // site uses this specifically to guard a real workspace change, so it also
-  // clears `selectedProjectId` — left alone, a Project selected in the
-  // workspace being left behind would keep the Control Panel (and the
-  // breadcrumb's Home button) scoped to it even once that workspace, and its
-  // projects, are no longer in view. `applyWorkspaceHistoryEntry` restores
-  // the target entry's own `projectId` right after, overriding this.
+  // state change (switching workspace) must not proceed either.
   const resetTabs = (): boolean => {
     const dirtyCount = openTabs.filter(isDirty).length;
     if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return false;
     setOpenTabs([]);
     setActiveTabId(null);
-    setSelectedProjectId(null);
     return true;
   };
 
@@ -375,39 +320,35 @@ export function WorkspaceScreen(): React.ReactElement {
     return () => registerUnsavedTabsGuard(null);
   });
 
-  // Records the current scope + active tab as a Workbench "location" every
-  // time either changes, so TopNav's back/forward buttons have somewhere to
-  // navigate to — see workspace-history-store.ts for the full picture.
+  // Records the open workspace (or Início) + active tab as a Workbench
+  // "location" every time either changes, so TopNav's back/forward buttons
+  // have somewhere to navigate to — see workspace-history-store.ts for the
+  // full picture.
   useEffect(() => {
-    if (!activeWorkspace) return;
-    pushWorkspaceHistoryEntry({ workspaceId: activeWorkspace.id, projectId: selectedProjectId, activeTabId });
-  }, [activeWorkspace, selectedProjectId, activeTabId]);
+    if (activeWorkspace === undefined) return;
+    pushWorkspaceHistoryEntry({ workspaceId: activeWorkspace?.id ?? null, activeTabId });
+  }, [activeWorkspace, activeTabId]);
 
-  // Applies one history entry. A real workspace change still reuses
-  // `resetTabs()` (same confirm-then-wipe every workspace switch already
-  // needs — a different workspace's tabs and entities don't exist here).
-  // A project-only change — same workspace, `projectId` differs — is no
-  // longer a "scope transition" at all: `selectedProjectId` is just a view
-  // of whichever tab is active, so it's resynced alongside `activeTabId`
-  // with no discard prompt, same as any other same-workspace navigation.
-  // Reporting 'stale' for a since-closed tab instead lets the store prune
-  // it and keep walking back/forward.
+  // Applies one history entry. A workspace change reuses `resetTabs()` (same
+  // confirm-then-wipe every workspace switch already needs — a different
+  // workspace's tabs and entities don't exist here). Reporting 'stale' for a
+  // since-closed tab instead lets the store prune it and keep walking
+  // back/forward.
   const applyWorkspaceHistoryEntry = async (entry: WorkspaceHistoryEntry): Promise<ApplyWorkspaceHistoryResult> => {
-    const workspaceChanged = entry.workspaceId !== activeWorkspace?.id;
+    const workspaceChanged = entry.workspaceId !== (activeWorkspace?.id ?? null);
     if (workspaceChanged) {
       if (!resetTabs()) return 'declined';
       try {
-        await switchWorkspace.mutateAsync(entry.workspaceId);
+        if (entry.workspaceId === null) await goHomeMutation.mutateAsync();
+        else await switchWorkspace.mutateAsync(entry.workspaceId);
       } catch (err) {
         setToast({ variant: 'error', message: errorMessage(err) });
         return 'declined';
       }
-      setSelectedProjectId(entry.projectId);
       return 'applied';
     }
     if (entry.activeTabId !== null && !openTabs.some((t) => t.id === entry.activeTabId)) return 'stale';
     setActiveTabId(entry.activeTabId);
-    if (entry.projectId !== selectedProjectId) setSelectedProjectId(entry.projectId);
     return 'applied';
   };
 
@@ -445,17 +386,20 @@ export function WorkspaceScreen(): React.ReactElement {
     setPropertiesRequestTabId(`entity:${entity.urn}`);
   };
 
-  // The item's own project/workspace scope, never its `entity` urn — an
-  // `entity` anchor would reuse an already-running session for that item
-  // instead of the fresh one "New Action" always wants. `personal`-scoped
-  // entities (no project/workspace of their own) fall back to the active
-  // workspace, whose cwd is where their canonical source actually lives.
-  const anchorForEntityScope = (entity: Pick<Skill | Agent | Instruction, 'scopes' | 'scopeId'>): SessionAnchor | null => {
-    const scope = entity.scopes[0];
-    if (scope === 'project' && entity.scopeId) return { kind: 'project', projectId: entity.scopeId };
-    if (scope === 'workspace' && entity.scopeId) return { kind: 'workspace', workspaceId: entity.scopeId };
-    return activeWorkspace ? { kind: 'workspace', workspaceId: activeWorkspace.id } : null;
-  };
+  // Where a session started from "here" runs: the open workspace's root, or
+  // the home dir at Início.
+  const currentAnchor: SessionAnchor = activeWorkspace
+    ? { kind: 'workspace', workspaceId: activeWorkspace.id }
+    : { kind: 'personal' };
+
+  // The item's own workspace scope, never its `entity` urn — an `entity`
+  // anchor would reuse an already-running session for that item instead of
+  // the fresh one "New Action" always wants. `personal`-scoped entities (no
+  // workspace of their own) run wherever the user currently is.
+  const anchorForEntityScope = (entity: Pick<Skill | Agent | Instruction, 'scopes' | 'scopeId'>): SessionAnchor =>
+    entity.scopes[0] === 'workspace' && entity.scopeId
+      ? { kind: 'workspace', workspaceId: entity.scopeId }
+      : currentAnchor;
 
   // Right-click → "New Action": always a brand-new session whose first
   // message is a draft `@<path>` reference the user reviews and edits before
@@ -485,8 +429,7 @@ export function WorkspaceScreen(): React.ReactElement {
     })();
   };
 
-  const newActionFromResolvedPath = (anchor: SessionAnchor | null, resolvePath: () => Promise<string>): void => {
-    if (!anchor) return;
+  const newActionFromResolvedPath = (anchor: SessionAnchor, resolvePath: () => Promise<string>): void => {
     void (async () => {
       try {
         startNewActionSession(anchor, await resolvePath());
@@ -496,17 +439,12 @@ export function WorkspaceScreen(): React.ReactElement {
     })();
   };
 
-  // Files/folders already sit inside the target project's own tree, so their
-  // relPath already matches a project-anchored session's cwd — no path
+  // Files/folders already sit inside the workspace's own tree, so their
+  // relPath already matches a workspace-anchored session's cwd — no path
   // resolution IPC round trip needed, unlike entities (see below).
-  const newActionForFile = (relPath: string, projectId?: string): void => {
-    const anchor: SessionAnchor | null = projectId
-      ? { kind: 'project', projectId }
-      : activeWorkspace
-        ? { kind: 'workspace', workspaceId: activeWorkspace.id }
-        : null;
-    if (!anchor) return;
-    startNewActionSession(anchor, relPath);
+  const newActionForFile = (relPath: string): void => {
+    if (!activeWorkspace) return;
+    startNewActionSession({ kind: 'workspace', workspaceId: activeWorkspace.id }, relPath);
   };
 
   const newActionForEntity = (kind: EntityKind, entity: Skill | Agent): void =>
@@ -523,12 +461,7 @@ export function WorkspaceScreen(): React.ReactElement {
     });
 
   // Pinned at the top of the Explorer Panel's FolderTree (not the Control
-  // Panel) — always the active workspace's own INSTRUCTIONS row, regardless
-  // of which Project (if any) the Control Panel is currently scoped to. It
-  // never swaps to a Project's own instruction, so it stays a reliable
-  // "back to the workspace" anchor — opening it also drops any Project
-  // scope, the same way opening a Project's own INSTRUCTIONS row (nested
-  // under its folder, see `renderProjectInstructionRow` below) enters one.
+  // Panel) — the open workspace's own INSTRUCTIONS row.
   const instructionRow = !activeWorkspace ? undefined : (
     <InstructionTreeRow
       kind="workspace"
@@ -541,32 +474,20 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   );
 
-  // Skills/Agents are scoped to whichever node is currently in view (a
-  // selected Project, or the active workspace itself); Hooks have no
-  // project/workspace tier of their own yet, and MCP's own local tier
+  // Skills/Agents split into the open workspace's own vs Global; Hooks have
+  // no workspace tier of their own yet, and MCP's own local tier
   // ('project-local'/'project-shared') keys off a filesystem path instead.
-  const entityLocalScope = selectedProject
-    ? { scope: 'project' as const, scopeId: selectedProject.id }
-    : activeWorkspace
-      ? { scope: 'workspace' as const, scopeId: activeWorkspace.id }
-      : undefined;
-  const mcpMatchPath = selectedProject ? selectedProject.path : activeWorkspace?.rootPath;
+  const entityLocalScope = activeWorkspace ? { scope: 'workspace' as const, scopeId: activeWorkspace.id } : undefined;
+  const mcpMatchPath = activeWorkspace?.rootPath;
 
   const removeSessionTab = (sessionId: string): void => closeTab(`session:${sessionId}`);
 
-  // Anchors a new session to whatever's currently in view (a selected
-  // Project, or the active workspace itself) — the "+" in the Sessões panel
-  // header is the only entry point for starting one now, so it always
-  // targets the current scope rather than asking which anchor to use.
-  // Always spawns a fresh session (coexisting with any already open for the
-  // same anchor) rather than refocusing one, since `session.spawn` mints a
-  // new sessionId on every call for a workspace/project anchor.
   // What the Sessões panel and the Histórico tab both mean by "here": the
-  // project in view, or the workspace itself when no project is selected.
-  const historyScope: HistoryScope | null = selectedProject
-    ? { kind: 'project', projectId: selectedProject.id }
-    : activeWorkspace
-      ? { kind: 'workspace', workspaceId: activeWorkspace.id }
+  // open workspace, or everything at Início (whose root is the home dir).
+  const historyScope: HistoryScope | null = activeWorkspace
+    ? { kind: 'workspace', workspaceId: activeWorkspace.id }
+    : isHome
+      ? { kind: 'all' }
       : null;
 
   // One fixed id, so "Ver todas" focuses the tab that is already open rather
@@ -577,29 +498,21 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(HISTORY_TAB_ID);
   };
 
-  // One tab per (target, source, path): re-clicking a changed file focuses its
-  // diff, while the staged and unstaged sides of the same file stay distinct.
-  const openGitDiffTab = ({ projectId, path, source }: { projectId?: string; path: string; source: GitDiffSource }): void => {
+  // One tab per (source, path): re-clicking a changed file focuses its diff,
+  // while the staged and unstaged sides of the same file stay distinct.
+  const openGitDiffTab = ({ path, source }: { path: string; source: GitDiffSource }): void => {
     const sourceKey = source.kind === 'commit' ? `commit-${source.sha}` : source.kind;
-    const id = `git-diff:${projectId ?? 'workspace'}:${sourceKey}:${path}`;
-    setOpenTabs((prev) =>
-      prev.some((t) => t.id === id)
-        ? prev
-        : [...prev, { id, kind: 'git-diff', path, source, ...(projectId !== undefined ? { projectId } : {}) }],
-    );
+    const id = `git-diff:${sourceKey}:${path}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'git-diff', path, source }]));
     setActiveTabId(id);
   };
 
+  // The "+" in the Sessões panel header: always a fresh session (coexisting
+  // with any already open for the same anchor) wherever the user currently is.
   const handleNewSession = (): void => {
-    const anchor: SessionAnchor | null = selectedProject
-      ? { kind: 'project', projectId: selectedProject.id }
-      : activeWorkspace
-        ? { kind: 'workspace', workspaceId: activeWorkspace.id }
-        : null;
-    if (!anchor) return;
     void (async () => {
       try {
-        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor });
+        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor: currentAnchor });
         openSessionTab(session);
         void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
       } catch (err) {
@@ -633,42 +546,22 @@ export function WorkspaceScreen(): React.ReactElement {
     });
   };
 
-  // Manual override for the derived scope above — lets a successful project
-  // delete pin the Control Panel back to workspace scope even while a
-  // project's file tab is still open. No `resetTabs()` guard: nothing is
-  // discarded, it's just a view switch.
-  const exitProjectScope = (): void => setSelectedProjectId(null);
-
-  // The breadcrumb's own "back" — not just leaving the current Project
-  // (`exitProjectScope`), but all the way back to the actual default/Home
-  // workspace, the same destination as AppShell's "Início" button. Already
-  // home, it degrades to exiting the Project, since there's no workspace left
-  // to switch to. A real switch discards open tabs (same guard every other
-  // workspace change goes through), so it asks first.
+  // The breadcrumb's own "back" to Início, the same destination as
+  // AppShell's "Início" button. Leaving a workspace discards open tabs (same
+  // guard every other workspace change goes through), so it asks first.
   const goHome = (): void => {
-    if (isDefaultWorkspace) {
-      exitProjectScope();
-      return;
-    }
+    if (isHome) return;
     if (!resetTabs()) return;
-    switchWorkspace.mutateAsync('default').catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+    goHomeMutation.mutateAsync().catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
   };
 
-  const handleDeleteProject = async (id: string): Promise<void> => {
+  // A folder row's "Abrir como workspace": leaves this workspace for that
+  // folder's own (existing or new) — a real switch, so the same discard guard.
+  const handleOpenAsWorkspace = async (absolutePath: string): Promise<void> => {
+    if (!resetTabs()) return;
     try {
-      await deleteProject.mutateAsync(id);
-      exitProjectScope();
-    } catch (err) {
-      setToast({ variant: 'error', message: errorMessage(err) });
-    }
-  };
-
-  const handleUseAsProject = async (absolutePath: string): Promise<void> => {
-    try {
-      const project = await findOrCreateProject.mutateAsync(absolutePath);
-      // Immediately shows the new Project's (empty) Skills/Agents/etc, so
-      // "+" is reachable without needing to open a file from it first.
-      setSelectedProjectId(project.id);
+      const opened = await openWorkspace.mutateAsync(absolutePath);
+      setToast({ variant: 'success', message: `Workspace aberto: ${opened.name}` });
     } catch (err) {
       setToast({ variant: 'error', message: errorMessage(err) });
     }
@@ -680,7 +573,7 @@ export function WorkspaceScreen(): React.ReactElement {
     if (!target) return;
     if (!resetTabs()) return;
     try {
-      await switchWorkspace.mutateAsync('default');
+      // Deleting the open workspace goes home server-side.
       await deleteWorkspace.mutateAsync(target.id);
       setToast({ variant: 'success', message: `${target.name} removido` });
     } catch (err) {
@@ -689,9 +582,7 @@ export function WorkspaceScreen(): React.ReactElement {
   };
 
   const closeHeaderMenu = (): void => setMenuAnchor(null);
-  const showGlobalToggle = activeWorkspace !== undefined && !activeWorkspace.isDefault;
-  const isDefaultWorkspace = activeWorkspace?.isDefault ?? false;
-  const showRemoveAction = selectedProject !== null || (showGlobalToggle && activeWorkspace !== undefined);
+  const showGlobalToggle = activeWorkspace !== undefined && activeWorkspace !== null;
 
   // Lives at the top of the Explorer Panel now (see `ExplorerPanelContent`),
   // anchored to the same breadcrumb row it always shared — these actions
@@ -724,28 +615,16 @@ export function WorkspaceScreen(): React.ReactElement {
           <ListItemIcon><Icon glyph={PanelRight} size={16} /></ListItemIcon>
           <ListItemText>{controlPanelCollapsed ? 'Mostrar Customizations' : 'Ocultar Customizations'}</ListItemText>
         </MenuItem>
-        {showRemoveAction && <Divider />}
-        {selectedProject ? (
+        {activeWorkspace && <Divider />}
+        {activeWorkspace && (
           <MenuItem
-            data-testid={`project-delete-${selectedProject.id}`}
-            onClick={() => { closeHeaderMenu(); void handleDeleteProject(selectedProject.id); }}
+            data-testid="workspace-context-remove"
+            onClick={() => { closeHeaderMenu(); setPendingRemoval(activeWorkspace); }}
             sx={{ color: 'error.main' }}
           >
             <ListItemIcon sx={{ color: 'inherit' }}><Icon glyph={Trash2} size={16} /></ListItemIcon>
-            <ListItemText>Remover projeto</ListItemText>
+            <ListItemText>Remover workspace</ListItemText>
           </MenuItem>
-        ) : (
-          showGlobalToggle &&
-          activeWorkspace && (
-            <MenuItem
-              data-testid="workspace-context-remove"
-              onClick={() => { closeHeaderMenu(); setPendingRemoval(activeWorkspace); }}
-              sx={{ color: 'error.main' }}
-            >
-              <ListItemIcon sx={{ color: 'inherit' }}><Icon glyph={Trash2} size={16} /></ListItemIcon>
-              <ListItemText>Remover workspace</ListItemText>
-            </MenuItem>
-          )
         )}
       </Menu>
     </>
@@ -753,12 +632,11 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const canvasTabs: WorkbenchTab[] = openTabs.map((tab): WorkbenchTab => {
     if (tab.kind === 'file') {
-      const projectName = tab.projectId ? projects.find((p) => p.id === tab.projectId)?.name : undefined;
       return {
         id: tab.id,
         glyph: FileIcon,
         label: tab.relPath.split('/').pop() || tab.relPath,
-        breadcrumb: projectName ? `${projectName} › ${tab.relPath}` : tab.relPath,
+        breadcrumb: tab.relPath,
         dense: true,
         dirty: tab.dirty ?? false,
         onClose: () => closeTab(tab.id),
@@ -767,7 +645,6 @@ export function WorkspaceScreen(): React.ReactElement {
             subject="file"
             path={tab.relPath}
             active={!hidden}
-            {...(tab.projectId ? { projectId: tab.projectId } : {})}
             onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
           />
         ),
@@ -783,7 +660,7 @@ export function WorkspaceScreen(): React.ReactElement {
         dense: true,
         onClose: () => closeTab(tab.id),
         render: () => (
-          <DiffView {...(tab.projectId !== undefined ? { projectId: tab.projectId } : {})} path={tab.path} source={tab.source} />
+          <DiffView path={tab.path} source={tab.source} />
         ),
       };
     }
@@ -870,16 +747,11 @@ export function WorkspaceScreen(): React.ReactElement {
       };
     }
     const isPersonal = tab.kind === 'instruction' && isPersonalInstruction(tab.entity);
-    // An instruction's own `entity.name` is just its project/workspace's
-    // basename (see `instruction-seed.ts`) — the same name a file/skill tab
-    // for that same scope could also carry — so the tab label alone can't
-    // tell two tabs apart. The scope name below is what actually does.
-    const scopeName =
-      tab.entity.scopes[0] === 'project'
-        ? projects.find((p) => p.id === tab.entity.scopeId)?.name
-        : tab.entity.scopes[0] === 'workspace'
-          ? activeWorkspace?.name
-          : undefined;
+    // An instruction's own `entity.name` is just its workspace's basename (see
+    // `instruction-seed.ts`) — the same name a file/skill tab for that same
+    // scope could also carry — so the tab label alone can't tell two tabs
+    // apart. The scope name below is what actually does.
+    const scopeName = tab.entity.scopes[0] === 'workspace' ? activeWorkspace?.name : undefined;
     const breadcrumb =
       tab.kind === 'instruction'
         ? scopeName
@@ -943,8 +815,8 @@ export function WorkspaceScreen(): React.ReactElement {
   );
 
   // Starter Pack/Marketplaces/Diagnóstico are global app destinations, not
-  // scoped to any one workspace — pinned above the workspace list only on
-  // the Default/Global workspace, the same place the Personal Instruction
+  // scoped to any one workspace — pinned above the workspace list only at
+  // Início, the same place the Personal Instruction
   // row above already pins itself (see WorkspaceManagementList).
   const appAreaRows = (
     <>
@@ -979,40 +851,8 @@ export function WorkspaceScreen(): React.ReactElement {
     </>
   );
 
-  const renderProjectInstructionRow = (project: Project, depth: number): React.ReactNode => (
-    <ProjectInstructionRow
-      project={project}
-      onPreview={previewEntity}
-      // Opening a Project's own INSTRUCTIONS row — even browsed in place,
-      // before "entering" it — scopes the Control Panel/breadcrumb to that
-      // Project too, same as opening one of its files does: `openInstructionEditor`/
-      // `requestInstructionProperties` derive it from the entity's own scope
-      // (see `projectIdForEntityScope`), same as any other entity tab.
-      onOpen={openInstructionEditor}
-      onProperties={requestInstructionProperties}
-      onNewAction={(entity) => {
-        setSelectedProjectId(project.id);
-        newActionForInstruction(entity);
-      }}
-      testId={`tree-node-instructions-${project.name}`}
-      depth={depth}
-    />
-  );
-
-  const renderProjectLaunchConfigsRow = (project: Project, depth: number): React.ReactNode => (
-    <LaunchConfigsTreeGroup project={project} depth={depth} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
-  );
-
-  // The workspace root itself may be registered as its own Project (see
-  // docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision
-  // #4/#6) — its own Launch Configurations group is pinned once via
-  // `pinnedRows` rather than `renderProjectLaunchConfigsRow`'s nested call
-  // site, which is deliberately gated on `matchedProject` only (see that
-  // prop's own doc comment in FolderTree.tsx) to avoid rendering this group
-  // once per expanded top-level folder.
-  const rootProject = activeWorkspace ? projects.find((p) => p.path === activeWorkspace.rootPath) : undefined;
-  const pinnedRows = rootProject ? (
-    <LaunchConfigsTreeGroup project={rootProject} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
+  const pinnedRows = activeWorkspace ? (
+    <LaunchConfigsTreeGroup workspace={activeWorkspace} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
   ) : undefined;
 
   const explorerToolbarActions = (
@@ -1045,32 +885,26 @@ export function WorkspaceScreen(): React.ReactElement {
           >
             <ExplorerPanelContent
               activeWorkspace={activeWorkspace}
-              isDefaultWorkspace={isDefaultWorkspace}
-              selectedProject={selectedProject}
+              isHome={isHome}
               onNavigateToWorkspace={goHome}
               headerMenu={headerMenu}
               toolbarActions={explorerToolbarActions}
               beforeSwitch={resetTabs}
               personalInstructionRow={personalInstructionRow}
               appAreaRows={appAreaRows}
-              projects={projects}
               onSelectFile={openFileTab}
-              onUseAsProject={(absolutePath) => void handleUseAsProject(absolutePath)}
+              onOpenAsWorkspace={(absolutePath) => void handleOpenAsWorkspace(absolutePath)}
               onPreviewFile={openFilePreviewTab}
               onNewAction={newActionForFile}
               instructionRow={instructionRow}
               {...(pinnedRows !== undefined ? { pinnedRows } : {})}
-              renderProjectInstructionRow={renderProjectInstructionRow}
-              renderProjectLaunchConfigsRow={renderProjectLaunchConfigsRow}
-              {...(activeWorkspace ? { workspaceRootPath: activeWorkspace.rootPath } : {})}
-              onSelectProject={setSelectedProjectId}
               onOpenGitDiff={openGitDiffTab}
             />
           </SidePanel>
           <ResizeHandle />
           <Panel id="workbench-canvas-panel" minSize="30" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={panelCardSx()}>
-              <WorkbenchCanvas tabs={canvasTabs} activeTabId={activeTabId} onSelect={handleSelectTab} emptyState={emptyCanvasState} />
+              <WorkbenchCanvas tabs={canvasTabs} activeTabId={activeTabId} onSelect={setActiveTabId} emptyState={emptyCanvasState} />
             </Box>
           </Panel>
           <ResizeHandle />
@@ -1085,10 +919,8 @@ export function WorkspaceScreen(): React.ReactElement {
             cardTestId="workspace-control-panel-label"
           >
             <ControlPanelContent
-              isDefaultWorkspace={isDefaultWorkspace}
+              isHome={isHome}
               showGlobal={showGlobal}
-              viewMode={viewMode}
-              {...(selectedProject ? { selectedProjectName: selectedProject.name } : {})}
               {...(entityLocalScope ? { localScope: entityLocalScope } : {})}
               {...(mcpMatchPath ? { mcpMatchPath } : {})}
               onEditEntity={openEntityTab}
@@ -1099,7 +931,7 @@ export function WorkspaceScreen(): React.ReactElement {
               onOpenSession={openSessionTab}
               onSessionRemoved={removeSessionTab}
               onSeeAllSessions={openHistoryTab}
-              canStartSession={selectedProject !== null || activeWorkspace !== undefined}
+              canStartSession={activeWorkspace !== undefined}
               onNewSession={handleNewSession}
             />
           </SidePanel>

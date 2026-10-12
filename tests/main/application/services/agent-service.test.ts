@@ -6,6 +6,7 @@ import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-cloc
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { WORKSPACE_SOURCE, type Agent } from '../../../../src/shared/entity.js';
 import { agentId } from '../../../../src/main/domain/agent-id.js';
+import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const agent = (name = 'rev'): Agent => ({
   urn: `urn:agent:${name}`, kind: 'agent', name, description: 'reviewer', scopes: ['personal'],
@@ -15,7 +16,7 @@ const agent = (name = 'rev'): Agent => ({
 const setup = () => {
   const repo = new InMemoryEntityRepository();
   const adapterManager = { syncEntity: vi.fn().mockResolvedValue([]), removeEntity: vi.fn().mockResolvedValue([]) } as unknown as AdapterManager;
-  const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
+  const base = new EntityService(scopedRepository({ global: repo }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   return { service: new AgentService(base) };
 };
 

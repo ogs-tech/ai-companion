@@ -13,8 +13,8 @@ import type { SessionService } from '../../../src/main/application/services/sess
 import type { EmbeddedBrowserPort } from '../../../src/main/application/ports/embedded-browser-port.js';
 import type { SessionHistoryService } from '../../../src/main/application/services/session-history-service.js';
 import type { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
-import type { ProjectService } from '../../../src/main/application/services/project-service.js';
-import type { Workspace } from '../../../src/shared/workspace.js';
+import type { WorkspaceActivation } from '../../../src/main/ipc/workspace-handlers.js';
+import { createDispatcher } from '../../../src/main/ipc/dispatcher.js';
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import type { HookService } from '../../../src/main/application/services/hook-service.js';
 import type { CredentialStorePort } from '../../../src/main/application/ports/credential-store-port.js';
@@ -24,7 +24,6 @@ import type { WorkspaceTeardownService } from '../../../src/main/application/ser
 import type { McpService } from '../../../src/main/application/services/mcp-service.js';
 import type { OpenWithService } from '../../../src/main/application/services/open-with-service.js';
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
-import type { FileBrowserPort } from '../../../src/main/application/ports/file-browser-port.js';
 import type { Settings } from '../../../src/shared/settings.js';
 import type { LaunchConfigService } from '../../../src/main/application/services/launch-config-service.js';
 import type { LaunchProcessService } from '../../../src/main/application/services/launch-process-service.js';
@@ -52,11 +51,8 @@ interface Deps {
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
-  switchActiveWorkspace: (id: string) => Promise<Workspace>;
-  registerRootProject: (rootPath: string) => Promise<void>;
-  fileBrowserService: FileBrowserService;
-  fileBrowserPort: FileBrowserPort;
-  projectService: ProjectService;
+  workspaceActivation: WorkspaceActivation;
+  fileBrowserService: FileBrowserService | null;
   marketplaceService: MarketplaceService;
   hookService: HookService;
   healthService: HealthService;
@@ -111,11 +107,13 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const embeddedBrowserPort = null as unknown as EmbeddedBrowserPort;
   const sessionHistoryService = null as unknown as SessionHistoryService;
   const workspaceService = null as unknown as WorkspaceService;
-  const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
-  const registerRootProject = vi.fn().mockResolvedValue(undefined);
-  const fileBrowserService = null as unknown as FileBrowserService;
-  const fileBrowserPort = null as unknown as FileBrowserPort;
-  const projectService = null as unknown as ProjectService;
+  const workspaceActivation = {
+    switchTo: vi.fn(),
+    open: vi.fn(),
+    goHome: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as WorkspaceActivation;
+  const fileBrowserService = null;
   const marketplaceService = null as unknown as MarketplaceService;
   const hookService = null as unknown as HookService;
   const healthService = null as unknown as HealthService;
@@ -147,11 +145,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     embeddedBrowserPort,
     sessionHistoryService,
     workspaceService,
-    switchActiveWorkspace,
-    registerRootProject,
+    workspaceActivation,
     fileBrowserService,
-    fileBrowserPort,
-    projectService,
     marketplaceService,
     hookService,
     healthService,
@@ -216,6 +211,19 @@ describe('buildHandlers', () => {
     expect(handlers['repo.link']).toBeUndefined();
     expect(handlers['repo.unlink']).toBeUndefined();
     expect(handlers['repo.list']).toBeUndefined();
+  });
+
+  it('project.* is no longer registered (a folder is a workspace now) — the dispatcher answers not_found', async () => {
+    const handlers = buildHandlers(buildDeps());
+    expect(Object.keys(handlers).filter((method) => method.startsWith('project.'))).toEqual([]);
+    const dispatch = createDispatcher(handlers);
+    expect(await dispatch('project.list', {})).toMatchObject({ ok: false, error: { kind: 'not_found' } });
+  });
+
+  it('registers workspace.open and workspace.goHome', () => {
+    const handlers = buildHandlers(buildDeps());
+    expect(handlers['workspace.open']).toBeTypeOf('function');
+    expect(handlers['workspace.goHome']).toBeTypeOf('function');
   });
 
   it('dialog.selectFolder delegates to DialogPort.selectFolder', async () => {

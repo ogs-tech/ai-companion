@@ -6,11 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
 import { brand } from '../shared/brand.js';
-import {
-  devLockPath,
-  projectWorkspacePath,
-  workspacePath as workspaceDataDir,
-} from '../shared/brand-paths.js';
+import { devLockPath, workspacePath as workspaceDataDir } from '../shared/brand-paths.js';
 import type { Workspace } from '../shared/workspace.js';
 import { SettingsService } from './application/services/settings-service.js';
 import { WorkspaceBootstrapService } from './application/services/workspace-bootstrap.js';
@@ -18,10 +14,13 @@ import { WorkspaceService } from './application/services/workspace-service.js';
 import { ProductMigrationService } from './application/services/product-migration-service.js';
 import {
   buildWorkspaceScopedServices,
-  buildProjectService,
+  type ActiveWorkspaceScope,
   type WorkspaceScopedServices,
 } from './application/workspace-scoped-services.js';
-import { SymlinkManager } from './application/services/symlink-manager.js';
+import { WorkspaceModelMigration } from './application/services/workspace-model-migration.js';
+import { FsEntityRepository } from './infrastructure/entity/fs-entity-repository.js';
+import type { WorkspaceActivation } from './ipc/workspace-handlers.js';
+import { DomainError } from './domain/errors.js';
 import { createTaskQueue } from './application/task-queue.js';
 import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repository.js';
 import { FsWorkspaceBootstrap } from './infrastructure/workspace/fs-workspace-bootstrap.js';
@@ -173,25 +172,49 @@ async function wireIpc(): Promise<void> {
   await workspaceBootstrap.create(workspacePath);
 
   const clock = new SystemClock();
+  const workspaceRegistry = new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json'));
 
-  const workspaceService = new WorkspaceService(
-    new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json')),
-    clock,
-    workspaceBootstrap,
-    home,
-  );
-  /**
-   * The default workspace reuses the already-migrated `workspacePath` constant instead of
-   * recomputing the identical string a second time.
-   */
-  const dataDirFor = (workspace: Workspace): string =>
-    workspace.rootPath === home ? workspacePath : workspaceDataDir(workspace.rootPath);
-  const activeWorkspace = await workspaceService.getActive();
-  const activeDataDir = dataDirFor(activeWorkspace);
-  // Self-heals a non-default active workspace bootstrapped before a later addition (e.g. index.md) existed.
-  if (activeDataDir !== workspacePath) {
-    await workspaceBootstrap.create(activeDataDir);
+  // Before any service graph exists: moves project-era data onto the
+  // Global/workspace model. A failure leaves the old files untouched and the
+  // app on the IoError screen (see wireMigrationFailure).
+  let migration: Awaited<ReturnType<WorkspaceModelMigration['run']>>;
+  try {
+    migration = await new WorkspaceModelMigration({
+      fs: nodeFsAdapter,
+      registry: workspaceRegistry,
+      bootstrap: workspaceBootstrap,
+      clock,
+      homedir: home,
+      globalDataDir: workspacePath,
+    }).run();
+  } catch (error) {
+    wireMigrationFailure(error);
+    return;
   }
+
+  const workspaceService = new WorkspaceService(workspaceRegistry, clock, workspaceBootstrap, home, nodeFsAdapter);
+  const globalEntities = { repository: new FsEntityRepository(workspacePath, 'personal'), dataDir: workspacePath };
+
+  /** Bootstraps (self-heals) the workspace's data dir — a no-op scope at Início. */
+  const scopeFor = async (workspace: Workspace | null): Promise<ActiveWorkspaceScope | null> => {
+    if (workspace === null) return null;
+    const dataDir = workspaceDataDir(workspace.rootPath);
+    await workspaceBootstrap.create(dataDir);
+    return { workspace, dataDir };
+  };
+  let activeWorkspace = await workspaceService.getActive();
+
+  /**
+   * Harness-native `project` tiers (plugin cache, Claude settings, marketplace
+   * cache) resolve against the open workspace's root. At Início there is none,
+   * so those tiers are not offered.
+   */
+  const activeRoot = (): string => {
+    if (activeWorkspace === null) {
+      throw new DomainError('validation', 'No workspace is open — project-scoped settings need one');
+    }
+    return activeWorkspace.rootPath;
+  };
 
   const settingsService = new SettingsService(
     new FsSettingsRepository(join(workspacePath, 'settings.json')),
@@ -208,22 +231,22 @@ async function wireIpc(): Promise<void> {
     pluginsDir: (scope) =>
       scope === 'personal'
         ? pluginsWorkspaceDir
-        : join(projectWorkspacePath(process.cwd()), 'plugins'),
+        : join(workspaceDataDir(activeRoot()), 'plugins'),
     cacheDir: (scope) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'plugins', 'cache', 'local')
-        : join(process.cwd(), '.claude', 'plugins', 'cache', 'local'),
+        : join(activeRoot(), '.claude', 'plugins', 'cache', 'local'),
   });
 
   const claudeSettingsFile = new ClaudeSettingsFile({
     settingsPath: (scope) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'settings.json')
-        : join(process.cwd(), '.claude', 'settings.json'),
+        : join(activeRoot(), '.claude', 'settings.json'),
     symlinkPath: (scope, id) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'plugins', 'cache', 'local', id)
-        : join(process.cwd(), '.claude', 'plugins', 'cache', 'local', id),
+        : join(activeRoot(), '.claude', 'plugins', 'cache', 'local', id),
   });
 
   const manifestParser = new PluginManifestParser(nodeFsAdapter);
@@ -277,7 +300,7 @@ async function wireIpc(): Promise<void> {
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
-      : join(projectWorkspacePath(process.cwd()), 'marketplaces-cache');
+      : join(workspaceDataDir(activeRoot()), 'marketplaces-cache');
   const marketplaceService = new MarketplaceService({
     repository: new SettingsMarketplaceRepository(claudeSettingsFile),
     parser: marketplaceParser,
@@ -331,6 +354,7 @@ async function wireIpc(): Promise<void> {
     settingsService,
     homedir: home,
     workspaceService,
+    globalEntities,
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,
@@ -346,13 +370,38 @@ async function wireIpc(): Promise<void> {
     repoGitPort: new SimpleGitRepoClient(),
   };
 
+  if (migration.migrated) await syncAfterMigration(migration.touchedWorkspaceIds);
+
   let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
-    activeDataDir,
+    await scopeFor(activeWorkspace),
     sharedDeps,
   );
 
   const fileBrowserPort = new NodeFileBrowserAdapter([new NumbersConverterAdapter()]);
-  let fileBrowserService = new FileBrowserService(fileBrowserPort, activeWorkspace.rootPath);
+  const fileBrowserFor = (workspace: Workspace | null): FileBrowserService | null =>
+    workspace === null ? null : new FileBrowserService(fileBrowserPort, workspace.rootPath);
+  let fileBrowserService = fileBrowserFor(activeWorkspace);
+
+  /**
+   * Re-points every adapter destination at the canonical files the migration
+   * moved — Global first, then each touched workspace (whose graph also
+   * re-syncs Global's entities, harmlessly). Best-effort: a failed sync is
+   * what `adapter.syncAll` and the health screen already surface.
+   */
+  async function syncAfterMigration(touchedWorkspaceIds: string[]): Promise<void> {
+    const targets: (Workspace | null)[] = [null];
+    for (const id of touchedWorkspaceIds) {
+      const workspace = await workspaceService.get(id).catch(() => null);
+      if (workspace !== null) targets.push(workspace);
+    }
+    for (const target of targets) {
+      try {
+        await buildWorkspaceScopedServices(await scopeFor(target), sharedDeps).adapterManager.syncAll({});
+      } catch (error) {
+        console.error('[migration] adapter sync failed for', target?.rootPath ?? 'Global', error);
+      }
+    }
+  }
 
   const attachSessionBridges = (services: WorkspaceScopedServices): void => {
     services.sessionService.onOutput((sessionId, chunk) => {
@@ -413,11 +462,8 @@ async function wireIpc(): Promise<void> {
     embeddedBrowserPort: embeddedBrowserAdapter,
     sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,
-    projectService: workspaceScoped.projectService,
-    switchActiveWorkspace,
-    registerRootProject,
+    workspaceActivation,
     fileBrowserService,
-    fileBrowserPort,
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
@@ -434,24 +480,27 @@ async function wireIpc(): Promise<void> {
   let dispatch = createDispatcher(buildHandlers(buildDeps()));
 
   /**
-   * Serialized: `workspace.switchTo` is renderer-triggerable, and two
-   * overlapping switches would interleave across the `await` below — leaving
-   * the workspace that "wins" up to which registry write happened to land
-   * last rather than which switch was requested last, and leaving the on-disk
+   * Serialized: activation is renderer-triggerable, and two overlapping
+   * switches would interleave across the `await`s below — leaving the
+   * workspace that "wins" up to which registry write happened to land last
+   * rather than which switch was requested last, and leaving the on-disk
    * active pointer free to disagree with the graph every later IPC call reads.
-   * Queuing makes each switch atomic with respect to the others.
+   * Queuing makes each activation atomic with respect to the others.
+   *
+   * `select` runs first and persists the new active id; only once it succeeds
+   * is the old graph torn down, so a rejected `workspace.open` (not a folder,
+   * the home dir) leaves the open workspace and its sessions alone.
    */
-  function switchActiveWorkspace(id: string): Promise<Workspace> {
+  function activate<T extends Workspace | null>(select: () => Promise<T>): Promise<T> {
     return switchQueue(async () => {
+      const target = await select();
       workspaceScoped.sessionService.killAll();
       workspaceScoped.launchProcessService.killAll();
       await embeddedBrowserAdapter.destroyAll();
       await workspaceScoped.entityWatchService.stop();
-      const target = await workspaceService.switchTo(id);
-      const targetDataDir = dataDirFor(target);
-      await workspaceBootstrap.create(targetDataDir); // same self-heal as at startup
-      workspaceScoped = buildWorkspaceScopedServices(targetDataDir, sharedDeps);
-      fileBrowserService = new FileBrowserService(fileBrowserPort, target.rootPath);
+      activeWorkspace = target;
+      workspaceScoped = buildWorkspaceScopedServices(await scopeFor(target), sharedDeps);
+      fileBrowserService = fileBrowserFor(target);
       attachSessionBridges(workspaceScoped);
       attachLaunchProcessBridges(workspaceScoped);
       attachEntityWatch(workspaceScoped);
@@ -460,19 +509,22 @@ async function wireIpc(): Promise<void> {
     });
   }
 
-  /**
-   * Registers a freshly created workspace's picked root folder as its first `Project` (see
-   * docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #4). Built against
-   * that workspace's own dataDir rather than `workspaceScoped.projectService` — a brand-new
-   * workspace is never the active one yet (`workspace.create` doesn't switch to it), so writing
-   * through the active graph's `ProjectService` would register the project onto the wrong
-   * workspace's `projects.json`.
-   */
-  async function registerRootProject(rootPath: string): Promise<void> {
-    const rootDataDir = workspaceDataDir(rootPath);
-    const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, rootDataDir);
-    await buildProjectService(rootDataDir, symlinkManager, clock).findOrCreateByPath(rootPath);
-  }
+  const goHome = async (): Promise<void> => {
+    await activate(async () => {
+      await workspaceService.goHome();
+      return null;
+    });
+  };
+
+  const workspaceActivation: WorkspaceActivation = {
+    switchTo: (id) => activate(() => workspaceService.switchTo(id)),
+    open: (path) => activate(() => workspaceService.open(path)),
+    goHome,
+    delete: async (id) => {
+      if (activeWorkspace?.id === id) await goHome();
+      await workspaceService.delete(id);
+    },
+  };
 
   ipcMain.handle(IPC_CHANNEL, async (_event, payload: unknown) => {
     if (!isCallPayload(payload)) {
@@ -483,6 +535,18 @@ async function wireIpc(): Promise<void> {
     }
     return dispatch(payload.method, payload.params);
   });
+}
+
+/**
+ * Boots into a dispatcher that answers every call with the migration's
+ * `io` error, so the renderer's first `settings.get` lands on the IoError
+ * screen with the message — which names the backup folder — instead of the
+ * app quitting on a dialog.
+ */
+function wireMigrationFailure(error: unknown): void {
+  console.error('[boot] workspace migration failed:', error);
+  const message = error instanceof Error ? error.message : String(error);
+  ipcMain.handle(IPC_CHANNEL, () => ({ ok: false, error: { kind: 'io', message } }));
 }
 
 function createWindow(): void {

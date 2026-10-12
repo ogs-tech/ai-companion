@@ -1,6 +1,5 @@
 import type { RepoGitPort } from '../ports/repo-git-port.js';
-import type { ProjectService } from './project-service.js';
-import type { WorkspaceService } from './workspace-service.js';
+import type { Workspace } from '../../../shared/workspace.js';
 import { createTaskQueue, type TaskQueue } from '../task-queue.js';
 import { DomainError } from '../../domain/errors.js';
 import { GitConflictError, NotARepositoryError } from '../../domain/git-errors.js';
@@ -13,14 +12,13 @@ import type {
 } from '../../../shared/git.js';
 
 export interface GitServiceDeps {
-  projectService: Pick<ProjectService, 'get'>;
-  workspaceService: Pick<WorkspaceService, 'getActive'>;
+  /** The workspace this graph was built for — `null` at Início, where every call fails `validation`. */
+  activeWorkspace: Pick<Workspace, 'rootPath'> | null;
 }
 
 /**
- * The `git` namespace's use cases over a Project's (or the workspace root's)
- * repository. Resolves the target on every call — a Project's path can change —
- * and runs mutations on the same root one at a time; reads bypass the queue.
+ * The `git` namespace's use cases over the open workspace root's repository.
+ * Runs mutations one at a time; reads bypass the queue.
  */
 export class GitService {
   private readonly queues = new Map<string, TaskQueue>();
@@ -30,45 +28,37 @@ export class GitService {
     private readonly deps: GitServiceDeps,
   ) {}
 
-  async status(projectId?: string): Promise<GitStatus> {
-    return this.port.status(await this.resolveRoot(projectId));
+  async status(): Promise<GitStatus> {
+    return this.port.status(this.resolveRoot());
   }
 
-  async diff(
-    projectId: string | undefined,
-    path: string,
-    source: GitDiffSource,
-  ): Promise<GitFileDiff> {
+  async diff(path: string, source: GitDiffSource): Promise<GitFileDiff> {
     assertRepoPath(path);
     if (source.kind === 'commit') {
       throw new DomainError('validation', "Diff source 'commit' is not supported yet");
     }
-    const root = await this.resolveRepo(projectId);
+    const root = await this.resolveRepo();
     return this.port.diff(root, path, source.kind);
   }
 
-  async stage(projectId: string | undefined, paths: string[]): Promise<void> {
+  async stage(paths: string[]): Promise<void> {
     assertRepoPaths(paths);
-    await this.mutate(projectId, (root) => this.port.stage(root, paths));
+    await this.mutate((root) => this.port.stage(root, paths));
   }
 
-  async unstage(projectId: string | undefined, paths: string[]): Promise<void> {
+  async unstage(paths: string[]): Promise<void> {
     assertRepoPaths(paths);
-    await this.mutate(projectId, (root) => this.port.unstage(root, paths));
+    await this.mutate((root) => this.port.unstage(root, paths));
   }
 
-  async discard(projectId: string | undefined, paths: string[]): Promise<void> {
+  async discard(paths: string[]): Promise<void> {
     assertRepoPaths(paths);
-    await this.mutate(projectId, (root) => this.port.discard(root, paths));
+    await this.mutate((root) => this.port.discard(root, paths));
   }
 
-  async commit(
-    projectId: string | undefined,
-    message: string,
-    amend: boolean,
-  ): Promise<GitCommitResult> {
+  async commit(message: string, amend: boolean): Promise<GitCommitResult> {
     if (message.trim().length === 0) throw new DomainError('validation', 'Commit message is empty');
-    return this.mutate(projectId, async (root) => {
+    return this.mutate(async (root) => {
       if (!amend) {
         const status = await this.port.status(root);
         const staged = status.isRepo && status.files.some(isStaged);
@@ -78,8 +68,8 @@ export class GitService {
     });
   }
 
-  async init(projectId?: string): Promise<void> {
-    const root = await this.resolveRoot(projectId);
+  async init(): Promise<void> {
+    const root = this.resolveRoot();
     await this.queueFor(root)(async () => {
       if (await this.port.isRepo(root)) {
         throw new GitConflictError(`Already a git repository: ${root}`);
@@ -88,11 +78,8 @@ export class GitService {
     });
   }
 
-  private async mutate<T>(
-    projectId: string | undefined,
-    task: (root: string) => Promise<T>,
-  ): Promise<T> {
-    const root = await this.resolveRepo(projectId);
+  private async mutate<T>(task: (root: string) => Promise<T>): Promise<T> {
+    const root = await this.resolveRepo();
     return this.queueFor(root)(() => task(root));
   }
 
@@ -106,17 +93,16 @@ export class GitService {
   }
 
   /** Like {@link resolveRoot}, but the target must be a repository (`not_found` otherwise). */
-  private async resolveRepo(projectId: string | undefined): Promise<string> {
-    const root = await this.resolveRoot(projectId);
+  private async resolveRepo(): Promise<string> {
+    const root = this.resolveRoot();
     if (!(await this.port.isRepo(root))) throw new NotARepositoryError(root);
     return root;
   }
 
-  // Same projectId? → root convention as the openWith handlers; consolidating
-  // the two is tracked separately (open-with handler DRY debt).
-  private async resolveRoot(projectId: string | undefined): Promise<string> {
-    if (projectId !== undefined) return (await this.deps.projectService.get(projectId)).path;
-    return (await this.deps.workspaceService.getActive()).rootPath;
+  private resolveRoot(): string {
+    const workspace = this.deps.activeWorkspace;
+    if (workspace === null) throw new DomainError('validation', 'No workspace is open — git needs one');
+    return workspace.rootPath;
   }
 }
 

@@ -15,8 +15,8 @@ Where each `manage` adapter materializes an `Entity`. Source of truth:
 | Symbol | Meaning |
 |---|---|
 | `~` | The user's home directory. |
-| `<data>` | The active workspace's data dir — `<workspace.rootPath>/.ai-companion/` (`~/.ai-companion/` for the default workspace). See [On-disk layout](on-disk-layout.md). |
-| `<scope>` | The path a `project`/`workspace`-scoped entity resolves to at sync time: `Project.path` or `Workspace.rootPath`, looked up from `scopeId` by `resolveScopePath` (`src/main/application/resolve-scope-path.ts`). Never cached on the entity. |
+| `<data>` | The data dir the entity lives in — Global's `~/.ai-companion/` for `personal`, the workspace's `<workspace.rootPath>/.ai-companion/` for `workspace`. See [On-disk layout](on-disk-layout.md). |
+| `<scope>` | The path a `workspace`-scoped entity resolves to at sync time: `Workspace.rootPath`, looked up from `scopeId` by `resolveScopePath` (`src/main/application/resolve-scope-path.ts`). Never cached on the entity. |
 | `<name>` | The entity's `name`. |
 | 🔗 | `strategy: 'symlink'` — a symlink pointing at the canonical file in `<data>`. |
 | ✍️ | `strategy: 'write'` — a generated regular file, recognized as app-owned by a marker. |
@@ -25,18 +25,18 @@ Where each `manage` adapter materializes an `Entity`. Source of truth:
 
 Enabled by default. Every destination is a symlink — the Claude adapter never uses `write`.
 
-| Entity | `personal` | `project` / `workspace` | Canonical source |
+| Entity | `personal` | `workspace` | Canonical source |
 |---|---|---|---|
 | Skill | 🔗 `~/.claude/skills/<name>` (dir) | 🔗 `<scope>/.claude/skills/<name>` (dir) | `<data>/skills/<name>/` |
 | Agent | 🔗 `~/.claude/agents/<name>.md` | 🔗 `<scope>/.claude/agents/<name>.md` | `<data>/agents/<name>.md` |
-| Instruction | 🔗 `~/.claude/CLAUDE.md` **and** 🔗 `~/AGENTS.md` | 🔗 `<scope>/.claude/CLAUDE.md` **and** 🔗 `<scope>/AGENTS.md` | personal: `<data>/instructions/default.md`; scoped: `<data>/instructions/project/<name>/INSTRUCTION.md` |
+| Instruction | 🔗 `~/.claude/CLAUDE.md` **and** 🔗 `~/AGENTS.md` | 🔗 `<scope>/.claude/CLAUDE.md` **and** 🔗 `<scope>/AGENTS.md` | personal: `<data>/instructions/default.md`; workspace: `<data>/instructions/project/<name>/INSTRUCTION.md` |
 
 ## Cursor (`cursor`)
 
 Off by default (`settings.adapters.cursor.enabled`). `manage` only — see
 [the harness model](../explanation/harness-model.md#the-two-capabilities).
 
-| Entity | `personal` | `project` / `workspace` |
+| Entity | `personal` | `workspace` |
 |---|---|---|
 | Skill | 🔗 `~/.cursor/skills/<name>` (dir) | 🔗 `<scope>/.cursor/skills/<name>` (dir) |
 | Agent | 🔗 `~/.cursor/agents/<name>.md` | 🔗 `<scope>/.cursor/agents/<name>.md` |
@@ -82,18 +82,19 @@ not all `ok`) and the **Diagnóstico** screen list them.
 - Deleting an entity with `removeSymlinks: true` removes its destinations.
 - Disabling an adapter (`adapter.setEnabled { enabled: false }`) removes that adapter's symlinks
   **and** its owned generated files, unless `removeSymlinks: false` is passed.
-- A symlink is only removed if it points into the workspace data dir; a regular file at a symlink
+- A symlink is only removed if it points into the entity's own data dir (Global's or the workspace's); a regular file at a symlink
   destination is skipped (`skipped-real-file`). A generated file is only removed if it carries its marker.
 
 ## Known issues
 
-- **Both adapters claim `<scope>/AGENTS.md` for a scoped instruction.** Claude symlinks it, Cursor
+- **Both adapters claim `<scope>/AGENTS.md` for a workspace instruction.** Claude symlinks it, Cursor
   writes a generated file. With both adapters enabled, each sync replaces the other's version and
-  leaves a backup in `_backups/` every time. Until this is resolved, avoid enabling Cursor if you rely on
-  project/workspace instructions — or expect the file to be the Cursor-generated copy after a sync
+  leaves a backup in `~/.ai-companion/_backups/` every time. Until this is resolved, avoid enabling Cursor if you rely on
+  workspace instructions — or expect the file to be the Cursor-generated copy after a sync
   (Cursor runs after Claude in the adapter map, `src/main/application/workspace-scoped-services.ts`).
-- **Switching workspace does not prune targets.** `~/.claude/` keeps symlinks to the previous
-  workspace's entities until they are re-synced; see
-  [Architecture → Workspace / Project](architecture.md#workspace--project).
+- **Switching workspace does not prune targets.** `personal` entities always live in Global, so
+  `~/.claude/` no longer follows the open workspace; but `syncAll` only covers Global plus the open
+  workspace and never prunes stale links — see
+  [Architecture → Global / Workspace](architecture.md#global--workspace).
 - Hooks and MCP servers are not `Entity` kinds yet and are not routed through adapters; they are written
   straight into Claude Code's own files — see [On-disk layout](on-disk-layout.md#files-the-app-edits-outside-its-data-dir).

@@ -10,14 +10,12 @@ import {
 import { getBrowserTabsSnapshot, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
-const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
-
 let call: CallSpy;
 beforeEach(() => {
   call = mockApi();
   call.mockImplementation(async (method: string) => {
     if (method === 'workspace.list') return ok([]);
-    if (method === 'workspace.getActive') return ok(DEFAULT_WORKSPACE);
+    if (method === 'workspace.getActive') return ok(null);
     return ok({ ui: { theme: 'light' }, adapters: { claude: { enabled: true } }, language: 'off' });
   });
 });
@@ -61,7 +59,7 @@ describe('TopNav', () => {
     it('opens a blank browser tab via IPC and registers it in the store', async () => {
       call.mockImplementation(async (method: string) => {
         if (method === 'workspace.list') return ok([]);
-        if (method === 'workspace.getActive') return ok(DEFAULT_WORKSPACE);
+        if (method === 'workspace.getActive') return ok(null);
         if (method === 'browser.openTab') return ok({ tabId: 'tab-1' });
         return ok({ ui: { theme: 'light' }, adapters: { claude: { enabled: true } }, language: 'off' });
       });
@@ -83,8 +81,8 @@ describe('TopNav', () => {
 
     it('enables back once the history store has an earlier entry to go to', () => {
       registerWorkspaceHistoryApplier(vi.fn());
-      pushWorkspaceHistoryEntry({ workspaceId: 'w1', projectId: null, activeTabId: null });
-      pushWorkspaceHistoryEntry({ workspaceId: 'w1', projectId: null, activeTabId: 'a1' });
+      pushWorkspaceHistoryEntry({ workspaceId: 'w1', activeTabId: null });
+      pushWorkspaceHistoryEntry({ workspaceId: 'w1', activeTabId: 'a1' });
       renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
       expect(screen.getByTestId('nav-history-back')).toBeEnabled();
       expect(screen.getByTestId('nav-history-forward')).toBeDisabled();
@@ -93,9 +91,9 @@ describe('TopNav', () => {
     it('clicking back calls the registered applier with the previous entry', async () => {
       const applier = vi.fn().mockResolvedValue('applied');
       registerWorkspaceHistoryApplier(applier);
-      const scopeEntry = { workspaceId: 'w1', projectId: null, activeTabId: null };
+      const scopeEntry = { workspaceId: 'w1', activeTabId: null };
       pushWorkspaceHistoryEntry(scopeEntry);
-      pushWorkspaceHistoryEntry({ workspaceId: 'w1', projectId: null, activeTabId: 'a1' });
+      pushWorkspaceHistoryEntry({ workspaceId: 'w1', activeTabId: 'a1' });
       renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
       await userEvent.click(screen.getByTestId('nav-history-back'));
       expect(applier).toHaveBeenCalledWith(scopeEntry);

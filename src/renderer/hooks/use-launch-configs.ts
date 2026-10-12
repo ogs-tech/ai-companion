@@ -1,22 +1,13 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
-import type { ProjectLaunchConfigs } from '../../shared/launch-config.js';
+import type { WorkspaceLaunchConfigs } from '../../shared/launch-config.js';
 
 export const launchConfigsQueryKey = ['launchConfigs'] as const;
 
-/** Every registered Project's launch.json configs, across the active workspace. */
-export function useLaunchConfigs(): UseQueryResult<ProjectLaunchConfigs[]> {
-  return useQuery<ProjectLaunchConfigs[]>({
+/** The open workspace's own launch.json configs — `null` at Início. */
+export function useLaunchConfigs(): UseQueryResult<WorkspaceLaunchConfigs | null> {
+  return useQuery<WorkspaceLaunchConfigs | null>({
     queryKey: launchConfigsQueryKey,
-    queryFn: async () => {
-      const list = await callIpc<ProjectLaunchConfigs[]>('launchConfig.list');
-      return Array.isArray(list) ? list : [];
-    },
+    queryFn: async () => (await callIpc<WorkspaceLaunchConfigs | null>('launchConfig.list')) ?? null,
   });
-}
-
-/** One Project's own launch configs, derived from the shared list query. */
-export function useProjectLaunchConfigs(projectId: string): ProjectLaunchConfigs | undefined {
-  const { data } = useLaunchConfigs();
-  return data?.find((entry) => entry.projectId === projectId);
 }

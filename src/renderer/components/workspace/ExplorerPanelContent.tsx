@@ -5,40 +5,33 @@ import { WorkspaceBreadcrumbHeader } from './WorkspaceBreadcrumbHeader.js';
 import { WorkspaceManagementList } from './WorkspaceManagementList.js';
 import { GitView } from './git/GitView.js';
 import type { GitDiffSource } from '../../../shared/git.js';
-import type { Project } from '../../../shared/project.js';
 import type { Workspace } from '../../../shared/workspace.js';
 
 interface ExplorerPanelContentProps {
-  activeWorkspace: Workspace | undefined;
-  isDefaultWorkspace: boolean;
-  /** The Control Panel's own current scope, only surfaced here for the header — the tree below never filters by it, it only expands folders in place. */
-  selectedProject: Project | null;
+  /** `null` at Início; `undefined` while loading. */
+  activeWorkspace: Workspace | null | undefined;
+  /** True at Início (no workspace open) — shows the workspace list instead of a file tree. */
+  isHome: boolean;
   onNavigateToWorkspace: () => void;
   /** The Explorer Panel's own "⋮" menu (global-entity visibility, panel toggles, destructive remove) — built by the parent screen, since it reaches state (both panels' collapse, `showGlobal`) that isn't local to this panel. */
   headerMenu: React.ReactNode;
-  /** Trailing actions on the Files/Git toggle row, e.g. the "Reler do disco" refresh button. The Default workspace has no toggle row, so they sit beside `headerMenu` there. */
+  /** Trailing actions on the Files/Git toggle row, e.g. the "Reler do disco" refresh button. Início has no toggle row, so they sit beside `headerMenu` there. */
   toolbarActions?: React.ReactNode;
-  /** Default workspace only: guards a workspace switch from `WorkspaceManagementList` the same way any other scope change does. */
+  /** Início only: guards a workspace switch from `WorkspaceManagementList` the same way any other scope change does. */
   beforeSwitch: () => boolean;
-  /** Default workspace only: the Personal Instruction's own pinned row. */
+  /** Início only: the Personal Instruction's own pinned row. */
   personalInstructionRow: React.ReactNode;
-  /** Default workspace only: Starter Pack/Marketplaces/Diagnóstico's own pinned rows. */
+  /** Início only: Starter Pack/Marketplaces/Diagnóstico's own pinned rows. */
   appAreaRows: React.ReactNode;
-  projects: ReadonlyArray<Project>;
-  onSelectFile: (relPath: string, projectId?: string) => void;
-  onUseAsProject: (absolutePath: string) => void;
-  onPreviewFile: (relPath: string, projectId?: string) => void;
-  onNewAction: (relPath: string, projectId?: string) => void;
+  onSelectFile: (relPath: string) => void;
+  onOpenAsWorkspace: (absolutePath: string) => void;
+  onPreviewFile: (relPath: string) => void;
+  onNewAction: (relPath: string) => void;
   /** The active workspace's own pinned INSTRUCTIONS row, rendered above the file tree. */
   instructionRow: React.ReactNode;
-  /** Content pinned below `instructionRow` and above the folders/files — e.g. the workspace-root Project's own Launch Configurations group. */
+  /** Content pinned below `instructionRow` and above the folders/files — e.g. the workspace's Launch Configurations group. */
   pinnedRows?: React.ReactNode;
-  renderProjectInstructionRow: (project: Project, depth: number) => React.ReactNode;
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
-  workspaceRootPath?: string;
-  /** The Git view's repo picker writes the shared Project scope, so the Control Panel follows it. */
-  onSelectProject: (projectId: string | null) => void;
-  onOpenGitDiff: (args: { projectId?: string; path: string; source: GitDiffSource }) => void;
+  onOpenGitDiff: (args: { path: string; source: GitDiffSource }) => void;
 }
 
 type ExplorerView = 'files' | 'git';
@@ -65,31 +58,24 @@ const segmentedControlSx: SxProps<Theme> = (theme) => ({
 
 /**
  * The Explorer Panel's body inside the shared `SidePanel` card: the
- * workspace/project breadcrumb (with the "⋮" menu) over the Files/Git
- * segmented control, then either the workspace list (Default workspace) or
- * the file/entity tree.
+ * workspace breadcrumb (with the "⋮" menu) over the Files/Git segmented
+ * control, then either the workspace list (Início) or the file/entity tree.
  */
 export function ExplorerPanelContent({
   activeWorkspace,
-  isDefaultWorkspace,
-  selectedProject,
+  isHome,
   onNavigateToWorkspace,
   headerMenu,
   toolbarActions,
   beforeSwitch,
   personalInstructionRow,
   appAreaRows,
-  projects,
   onSelectFile,
-  onUseAsProject,
+  onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
   instructionRow,
   pinnedRows,
-  renderProjectInstructionRow,
-  renderProjectLaunchConfigsRow,
-  workspaceRootPath,
-  onSelectProject,
   onOpenGitDiff,
 }: ExplorerPanelContentProps): React.ReactElement {
   const [view, setView] = useState<ExplorerView>('files');
@@ -98,12 +84,12 @@ export function ExplorerPanelContent({
     <>
       <Box sx={{ flexShrink: 0, px: 1.25, pt: 0.75, pb: 0.75, borderBottom: 1, borderColor: 'divider' }}>
         <WorkspaceBreadcrumbHeader
-          workspaceName={activeWorkspace?.name ?? '…'}
-          isDefaultWorkspace={activeWorkspace?.isDefault ?? false}
-          path={selectedProject ? selectedProject.path : (activeWorkspace?.rootPath ?? '')}
+          workspaceName={isHome ? 'Início' : (activeWorkspace?.name ?? '…')}
+          isHome={isHome}
+          path={isHome ? '~' : (activeWorkspace?.rootPath ?? '')}
           onNavigateToWorkspace={onNavigateToWorkspace}
           actions={
-            isDefaultWorkspace ? (
+            isHome ? (
               <>
                 {toolbarActions}
                 {headerMenu}
@@ -113,7 +99,7 @@ export function ExplorerPanelContent({
             )
           }
         />
-        {!isDefaultWorkspace && (
+        {!isHome && (
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: 0.75 }}>
             <ToggleButtonGroup
               exclusive
@@ -136,28 +122,18 @@ export function ExplorerPanelContent({
         )}
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {isDefaultWorkspace ? (
+        {isHome ? (
           <WorkspaceManagementList beforeSwitch={beforeSwitch} instructionRow={personalInstructionRow} appAreaRows={appAreaRows} />
         ) : view === 'git' ? (
-          <GitView
-            projectId={selectedProject?.id}
-            visible
-            projects={projects}
-            onSelectProject={onSelectProject}
-            onOpenDiff={onOpenGitDiff}
-          />
+          <GitView visible onOpenDiff={onOpenGitDiff} />
         ) : (
           <FolderTree
             onSelectFile={onSelectFile}
-            onUseAsProject={onUseAsProject}
+            onOpenAsWorkspace={onOpenAsWorkspace}
             onPreviewFile={onPreviewFile}
             onNewAction={onNewAction}
-            projects={projects}
             instructionRow={instructionRow}
             {...(pinnedRows !== undefined ? { pinnedRows } : {})}
-            renderProjectInstructionRow={renderProjectInstructionRow}
-            {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
-            {...(workspaceRootPath ? { workspaceRootPath } : {})}
           />
         )}
       </Box>

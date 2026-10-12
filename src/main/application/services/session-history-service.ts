@@ -18,7 +18,6 @@ import type { ModelRate } from '../pricing/model-pricing.js';
 import { primaryModel, resolveCostUsd } from '../pricing/model-pricing.js';
 import type { SettingsService } from './settings-service.js';
 import type { WorkspaceService } from './workspace-service.js';
-import type { ProjectService } from './project-service.js';
 import { DomainError } from '../../domain/errors.js';
 
 /** A ref paired with its reading, ordered and filtered as one. */
@@ -65,7 +64,6 @@ export class SessionHistoryService {
     private readonly settingsService: Pick<SettingsService, 'load' | 'getDefaults'>,
     private readonly scopeDeps: {
       workspaceService: Pick<WorkspaceService, 'get'>;
-      projectService: Pick<ProjectService, 'get'>;
     },
   ) {}
 
@@ -191,12 +189,8 @@ export class SessionHistoryService {
   /** The directory a scope covers, or `null` for "everything on this machine". */
   private async scopeRoot(scope: HistoryScope): Promise<string | null> {
     if (scope.kind === 'all') return null;
-    if (scope.kind === 'workspace') {
-      const workspace = await this.scopeDeps.workspaceService.get(scope.workspaceId);
-      return workspace.rootPath;
-    }
-    const project = await this.scopeDeps.projectService.get(scope.projectId);
-    return project.path;
+    const workspace = await this.scopeDeps.workspaceService.get(scope.workspaceId);
+    return workspace.rootPath;
   }
 }
 

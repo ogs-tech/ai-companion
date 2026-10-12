@@ -1,13 +1,10 @@
 /**
- * Which conversations a history query covers. `project`/`workspace` match a
+ * Which conversations a history query covers. `workspace` matches a
  * conversation by the directory it ran in — including anything below it, so a
- * session opened in a subfolder still belongs to its project. `all` is every
+ * session opened in a subfolder still belongs to its workspace. `all` is every
  * conversation the CLI has ever recorded on this machine.
  */
-export type HistoryScope =
-  | { kind: 'project'; projectId: string }
-  | { kind: 'workspace'; workspaceId: string }
-  | { kind: 'all' };
+export type HistoryScope = { kind: 'workspace'; workspaceId: string } | { kind: 'all' };
 
 export interface HistoryFilters {
   /** Model ids, as the transcripts spell them. Empty or absent means every model. */

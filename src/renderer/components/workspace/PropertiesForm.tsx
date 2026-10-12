@@ -1,21 +1,16 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import {
-  Alert, Box, Checkbox, FormControl, FormControlLabel, FormGroup, InputLabel, MenuItem, Select,
-  Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
+  Box, Checkbox, FormControlLabel, FormGroup, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
-import { callIpc } from '../../lib/ipc.js';
-import { useFindOrCreateProjectByPath, useProjects } from '../../hooks/use-projects.js';
 import { useActiveWorkspace } from '../../hooks/use-workspaces.js';
 import type { Agent, Instruction, Scope, Skill } from '../../../shared/entity.js';
 
 export type EditableEntity = Skill | Agent | Instruction;
 export type EditorHiddenField = 'name' | 'scope' | 'description' | 'version';
 
-const scopeOptionsFor = (kind: EditableEntity['kind']): readonly Scope[] =>
-  kind === 'instruction' ? (['personal', 'project'] as const) : (['personal', 'workspace', 'project'] as const);
+const SCOPE_OPTIONS: readonly Scope[] = ['personal', 'workspace'];
 
-const SCOPE_LABEL: Record<Scope, string> = { personal: 'Personal', workspace: 'Workspace', project: 'Project' };
-const NEW_PROJECT_OPTION = '__new_project__';
+const SCOPE_LABEL: Record<Scope, string> = { personal: 'Personal', workspace: 'Workspace' };
 
 function clearScopeId<T extends { scopeId?: string }>(entity: T): T {
   const { scopeId: _drop, ...rest } = entity;
@@ -31,38 +26,21 @@ interface PropertiesFormProps {
 
 /** The frontmatter strip — name/description/version/scope — for entity tabs (Skill/Agent/Instruction) in EditorPanel. */
 export function PropertiesForm({ entity, onChange, hiddenFields, readOnly }: PropertiesFormProps): React.ReactElement {
-  const { data: projects = [] } = useProjects();
   const activeWorkspace = useActiveWorkspace();
-  const findOrCreateProject = useFindOrCreateProjectByPath();
-  const [projectPickerError, setProjectPickerError] = useState<string | null>(null);
+  // A workspace entity always belongs to the open workspace — at Início there is none to pick.
+  const activeWorkspaceId = activeWorkspace.data?.id;
 
   const isHidden = (field: EditorHiddenField): boolean => hiddenFields?.has(field) ?? false;
 
   const handleScopeChange = (value: Scope | null): void => {
     if (!value) return;
-    const scopeId = value === 'workspace' ? activeWorkspace.data?.id : undefined;
+    const scopeId = value === 'workspace' ? activeWorkspaceId : undefined;
     onChange((prev) => {
       const cleared = clearScopeId(prev);
       return (scopeId !== undefined
         ? { ...cleared, scopes: [value], scopeId }
         : { ...cleared, scopes: [value] }) as EditableEntity;
     });
-  };
-
-  const handleProjectSelectChange = async (value: string): Promise<void> => {
-    if (value === NEW_PROJECT_OPTION) {
-      setProjectPickerError(null);
-      try {
-        const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
-        if (picked.canceled || !picked.path) return;
-        const project = await findOrCreateProject.mutateAsync(picked.path);
-        onChange((prev) => ({ ...prev, scopes: ['project'], scopeId: project.id } as EditableEntity));
-      } catch (err) {
-        setProjectPickerError(err instanceof Error ? err.message : 'Erro ao abrir o seletor');
-      }
-      return;
-    }
-    onChange((prev) => ({ ...prev, scopes: ['project'], scopeId: value } as EditableEntity));
   };
 
   return (
@@ -109,33 +87,20 @@ export function PropertiesForm({ entity, onChange, hiddenFields, readOnly }: Pro
                 value={entity.scopes[0] ?? 'personal'}
                 onChange={(_, value: Scope | null) => handleScopeChange(value)}
               >
-                {scopeOptionsFor(entity.kind).map((value) => (
-                  <ToggleButton key={value} value={value}>{SCOPE_LABEL[value]}</ToggleButton>
+                {SCOPE_OPTIONS.map((value) => (
+                  <ToggleButton
+                    key={value}
+                    value={value}
+                    disabled={value === 'workspace' && activeWorkspaceId === undefined}
+                  >
+                    {SCOPE_LABEL[value]}
+                  </ToggleButton>
                 ))}
               </ToggleButtonGroup>
-              {entity.scopes[0] === 'project' && (
-                <FormControl size="small" disabled={readOnly} sx={{ mt: 1.5, minWidth: 260, display: 'block' }}>
-                  <InputLabel id="scope-project-select-label">Project</InputLabel>
-                  <Select
-                    labelId="scope-project-select-label"
-                    label="Project"
-                    value={entity.scopeId ?? ''}
-                    onChange={(e) => void handleProjectSelectChange(e.target.value)}
-                  >
-                    {projects.map((p) => (
-                      <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                    ))}
-                    <MenuItem value={NEW_PROJECT_OPTION}>+ Novo project…</MenuItem>
-                  </Select>
-                </FormControl>
-              )}
-              {projectPickerError && (
-                <Alert severity="error" sx={{ mt: 1 }}>{projectPickerError}</Alert>
-              )}
             </>
           ) : (
             <FormGroup row>
-              {(scopeOptionsFor(entity.kind)).map((value) => (
+              {SCOPE_OPTIONS.map((value) => (
                 <FormControlLabel
                   key={value}
                   control={

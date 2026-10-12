@@ -16,6 +16,7 @@ import { pluginId } from '../../../../src/main/domain/plugin-id.js';
 import { OperationNotAllowedForOriginError } from '../../../../src/main/domain/plugin-errors.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { WORKSPACE_SOURCE, type Skill, type Agent } from '../../../../src/shared/entity.js';
+import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const FROZEN = new Date('2026-04-26T10:00:00.000Z');
 
@@ -33,7 +34,7 @@ const skill = (name: string, content = 'x'): Skill => ({
   kind: 'skill',
   name,
   description: `skill ${name}`,
-  scopes: ['project'],
+  scopes: ['personal'],
   metadata: { version: '0.1.0', createdAt: FROZEN.toISOString(), updatedAt: FROZEN.toISOString() },
   source: WORKSPACE_SOURCE,
   content,
@@ -47,7 +48,7 @@ const agent = (name: string, systemPrompt = 'x'): Agent => ({
   kind: 'agent',
   name,
   description: `agent ${name}`,
-  scopes: ['project'],
+  scopes: ['personal'],
   metadata: { version: '0.1.0', createdAt: FROZEN.toISOString(), updatedAt: FROZEN.toISOString() },
   source: WORKSPACE_SOURCE,
   systemPrompt,
@@ -116,7 +117,7 @@ describe('SkillService — provenance merging', () => {
     const fs = new InMemoryFileSystem();
     const clock = new FixedClock(FROZEN);
     const adapterManager = fakeEntityAdapterManager();
-    const base = new EntityService(repo, clock, adapterManager);
+    const base = new EntityService(scopedRepository({ global: repo }).scoped, clock, adapterManager);
     const provenance = new PluginProvenanceService({ cache, fs });
     const skills = new SkillService(base, { provenance, fs });
     return { repo, cache, fs, skills };
@@ -252,7 +253,7 @@ describe('AgentService — provenance merging', () => {
     const fs = new InMemoryFileSystem();
     const clock = new FixedClock(FROZEN);
     const adapterManager = fakeEntityAdapterManager();
-    const base = new EntityService(repo, clock, adapterManager);
+    const base = new EntityService(scopedRepository({ global: repo }).scoped, clock, adapterManager);
     const provenance = new PluginProvenanceService({ cache, fs });
     const agents = new AgentService(base, { provenance, fs });
     return { repo, cache, fs, agents };

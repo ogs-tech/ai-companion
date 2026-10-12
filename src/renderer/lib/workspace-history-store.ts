@@ -7,10 +7,9 @@
 // state must re-render `TopNav` on every push/navigate — so it also exposes
 // a `useSyncExternalStore`-compatible subscribe/snapshot pair.
 
-/** A single Workbench "location": which workspace/project scope was active, and which tab (if any) was focused within it. */
+/** A single Workbench "location": which workspace was open (`null` = Início), and which tab (if any) was focused within it. */
 export interface WorkspaceHistoryEntry {
-  readonly workspaceId: string;
-  readonly projectId: string | null;
+  readonly workspaceId: string | null;
   readonly activeTabId: string | null;
 }
 
@@ -47,7 +46,7 @@ let snapshot: WorkspaceHistorySnapshot = { canGoBack: false, canGoForward: false
 const listeners = new Set<() => void>();
 
 function sameEntry(a: WorkspaceHistoryEntry, b: WorkspaceHistoryEntry): boolean {
-  return a.workspaceId === b.workspaceId && a.projectId === b.projectId && a.activeTabId === b.activeTabId;
+  return a.workspaceId === b.workspaceId && a.activeTabId === b.activeTabId;
 }
 
 function notify(): void {

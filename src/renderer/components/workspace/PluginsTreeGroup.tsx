@@ -17,7 +17,7 @@ import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.j
 import type { PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
 
 interface PluginsTreeGroupProps {
-  /** True once inside a non-default Workspace — plugins then split into this workspace's own ('project' scope) vs Personal ones, matching how EntityTreeGroup's localScope works. Omitted at the Default workspace, where only 'personal' scope exists and nothing is filtered. */
+  /** True while a workspace is open — plugins then split into this workspace's own (Claude Code's 'project' plugin scope) vs Personal ones, matching how EntityTreeGroup's localScope works. Omitted at Início, where only 'personal' scope exists and nothing is filtered. */
   isProjectContext?: boolean;
   showGlobal: boolean;
 }

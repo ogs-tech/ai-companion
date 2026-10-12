@@ -7,7 +7,7 @@ interface SessionStatusBadgeProps {
   anchor: SessionAnchor;
 }
 
-/** A running/exited pill for whichever row (Skill/Agent/Instruction/Project/Workspace) owns this anchor's session — renders nothing when the anchor has never had one. */
+/** A running/exited pill for whichever row (Skill/Agent/Instruction/Workspace/Início) owns this anchor's session — renders nothing when the anchor has never had one. */
 export function SessionStatusBadge({ anchor }: SessionStatusBadgeProps): React.ReactElement | null {
   const status = useSessionStatus(anchor);
   if (!status) return null;

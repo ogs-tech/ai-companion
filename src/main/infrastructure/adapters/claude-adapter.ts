@@ -2,20 +2,18 @@ import { join } from 'node:path';
 import type { Adapter, AdapterDestination } from '../../application/ports/adapter.js';
 import type { Entity, Instruction } from '../../../shared/entity.js';
 import type { WorkspaceService } from '../../application/services/workspace-service.js';
-import type { ProjectService } from '../../application/services/project-service.js';
 import { resolveScopePath } from '../../application/resolve-scope-path.js';
 import { DomainError } from '../../domain/errors.js';
 
 export interface ClaudeAdapterDeps {
   homedir: string;
   workspaceService: Pick<WorkspaceService, 'get'>;
-  projectService: Pick<ProjectService, 'get'>;
 }
 
 export class ClaudeAdapter implements Adapter {
   readonly adapterId = 'claude';
   private readonly homedir: string;
-  private readonly scopeDeps: Pick<ClaudeAdapterDeps, 'workspaceService' | 'projectService'>;
+  private readonly scopeDeps: Pick<ClaudeAdapterDeps, 'workspaceService'>;
 
   constructor(deps: ClaudeAdapterDeps) {
     if (deps.homedir === undefined || deps.homedir === null || deps.homedir === '') {
@@ -26,7 +24,7 @@ export class ClaudeAdapter implements Adapter {
       );
     }
     this.homedir = deps.homedir;
-    this.scopeDeps = { workspaceService: deps.workspaceService, projectService: deps.projectService };
+    this.scopeDeps = { workspaceService: deps.workspaceService };
   }
 
   async resolveEntityDestinations(args: { entity: Entity }): Promise<AdapterDestination[]> {

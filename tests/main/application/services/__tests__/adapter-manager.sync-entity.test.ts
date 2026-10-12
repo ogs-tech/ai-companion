@@ -5,7 +5,6 @@ import { WORKSPACE_SOURCE, type Skill } from '../../../../../src/shared/entity.j
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 describe('AdapterManager.syncEntity', () => {

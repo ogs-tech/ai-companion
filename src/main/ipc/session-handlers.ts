@@ -24,12 +24,10 @@ function asSessionAnchor(value: unknown, field: string): SessionAnchor {
   if (obj['kind'] === 'workspace') {
     return { kind: 'workspace', workspaceId: asString(obj['workspaceId'], `${field}.workspaceId`) };
   }
-  if (obj['kind'] === 'project') {
-    return { kind: 'project', projectId: asString(obj['projectId'], `${field}.projectId`) };
-  }
+  if (obj['kind'] === 'personal') return { kind: 'personal' };
   throw new DomainError(
     'validation',
-    `Invalid '${field}': expected {kind:'entity',urn} | {kind:'workspace',workspaceId} | {kind:'project',projectId}`,
+    `Invalid '${field}': expected {kind:'entity',urn} | {kind:'workspace',workspaceId} | {kind:'personal'}`,
   );
 }
 

@@ -6,59 +6,46 @@ import type { GitCommitResult, GitDiffSource, GitFileDiff, GitStatus } from '../
 export const GIT_STATUS_POLL_MS = 5_000;
 
 /**
- * The renderer never knows a repo's absolute root, so queries are keyed by the
- * target as the IPC addresses it: a Project id, or the workspace root. Every
- * `git.*` query for one target shares the `['git', scope]` prefix, so a
- * mutation invalidates status and open diffs together.
+ * Every `git.*` call targets the open workspace's root, so every query shares
+ * the `['git']` prefix and a mutation invalidates status and open diffs
+ * together. A workspace switch invalidates everything anyway.
  */
-export function gitScopeKey(projectId: string | undefined): readonly ['git', string] {
-  return ['git', projectId ?? 'workspace'];
-}
-
-/** `{ projectId }` only when set — `exactOptionalPropertyTypes` rejects an explicit `undefined`. */
-function target(projectId: string | undefined): { projectId?: string } {
-  return projectId !== undefined ? { projectId } : {};
-}
+export const GIT_QUERY_KEY = ['git'] as const;
 
 // Agent sessions rewrite the worktree at any moment: never trust a cached read.
 const LIVE_QUERY_OPTIONS = { staleTime: 0, refetchOnWindowFocus: true } as const;
 
-export function useGitStatus(projectId: string | undefined, options: { visible: boolean }) {
+export function useGitStatus(options: { visible: boolean }) {
   return useQuery<GitStatus>({
-    queryKey: [...gitScopeKey(projectId), 'status'],
-    queryFn: () => callIpc<GitStatus>('git.status', target(projectId)),
+    queryKey: [...GIT_QUERY_KEY, 'status'],
+    queryFn: () => callIpc<GitStatus>('git.status', {}),
     refetchInterval: options.visible ? GIT_STATUS_POLL_MS : false,
     ...LIVE_QUERY_OPTIONS,
   });
 }
 
-export function useGitDiff(projectId: string | undefined, path: string, source: GitDiffSource) {
+export function useGitDiff(path: string, source: GitDiffSource) {
   return useQuery<GitFileDiff>({
-    queryKey: [...gitScopeKey(projectId), 'diff', path, source],
-    queryFn: () => callIpc<GitFileDiff>('git.diff', { ...target(projectId), path, source }),
+    queryKey: [...GIT_QUERY_KEY, 'diff', path, source],
+    queryFn: () => callIpc<GitFileDiff>('git.diff', { path, source }),
     ...LIVE_QUERY_OPTIONS,
   });
 }
 
-function useGitMutation<TArgs, TResult = void>(projectId: string | undefined, method: string) {
+function useGitMutation<TArgs, TResult = void>(method: string) {
   const queryClient = useQueryClient();
   return useMutation<TResult, Error, TArgs>({
-    mutationFn: (args) => callIpc<TResult>(method, { ...target(projectId), ...args }),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: gitScopeKey(projectId) }),
+    mutationFn: (args) => callIpc<TResult>(method, args),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: GIT_QUERY_KEY }),
   });
 }
 
-export const useGitStage = (projectId: string | undefined) =>
-  useGitMutation<{ paths: string[] }>(projectId, 'git.stage');
+export const useGitStage = () => useGitMutation<{ paths: string[] }>('git.stage');
 
-export const useGitUnstage = (projectId: string | undefined) =>
-  useGitMutation<{ paths: string[] }>(projectId, 'git.unstage');
+export const useGitUnstage = () => useGitMutation<{ paths: string[] }>('git.unstage');
 
-export const useGitDiscard = (projectId: string | undefined) =>
-  useGitMutation<{ paths: string[] }>(projectId, 'git.discard');
+export const useGitDiscard = () => useGitMutation<{ paths: string[] }>('git.discard');
 
-export const useGitCommit = (projectId: string | undefined) =>
-  useGitMutation<{ message: string; amend?: boolean }, GitCommitResult>(projectId, 'git.commit');
+export const useGitCommit = () => useGitMutation<{ message: string; amend?: boolean }, GitCommitResult>('git.commit');
 
-export const useGitInit = (projectId: string | undefined) =>
-  useGitMutation<Record<string, never>>(projectId, 'git.init');
+export const useGitInit = () => useGitMutation<Record<string, never>>('git.init');

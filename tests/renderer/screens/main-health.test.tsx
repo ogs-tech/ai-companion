@@ -26,8 +26,6 @@ const report = (worst: HealthReport['worst']): HealthReport => ({
       : [],
 });
 
-const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
-
 const setupRoute = (worst: HealthReport['worst']) => {
   call.mockImplementation((method: string) => {
     if (method === 'health.getReport') return Promise.resolve(ok(report(worst)));
@@ -36,8 +34,8 @@ const setupRoute = (worst: HealthReport['worst']) => {
     }
     // Lands the Workspace landing screen on the Global/default branch — no
     // active project, so no file browser (and its xterm session panel).
-    if (method === 'workspace.getActive') return Promise.resolve(ok(DEFAULT_WORKSPACE));
-    if (method === 'workspace.list') return Promise.resolve(ok([DEFAULT_WORKSPACE]));
+    if (method === 'workspace.getActive') return Promise.resolve(ok(null));
+    if (method === 'workspace.list') return Promise.resolve(ok([]));
     if (method === 'project.list') return Promise.resolve(ok([]));
     return Promise.resolve(ok(undefined));
   });

@@ -15,14 +15,14 @@ import { Toast, type ToastMessage } from '../Toast.js';
 import type { Agent, Entity, Skill } from '../../../shared/entity.js';
 
 interface LocalScope {
-  scope: 'workspace' | 'project';
+  scope: 'workspace';
   scopeId: string;
 }
 
 interface EntityTreeGroupProps {
   kind: 'skill' | 'agent';
   label: string;
-  /** Omitted at the Default/personal workspace — there, nothing is "more global" than this, so every item shows unfiltered. */
+  /** Omitted at Início — there, nothing is "more global" than this, so every item shows unfiltered. */
   localScope?: LocalScope;
   /** Whether entities that don't belong to `localScope` are currently visible. Ignored when `localScope` is omitted. */
   showGlobal: boolean;

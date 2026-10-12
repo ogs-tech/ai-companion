@@ -15,10 +15,7 @@ const renderList = (beforeSwitch?: () => boolean, instructionRow?: React.ReactNo
     { client: queryClient },
   );
 
-const workspaces = [
-  { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' },
-  { id: 'w1', name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' },
-];
+const workspaces = [{ id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' }];
 
 beforeEach(() => {
   queryClient.clear();
@@ -41,20 +38,14 @@ describe('WorkspaceManagementList', () => {
     expect(await screen.findByTestId('workspace-list-row-w1')).toBeInTheDocument();
   });
 
-  it('renders the instructionRow slot even when there are no other workspaces (empty state)', async () => {
+  it('renders the instructionRow slot even when there are no workspaces (empty state)', async () => {
     vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.list') return [workspaces[0]];
+      if (method === 'workspace.list') return [];
       return undefined;
     });
     renderList(undefined, <div data-testid="instruction-row-slot">Instructions</div>);
     expect(await screen.findByTestId('instruction-row-slot')).toBeInTheDocument();
     expect(await screen.findByTestId('empty-state-workspace-management-empty')).toBeInTheDocument();
-  });
-
-  it('never lists the default/global workspace — the screen around it already shows that', async () => {
-    renderList();
-    await screen.findByTestId('workspace-list-row-w1');
-    expect(screen.queryByTestId('workspace-list-row-default')).not.toBeInTheDocument();
   });
 
   it('clicking a row switches to it', async () => {
@@ -93,7 +84,7 @@ describe('WorkspaceManagementList', () => {
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
       if (method === 'workspace.list') return workspaces;
       if (method === 'dialog.selectFolder') return { canceled: false, path: '/repos/client-x' };
-      if (method === 'workspace.create') return { id: 'w2', name: 'client-x', rootPath: '/repos/client-x', isDefault: false, createdAt: '' };
+      if (method === 'workspace.create') return { id: 'w2', name: 'client-x', rootPath: '/repos/client-x', createdAt: '' };
       return undefined;
     });
     renderList();
@@ -116,13 +107,13 @@ describe('WorkspaceManagementList', () => {
     expect(await screen.findByTestId('toast')).toHaveTextContent('disk full');
   });
 
-  it('shows an EmptyState with the create action when there are no other workspaces', async () => {
+  it('shows an EmptyState with the create action when there are no workspaces', async () => {
     vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.list') return [workspaces[0]];
+      if (method === 'workspace.list') return [];
       return undefined;
     });
     renderList();
-    expect(await screen.findByTestId('empty-state-workspace-management-empty')).toHaveTextContent('Nenhum outro workspace');
+    expect(await screen.findByTestId('empty-state-workspace-management-empty')).toHaveTextContent('Nenhum workspace ainda');
     expect(screen.getByTestId('workspace-list-new')).toBeInTheDocument();
   });
 

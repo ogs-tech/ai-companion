@@ -4,9 +4,9 @@ import type { LaunchConfigService } from '../../../src/main/application/services
 import type { LaunchProcessService } from '../../../src/main/application/services/launch-process-service.js';
 
 const setup = () => {
-  const configService = { listAll: vi.fn().mockResolvedValue([]) } as unknown as LaunchConfigService;
+  const configService = { list: vi.fn().mockResolvedValue(null) } as unknown as LaunchConfigService;
   const processService = {
-    run: vi.fn().mockResolvedValue({ processId: 'x', projectId: 'p1', configName: 'Run', status: 'running', exitCode: null }),
+    run: vi.fn().mockResolvedValue({ processId: 'x', workspaceId: 'ws-1', configName: 'Run', status: 'running', exitCode: null }),
     kill: vi.fn(),
     status: vi.fn().mockReturnValue(undefined),
   } as unknown as LaunchProcessService;
@@ -14,22 +14,22 @@ const setup = () => {
 };
 
 describe('launch-config-handlers', () => {
-  it('launchConfig.list delegates to LaunchConfigService.listAll', async () => {
+  it('launchConfig.list delegates to LaunchConfigService.list', async () => {
     const { handlers, configService } = setup();
     await handlers['launchConfig.list']!({});
-    expect(configService.listAll).toHaveBeenCalled();
+    expect(configService.list).toHaveBeenCalled();
   });
 
   it('launchConfig.run validates params and delegates to LaunchProcessService.run', async () => {
     const { handlers, processService } = setup();
-    await handlers['launchConfig.run']!({ projectId: 'p1', configName: 'Run' });
-    expect(processService.run).toHaveBeenCalledWith('p1', 'Run');
+    await handlers['launchConfig.run']!({ configName: 'Run' });
+    expect(processService.run).toHaveBeenCalledWith('Run');
   });
 
   it('launchConfig.run rejects missing params', async () => {
     const { handlers } = setup();
     await expect(handlers['launchConfig.run']!({})).rejects.toMatchObject({ kind: 'validation' });
-    await expect(handlers['launchConfig.run']!({ projectId: 'p1' })).rejects.toMatchObject({ kind: 'validation' });
+    await expect(handlers['launchConfig.run']!({ configName: '' })).rejects.toMatchObject({ kind: 'validation' });
   });
 
   it('launchConfig.kill validates params and delegates to LaunchProcessService.kill', async () => {

@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { basename, join } from 'node:path';
+import { basename, join, sep } from 'node:path';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
 import { MAX_SESSION_ATTACHMENT_BYTES, sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
 import type { ClaudeConversationTarget, ClaudeSessionPort } from '../ports/claude-session-port.js';
 import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
-import type { ProjectService } from './project-service.js';
+import type { Workspace } from '../../../shared/workspace.js';
 import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
 import { DomainError, ioError } from '../../domain/errors.js';
@@ -29,9 +29,9 @@ export type SessionStatusListener = (sessionId: string, status: SessionStatus, e
  * Session identity is kind-conditional. `entity` anchors keep the original
  * one-live-session invariant: `sessionId` is always `sessionAnchorKey(anchor)`,
  * `spawn` dedupes against a running session and relaunches an exited one in
- * place. `workspace`/`project` anchors coexist instead — every `spawn` mints
+ * place. `workspace`/`personal` anchors coexist instead — every `spawn` mints
  * a fresh `crypto.randomUUID()` and starts a brand-new PTY, so multiple
- * sessions can be live for the same workspace/project at once; `resume`
+ * sessions can be live for the same workspace (or for Início) at once; `resume`
  * relaunches one specific, already-known `sessionId` (of any anchor kind)
  * without minting a new one.
  *
@@ -48,7 +48,7 @@ export class SessionService {
   private readonly exitListeners: SessionStatusListener[] = [];
   private readonly outputBuffers = new Map<string, string[]>();
   private readonly maxBufferChars: number;
-  /** Per-anchor count of `workspace`/`project` sessions ever spawned — numbers the label suffix, never reused even after that session is removed. */
+  /** Per-anchor count of `workspace`/`personal` sessions ever spawned — numbers the label suffix, never reused even after that session is removed. */
   private readonly ordinals = new Map<string, number>();
   /**
    * The `--mcp-config` path handed back by `embeddedBrowser.create` for each
@@ -72,7 +72,9 @@ export class SessionService {
     private readonly workspacePath: string,
     private readonly scopeDeps: {
       workspaceService: Pick<WorkspaceService, 'get'>;
-      projectService: Pick<ProjectService, 'get' | 'findOrCreateByPath'>;
+      /** The workspace this graph was built for — `null` at Início. */
+      activeWorkspace: Workspace | null;
+      homedir: string;
     },
     private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'>,
     options?: { maxBufferChars?: number },
@@ -178,9 +180,9 @@ export class SessionService {
    * collide with an entity anchor's key, and stable, so adopting the same
    * conversation twice reattaches rather than forking it.
    *
-   * Registers `cwd` as a project if it isn't one already — a live session has
-   * to be anchored somewhere, and the directory the conversation actually ran
-   * in is the only honest answer.
+   * Anchored to the open workspace when the conversation ran inside its root,
+   * to Início otherwise. Either way it relaunches in the directory it actually
+   * ran in — `resume` reuses the stored `cwd`, never the anchor's.
    */
   async adoptConversation(input: {
     claudeSessionId: string;
@@ -195,7 +197,6 @@ export class SessionService {
     if (pendingAdopt) return pendingAdopt;
 
     const adoptPromise = (async () => {
-      const project = await this.scopeDeps.projectService.findOrCreateByPath(input.cwd);
       await this.spawnPty(sessionId, input.cwd, {
         mode: 'resume',
         claudeSessionId: input.claudeSessionId,
@@ -203,7 +204,7 @@ export class SessionService {
       const session: SessionSnapshot = {
         sessionId,
         claudeSessionId: input.claudeSessionId,
-        anchor: { kind: 'project', projectId: project.id },
+        anchor: this.anchorForCwd(input.cwd),
         cwd: input.cwd,
         label: input.label,
         status: 'running',
@@ -222,7 +223,7 @@ export class SessionService {
     const { cwd, label } = await this.resolveAnchor(anchor);
     // Only an `entity` anchor can land here with a prior entry: its sessionId
     // is the anchor key, so reopening an exited one reuses the same slot.
-    // `workspace`/`project` arrive with a freshly minted sessionId every time.
+    // `workspace`/`personal` arrive with a freshly minted sessionId every time.
     const previous = this.sessions.get(sessionId);
     const finalLabel =
       previous?.label ?? (anchor.kind === 'entity' ? label : this.nextOrdinalLabel(anchor, label));
@@ -436,12 +437,19 @@ export class SessionService {
       const workspace = await this.scopeDeps.workspaceService.get(anchor.workspaceId);
       return { cwd: workspace.rootPath, label: workspace.name };
     }
-    if (anchor.kind === 'project') {
-      const project = await this.scopeDeps.projectService.get(anchor.projectId);
-      return { cwd: project.path, label: project.name };
+    if (anchor.kind === 'personal') {
+      return { cwd: this.scopeDeps.homedir, label: 'Início' };
     }
     const entity = await this.entityService.get(anchor.urn);
     const cwd = entity.scopes[0] !== 'personal' ? await resolveScopePath(entity, this.scopeDeps) : this.workspacePath;
     return { cwd, label: entity.name };
+  }
+
+  private anchorForCwd(cwd: string): SessionAnchor {
+    const workspace = this.scopeDeps.activeWorkspace;
+    if (workspace !== null && (cwd === workspace.rootPath || cwd.startsWith(workspace.rootPath + sep))) {
+      return { kind: 'workspace', workspaceId: workspace.id };
+    }
+    return { kind: 'personal' };
   }
 }

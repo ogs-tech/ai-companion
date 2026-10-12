@@ -17,50 +17,35 @@ const DISK_BACKED_QUERY_OPTIONS = {
   refetchOnWindowFocus: true,
 } as const;
 
-export function useDirListing(path: string, options: { enabled?: boolean; projectId?: string } = {}) {
-  const { enabled = true, projectId } = options;
+export function useDirListing(path: string, options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
   return useQuery<FileBrowserEntry[]>({
-    queryKey: projectId
-      ? (['project', 'listDir', projectId, path] as const)
-      : (['workspace', 'listDir', path] as const),
-    queryFn: () =>
-      projectId
-        ? callIpc<FileBrowserEntry[]>('project.listDir', { projectId, path })
-        : callIpc<FileBrowserEntry[]>('workspace.listDir', { path }),
+    queryKey: ['workspace', 'listDir', path] as const,
+    queryFn: () => callIpc<FileBrowserEntry[]>('workspace.listDir', { path }),
     enabled,
     ...DISK_BACKED_QUERY_OPTIONS,
   });
 }
 
-export function useFilePreview(path: string | null, options: { projectId?: string } = {}) {
-  const { projectId } = options;
+export function useFilePreview(path: string | null) {
   return useQuery<FilePreview>({
-    queryKey: projectId
-      ? (['project', 'readFile', projectId, path] as const)
-      : (['workspace', 'readFile', path] as const),
-    queryFn: () =>
-      projectId
-        ? callIpc<FilePreview>('project.readFile', { projectId, path })
-        : callIpc<FilePreview>('workspace.readFile', { path }),
+    queryKey: ['workspace', 'readFile', path] as const,
+    queryFn: () => callIpc<FilePreview>('workspace.readFile', { path }),
     enabled: path !== null,
     ...DISK_BACKED_QUERY_OPTIONS,
   });
 }
 
 /**
- * Re-reads every file-browser query — directory listings and file contents, in
- * both the workspace and project scopes — so the Explorer tree and any open
- * editor tab pick up work done outside the app. Deliberately unscoped: the tree
- * mixes the two (a registered Project folder expands in place inside the
- * workspace listing), so refreshing one scope would leave the other stale. The
- * keys are one segment short of the ones `useDirListing`/`useFilePreview` build
- * — react-query matches by prefix, so each covers every path under it.
+ * Re-reads every file-browser query — directory listings and file contents —
+ * so the Explorer tree and any open editor tab pick up work done outside the
+ * app. The keys are one segment short of the ones `useDirListing`/
+ * `useFilePreview` build — react-query matches by prefix, so each covers every
+ * path under it.
  */
 const FILE_BROWSER_QUERY_PREFIXES = [
   ['workspace', 'listDir'],
   ['workspace', 'readFile'],
-  ['project', 'listDir'],
-  ['project', 'readFile'],
 ] as const;
 
 export function useRefreshFiles(): () => Promise<void> {
@@ -76,14 +61,10 @@ export function useRefreshFiles(): () => Promise<void> {
 export function useWriteFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (args: { path: string; content: string; projectId?: string }): Promise<void> => {
-      const { path, content, projectId } = args;
-      if (projectId) return callIpc<void>('project.writeFile', { projectId, path, content });
-      return callIpc<void>('workspace.writeFile', { path, content });
-    },
-    onSuccess: (_data, { path, content, projectId }) => {
-      const key = projectId ? (['project', 'readFile', projectId, path] as const) : (['workspace', 'readFile', path] as const);
-      queryClient.setQueryData<FilePreview>(key, { previewable: true, kind: 'text', content, truncated: false });
+    mutationFn: (args: { path: string; content: string }): Promise<void> =>
+      callIpc<void>('workspace.writeFile', { path: args.path, content: args.content }),
+    onSuccess: (_data, { path, content }) => {
+      queryClient.setQueryData<FilePreview>(['workspace', 'readFile', path] as const, { previewable: true, kind: 'text', content, truncated: false });
     },
   });
 }

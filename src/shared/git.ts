@@ -1,5 +1,5 @@
-// Types for the `git` IPC namespace — a git client over a Project's (or the
-// workspace root's) own repository. See docs/reference/ipc-contract.md, "git".
+// Types for the `git` IPC namespace — a git client over the active workspace
+// root's own repository. See docs/reference/ipc-contract.md, "git".
 
 export type GitChange =
   | 'modified'
@@ -72,21 +72,17 @@ export type GitFileDiff =
   | { kind: 'binary'; path: string }
   | { kind: 'too-large'; path: string; bytes: number };
 
-/** Every `git.*` method accepts this; absent `projectId` targets the active workspace's root. */
-export interface GitTargetParams {
-  projectId?: string;
-}
-
-export interface GitDiffParams extends GitTargetParams {
+/** Every `git.*` method targets the active workspace's root; with none open they fail `validation`. */
+export interface GitDiffParams {
   path: string;
   source: GitDiffSource;
 }
 
-export interface GitPathsParams extends GitTargetParams {
+export interface GitPathsParams {
   paths: string[];
 }
 
-export interface GitCommitParams extends GitTargetParams {
+export interface GitCommitParams {
   message: string;
   amend?: boolean;
 }

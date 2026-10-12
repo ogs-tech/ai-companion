@@ -11,7 +11,7 @@ import { mockApi, ok, fail, renderWithShell, type CallSpy } from '../../test-uti
 import { intersectionObservers } from '../../setup.js';
 import type { SessionHistoryEntry, SessionHistoryPage } from '../../../../src/shared/session-history.js';
 
-const SCOPE = { kind: 'project', projectId: 'p1' } as const;
+const SCOPE = { kind: 'workspace', workspaceId: 'ws-1' } as const;
 
 const runningSession = {
   sessionId: 'workspace:w1',

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
-import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, Globe, SquareTerminal } from 'lucide-react';
+import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderSearch, FolderX, Globe, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { TreeRow } from '../ds/TreeRow.js';
@@ -9,79 +9,41 @@ import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
 import { useOpenInBrowser, useRevealPath, type OpenWithTarget } from '../../hooks/use-open-with.js';
 import { OpenWithMenu } from './OpenWithMenu.js';
-import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { focusManualTab } from '../../lib/browser-tabs-store.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
-import type { Project } from '../../../shared/project.js';
 
 interface RowMenuTarget {
   relPath: string;
   kind: 'file' | 'dir';
-  projectId?: string;
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** A depth-0 folder's absolute path is always `<workspace root>/<folder name>`. */
-function joinRootPath(root: string, name: string): string {
-  return `${root.replace(/[\\/]+$/, '')}/${name}`;
-}
-
 interface FolderTreeProps {
-  /**
-   * `projectId` is the file's own scope — the closest ancestor Project, whether
-   * that's an explicit `scopeProjectId` or a root-level folder expanded in place
-   * because it matched a registered Project. Callers must route reads/writes
-   * through that project, not whatever project (if any) the screen itself is
-   * currently scoped to — those can differ when a Project folder is browsed
-   * inline without "entering" it.
-   */
-  onSelectFile: (relPath: string, projectId?: string) => void;
-  onUseAsProject: (absolutePath: string) => void;
+  /** Every path is relative to the open workspace's root. */
+  onSelectFile: (relPath: string) => void;
+  /** A folder row's "Abrir como workspace" — opens that folder as its own workspace (`workspace.open`). */
+  onOpenAsWorkspace: (absolutePath: string) => void;
   /** Right-click on a file row → "Preview" — opens a read-only rendered-Markdown tab instead of the normal editing tab. Never offered for folders (nothing to preview). */
-  onPreviewFile?: (relPath: string, projectId?: string) => void;
+  onPreviewFile?: (relPath: string) => void;
   /** Right-click on a file OR folder row → "New Action" — opens a brand-new session with a draft first message referencing it. */
-  onNewAction?: (relPath: string, projectId?: string) => void;
+  onNewAction?: (relPath: string) => void;
   /** Pinned row rendered above the folders/files, e.g. an `InstructionTreeRow` for the current scope. */
   instructionRow?: React.ReactNode;
   /** Pinned nodes rendered below `instructionRow` and above the folders/files, e.g. Skills/Agents/Hooks/MCP `TreeGroup`s for the current scope. */
   pinnedRows?: React.ReactNode;
-  /** Root-level folders already registered as a `Project` swap "Usar como Project" for an "Abrir customizations do projeto" shortcut into that project. */
-  workspaceRootPath?: string;
-  projects?: ReadonlyArray<Project>;
-  onOpenProject?: (projectId: string) => void;
-  scopeProjectId?: string;
-  /** Renders a Project's own INSTRUCTIONS row pinned above its children once its folder node is expanded in place — lets a Project's instruction be reached without "entering" it via `onOpenProject`. `depth` matches its children's own indent level (see `TreeNode`'s `pl: 1.5 + depth * 2`), so the row reads as nested under the Project folder rather than flush with it. */
-  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
-  /**
-   * Renders a Project's own LAUNCH CONFIGURATIONS group pinned above its
-   * children once its folder node is expanded in place — gated on
-   * `matchedProject` only, never the workspace-root's own `rootProject`
-   * fallback (unlike this file's `effectiveProjectId`), since `rootProject`
-   * is recomputed identically for every depth-0 entry and would render this
-   * group once per expanded top-level folder instead of once. The
-   * workspace-root case is handled separately, via `pinnedRows`. `depth`
-   * matches `renderProjectInstructionRow`'s own formula.
-   */
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 interface TreeNodeProps {
   entry: FileBrowserEntry;
   relPath: string;
   depth: number;
-  onSelectFile: (relPath: string, projectId?: string) => void;
-  onUseAsProject: (absolutePath: string) => void;
+  onSelectFile: (relPath: string) => void;
+  onOpenAsWorkspace: (absolutePath: string) => void;
   onOpenRowMenu: (e: React.MouseEvent, target: RowMenuTarget) => void;
   onError: (message: string) => void;
-  workspaceRootPath?: string;
-  projects?: ReadonlyArray<Project>;
-  onOpenProject?: (projectId: string) => void;
-  scopeProjectId?: string;
-  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
 }
 
 function TreeNode({
@@ -89,53 +51,18 @@ function TreeNode({
   relPath,
   depth,
   onSelectFile,
-  onUseAsProject,
+  onOpenAsWorkspace,
   onOpenRowMenu,
   onError,
-  workspaceRootPath,
-  projects,
-  onOpenProject,
-  scopeProjectId,
-  renderProjectInstructionRow,
-  renderProjectLaunchConfigsRow,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
   const resolveAbsolutePath = useResolveAbsolutePath();
-  const isRootLevel = entry.kind === 'dir' && depth === 0 && !scopeProjectId;
-  const matchedProject =
-    isRootLevel && workspaceRootPath !== undefined
-      ? projects?.find((p) => p.path === joinRootPath(workspaceRootPath, entry.name))
-      : undefined;
-  const canUseAsProject = isRootLevel && matchedProject === undefined;
-  // The workspace root itself may be registered as a Project (see decision
-  // #4/#6 of docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md) —
-  // every depth-0 entry, file or dir, belongs to it unless it matches a more
-  // specific child Project above (`matchedProject` always wins when both apply).
-  const rootProject =
-    depth === 0 && !scopeProjectId && workspaceRootPath !== undefined
-      ? projects?.find((p) => p.path === workspaceRootPath)
-      : undefined;
-  // A root-level folder already registered as a Project expands in place too,
-  // browsing its own tree without leaving the workspace-root view — full
-  // navigation into the Project (Skills/Agents/Instructions/Sessions) stays
-  // behind the dedicated "Gerir instructions" shortcut further below. Every
-  // other root-level folder stays flat, for now — only inside a Project's own
-  // tree (scoped, or expanded in place here) can you drill into subfolders.
-  const effectiveProjectId = scopeProjectId ?? matchedProject?.id ?? rootProject?.id;
-  const canExpand = entry.kind === 'dir' && effectiveProjectId !== undefined;
-  // A Project row's own listing is relative to ITS root ('') when expanded in
-  // place from the unscoped workspace view — `relPath` there is
-  // workspace-relative (e.g. "apps"), not what `project.listDir` expects.
-  const listingPath = scopeProjectId ? relPath : matchedProject ? '' : relPath;
-  const { data: children, isError: childrenError } = useDirListing(listingPath, {
-    enabled: expanded && canExpand,
-    ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
-  });
+  const isDir = entry.kind === 'dir';
+  const { data: children, isError: childrenError } = useDirListing(relPath, { enabled: expanded && isDir });
 
-  const handleUseAsProject = async (): Promise<void> => {
+  const handleOpenAsWorkspace = async (): Promise<void> => {
     try {
-      const absolutePath = await resolveAbsolutePath.mutateAsync(relPath);
-      onUseAsProject(absolutePath);
+      onOpenAsWorkspace(await resolveAbsolutePath.mutateAsync(relPath));
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -145,79 +72,43 @@ function TreeNode({
     <>
       <TreeRow
         pl={1.5 + depth * 2}
-        // Reserved uniformly so folder names line up whether or not a given row
-        // can expand — root-level Project folders now can, plain root-level
-        // folders still can't ("flat, for now").
-        chevron={canExpand ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
-        glyph={entry.kind === 'dir' ? Folder : FileIcon}
+        chevron={isDir ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
+        glyph={isDir ? Folder : FileIcon}
         primary={entry.name}
-        badge={matchedProject && <SessionStatusBadge anchor={{ kind: 'project', projectId: matchedProject.id }} />}
         actionsVisibility="always"
         onClick={() => {
-          if (canExpand) setExpanded((v) => !v);
-          else if (entry.kind === 'file') onSelectFile(relPath, effectiveProjectId);
+          if (isDir) setExpanded((v) => !v);
+          else onSelectFile(relPath);
         }}
-        onContextMenu={(e) => {
-          // `listingPath`, not `relPath`, for the same reason the children
-          // listing uses it: a Project folder expanded in place is addressed
-          // relative to ITS root (''), and pairing the workspace-relative name
-          // with its own projectId would resolve <project>/<project name>.
-          onOpenRowMenu(e, { relPath: listingPath, kind: entry.kind, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
-        }}
+        onContextMenu={(e) => onOpenRowMenu(e, { relPath, kind: entry.kind })}
         actions={
-          <>
-            {canUseAsProject && (
-              <Tooltip title="Usar como Project">
-                <Box
-                  component="span"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Usar ${entry.name} como Project`}
-                  data-testid={`tree-node-use-as-project-${entry.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleUseAsProject();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    if (e.key === ' ') e.preventDefault();
-                    e.stopPropagation();
-                    void handleUseAsProject();
-                  }}
-                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                >
-                  <Icon glyph={FolderInput} size={14} />
-                </Box>
-              </Tooltip>
-            )}
-            {matchedProject && onOpenProject && (
-              <Tooltip title="Abrir customizations do projeto">
-                <Box
-                  component="span"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Abrir customizations do projeto ${entry.name}`}
-                  data-testid={`tree-node-open-project-${entry.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenProject(matchedProject.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    if (e.key === ' ') e.preventDefault();
-                    e.stopPropagation();
-                    onOpenProject(matchedProject.id);
-                  }}
-                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                >
-                  <Icon glyph={FolderOpen} size={14} />
-                </Box>
-              </Tooltip>
-            )}
-          </>
+          isDir ? (
+            <Tooltip title="Abrir como workspace">
+              <Box
+                component="span"
+                role="button"
+                tabIndex={0}
+                aria-label={`Abrir ${entry.name} como workspace`}
+                data-testid={`tree-node-open-as-workspace-${entry.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleOpenAsWorkspace();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  if (e.key === ' ') e.preventDefault();
+                  e.stopPropagation();
+                  void handleOpenAsWorkspace();
+                }}
+                sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+              >
+                <Icon glyph={FolderInput} size={14} />
+              </Box>
+            </Tooltip>
+          ) : undefined
         }
       />
-      {canExpand && (
+      {isDir && (
         <Collapse in={expanded} unmountOnExit>
           {childrenError ? (
             <Typography
@@ -230,28 +121,16 @@ function TreeNode({
             </Typography>
           ) : (
             <List disablePadding>
-              {matchedProject && renderProjectInstructionRow
-                ? renderProjectInstructionRow(matchedProject, depth + 1)
-                : null}
-              {matchedProject && renderProjectLaunchConfigsRow
-                ? renderProjectLaunchConfigsRow(matchedProject, depth + 1)
-                : null}
               {(children ?? []).map((child) => (
                 <TreeNode
                   key={child.name}
                   entry={child}
-                  relPath={listingPath ? `${listingPath}/${child.name}` : child.name}
+                  relPath={`${relPath}/${child.name}`}
                   depth={depth + 1}
                   onSelectFile={onSelectFile}
-                  onUseAsProject={onUseAsProject}
+                  onOpenAsWorkspace={onOpenAsWorkspace}
                   onOpenRowMenu={onOpenRowMenu}
                   onError={onError}
-                  {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
-                  {...(projects !== undefined ? { projects } : {})}
-                  {...(onOpenProject !== undefined ? { onOpenProject } : {})}
-                  {...(effectiveProjectId ? { scopeProjectId: effectiveProjectId } : {})}
-                  {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
-                  {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
                 />
               ))}
             </List>
@@ -264,21 +143,13 @@ function TreeNode({
 
 export function FolderTree({
   onSelectFile,
-  onUseAsProject,
+  onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
   instructionRow,
   pinnedRows,
-  workspaceRootPath,
-  projects,
-  onOpenProject,
-  scopeProjectId,
-  renderProjectInstructionRow,
-  renderProjectLaunchConfigsRow,
 }: FolderTreeProps): React.ReactElement {
-  const { data: rootEntries, isError } = useDirListing('', {
-    ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
-  });
+  const { data: rootEntries, isError } = useDirListing('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<RowMenuTarget>();
   const rowMenuTarget = rowMenu.state?.target;
@@ -287,11 +158,7 @@ export function FolderTree({
   const revealPath = useRevealPath();
   const openInBrowser = useOpenInBrowser();
 
-  const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({
-    relPath: target.relPath,
-    kind: target.kind,
-    ...(target.projectId ? { projectId: target.projectId } : {}),
-  });
+  const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({ relPath: target.relPath, kind: target.kind });
 
   const closeRowAndSubmenu = (): void => {
     setOpenWithAnchor(null);
@@ -301,7 +168,7 @@ export function FolderTree({
   const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
     ? [
         ...(rowMenuTarget.kind === 'file'
-          ? [{ key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreviewFile?.(rowMenuTarget.relPath, rowMenuTarget.projectId) }]
+          ? [{ key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreviewFile?.(rowMenuTarget.relPath) }]
           : []),
         {
           key: 'open-with',
@@ -339,7 +206,7 @@ export function FolderTree({
               .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
           },
         },
-        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath, rowMenuTarget.projectId) },
+        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath) },
       ]
     : [];
 
@@ -368,15 +235,9 @@ export function FolderTree({
             relPath={entry.name}
             depth={0}
             onSelectFile={onSelectFile}
-            onUseAsProject={onUseAsProject}
+            onOpenAsWorkspace={onOpenAsWorkspace}
             onOpenRowMenu={rowMenu.openMenu}
             onError={(message) => setToast({ variant: 'error', message })}
-            {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
-            {...(projects !== undefined ? { projects } : {})}
-            {...(onOpenProject !== undefined ? { onOpenProject } : {})}
-            {...(scopeProjectId ? { scopeProjectId } : {})}
-            {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
-            {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
           />
         ))}
       </List>

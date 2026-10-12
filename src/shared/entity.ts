@@ -1,6 +1,7 @@
 export type EntityKind = 'skill' | 'agent' | 'mcp' | 'instruction' | 'hook';
 
-export type Scope = 'personal' | 'project' | 'workspace';
+/** `personal` = Global (`~/.ai-companion`); `workspace` = one open folder, identified by `scopeId`. */
+export type Scope = 'personal' | 'workspace';
 
 export type EntityProvenance = 'workspace-managed' | 'claude-code';
 
@@ -55,24 +56,16 @@ export interface Agent extends Entity {
 
 /**
  * `name === 'default'` and `scopes === ['personal']` identify the personal
- * singleton; any other instruction carries `scopes[0] === 'project' | 'workspace'`
- * and a `scopeId` resolved against `Project.id` / `Workspace.id` (see
- * `resolveScopePath`). `legacyRepoPath` is set only on read, only for
- * pre-migration on-disk data that predates `scopeId` — see
- * `InstructionService.get`/`.list`.
+ * singleton; any other instruction carries `scopes[0] === 'workspace'` and a
+ * `scopeId` resolved against `Workspace.id` (see `resolveScopePath`).
  */
 export interface Instruction extends Entity {
   kind: 'instruction';
   content: string;
-  legacyRepoPath?: string;
 }
 
 export function isPersonalInstruction(entity: Instruction): boolean {
   return entity.scopes[0] === 'personal';
-}
-
-export function isProjectInstruction(entity: Instruction): boolean {
-  return entity.scopes[0] === 'project';
 }
 
 export function isWorkspaceInstruction(entity: Instruction): boolean {
@@ -83,7 +76,7 @@ export function isWorkspaceInstruction(entity: Instruction): boolean {
  * Sidecar metadata for instructions. Instructions are stored frontmatter-free
  * on disk so the sync target (AGENTS.md, CLAUDE.md) is a clean body — this
  * struct captures everything else (description, version, timestamps, and the
- * per-project repoPath) and lives in a separate `meta.json` for project
+ * owning workspace) and lives in a separate `meta.json` for workspace
  * instructions. Personal instructions default this struct in memory.
  */
 export interface InstructionSidecar {
@@ -92,11 +85,9 @@ export interface InstructionSidecar {
   tags?: string[];
   createdAt: string;
   updatedAt: string;
-  /** Current shape (post scopeId migration). */
-  scope?: 'project' | 'workspace';
+  /** Present on every workspace instruction; absent on the personal singleton. */
+  scope?: 'workspace';
   scopeId?: string;
-  /** Legacy shape — read-only. Never written again after the scopeId migration lands. */
-  repoPath?: string;
 }
 
 export interface EntityChangedEvent {

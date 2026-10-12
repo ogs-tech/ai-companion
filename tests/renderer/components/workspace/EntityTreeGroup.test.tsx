@@ -19,7 +19,7 @@ function skill(overrides: Partial<Skill>): Skill {
   };
 }
 
-const projectScoped = skill({ name: 'project-skill', scopes: ['project'], scopeId: 'p1' });
+const workspaceScoped = skill({ name: 'workspace-skill', scopes: ['workspace'], scopeId: 'w1' });
 const personalScoped = skill({ name: 'personal-skill', scopes: ['personal'] });
 const pluginSkill = skill({ name: 'plugin-skill', source: { kind: 'plugin', pluginId: 'acme', provenance: 'workspace-managed' } });
 
@@ -27,7 +27,7 @@ let call: CallSpy;
 beforeEach(() => {
   call = mockApi();
   call.mockImplementation(async (method: string) => {
-    if (method === 'skill.list') return ok([projectScoped, personalScoped, pluginSkill]);
+    if (method === 'skill.list') return ok([workspaceScoped, personalScoped, pluginSkill]);
     return ok(undefined);
   });
 });
@@ -36,10 +36,10 @@ describe('EntityTreeGroup', () => {
   it('with a localScope, only shows items matching it until "Mostrar globais" is toggled on', async () => {
     const user = userEvent.setup();
     renderWithShell(
-      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'project', scopeId: 'p1' }} showGlobal={false} onEdit={vi.fn()} />,
+      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} showGlobal={false} onEdit={vi.fn()} />,
     );
     await user.click(await screen.findByTestId('tree-group-skill'));
-    expect(await screen.findByTestId('tree-skill-project-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
     expect(screen.queryByTestId('tree-skill-personal-skill')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tree-skill-plugin-skill')).not.toBeInTheDocument();
   });
@@ -47,33 +47,33 @@ describe('EntityTreeGroup', () => {
   it('reveals non-local items once showGlobal is true', async () => {
     const user = userEvent.setup();
     renderWithShell(
-      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'project', scopeId: 'p1' }} showGlobal onEdit={vi.fn()} />,
+      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} showGlobal onEdit={vi.fn()} />,
     );
     await user.click(await screen.findByTestId('tree-group-skill'));
-    expect(await screen.findByTestId('tree-skill-project-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
     expect(await screen.findByTestId('tree-skill-personal-skill')).toBeInTheDocument();
     expect(await screen.findByTestId('tree-skill-plugin-skill')).toBeInTheDocument();
   });
 
-  it('shows every item, unfiltered, when no localScope is given (the Default/personal tier)', async () => {
+  it('shows every item, unfiltered, when no localScope is given (at Início)', async () => {
     const user = userEvent.setup();
     renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
-    expect(await screen.findByTestId('tree-skill-project-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
     expect(await screen.findByTestId('tree-skill-personal-skill')).toBeInTheDocument();
     expect(await screen.findByTestId('tree-skill-plugin-skill')).toBeInTheDocument();
   });
 
-  it('seeds a new skill with the current localScope when creating from inside a project', async () => {
+  it('seeds a new skill with the current localScope when creating from inside a workspace', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
     renderWithShell(
-      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'project', scopeId: 'p1' }} showGlobal={false} onEdit={onEdit} />,
+      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} showGlobal={false} onEdit={onEdit} />,
     );
     await user.click(await screen.findByTestId('tree-group-new-skill'));
     expect(onEdit).toHaveBeenCalledWith(
       'skill',
-      expect.objectContaining({ scopes: ['project'], scopeId: 'p1' }),
+      expect.objectContaining({ scopes: ['workspace'], scopeId: 'w1' }),
       true,
     );
   });
@@ -102,7 +102,7 @@ describe('EntityTreeGroup', () => {
 
   it('shows a running-session badge only on the row whose entity has an active session', async () => {
     call.mockImplementation(async (method: string) => {
-      if (method === 'skill.list') return ok([projectScoped, personalScoped, pluginSkill]);
+      if (method === 'skill.list') return ok([workspaceScoped, personalScoped, pluginSkill]);
       if (method === 'session.list') {
         return ok([
           {
@@ -123,7 +123,7 @@ describe('EntityTreeGroup', () => {
     const activeRow = await screen.findByTestId('tree-skill-personal-skill');
     expect(within(activeRow).getByTestId('status-pill-session-status-entity:urn:skill:personal-skill')).toHaveTextContent('Ativa');
 
-    const idleRow = await screen.findByTestId('tree-skill-project-skill');
+    const idleRow = await screen.findByTestId('tree-skill-workspace-skill');
     expect(within(idleRow).queryByText('Ativa')).not.toBeInTheDocument();
   });
 

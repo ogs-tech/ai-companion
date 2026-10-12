@@ -29,23 +29,42 @@ import { FakeRepoGitPort } from '../../../src/main/application/services/__fixtur
 import { FakeLaunchProcessPort } from '../../../src/main/application/services/__fixtures__/fake-launch-process-port.js';
 import type { WorkspaceScopedSharedDeps } from '../../../src/main/application/workspace-scoped-services.js';
 import type { FileWatcherPort } from '../../../src/main/application/ports/file-watcher-port.js';
+import { FsEntityRepository } from '../../../src/main/infrastructure/entity/fs-entity-repository.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../src/shared/entity.js';
+import type { Workspace } from '../../../src/shared/workspace.js';
 
 const noopFileWatcherPort: FileWatcherPort = {
   watch: () => ({ close: async () => undefined }),
 };
 
+let globalDir: string;
 let dirA: string;
 let dirB: string;
+let workspaceA: Workspace;
+let workspaceB: Workspace;
 
 beforeEach(async () => {
+  globalDir = await mkdtemp(join(tmpdir(), 'wss-global-'));
   dirA = await mkdtemp(join(tmpdir(), 'wss-a-'));
   dirB = await mkdtemp(join(tmpdir(), 'wss-b-'));
+  workspaceA = { id: 'ws-a', name: 'A', rootPath: dirA, createdAt: '' };
+  workspaceB = { id: 'ws-b', name: 'B', rootPath: dirB, createdAt: '' };
 });
 
 afterEach(async () => {
+  await rm(globalDir, { recursive: true, force: true });
   await rm(dirA, { recursive: true, force: true });
   await rm(dirB, { recursive: true, force: true });
+});
+
+const scopeOf = (workspace: Workspace) => ({ workspace, dataDir: join(workspace.rootPath, '.ai-companion') });
+
+const skill = (name: string, workspace?: Workspace): Skill => ({
+  urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd',
+  scopes: [workspace ? 'workspace' : 'personal'],
+  ...(workspace ? { scopeId: workspace.id } : {}),
+  metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE, content: 'body',
 });
 
 function buildShared(): WorkspaceScopedSharedDeps {
@@ -53,8 +72,13 @@ function buildShared(): WorkspaceScopedSharedDeps {
   const clock = new SystemClock();
   const settingsService = new SettingsService(new InMemorySettingsRepository());
   const homedir = '/home/test-user';
-  const notStubbed = async (): Promise<never> => { throw new Error('not stubbed in this test'); };
-  const workspaceService = { get: notStubbed, getActive: notStubbed };
+  const workspaceService = {
+    get: async (id: string): Promise<Workspace> => {
+      const found = [workspaceA, workspaceB].find((w) => w.id === id);
+      if (!found) throw new Error(`unknown workspace ${id}`);
+      return found;
+    },
+  };
   const pluginCache = new PluginCacheFile({
     pluginsDir: () => join(homedir, '.ai-companion', 'plugins'),
     cacheDir: () => join(homedir, '.claude', 'plugins', 'cache', 'local'),
@@ -99,6 +123,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     settingsService,
     homedir,
     workspaceService,
+    globalEntities: { repository: new FsEntityRepository(globalDir, 'personal'), dataDir: globalDir },
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,
@@ -114,29 +139,28 @@ function buildShared(): WorkspaceScopedSharedDeps {
 }
 
 describe('buildWorkspaceScopedServices', () => {
-  it('two calls with different dataDirs produce fully independent entity graphs', async () => {
+  it('two workspace graphs share Global but keep their workspace entities apart', async () => {
     const shared = buildShared();
-    const a = buildWorkspaceScopedServices(dirA, shared);
-    const b = buildWorkspaceScopedServices(dirB, shared);
+    const a = buildWorkspaceScopedServices(scopeOf(workspaceA), shared);
+    const b = buildWorkspaceScopedServices(scopeOf(workspaceB), shared);
 
-    const skill: Skill = {
-      urn: 'urn:skill:foo', kind: 'skill', name: 'foo', description: 'd',
-      scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
-      source: WORKSPACE_SOURCE, content: 'body',
-    };
-    await a.skillService.save({ skill, isCreate: true });
+    await a.skillService.save({ skill: skill('everywhere'), isCreate: true });
+    await a.skillService.save({ skill: skill('only-a', workspaceA), isCreate: true });
 
-    expect((await a.skillService.list()).map((s) => s.name)).toEqual(['foo']);
-    expect(await b.skillService.list()).toEqual([]);
+    expect((await a.skillService.list()).map((s) => s.name).sort()).toEqual(['everywhere', 'only-a']);
+    expect((await b.skillService.list()).map((s) => s.name)).toEqual(['everywhere']);
   });
 
-  it('wires projectService against <dataDir>/projects.json independently per graph', async () => {
+  it('the Início graph (no workspace open) serves Global and rejects workspace entities', async () => {
     const shared = buildShared();
-    const a = buildWorkspaceScopedServices(dirA, shared);
-    const b = buildWorkspaceScopedServices(dirB, shared);
+    const home = buildWorkspaceScopedServices(null, shared);
 
-    await a.projectService.create({ name: 'acme', path: '/repos/acme' });
-    expect(await a.projectService.list()).toHaveLength(1);
-    expect(await b.projectService.list()).toHaveLength(0);
+    await home.skillService.save({ skill: skill('mine'), isCreate: true });
+    expect((await home.skillService.list()).map((s) => s.name)).toEqual(['mine']);
+    await expect(home.skillService.save({ skill: skill('local', workspaceA), isCreate: true })).rejects.toMatchObject({
+      kind: 'validation',
+    });
+    await expect(home.gitService.status()).rejects.toMatchObject({ kind: 'validation' });
+    expect(await home.launchConfigService.list()).toBeNull();
   });
 });

@@ -33,7 +33,6 @@ const skillEntity: Skill = {
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 const setup = async () => {
@@ -52,7 +51,7 @@ const setup = async () => {
     entityRepository,
     symlinkManager: sm,
     fileMaterializer,
-    workspacePath: WORKSPACE,
+    entityDataDir: () => WORKSPACE,
     adapters: new Map([['claude', claudeAdapter]]),
   });
   return { manager };

@@ -65,11 +65,11 @@ export class LaunchProcessService {
     return { ...process, outputBuffer: (this.outputBuffers.get(process.processId) ?? []).join('') };
   }
 
-  async run(projectId: string, configName: string): Promise<LaunchProcessSnapshot> {
-    const { config, projectPath } = await this.launchConfigService.getConfig(projectId, configName);
-    const resolved = resolveLaunchCommand(config, projectPath);
+  async run(configName: string): Promise<LaunchProcessSnapshot> {
+    const { config, workspaceId, rootPath } = await this.launchConfigService.getConfig(configName);
+    const resolved = resolveLaunchCommand(config, rootPath);
     const processId = randomUUID();
-    const snapshot: LaunchProcessSnapshot = { processId, projectId, configName, status: 'running', exitCode: null };
+    const snapshot: LaunchProcessSnapshot = { processId, workspaceId, configName, status: 'running', exitCode: null };
     this.processes.set(processId, snapshot);
     try {
       await this.port.spawn(processId, resolved);

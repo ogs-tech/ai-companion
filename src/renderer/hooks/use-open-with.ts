@@ -4,19 +4,15 @@ import type { OpenWithKind, OpenWithSuggestions } from '../../shared/open-with.j
 
 /**
  * A row in the file tree, in exactly the terms the tree already has: a path
- * relative to its scope's root, never an absolute one. The main process
+ * relative to the workspace root, never an absolute one. The main process
  * resolves it through the same sandbox the rest of the file browser uses.
  */
 export interface OpenWithTarget {
   relPath: string;
   kind: OpenWithKind;
-  projectId?: string;
 }
 
-const scopeParams = (target: OpenWithTarget): { path: string; projectId?: string } => ({
-  path: target.relPath,
-  ...(target.projectId ? { projectId: target.projectId } : {}),
-});
+const scopeParams = (target: OpenWithTarget): { path: string } => ({ path: target.relPath });
 
 /**
  * Suggestions are fetched only once the submenu actually opens — querying
@@ -28,7 +24,7 @@ export function useOpenWithSuggestions(
   enabled: boolean,
 ): UseQueryResult<OpenWithSuggestions> {
   return useQuery<OpenWithSuggestions>({
-    queryKey: ['openWith', 'suggest', target?.projectId ?? null, target?.relPath ?? null],
+    queryKey: ['openWith', 'suggest', target?.relPath ?? null],
     queryFn: () => {
       if (target === null) throw new Error('No target to suggest applications for');
       return callIpc<OpenWithSuggestions>('openWith.suggest', {

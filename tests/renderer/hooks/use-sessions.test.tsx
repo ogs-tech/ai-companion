@@ -46,7 +46,7 @@ describe('useSessionStatus', () => {
 
   it('distinguishes anchors of different kinds sharing no key overlap', async () => {
     call.mockImplementation(async (method: string) =>
-      method === 'session.list' ? ok([snapshot({ sessionId: 'project:p1', anchor: { kind: 'project', projectId: 'p1' }, status: 'exited' })]) : ok(undefined),
+      method === 'session.list' ? ok([snapshot({ sessionId: 'personal-1', anchor: { kind: 'personal' }, status: 'exited' })]) : ok(undefined),
     );
     const { result } = renderHook(() => useSessionStatus({ kind: 'workspace', workspaceId: 'p1' }), { wrapper });
     await waitFor(() => expect(call).toHaveBeenCalledWith('session.list', {}));

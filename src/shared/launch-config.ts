@@ -4,22 +4,23 @@ export interface LaunchConfig {
   request: string; // raw `request`, e.g. 'launch', 'attach'
   program: string; // raw, before ${workspaceFolder} substitution
   args: string[];
-  cwd?: string; // raw, before substitution; defaults to the Project's path if absent
+  cwd?: string; // raw, before substitution; defaults to the workspace root if absent
   env?: Record<string, string>;
   supported: boolean; // true only for type: 'node', request: 'launch'
 }
 
-export interface ProjectLaunchConfigs {
-  projectId: string;
+/** The active workspace's own `.vscode/launch.json`, read at its root. */
+export interface WorkspaceLaunchConfigs {
+  workspaceId: string;
   configs: LaunchConfig[];
-  error?: string; // malformed launch.json — surfaced per-project, doesn't break other projects
+  error?: string; // malformed launch.json — surfaced in place of the configs
 }
 
 export type LaunchProcessStatus = 'running' | 'exited';
 
 export interface LaunchProcessSnapshot {
   processId: string;
-  projectId: string;
+  workspaceId: string;
   configName: string;
   status: LaunchProcessStatus;
   exitCode?: number | null;

@@ -4,8 +4,8 @@ import { WORKSPACE_SOURCE } from '../../shared/entity.js';
 /**
  * Build an empty entity pre-filled with sensible defaults for a "New" create
  * flow. `instruction` here means the personal singleton (name === 'default',
- * scopes === ['personal']). Project instructions are seeded via a separate
- * helper because they require a Project picked from the registry.
+ * scopes === ['personal']). Workspace instructions are seeded via a separate
+ * helper because they require the open workspace.
  */
 export function blankCustomization(kind: 'skill' | 'agent' | 'instruction'): Skill | Agent | Instruction {
   const metadata = { version: '0.1.0', createdAt: '', updatedAt: '' };

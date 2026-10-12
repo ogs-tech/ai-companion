@@ -5,7 +5,6 @@ import { GitView } from '../../../../../src/renderer/components/workspace/git/Gi
 import { groupChanges } from '../../../../../src/renderer/components/workspace/git/ChangeList.js';
 import { fail, mockApi, ok, renderWithQuery, type CallSpy } from '../../../test-utils.js';
 import type { GitFileChange, GitStatus } from '../../../../../src/shared/git.js';
-import type { Project } from '../../../../../src/shared/project.js';
 
 const file = (
   path: string,
@@ -44,19 +43,10 @@ function route(overrides: Partial<Record<string, unknown>> = {}): void {
   });
 }
 
-function renderView(props: { projectId?: string; projects?: Project[] } = {}) {
+function renderView() {
   const onOpenDiff = vi.fn();
-  const onSelectProject = vi.fn();
-  renderWithQuery(
-    <GitView
-      projectId={props.projectId}
-      visible
-      projects={props.projects ?? []}
-      onSelectProject={onSelectProject}
-      onOpenDiff={onOpenDiff}
-    />,
-  );
-  return { onOpenDiff, onSelectProject };
+  renderWithQuery(<GitView visible onOpenDiff={onOpenDiff} />);
+  return { onOpenDiff };
 }
 
 beforeEach(() => {
@@ -79,11 +69,11 @@ describe('groupChanges', () => {
 describe('GitView', () => {
   it('shows the non-repo empty state and initializes on request', async () => {
     route({ 'git.status': ok({ isRepo: false }) });
-    renderView({ projectId: 'p1' });
+    renderView();
 
     await userEvent.click(await screen.findByTestId('git-init-btn'));
 
-    expect(call).toHaveBeenCalledWith('git.init', { projectId: 'p1' });
+    expect(call).toHaveBeenCalledWith('git.init', {});
   });
 
   it('explains a missing git binary', async () => {
@@ -109,16 +99,16 @@ describe('GitView', () => {
     expect(screen.getByTestId('git-head')).toHaveTextContent('↑2');
   });
 
-  it('opens the right diff source for each group, scoped to the project', async () => {
+  it('opens the right diff source for each group', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'modified', 'modified')])) });
-    const { onOpenDiff } = renderView({ projectId: 'p1' });
+    const { onOpenDiff } = renderView();
 
     await userEvent.click(await screen.findByTestId('git-row-staged-a.ts'));
     await userEvent.click(screen.getByTestId('git-row-changes-a.ts'));
 
     expect(onOpenDiff.mock.calls).toEqual([
-      [{ projectId: 'p1', path: 'a.ts', source: { kind: 'index' } }],
-      [{ projectId: 'p1', path: 'a.ts', source: { kind: 'worktree' } }],
+      [{ path: 'a.ts', source: { kind: 'index' } }],
+      [{ path: 'a.ts', source: { kind: 'worktree' } }],
     ]);
   });
 
@@ -203,15 +193,6 @@ describe('GitView', () => {
     await userEvent.click(screen.getByTestId('git-error-details-toggle'));
     expect(screen.getByTestId('git-error-details')).toHaveTextContent('eslint: 3 errors');
     expect(screen.getByTestId('git-commit-message')).toHaveValue('msg');
-  });
-
-  it('shows a project picker only with more than one project', async () => {
-    const projects: Project[] = [
-      { id: 'p1', name: 'api', path: '/ws/api', createdAt: '' },
-      { id: 'p2', name: 'web', path: '/ws/web', createdAt: '' },
-    ];
-    renderView({ projects });
-    expect(await screen.findByTestId('git-project-picker')).toBeInTheDocument();
   });
 
   it('warns about an in-progress operation', async () => {
