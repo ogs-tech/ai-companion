@@ -10,10 +10,10 @@ export interface WorkbenchTab {
   /** Verb shown on the close control's tooltip/aria-label — e.g. "Minimizar" for a session tab whose process is still running, vs. "Fechar" once it isn't. Defaults to "Fechar". */
   closeLabel?: string;
   /**
-   * Top-border color for this tab when active — the signature that lets a
-   * user trace an open tab back to its row in the rail (skill/agent/
-   * instruction tabs use their kind's role color; falls back to
-   * `secondary.main`, the same neutral used for file tabs).
+   * Color of the 6px dot before this tab's label, shown whether or not the
+   * tab is active — the signature that lets a user trace an open tab back to
+   * its row in the side panels (skill/agent/instruction tabs use their
+   * kind's role color). Tabs without one show no dot.
    */
   accentColor?: string;
   /** Skips the canvas's own content padding — for tabs (like the entity editor) that manage their own internal spacing edge-to-edge. */
@@ -51,7 +51,11 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
   return (
     <Box data-testid="workbench-canvas" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
       {tabs.length > 0 && (
-        <Stack direction="row" data-testid="workbench-tabs" sx={{ borderBottom: 1, borderColor: 'divider', overflowX: 'auto', flexShrink: 0 }}>
+        <Stack
+          direction="row"
+          data-testid="workbench-tabs"
+          sx={{ px: 1, py: 0.75, gap: 0.375, borderBottom: 1, borderColor: 'divider', overflowX: 'auto', flexShrink: 0 }}
+        >
           {tabs.map((tab) => {
             const active = tab.id === activeTabId;
             return (
@@ -68,21 +72,28 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
                   if (e.key === ' ') e.preventDefault();
                   onSelect(tab.id);
                 }}
-                sx={{
+                sx={(theme) => ({
                   display: 'flex',
                   alignItems: 'center',
                   cursor: 'pointer',
-                  borderRight: 1,
-                  borderTop: 2,
-                  borderTopColor: active ? (tab.accentColor ?? 'secondary.main') : 'transparent',
-                  borderColor: active ? undefined : 'divider',
-                  bgcolor: active ? 'background.paper' : 'transparent',
+                  borderRadius: `${theme.ogs.radius.pill}px`,
+                  color: active ? 'text.primary' : 'text.secondary',
+                  bgcolor: active ? theme.ogs.surfaces.rail : 'transparent',
                   flexShrink: 0,
-                }}
+                  '&:hover': active ? {} : { bgcolor: 'action.hover' },
+                  '&:hover .workbench-tab-close, &:focus-within .workbench-tab-close': { color: 'text.secondary' },
+                })}
               >
-                <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', pl: 1.25, pr: tab.onClose ? 0.5 : 1.25, py: 0.875 }}>
-                  <Icon glyph={tab.glyph} size={14} />
-                  <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: active ? 600 : 400, maxWidth: 160 }}>
+                <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', pl: 1.25, pr: tab.onClose ? 0.5 : 1.25, py: 0.25 }}>
+                  {tab.accentColor ? (
+                    <Box
+                      aria-hidden
+                      sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tab.accentColor, flexShrink: 0 }}
+                    />
+                  ) : (
+                    <Icon glyph={tab.glyph} size={14} />
+                  )}
+                  <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: active ? 500 : 400, maxWidth: 160 }}>
                     {tab.label}
                   </Typography>
                   {tab.dirty && (
@@ -109,7 +120,15 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
                         e.stopPropagation();
                         tab.onClose?.();
                       }}
-                      sx={{ display: 'inline-flex', p: 0.5, ml: 0.25, borderRadius: 0.5, '&:hover': { bgcolor: 'action.hover' } }}
+                      className="workbench-tab-close"
+                      sx={(theme) => ({
+                        display: 'inline-flex',
+                        p: 0.5,
+                        ml: 0.25,
+                        borderRadius: `${theme.ogs.radius.pill}px`,
+                        color: 'text.disabled',
+                        '&:hover': { bgcolor: 'action.hover' },
+                      })}
                     >
                       <Icon glyph={X} size={12} />
                     </Box>
@@ -126,6 +145,7 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
           sx={(theme) => ({
             px: 1.5,
             py: 0.5,
+            bgcolor: 'background.paper',
             borderBottom: 1,
             borderColor: 'divider',
             flexShrink: 0,

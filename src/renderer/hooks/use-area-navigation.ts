@@ -4,7 +4,7 @@ import { openWorkspaceArea } from '../lib/workspace-area-store.js';
 import type { Area } from '../components/shell/nav.js';
 
 /**
- * CommandPalette's "go to X" entries, and the TopNav sync pill's fallback
+ * CommandPalette's "go to X" entries, and the status bar sync entry's fallback
  * when it isn't already on the Default workspace. 'workspace' is the old
  * "Início" gesture (jump back to Default, guarded against unsaved Workbench
  * tabs); the other three open/focus their Workbench tab inside

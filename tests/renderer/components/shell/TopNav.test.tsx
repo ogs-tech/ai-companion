@@ -7,7 +7,6 @@ import {
   registerWorkspaceHistoryApplier,
   resetWorkspaceHistoryForTests,
 } from '../../../../src/renderer/lib/workspace-history-store.js';
-import { registerAreaOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
 import { getBrowserTabsSnapshot, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
@@ -26,7 +25,6 @@ beforeEach(() => {
 afterEach(() => {
   resetWorkspaceHistoryForTests();
   resetBrowserTabsForTests();
-  registerAreaOpener(null);
 });
 
 const noop = () => undefined;
@@ -45,17 +43,13 @@ describe('TopNav', () => {
     renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
     expect(screen.queryByText(/TECNOLOGIA BRASIL/i)).not.toBeInTheDocument();
   });
-  it('shows the sync StatusPill carrying the health severity', () => {
-    renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} healthSeverity="error" />);
-    expect(screen.getByTestId('status-pill-sync')).toHaveAttribute('data-variant', 'error');
+  it('no longer renders the sync pill (moved to the status bar)', () => {
+    renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    expect(screen.queryByTestId('status-pill-sync')).not.toBeInTheDocument();
   });
-  it('clicking the sync StatusPill opens the Diagnóstico Workbench tab', async () => {
-    const opener = vi.fn();
-    registerAreaOpener(opener);
-    renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} healthSeverity="error" />);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.getActive', {}));
-    await userEvent.click(screen.getByTestId('status-pill-sync'));
-    expect(opener).toHaveBeenCalledWith('diagnostico');
+  it('renders the ⌘K trigger as a search field', () => {
+    renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    expect(screen.getByTestId('command-palette-trigger')).toHaveTextContent('Buscar ou ir para…⌘K');
   });
   it('toggles the theme through useThemeMode', async () => {
     renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);

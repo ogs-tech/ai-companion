@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Box, Chip, IconButton, List, Stack, Tooltip } from '@mui/material';
-import { ChevronDown, ChevronRight, Layers, Plus, SquareTerminal } from 'lucide-react';
+import { Box, IconButton, List, Stack, Tooltip, Typography } from '@mui/material';
+import { ChevronDown, ChevronRight, Layers, Plus } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { Kicker } from '../ds/Kicker.js';
+import { treeGroupLabelSx } from '../ds/TreeRow.js';
 import { EntityTreeGroup } from './EntityTreeGroup.js';
 import { HooksTreeGroup } from './HooksTreeGroup.js';
 import { McpTreeGroup } from './McpTreeGroup.js';
@@ -46,9 +46,9 @@ interface ControlPanelContentProps {
 }
 
 /**
- * The Control Panel's body, below the shared `SidePanel` header: the
- * Sessões block (own local collapse, independent of the panel itself), then
- * the Customizations tree (Skills/Agents/Hooks/MCP/Plugins).
+ * The Control Panel's body inside the shared `SidePanel` card: the Sessões
+ * block (own local collapse, independent of the panel itself), then the
+ * Customizations tree (Skills/Agents/Hooks/MCP/Plugins).
  */
 export function ControlPanelContent({
   isDefaultWorkspace,
@@ -100,6 +100,19 @@ export function ControlPanelContent({
 
   return (
     <>
+      {/* Only meaningful once a workspace juggles more than one Project — a
+          single Project needs nothing to disambiguate. Falls back to a
+          neutral "Workspace" label whenever the active tab isn't scoped to
+          any Project (a workspace-anchored session, Starter Pack, ...). */}
+      {viewMode === 'multi-project' && (
+        <Typography
+          data-testid="control-panel-scope-chip"
+          noWrap
+          sx={{ flexShrink: 0, px: 1.5, pt: 0.75, textAlign: 'right', fontSize: '0.6875rem', color: 'text.secondary' }}
+        >
+          {selectedProjectName ? `Projeto: ${selectedProjectName}` : 'Workspace'}
+        </Typography>
+      )}
       {/* Stacked above Customizations, not nested inside it as one more tree
           row — a session is reachable/actionable even when its own
           entity/project/workspace tab isn't open, so it earns its own
@@ -109,8 +122,7 @@ export function ControlPanelContent({
       <Box
         data-testid="workspace-sessions-panel"
         sx={{
-          borderBottom: 1,
-          borderColor: 'divider',
+          mt: 0.75,
           flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
@@ -118,29 +130,34 @@ export function ControlPanelContent({
           overflow: 'hidden',
         }}
       >
-        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, flexShrink: 0 }}>
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-            <Icon glyph={SquareTerminal} size={14} />
-            <Kicker>Sessões</Kicker>
-          </Stack>
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            <Tooltip title="Nova sessão">
-              {/* span wrapper keeps the tooltip working while the button is disabled (no project/workspace in view yet) */}
-              <span>
-                <IconButton size="small" data-testid="workspace-sessions-new" aria-label="Nova sessão" disabled={!canStartSession} onClick={onNewSession}>
-                  <Icon glyph={Plus} size={16} />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <IconButton
-              size="small"
-              data-testid="workspace-sessions-collapse"
-              aria-label={sessionsExpanded ? 'Ocultar sessões' : 'Mostrar sessões'}
-              onClick={toggleSessions}
-            >
-              <Icon glyph={sessionsExpanded ? ChevronDown : ChevronRight} size={16} />
-            </IconButton>
-          </Stack>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minHeight: 22, pl: 0.75, pr: 1, flexShrink: 0 }}>
+          <IconButton
+            size="small"
+            data-testid="workspace-sessions-collapse"
+            aria-label={sessionsExpanded ? 'Ocultar sessões' : 'Mostrar sessões'}
+            onClick={toggleSessions}
+            sx={{ p: 0.25 }}
+          >
+            <Icon glyph={sessionsExpanded ? ChevronDown : ChevronRight} size={14} />
+          </IconButton>
+          <Typography component="span" sx={{ ...treeGroupLabelSx, flexGrow: 1 }}>
+            Sessões
+          </Typography>
+          <Tooltip title="Nova sessão">
+            {/* span wrapper keeps the tooltip working while the button is disabled (no project/workspace in view yet) */}
+            <span>
+              <IconButton
+                size="small"
+                data-testid="workspace-sessions-new"
+                aria-label="Nova sessão"
+                disabled={!canStartSession}
+                onClick={onNewSession}
+                sx={{ p: 0.25 }}
+              >
+                <Icon glyph={Plus} size={14} />
+              </IconButton>
+            </span>
+          </Tooltip>
         </Stack>
         {sessionsExpanded && (
           // No overflow here: SessionsTreeGroup owns its own internal scroll
@@ -151,27 +168,7 @@ export function ControlPanelContent({
           </Box>
         )}
       </Box>
-      <Stack
-        data-testid="workspace-customizations-header"
-        direction="row"
-        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
-      >
-        <Kicker>Customizations</Kicker>
-        {/* Only meaningful once a workspace juggles more than one Project — a
-            single Project needs nothing to disambiguate. Falls back to a
-            neutral "Workspace" label whenever the active tab isn't scoped to
-            any Project (a workspace-anchored session, Starter Pack, ...). */}
-        {viewMode === 'multi-project' && (
-          <Chip
-            size="small"
-            variant="outlined"
-            data-testid="control-panel-scope-chip"
-            label={selectedProjectName ? `Projeto: ${selectedProjectName}` : 'Workspace'}
-            sx={{ height: 18, fontSize: '0.6875rem' }}
-          />
-        )}
-      </Stack>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <Box data-testid="workspace-customizations" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', mt: 0.75 }}>
         <List disablePadding>{customizationRows}</List>
       </Box>
     </>

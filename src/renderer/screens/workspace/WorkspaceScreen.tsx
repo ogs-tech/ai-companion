@@ -11,7 +11,7 @@ import {
 import { Icon } from '../../components/ds/Icon.js';
 import { EmptyState } from '../../components/ds/EmptyState.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
-import { SidePanel } from '../../components/ds/SidePanel.js';
+import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
 import { DiffView } from '../../components/workspace/git/DiffView.js';
 import type { GitDiffSource } from '../../../shared/git.js';
@@ -1015,7 +1015,7 @@ export function WorkspaceScreen(): React.ReactElement {
     <LaunchConfigsTreeGroup project={rootProject} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
   ) : undefined;
 
-  const explorerHeaderActions = (
+  const explorerToolbarActions = (
     <Tooltip title="Reler do disco">
       <IconButton size="small" data-testid="workspace-refresh-files" aria-label="Reler do disco" onClick={() => void refreshFiles()}>
         <Icon glyph={RefreshCw} size={14} />
@@ -1025,14 +1025,13 @@ export function WorkspaceScreen(): React.ReactElement {
 
   return (
     <Box component="main" data-testid="workspace-screen" sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {/* Panels run edge-to-edge with the window, not boxed in a bordered,
-          margined card — a workbench reads as part of the app shell, not as
-          a widget floating inside one. The Explorer Panel leads on the left
+      {/* Three cards on the canvas: the Explorer Panel leads on the left
           (file/entity tree, plus the workspace's own identity and actions —
-          same convention as any file-tree-driven IDE); the Control Panel
-          trails as a collapsible panel on the right (sessions + customizations),
-          both driven by the same shared `SidePanel` shell. */}
-      <Box sx={{ flex: 1, minHeight: 420, overflow: 'hidden', display: 'flex' }}>
+          same convention as any file-tree-driven IDE), the Workbench in the
+          middle, and the Control Panel trails as a collapsible card on the
+          right (sessions + customizations). The side cards share the
+          `SidePanel` shell; the 6px gaps between cards are the resize handles. */}
+      <Box sx={{ flex: 1, minHeight: 420, overflow: 'hidden', display: 'flex', px: 0.75 }}>
         <Group orientation="horizontal" style={{ flex: 1, minWidth: 0 }}>
           <SidePanel
             panelId="workspace-files-panel"
@@ -1042,11 +1041,7 @@ export function WorkspaceScreen(): React.ReactElement {
             maxSize="36"
             collapsed={explorerCollapsed}
             onResize={(size) => setExplorerCollapsed(size.asPercentage === 0)}
-            glyph={PanelLeft}
-            title="Explorer Panel"
-            headerTestId="workspace-explorer-panel-label"
-            headerDivider={false}
-            headerActions={explorerHeaderActions}
+            cardTestId="workspace-explorer-panel-label"
           >
             <ExplorerPanelContent
               activeWorkspace={activeWorkspace}
@@ -1054,6 +1049,7 @@ export function WorkspaceScreen(): React.ReactElement {
               selectedProject={selectedProject}
               onNavigateToWorkspace={goHome}
               headerMenu={headerMenu}
+              toolbarActions={explorerToolbarActions}
               beforeSwitch={resetTabs}
               personalInstructionRow={personalInstructionRow}
               appAreaRows={appAreaRows}
@@ -1073,7 +1069,9 @@ export function WorkspaceScreen(): React.ReactElement {
           </SidePanel>
           <ResizeHandle />
           <Panel id="workbench-canvas-panel" minSize="30" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <WorkbenchCanvas tabs={canvasTabs} activeTabId={activeTabId} onSelect={handleSelectTab} emptyState={emptyCanvasState} />
+            <Box sx={panelCardSx()}>
+              <WorkbenchCanvas tabs={canvasTabs} activeTabId={activeTabId} onSelect={handleSelectTab} emptyState={emptyCanvasState} />
+            </Box>
           </Panel>
           <ResizeHandle />
           <SidePanel
@@ -1084,9 +1082,7 @@ export function WorkspaceScreen(): React.ReactElement {
             maxSize={420}
             collapsed={controlPanelCollapsed}
             onResize={(size) => setControlPanelCollapsed(size.asPercentage === 0)}
-            glyph={PanelRight}
-            title="Control Panel"
-            headerTestId="workspace-control-panel-label"
+            cardTestId="workspace-control-panel-label"
           >
             <ControlPanelContent
               isDefaultWorkspace={isDefaultWorkspace}

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material';
 import { Group, usePanelRef } from 'react-resizable-panels';
-import { PanelLeft } from 'lucide-react';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { SidePanel } from '../../../../src/renderer/components/ds/SidePanel.js';
 
@@ -18,10 +17,7 @@ function Harness({ collapsed = false }: { collapsed?: boolean }): React.ReactEle
           minSize="10"
           maxSize="60"
           collapsed={collapsed}
-          glyph={PanelLeft}
-          title="Test Panel"
-          headerTestId="test-panel-label"
-          headerActions={<button type="button">Ação</button>}
+          cardTestId="test-panel-card"
         >
           <div data-testid="side-panel-body">Conteúdo</div>
         </SidePanel>
@@ -31,15 +27,15 @@ function Harness({ collapsed = false }: { collapsed?: boolean }): React.ReactEle
 }
 
 describe('SidePanel', () => {
-  it('renders the header title/icon and the body content', () => {
+  it('renders the body content inside the card carrying the panel-identity testid', () => {
     render(<Harness />);
-    expect(screen.getByTestId('test-panel-label')).toHaveTextContent('Test Panel');
+    expect(screen.getByTestId('test-panel-card')).toContainElement(screen.getByTestId('side-panel-body'));
     expect(screen.getByTestId('side-panel-body')).toHaveTextContent('Conteúdo');
   });
 
-  it('renders header actions in the trailing slot', () => {
+  it('no longer renders a title header', () => {
     render(<Harness />);
-    expect(screen.getByRole('button', { name: 'Ação' })).toBeInTheDocument();
+    expect(screen.getByTestId('test-panel-card')).toHaveTextContent(/^Conteúdo$/);
   });
 
   it('reflects the collapsed prop as data-collapsed on the underlying Panel (also the panel identity testid, via `id`)', () => {

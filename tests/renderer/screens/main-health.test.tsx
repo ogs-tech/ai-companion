@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 describe('<Main> — sync status + diagnostics', () => {
-  it('paints the TopNav sync pill with the report worst severity', async () => {
+  it('paints the status bar sync entry with the report worst severity', async () => {
     setupRoute('error');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
@@ -56,7 +56,7 @@ describe('<Main> — sync status + diagnostics', () => {
     expect(pill).toHaveAttribute('data-variant', 'error');
   });
 
-  it('opens Diagnóstico as a Workbench tab from the TopNav sync pill', async () => {
+  it('opens Diagnóstico as a Workbench tab from the status bar sync entry', async () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 

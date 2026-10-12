@@ -98,6 +98,7 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
               testId={`tree-${kind}-${item.name}`}
               glyph={ENTITY_GROUP_ICONS[kind]}
               primary={item.name}
+              mono
               muted={global}
               accentColor={ENTITY_ACCENT_COLOR[kind]}
               onClick={() => onEdit(kind, item as Skill | Agent, false)}

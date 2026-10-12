@@ -3,6 +3,9 @@
 // "Cream is the paper, Ink is the stroke." One chromatic role at a time:
 // azul = action/link, verde = success/active, ambar = premium/attention,
 // erro = error. Ink is the neutral accent; azul is the default Button colour.
+// Shell panels are bordered `paper` cards on the `canvas` — still "fio antes
+// de sombra" (hairline border, no shadow); `rail` is a fill for selection,
+// hover and segmented-control tracks, never a panel background.
 
 export const ogs = {
   ink: '#142036',
@@ -31,7 +34,7 @@ export const colorRoles = {
 /** Surface tokens that have no MUI palette slot. */
 export const surfaces = {
   light: { canvas: '#F7F4EE', paper: '#FFFFFF', rail: '#F2EEE5', input: '#FBFAF6' },
-  dark: { canvas: '#0F1828', paper: '#16223A', rail: '#142036', input: '#16223A' },
+  dark: { canvas: '#0F1828', paper: '#16223A', rail: '#1B2944', input: '#16223A' },
 } as const;
 
 export const text = {

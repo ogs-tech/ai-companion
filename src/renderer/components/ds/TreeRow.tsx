@@ -1,4 +1,4 @@
-import { Box, ListItemButton, ListItemText, Stack } from '@mui/material';
+import { Box, ListItemButton, ListItemText, Stack, alpha, type SxProps, type Theme } from '@mui/material';
 import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from './Icon.js';
 
@@ -28,6 +28,28 @@ export interface TreeRowProps {
   actionsVisibility?: 'hover' | 'always';
   muted?: boolean;
   disabled?: boolean;
+  /** 'mono' for entity names (skills/agents); 'group' for a group-header row, in the same Kicker style as every other group header in the side panels. */
+  labelVariant?: 'default' | 'mono' | 'group';
+}
+
+/** Kicker-style label for a tree group header (TreeGroup rows, the Sessões header) — one definition so every group header in the side panels reads the same. */
+export const treeGroupLabelSx = {
+  fontSize: '0.6rem',
+  fontWeight: 500,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+} as const;
+
+function labelSx(variant: 'default' | 'mono' | 'group'): SxProps<Theme> {
+  switch (variant) {
+    case 'default':
+      return { fontSize: '0.8rem' };
+    case 'mono':
+      return (theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.75rem' });
+    case 'group':
+      return treeGroupLabelSx;
+  }
 }
 
 /**
@@ -51,6 +73,7 @@ export function TreeRow({
   actionsVisibility = 'hover',
   muted,
   disabled,
+  labelVariant = 'default',
 }: TreeRowProps): React.ReactElement {
   return (
     <ListItemButton
@@ -59,17 +82,26 @@ export function TreeRow({
       {...(testId ? { 'data-testid': testId } : {})}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      sx={{
+      sx={(theme) => ({
         pl,
+        minHeight: 22,
+        py: 0,
+        mx: 0.75,
+        borderRadius: `${theme.ogs.radius.xs}px`,
         opacity: muted ? 0.65 : 1,
         position: 'relative',
         '&:hover .tree-row-actions, &:focus-within .tree-row-actions': { opacity: 1 },
-      }}
+        // `rail` is too close to `paper` in dark mode to read as a fill there.
+        '&.Mui-selected, &.Mui-selected:hover': {
+          bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.secondary.main, 0.16) : theme.ogs.surfaces.rail,
+        },
+      })}
     >
       {accentColor && (
         <Box
           sx={(theme) => ({
-            position: 'absolute', left: 0, top: 4, bottom: 4, width: 3,
+            // Inset so the spine sits inside the row's rounded pill.
+            position: 'absolute', left: 2, top: 4, bottom: 4, width: 3,
             borderRadius: `${theme.ogs.radius.xs}px`, bgcolor: accentColor,
           })}
         />
@@ -81,7 +113,7 @@ export function TreeRow({
           <Icon glyph={chevron === 'expanded' ? ChevronDown : ChevronRight} size={14} />
         ) : null}
         <Icon glyph={glyph} size={14} />
-        <ListItemText primary={primary} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
+        <ListItemText primary={primary} sx={{ my: 0 }} slotProps={{ primary: { noWrap: true, sx: labelSx(labelVariant) } }} />
         {badge}
       </Stack>
       {actions && (

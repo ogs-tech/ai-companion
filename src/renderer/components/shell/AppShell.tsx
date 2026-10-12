@@ -29,17 +29,13 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
       data-testid="main-screen"
       sx={{ height: '100vh', overflow: 'hidden', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}
     >
-      <TopNav
-        onOpenSettings={onOpenSettings}
-        onOpenCommandPalette={() => setPaletteOpen(true)}
-        {...(healthSeverity !== undefined ? { healthSeverity } : {})}
-      />
+      <TopNav onOpenSettings={onOpenSettings} onOpenCommandPalette={() => setPaletteOpen(true)} />
       <Box data-testid="app-shell" sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Box component="main" sx={{ flexGrow: 1, minWidth: 0, overflowY: 'auto' }}>
           {children}
         </Box>
       </Box>
-      <AppFooter />
+      <AppFooter {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </Box>
   );

@@ -840,7 +840,7 @@ describe('WorkspaceScreen', () => {
   describe('Control Panel scope chip (project vs multi-project view)', () => {
     it('shows no scope chip while the workspace has a single registered Project ("project" view)', async () => {
       renderScreen();
-      await screen.findByTestId('workspace-customizations-header');
+      await screen.findByTestId('workspace-customizations');
       expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
     });
 
@@ -853,7 +853,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await screen.findByTestId('workspace-customizations-header');
+      await screen.findByTestId('workspace-customizations');
       expect(screen.queryByTestId('control-panel-scope-chip')).not.toBeInTheDocument();
     });
 
@@ -1753,10 +1753,20 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Explorer Panel / Control Panel identity', () => {
-    it('labels the left aside "Explorer Panel" and the right aside "Control Panel"', async () => {
+    it('renders each side panel as a title-less card inside its own resizable Panel', async () => {
       renderScreen();
-      expect(await screen.findByTestId('workspace-explorer-panel-label')).toHaveTextContent('Explorer Panel');
-      expect(await screen.findByTestId('workspace-control-panel-label')).toHaveTextContent('Control Panel');
+      const explorerCard = await screen.findByTestId('workspace-explorer-panel-label');
+      const controlCard = await screen.findByTestId('workspace-control-panel-label');
+      expect(screen.getByTestId('workspace-files-panel')).toContainElement(explorerCard);
+      expect(screen.getByTestId('workspace-customizations-aside')).toContainElement(controlCard);
+      expect(explorerCard).not.toHaveTextContent('Explorer Panel');
+      expect(controlCard).not.toHaveTextContent('Control Panel');
+    });
+
+    it('puts the "Reler do disco" refresh button on the Files/Git toggle row', async () => {
+      renderScreen();
+      const refresh = await screen.findByTestId('workspace-refresh-files');
+      expect(screen.getByTestId('explorer-view-files').parentElement?.parentElement).toContainElement(refresh);
     });
 
     it('renders the workspace breadcrumb and its "⋮" menu inside the Explorer Panel, not above it', async () => {
@@ -1807,8 +1817,8 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       const sessionsPanel = await screen.findByTestId('workspace-sessions-panel');
-      const customizationsHeader = await screen.findByTestId('workspace-customizations-header');
-      const position = sessionsPanel.compareDocumentPosition(customizationsHeader);
+      const customizations = await screen.findByTestId('workspace-customizations');
+      const position = sessionsPanel.compareDocumentPosition(customizations);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
 

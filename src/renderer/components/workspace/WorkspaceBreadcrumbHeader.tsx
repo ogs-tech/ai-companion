@@ -26,10 +26,10 @@ export function WorkspaceBreadcrumbHeader({
   actions,
 }: WorkspaceBreadcrumbHeaderProps): React.ReactElement {
   return (
-    <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+    <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
       <Box sx={{ minWidth: 0 }}>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-          <Typography variant="h6" component="h1" noWrap>
+          <Typography component="h1" noWrap sx={{ fontSize: '0.85rem', fontWeight: 600, lineHeight: 1.4 }}>
             {workspaceName}
           </Typography>
           {isDefaultWorkspace && (
@@ -63,7 +63,7 @@ export function WorkspaceBreadcrumbHeader({
                 aria-label="Início"
                 onClick={onNavigateToWorkspace}
               >
-                <Icon glyph={House} size={18} />
+                <Icon glyph={House} size={16} />
               </IconButton>
             </Tooltip>
           )}

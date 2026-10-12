@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Box, Stack, ToggleButton, ToggleButtonGroup, type SxProps, type Theme } from '@mui/material';
 import { FolderTree } from './FolderTree.js';
 import { WorkspaceBreadcrumbHeader } from './WorkspaceBreadcrumbHeader.js';
 import { WorkspaceManagementList } from './WorkspaceManagementList.js';
@@ -16,6 +16,8 @@ interface ExplorerPanelContentProps {
   onNavigateToWorkspace: () => void;
   /** The Explorer Panel's own "⋮" menu (global-entity visibility, panel toggles, destructive remove) — built by the parent screen, since it reaches state (both panels' collapse, `showGlobal`) that isn't local to this panel. */
   headerMenu: React.ReactNode;
+  /** Trailing actions on the Files/Git toggle row, e.g. the "Reler do disco" refresh button. The Default workspace has no toggle row, so they sit beside `headerMenu` there. */
+  toolbarActions?: React.ReactNode;
   /** Default workspace only: guards a workspace switch from `WorkspaceManagementList` the same way any other scope change does. */
   beforeSwitch: () => boolean;
   /** Default workspace only: the Personal Instruction's own pinned row. */
@@ -41,10 +43,31 @@ interface ExplorerPanelContentProps {
 
 type ExplorerView = 'files' | 'git';
 
+/** Segmented control: a `rail` track with a borderless `paper` thumb on the selected option. */
+const segmentedControlSx: SxProps<Theme> = (theme) => ({
+  p: 0.25,
+  gap: 0.25,
+  bgcolor: theme.ogs.surfaces.rail,
+  borderRadius: `${theme.ogs.radius.xs}px`,
+  '& .MuiToggleButtonGroup-grouped': {
+    border: 0,
+    borderRadius: `${theme.ogs.radius.xs - 2}px !important`,
+    m: 0,
+  },
+  '& .MuiToggleButton-root': {
+    py: 0.125,
+    textTransform: 'none',
+    fontSize: '0.75rem',
+    color: 'text.secondary',
+    '&.Mui-selected, &.Mui-selected:hover': { bgcolor: 'background.paper', color: 'text.primary' },
+  },
+});
+
 /**
- * The Explorer Panel's body, below the shared `SidePanel` header: the
- * workspace/project breadcrumb (with the "⋮" menu), then either the
- * workspace list (Default workspace) or the file/entity tree.
+ * The Explorer Panel's body inside the shared `SidePanel` card: the
+ * workspace/project breadcrumb (with the "⋮" menu) over the Files/Git
+ * segmented control, then either the workspace list (Default workspace) or
+ * the file/entity tree.
  */
 export function ExplorerPanelContent({
   activeWorkspace,
@@ -52,6 +75,7 @@ export function ExplorerPanelContent({
   selectedProject,
   onNavigateToWorkspace,
   headerMenu,
+  toolbarActions,
   beforeSwitch,
   personalInstructionRow,
   appAreaRows,
@@ -72,31 +96,43 @@ export function ExplorerPanelContent({
 
   return (
     <>
-      <Box sx={{ flexShrink: 0, px: 1.5, pb: 1.25, borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ flexShrink: 0, px: 1.25, pt: 0.75, pb: 0.75, borderBottom: 1, borderColor: 'divider' }}>
         <WorkspaceBreadcrumbHeader
           workspaceName={activeWorkspace?.name ?? '…'}
           isDefaultWorkspace={activeWorkspace?.isDefault ?? false}
           path={selectedProject ? selectedProject.path : (activeWorkspace?.rootPath ?? '')}
           onNavigateToWorkspace={onNavigateToWorkspace}
-          actions={headerMenu}
+          actions={
+            isDefaultWorkspace ? (
+              <>
+                {toolbarActions}
+                {headerMenu}
+              </>
+            ) : (
+              headerMenu
+            )
+          }
         />
         {!isDefaultWorkspace && (
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            fullWidth
-            value={view}
-            onChange={(_, next: ExplorerView | null) => next && setView(next)}
-            aria-label="Visão do Explorer"
-            sx={{ mt: 1, '& .MuiToggleButton-root': { py: 0.25, textTransform: 'none', fontSize: '0.75rem' } }}
-          >
-            <ToggleButton value="files" data-testid="explorer-view-files">
-              Arquivos
-            </ToggleButton>
-            <ToggleButton value="git" data-testid="explorer-view-git">
-              Git
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: 0.75 }}>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              fullWidth
+              value={view}
+              onChange={(_, next: ExplorerView | null) => next && setView(next)}
+              aria-label="Visão do Explorer"
+              sx={segmentedControlSx}
+            >
+              <ToggleButton value="files" data-testid="explorer-view-files">
+                Arquivos
+              </ToggleButton>
+              <ToggleButton value="git" data-testid="explorer-view-git">
+                Git
+              </ToggleButton>
+            </ToggleButtonGroup>
+            {toolbarActions}
+          </Stack>
         )}
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>

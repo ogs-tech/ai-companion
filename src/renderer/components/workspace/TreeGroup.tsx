@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Chip, Collapse, List, Tooltip, Typography } from '@mui/material';
+import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
 import { Plus, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { TreeRow } from '../ds/TreeRow.js';
@@ -34,10 +34,11 @@ export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, 
         chevron={expanded ? 'expanded' : 'collapsed'}
         glyph={glyph}
         primary={label}
+        labelVariant="group"
         onClick={() => setExpanded((v) => !v)}
         actionsVisibility="always"
         {...(count !== undefined
-          ? { badge: <Chip size="small" label={count} sx={{ height: 18, fontSize: '0.6875rem', '& .MuiChip-label': { px: 0.75 } }} /> }
+          ? { badge: <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography> }
           : {})}
         actions={
           // Fixed-width whether or not this kind offers a create action, so every
@@ -106,6 +107,8 @@ interface TreeGroupRowProps {
   disabled?: boolean;
   /** See `TreeGroup`'s own `depth`. Defaults to `0`. */
   depth?: number;
+  /** Render `primary` in the mono face — for entity names (skills/agents). */
+  mono?: boolean;
 }
 
 /**
@@ -115,7 +118,7 @@ interface TreeGroupRowProps {
  * so a row reads as calm as a plain file/agent name until the user actually
  * means to act on it.
  */
-export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor, disabled, depth = 0 }: TreeGroupRowProps): React.ReactElement {
+export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor, disabled, depth = 0, mono }: TreeGroupRowProps): React.ReactElement {
   return (
     <TreeRow
       testId={testId}
@@ -129,6 +132,7 @@ export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContext
       {...(onContextMenu ? { onContextMenu } : {})}
       {...(muted !== undefined ? { muted } : {})}
       {...(disabled !== undefined ? { disabled } : {})}
+      {...(mono ? { labelVariant: 'mono' as const } : {})}
     />
   );
 }
