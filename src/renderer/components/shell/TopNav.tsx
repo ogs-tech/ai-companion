@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { AppBar, ButtonBase, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
-import { ChevronLeft, ChevronRight, Globe, Moon, Search, Sun, Settings as SettingsGlyph } from 'lucide-react';
+import {
+  ChevronLeft, ChevronRight, Globe, Moon, PanelLeft, PanelRight, Search, Sun, Settings as SettingsGlyph,
+} from 'lucide-react';
 import { Logo } from '../../assets/Logo.js';
 import { brand } from '../../../shared/brand.js';
 import { Icon } from '../ds/Icon.js';
@@ -11,6 +13,12 @@ import {
   subscribeWorkspaceHistory,
 } from '../../lib/workspace-history-store.js';
 import { openManualTab } from '../../lib/browser-tabs-store.js';
+import {
+  getWorkspacePanelsSnapshot,
+  subscribeWorkspacePanels,
+  toggleWorkspacePanel,
+} from '../../lib/workspace-shell-store.js';
+import { ContextSwitcher } from './ContextSwitcher.js';
 
 interface TopNavProps {
   onOpenSettings: () => void;
@@ -21,6 +29,9 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
   const { resolved, setTheme } = useThemeMode();
   const isDark = resolved === 'dark';
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
+  const { explorerCollapsed, controlCollapsed } = useSyncExternalStore(subscribeWorkspacePanels, getWorkspacePanelsSnapshot);
+  const explorerLabel = explorerCollapsed ? 'Mostrar painel esquerdo' : 'Ocultar painel esquerdo';
+  const controlLabel = controlCollapsed ? 'Mostrar painel direito' : 'Ocultar painel direito';
 
   return (
     // Canvas-coloured and borderless: the bar reads as part of the canvas, and
@@ -67,6 +78,7 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
               </IconButton>
             </span>
           </Tooltip>
+          <ContextSwitcher />
         </Stack>
 
         {/* Search-field-shaped ⌘K trigger — same onClick, it only looks like an input. */}
@@ -102,6 +114,31 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
         </ButtonBase>
 
         <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
+          <Tooltip title={explorerLabel}>
+            <IconButton
+              data-testid="workspace-toggle-files"
+              data-collapsed={explorerCollapsed}
+              onClick={() => toggleWorkspacePanel('explorer')}
+              size="small"
+              sx={{ color: explorerCollapsed ? 'text.disabled' : 'text.secondary' }}
+              aria-label={explorerLabel}
+            >
+              <Icon glyph={PanelLeft} size={18} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={controlLabel}>
+            <IconButton
+              data-testid="workspace-toggle-customizations"
+              data-collapsed={controlCollapsed}
+              onClick={() => toggleWorkspacePanel('control')}
+              size="small"
+              sx={{ color: controlCollapsed ? 'text.disabled' : 'text.secondary' }}
+              aria-label={controlLabel}
+            >
+              <Icon glyph={PanelRight} size={18} />
+            </IconButton>
+          </Tooltip>
+
           <Tooltip title="Abrir navegador">
             <IconButton
               data-testid="nav-browser-toggle"

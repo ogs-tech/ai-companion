@@ -1,164 +1,156 @@
 import { useState } from 'react';
-import { Box, Button, List, ListItemButton, ListItemText, Stack, Tooltip } from '@mui/material';
-import { Folder, FolderPlus, Trash2 } from 'lucide-react';
+import { Box, Button, IconButton, List, Stack, Tooltip, Typography } from '@mui/material';
+import { Folder, FolderOpen, FolderSearch, Plus, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
+import { TreeRow, treeGroupLabelSx } from '../ds/TreeRow.js';
 import { callIpc } from '../../lib/ipc.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
-import { useCreateWorkspace, useDeleteWorkspace, useSwitchWorkspace, useWorkspaces } from '../../hooks/use-workspaces.js';
+import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
+import { WorkspaceRemoveConfirmDialog } from '../shell/WorkspaceRemoveConfirmDialog.js';
+import { useContextNavigation } from '../../hooks/use-context-navigation.js';
+import { useDeleteWorkspace, useWorkspaces } from '../../hooks/use-workspaces.js';
 import type { Workspace } from '../../../shared/workspace.js';
-
-function basename(path: string): string {
-  const parts = path.split(/[/\\]/).filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/**
- * The workspaces you can jump into or remove. This only ever renders at
- * Início, where no workspace is open, so every registered one is listed.
- * Rows are styled identically to a FolderTree folder row (same icon size,
- * same trailing action-icon treatment) so it reads as one tree, not a card.
- */
 interface WorkspaceManagementListProps {
-  /** Checked before switching into another workspace — returns false to abort (e.g. the caller has unsaved Workbench tabs and the user declined to discard them). Defaults to always-allow. */
-  beforeSwitch?: () => boolean;
-  /** Pinned row rendered above the workspace list (and its empty state) — Início's own Personal Instruction row, matching how `FolderTree` pins the current scope's `InstructionTreeRow`. */
-  instructionRow?: React.ReactNode;
-  /** Pinned rows rendered below `instructionRow`, above the workspace list — Starter Pack/Marketplaces/Diagnóstico, global app destinations that only ever show here (Início), never inside a workspace's own tree. */
+  /** Starter Pack/Marketplaces/Diagnóstico — global app destinations, listed under "App". */
   appAreaRows?: React.ReactNode;
 }
 
-export function WorkspaceManagementList({
-  beforeSwitch,
-  instructionRow,
-  appAreaRows,
-}: WorkspaceManagementListProps = {}): React.ReactElement {
+function SectionHeader({ label, action }: { label: string; action?: React.ReactNode }): React.ReactElement {
+  return (
+    <Stack direction="row" sx={{ alignItems: 'center', minHeight: 26, pl: 1.5, pr: 1, pt: 0.75 }}>
+      <Typography component="span" sx={{ ...treeGroupLabelSx, flexGrow: 1 }}>
+        {label}
+      </Typography>
+      {action}
+    </Stack>
+  );
+}
+
+/**
+ * Início's left panel: the registered workspaces (click = switch; right-click
+ * = Abrir / Revelar no Finder / Remover…) and the app-level destinations.
+ * Rows carry no always-visible destructive action — removal sits behind the
+ * context menu and a confirm dialog.
+ */
+export function WorkspaceManagementList({ appAreaRows }: WorkspaceManagementListProps = {}): React.ReactElement {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const { data: workspaces } = useWorkspaces();
-  const switchWorkspace = useSwitchWorkspace();
-  const createWorkspace = useCreateWorkspace();
+  const { switchTo, openFolder } = useContextNavigation();
   const deleteWorkspace = useDeleteWorkspace();
+  const rowMenu = useRowContextMenu<Workspace>();
+  const rowMenuTarget = rowMenu.state?.target;
+  const [pendingRemoval, setPendingRemoval] = useState<Workspace | null>(null);
 
-  const otherWorkspaces = workspaces ?? [];
-  // Only commit to the empty-state layout once the list has actually
-  // settled — while `workspaces` is still undefined (first paint), this
-  // renders the same List+button shape the loaded/non-empty case does, so
-  // the "Novo workspace" button never gets swapped out for a fresh DOM node
-  // mid-click.
-  const showEmptyState = workspaces !== undefined && otherWorkspaces.length === 0;
+  const sorted = [...(workspaces ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  // Only commit to the empty state once the list has settled, so first paint
+  // never flashes it.
+  const showEmptyState = workspaces !== undefined && sorted.length === 0;
 
-  const handleSwitch = async (w: Workspace): Promise<void> => {
-    if (beforeSwitch && !beforeSwitch()) return;
+  const run = (action: () => Promise<unknown>): void => {
+    action().catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+  };
+
+  const handleRemove = async (): Promise<void> => {
+    const target = pendingRemoval;
+    setPendingRemoval(null);
+    if (!target) return;
     try {
-      await switchWorkspace.mutateAsync(w.id);
-      setToast({ variant: 'success', message: `Workspace alterado para ${w.name}` });
+      await deleteWorkspace.mutateAsync(target.id);
+      setToast({ variant: 'success', message: `${target.name} removido` });
     } catch (err) {
       setToast({ variant: 'error', message: errorMessage(err) });
     }
   };
 
-  const handleDelete = async (w: Workspace): Promise<void> => {
-    try {
-      await deleteWorkspace.mutateAsync(w.id);
-      setToast({ variant: 'success', message: `${w.name} removido` });
-    } catch (err) {
-      setToast({ variant: 'error', message: errorMessage(err) });
-    }
-  };
+  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
+    ? [
+        { key: 'open', label: 'Abrir', glyph: FolderOpen, onSelect: () => run(() => switchTo(rowMenuTarget.id)) },
+        {
+          key: 'reveal',
+          label: 'Revelar no Finder',
+          glyph: FolderSearch,
+          onSelect: () => run(() => callIpc('openWith.revealWorkspace', { id: rowMenuTarget.id })),
+        },
+        { key: 'remove', label: 'Remover…', glyph: Trash2, onSelect: () => setPendingRemoval(rowMenuTarget) },
+      ]
+    : [];
 
-  const handleNew = async (): Promise<void> => {
-    try {
-      const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
-      if (picked.canceled || !picked.path) return;
-      const name = basename(picked.path);
-      await createWorkspace.mutateAsync({ name, rootPath: picked.path });
-      setToast({ variant: 'success', message: `${name} criado` });
-    } catch (err) {
-      setToast({ variant: 'error', message: errorMessage(err) });
-    }
-  };
-
-  const newWorkspaceButton = (
-    <Button
-      variant="outlined"
-      size="small"
-      startIcon={<Icon glyph={FolderPlus} size={16} />}
-      data-testid="workspace-list-new"
-      onClick={() => void handleNew()}
-    >
-      Novo workspace
-    </Button>
+  const openFolderAction = (
+    <Tooltip title="Abrir pasta">
+      <IconButton
+        size="small"
+        data-testid="workspace-list-open-folder"
+        aria-label="Abrir pasta"
+        onClick={() => run(openFolder)}
+        sx={{ p: 0.25 }}
+      >
+        <Icon glyph={Plus} size={14} />
+      </IconButton>
+    </Tooltip>
   );
 
   return (
     <Box data-testid="workspace-management-list">
-      {(instructionRow || appAreaRows) && (
-        <List disablePadding>
-          {instructionRow}
-          {appAreaRows}
-        </List>
-      )}
+      <SectionHeader label="Workspaces" action={openFolderAction} />
       {showEmptyState ? (
         <Box sx={{ p: 1.5 }}>
           <EmptyState
-            glyph={FolderPlus}
+            glyph={FolderOpen}
             title="Nenhum workspace ainda"
-            description="Um workspace é uma pasta: agrupa as customizations e sessões dela. Crie um para começar."
-            cta={newWorkspaceButton}
+            description="Um workspace é uma pasta: agrupa as customizations e sessões dela. Abra uma para começar."
+            cta={
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Icon glyph={FolderOpen} size={16} />}
+                data-testid="workspace-list-empty-open-folder"
+                onClick={() => run(openFolder)}
+              >
+                Abrir pasta…
+              </Button>
+            }
             testId="workspace-management-empty"
           />
         </Box>
       ) : (
+        <List disablePadding>
+          {sorted.map((w) => (
+            <Tooltip key={w.id} title={w.rootPath} placement="right">
+              <Box>
+                <TreeRow
+                  testId={`workspace-list-row-${w.id}`}
+                  pl={1.5}
+                  glyph={Folder}
+                  primary={w.name}
+                  onClick={() => run(() => switchTo(w.id))}
+                  onContextMenu={(e) => rowMenu.openMenu(e, w)}
+                  badge={<SessionStatusBadge anchor={{ kind: 'workspace', workspaceId: w.id }} />}
+                />
+              </Box>
+            </Tooltip>
+          ))}
+        </List>
+      )}
+      {appAreaRows && (
         <>
-          <List disablePadding>
-            {otherWorkspaces.map((w) => (
-              <Tooltip key={w.id} title={w.rootPath} placement="top">
-                <ListItemButton
-                  dense
-                  data-testid={`workspace-list-row-${w.id}`}
-                  onClick={() => void handleSwitch(w)}
-                  sx={{ pl: 1.5 }}
-                >
-                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
-                    <Icon glyph={Folder} size={14} />
-                    <ListItemText
-                      primary={w.name}
-                      slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }}
-                    />
-                    <SessionStatusBadge anchor={{ kind: 'workspace', workspaceId: w.id }} />
-                  </Stack>
-                  <Box
-                    component="span"
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Remover ${w.name}`}
-                    data-testid={`workspace-list-delete-${w.id}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleDelete(w);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' && e.key !== ' ') return;
-                      if (e.key === ' ') e.preventDefault();
-                      e.stopPropagation();
-                      void handleDelete(w);
-                    }}
-                    sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                  >
-                    <Icon glyph={Trash2} size={14} />
-                  </Box>
-                </ListItemButton>
-              </Tooltip>
-            ))}
-          </List>
-          <Box sx={{ m: 1.5 }}>{newWorkspaceButton}</Box>
+          <SectionHeader label="App" />
+          <List disablePadding>{appAreaRows}</List>
         </>
       )}
+      <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
+      <WorkspaceRemoveConfirmDialog
+        open={pendingRemoval !== null}
+        workspaceName={pendingRemoval?.name ?? ''}
+        onConfirm={() => void handleRemove()}
+        onCancel={() => setPendingRemoval(null)}
+      />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );

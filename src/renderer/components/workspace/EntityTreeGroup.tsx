@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Box, Stack, Tooltip } from '@mui/material';
 import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { StatusPill } from '../ds/StatusPill.js';
 import { PluginOriginBadge } from '../PluginOriginBadge.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
@@ -24,8 +23,14 @@ interface EntityTreeGroupProps {
   label: string;
   /** Omitted at Início — there, nothing is "more global" than this, so every item shows unfiltered. */
   localScope?: LocalScope;
-  /** Whether entities that don't belong to `localScope` are currently visible. Ignored when `localScope` is omitted. */
-  showGlobal: boolean;
+  /**
+   * Lists the entities that do NOT belong to `localScope` instead — the
+   * workspace's read-only "Herdado do Global" view: no create, no delete,
+   * and `onEdit` is expected to open a read-only tab.
+   */
+  inherited?: boolean;
+  /** See `TreeGroup`'s own `depth`. */
+  depth?: number;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
   onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
   /** Right-click on a row → "Preview" — opens a read-only rendered-Markdown tab instead of the editing tab `onEdit` opens. */
@@ -41,7 +46,7 @@ function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
   return entity.scopes[0] === localScope.scope && entity.scopeId === localScope.scopeId;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
@@ -52,14 +57,17 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
   const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
     ? [
         { key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreview?.(rowMenuTarget) },
-        { key: 'properties', label: 'Properties', glyph: Settings2, onSelect: () => onProperties?.(kind, rowMenuTarget) },
+        ...(inherited
+          ? []
+          : [{ key: 'properties', label: 'Properties', glyph: Settings2, onSelect: () => onProperties?.(kind, rowMenuTarget) }]),
         { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(kind, rowMenuTarget) },
       ]
     : [];
 
-  const localItems = items.filter((item) => isLocal(item, localScope));
-  const globalItems = localScope && showGlobal ? items.filter((item) => !isLocal(item, localScope)) : [];
-  const visible = [...localItems, ...globalItems].sort((a, b) => a.name.localeCompare(b.name));
+  const visible = items
+    .filter((item) => (inherited ? !isLocal(item, localScope) : isLocal(item, localScope)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const groupTestId = inherited ? `inherited-${kind}` : kind;
 
   const startCreate = (): void => {
     const blank = blankCustomization(kind) as Skill | Agent;
@@ -83,23 +91,23 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
   return (
     <>
       <TreeGroup
-        testId={kind}
+        testId={groupTestId}
         glyph={ENTITY_GROUP_ICONS[kind]}
         label={label}
         count={visible.length}
-        onCreate={startCreate}
-        createLabel={`Novo ${kind === 'skill' ? 'skill' : 'agent'}`}
+        depth={depth}
+        {...(inherited ? {} : { onCreate: startCreate, createLabel: `Novo ${kind === 'skill' ? 'skill' : 'agent'}` })}
       >
         {visible.map((item) => {
-          const global = !isLocal(item, localScope);
           return (
             <TreeGroupRow
               key={item.urn}
-              testId={`tree-${kind}-${item.name}`}
+              testId={`tree-${groupTestId}-${item.name}`}
               glyph={ENTITY_GROUP_ICONS[kind]}
               primary={item.name}
               mono
-              muted={global}
+              depth={depth}
+              muted={inherited}
               accentColor={ENTITY_ACCENT_COLOR[kind]}
               onClick={() => onEdit(kind, item as Skill | Agent, false)}
               onContextMenu={(e) => rowMenu.openMenu(e, item as Skill | Agent)}
@@ -108,8 +116,6 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
                   <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
                   {item.source.kind === 'plugin' ? (
                     <PluginOriginBadge pluginId={item.source.pluginId} provenance={item.source.provenance} />
-                  ) : global ? (
-                    <StatusPill variant="idle" label="Global" testId={`${kind}-global-${item.name}`} />
                   ) : undefined}
                 </Stack>
               }
@@ -118,7 +124,7 @@ export function EntityTreeGroup({ kind, label, localScope, showGlobal, onEdit, o
               // action here would just duplicate it, so only Excluir survives
               // as a hover action.
               actions={
-                item.source.kind === 'workspace' ? (
+                !inherited && item.source.kind === 'workspace' ? (
                   <Tooltip title="Excluir">
                     <Box
                       component="span"

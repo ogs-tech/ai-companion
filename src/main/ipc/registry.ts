@@ -229,6 +229,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       workspaceBrowser: fileBrowserService,
       dialogPort,
       embeddedBrowser: embeddedBrowserPort,
+      workspaceService,
     }),
     ...buildLaunchConfigHandlers(launchConfigService, launchProcessService),
     ...buildGitHandlers(gitService),

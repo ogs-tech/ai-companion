@@ -14,16 +14,17 @@ app stores nothing of its own about past sessions. Internals:
 
 ## Start a session
 
-**Customizations** panel → **Sessões** → **+** (**Nova sessão**). The session starts in:
+Right panel → **Sessões** → **+** (**Nova sessão**), or **Nova sessão** on a workspace's Visão geral tab.
+The session starts in the open **workspace's root** — or your home folder at **Início**.
 
-- the **Project** in view, if the screen is scoped to one;
-- otherwise the active **workspace's root** (your home folder in the Global workspace).
+The **Sessões** list shows the current context's own conversations: the workspace's, or at Início only
+those that ran in your home folder itself. Running sessions are also summarized on the **Visão geral** tab.
 
 Each click starts a fresh conversation; several can run side by side. Each opens in its own tab in the
 center area.
 
 To start a session focused on one item instead, right-click a file, folder, skill, agent or
-**INSTRUCTIONS** row → **New Action**. The session starts in that item's scope with `@<path>` already
+instruction row → **New Action**. The session starts in that item's scope with `@<path>` already
 typed (not sent) as your first message.
 
 ## Work in the terminal

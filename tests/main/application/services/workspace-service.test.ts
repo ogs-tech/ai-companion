@@ -26,7 +26,7 @@ const setup = () => {
   const bootstrap = { create: vi.fn().mockResolvedValue(undefined) };
   const directories: DirectoryResolver = { realDirectory: async (path) => DIRECTORIES[path] ?? null };
   const service = new WorkspaceService(registry, clock, bootstrap, '/home/u', directories);
-  return { service, registry, bootstrap };
+  return { service, registry, bootstrap, clock };
 };
 
 describe('WorkspaceService', () => {
@@ -106,8 +106,33 @@ describe('WorkspaceService', () => {
   it('switchTo activates an existing workspace and returns it', async () => {
     const { service } = setup();
     const created = await service.create({ name: 'Acme', rootPath: '/repos/acme' });
-    expect(await service.switchTo(created.id)).toEqual(created);
+    expect(await service.switchTo(created.id)).toMatchObject(created);
     expect((await service.getActive())?.id).toBe(created.id);
+  });
+
+  describe('lastOpenedAt', () => {
+    it('is not set by create — registering is not opening', async () => {
+      const { service } = setup();
+      const created = await service.create({ name: 'Acme', rootPath: '/repos/acme' });
+      expect(created.lastOpenedAt).toBeUndefined();
+    });
+
+    it('is stamped by switchTo, on the returned and the persisted workspace', async () => {
+      const { service, clock } = setup();
+      const created = await service.create({ name: 'Acme', rootPath: '/repos/acme' });
+      clock.set(new Date('2026-08-23T09:00:00.000Z'));
+      expect((await service.switchTo(created.id)).lastOpenedAt).toBe('2026-08-23T09:00:00.000Z');
+      expect((await service.get(created.id)).lastOpenedAt).toBe('2026-08-23T09:00:00.000Z');
+    });
+
+    it('is stamped by open, for a new folder and again when reopening it', async () => {
+      const { service, clock } = setup();
+      expect((await service.open('/repos/acme')).lastOpenedAt).toBe('2026-08-22T10:00:00.000Z');
+      clock.set(new Date('2026-08-24T12:00:00.000Z'));
+      const reopened = await service.open('/repos/acme');
+      expect(reopened.lastOpenedAt).toBe('2026-08-24T12:00:00.000Z');
+      expect(await service.list()).toEqual([reopened]);
+    });
   });
 
   it('switchTo rejects an unknown id with not_found', async () => {

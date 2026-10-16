@@ -477,7 +477,9 @@ async function wireIpc(): Promise<void> {
 
   const switchQueue = createTaskQueue();
 
-  let dispatch = createDispatcher(buildHandlers(buildDeps()));
+  // Assigned below, once `workspaceActivation` exists — `buildDeps()` reads it,
+  // so building the first dispatcher here would hit its TDZ.
+  let dispatch: ReturnType<typeof createDispatcher>;
 
   /**
    * Serialized: activation is renderer-triggerable, and two overlapping
@@ -525,6 +527,8 @@ async function wireIpc(): Promise<void> {
       await workspaceService.delete(id);
     },
   };
+
+  dispatch = createDispatcher(buildHandlers(buildDeps()));
 
   ipcMain.handle(IPC_CHANNEL, async (_event, payload: unknown) => {
     if (!isCallPayload(payload)) {

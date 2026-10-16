@@ -1,22 +1,22 @@
 ---
 title: Write instructions
-description: Edit the personal instruction and create per-workspace or per-Project instructions that every harness loads automatically.
+description: Edit the personal instruction and create per-workspace instructions that every harness loads automatically.
 ---
 
 # Write instructions
 
 An **instruction** is the always-loaded context file a harness reads at the start of every conversation
 (`CLAUDE.md` / `AGENTS.md` in Claude Code, a rule or `AGENTS.md` in Cursor). There is one **personal**
-instruction, plus at most one per workspace and one per Project. Instructions are stored without
-frontmatter: the file is the body. Targets: [Adapter targets](../reference/adapter-targets.md).
+instruction, plus the instructions of each workspace. Instructions are stored without frontmatter: the file
+is the body. Targets: [Adapter targets](../reference/adapter-targets.md).
 
-All three live in the **Explorer** panel (left) as a row labeled **INSTRUCTIONS**.
+They live at the top of the right panel, in the **Instruction** group of the current context.
 
 ## Edit the personal instruction
 
-1. Go to the **Global** workspace (click **Início**).
-2. Click the **INSTRUCTIONS** row at the top of the Explorer. The first click on an empty one opens a
-   new instruction tab.
+1. Go to **Início** (TopNav switcher → **Início**).
+2. In the right panel's **Instruction** group, click **INSTRUCTIONS**. The first click on an empty one
+   opens a new instruction tab.
 3. Write, then press **⌘S**.
 
 It is linked to `~/.claude/CLAUDE.md` **and** `~/AGENTS.md` (plus a Cursor rule, if Cursor is enabled).
@@ -26,25 +26,18 @@ on the first sync, and the Sync report tells you where. Copy anything you want t
 ## Add an instruction for a workspace
 
 1. Switch to the workspace.
-2. With no Project scoped, click the Explorer's **INSTRUCTIONS** row, write, **⌘S**.
+2. In the right panel's **Instruction** group, click **+** (or **Criar instruction** on the Visão geral
+   tab), write, **⌘S**. Existing ones are listed there by name; click one to edit it.
 
 Targets resolve to the workspace's root folder: `<root>/.claude/CLAUDE.md` and `<root>/AGENTS.md`.
 
-## Add an instruction for a Project
-
-1. In the workspace's file tree, expand the Project's folder (it must already be a
-   [registered Project](manage-workspaces-and-projects.md#register-a-folder-as-a-project)).
-2. Click the **INSTRUCTIONS** row pinned at the top of that folder's children, write, **⌘S**.
-
-Targets resolve to the Project's folder: `<project>/.claude/CLAUDE.md` and `<project>/AGENTS.md`.
-
-> **Avoid enabling Cursor if you rely on workspace/Project instructions.** Both adapters claim
+> **Avoid enabling Cursor if you rely on workspace instructions.** Both adapters claim
 > `<folder>/AGENTS.md`; with both enabled they overwrite each other on every sync. See
 > [Adapter targets → Known issues](../reference/adapter-targets.md#known-issues).
 
-## Remove a workspace or Project instruction
+## Remove a workspace instruction
 
-Hover its **INSTRUCTIONS** row and click **Remover**. The instruction file and its links are deleted.
+Hover its row in the **Instruction** group and click **Remover**. The instruction file and its links are deleted.
 The personal instruction cannot be removed, only emptied.
 
 ## Set the reply language for every session
@@ -56,6 +49,6 @@ English. The block is plain text in the instruction — you can see and edit it 
 
 ## Draft an instruction with an agent
 
-Right-click an **INSTRUCTIONS** row → **New Action**. A `claude` session opens with `@<instruction file>`
+Right-click an instruction row → **New Action**. A `claude` session opens with `@<instruction file>`
 drafted as the first message; ask it to write or refine the instruction. Its edits land in the canonical
 file and re-sync automatically.

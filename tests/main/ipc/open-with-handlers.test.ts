@@ -50,9 +50,25 @@ function harness(
     workspaceBrowser: workspaceOpen ? new FileBrowserService(port, WORKSPACE_ROOT) : null,
     dialogPort: dialogPort as unknown as DialogPort,
     embeddedBrowser,
+    workspaceService: { get: vi.fn(async (id: string) => ({ id, name: 'acme', rootPath: '/repos/acme', createdAt: '' })) },
   });
   return { handlers, openWithService, dialogPort, embeddedBrowser };
 }
+
+describe('openWith.revealWorkspace', () => {
+  it("reveals a registered workspace's root by id — works at Início, with no workspace open", async () => {
+    const { handlers, openWithService } = harness(undefined, false);
+
+    await handlers['openWith.revealWorkspace']!({ id: 'w1' });
+
+    expect(openWithService.reveal).toHaveBeenCalledWith('/repos/acme');
+  });
+
+  it('rejects a missing id', async () => {
+    const { handlers } = harness();
+    await expect(handlers['openWith.revealWorkspace']!({})).rejects.toMatchObject({ kind: 'validation' });
+  });
+});
 
 describe('openWith.suggest', () => {
   it('resolves the relative path against the workspace root', async () => {

@@ -33,10 +33,10 @@ beforeEach(() => {
 });
 
 describe('EntityTreeGroup', () => {
-  it('with a localScope, only shows items matching it until "Mostrar globais" is toggled on', async () => {
+  it('with a localScope, only shows items matching it', async () => {
     const user = userEvent.setup();
     renderWithShell(
-      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} showGlobal={false} onEdit={vi.fn()} />,
+      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} onEdit={vi.fn()} />,
     );
     await user.click(await screen.findByTestId('tree-group-skill'));
     expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
@@ -44,20 +44,43 @@ describe('EntityTreeGroup', () => {
     expect(screen.queryByTestId('tree-skill-plugin-skill')).not.toBeInTheDocument();
   });
 
-  it('reveals non-local items once showGlobal is true', async () => {
-    const user = userEvent.setup();
-    renderWithShell(
-      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} showGlobal onEdit={vi.fn()} />,
-    );
-    await user.click(await screen.findByTestId('tree-group-skill'));
-    expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
-    expect(await screen.findByTestId('tree-skill-personal-skill')).toBeInTheDocument();
-    expect(await screen.findByTestId('tree-skill-plugin-skill')).toBeInTheDocument();
+  describe('inherited (the workspace\'s "Herdado do Global")', () => {
+    const renderInherited = (onEdit = vi.fn()) =>
+      renderWithShell(
+        <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} inherited onEdit={onEdit} />,
+      );
+
+    it('lists only the items that do NOT belong to the localScope', async () => {
+      const user = userEvent.setup();
+      renderInherited();
+      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      expect(await screen.findByTestId('tree-inherited-skill-personal-skill')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-inherited-skill-plugin-skill')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-inherited-skill-workspace-skill')).not.toBeInTheDocument();
+    });
+
+    it('is read-only: no create action, no delete action', async () => {
+      const user = userEvent.setup();
+      renderInherited();
+      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      await screen.findByTestId('tree-inherited-skill-personal-skill');
+      expect(screen.queryByTestId('tree-group-new-inherited-skill')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tree-skill-delete-personal-skill')).not.toBeInTheDocument();
+    });
+
+    it('row click hands the entity to onEdit (the caller opens it read-only)', async () => {
+      const user = userEvent.setup();
+      const onEdit = vi.fn();
+      renderInherited(onEdit);
+      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      await user.click(await screen.findByTestId('tree-inherited-skill-personal-skill'));
+      expect(onEdit).toHaveBeenCalledWith('skill', personalScoped, false);
+    });
   });
 
   it('shows every item, unfiltered, when no localScope is given (at Início)', async () => {
     const user = userEvent.setup();
-    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} />);
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={vi.fn()} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
     expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
     expect(await screen.findByTestId('tree-skill-personal-skill')).toBeInTheDocument();
@@ -68,7 +91,7 @@ describe('EntityTreeGroup', () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
     renderWithShell(
-      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} showGlobal={false} onEdit={onEdit} />,
+      <EntityTreeGroup kind="skill" label="Skills" localScope={{ scope: 'workspace', scopeId: 'w1' }} onEdit={onEdit} />,
     );
     await user.click(await screen.findByTestId('tree-group-new-skill'));
     expect(onEdit).toHaveBeenCalledWith(
@@ -81,7 +104,7 @@ describe('EntityTreeGroup', () => {
   it('opens the editor tab for an existing item on click of the row', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
-    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEdit} />);
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={onEdit} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
     await user.click(await screen.findByTestId('tree-skill-personal-skill'));
     expect(onEdit).toHaveBeenCalledWith('skill', expect.objectContaining({ name: 'personal-skill' }), false);
@@ -90,7 +113,7 @@ describe('EntityTreeGroup', () => {
   it('deletes a workspace-owned item after confirmation', async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} />);
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={vi.fn()} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
     await user.click(await screen.findByTestId('tree-skill-delete-personal-skill'));
     expect(confirmSpy).toHaveBeenCalled();
@@ -117,7 +140,7 @@ describe('EntityTreeGroup', () => {
       return ok(undefined);
     });
     const user = userEvent.setup();
-    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} />);
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={vi.fn()} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
 
     const activeRow = await screen.findByTestId('tree-skill-personal-skill');
@@ -130,7 +153,7 @@ describe('EntityTreeGroup', () => {
   it('does not offer a delete action for a plugin-provided item, but the row still opens it (read-only) in the editor tab', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
-    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEdit} />);
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={onEdit} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
     await screen.findByTestId('tree-skill-plugin-skill');
     expect(screen.queryByTestId('tree-skill-delete-plugin-skill')).not.toBeInTheDocument();
@@ -141,7 +164,7 @@ describe('EntityTreeGroup', () => {
   it('right-click → "New Action" passes the row\'s kind and entity through', async () => {
     const user = userEvent.setup();
     const onNewAction = vi.fn();
-    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={vi.fn()} onNewAction={onNewAction} />);
+    renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={vi.fn()} onNewAction={onNewAction} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
     const row = await screen.findByTestId('tree-skill-personal-skill');
     fireEvent.contextMenu(row);

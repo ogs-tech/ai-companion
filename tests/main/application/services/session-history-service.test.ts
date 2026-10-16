@@ -81,6 +81,7 @@ const settingsService = (settings?: Partial<Settings>) => ({
 });
 
 const scopeDeps = {
+  homedir: '/home/u',
   workspaceService: {
     get: async (id: string) => ({ id, name: id, rootPath: id === 'acme' ? '/repos/acme' : '/repos', createdAt: '' }),
   },
@@ -139,6 +140,18 @@ describe('SessionHistoryService', () => {
       ]);
 
       expect((await service.list({ scope: ALL })).total).toBe(2);
+    });
+
+    it('takes only conversations that ran in the home dir itself as Global, never those below it', async () => {
+      const { service } = setup([
+        transcript({ id: 'global', cwd: '/home/u' }),
+        transcript({ id: 'below-home', cwd: '/home/u/repos/acme' }),
+        transcript({ id: 'elsewhere', cwd: '/repos/acme' }),
+      ]);
+
+      const page = await service.list({ scope: { kind: 'personal' } });
+
+      expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['global']);
     });
   });
 

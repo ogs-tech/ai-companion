@@ -13,8 +13,8 @@ interface RenderTreeOptions {
   onOpenAsWorkspace?: (absolutePath: string) => void;
   onPreviewFile?: (relPath: string) => void;
   onNewAction?: (relPath: string) => void;
-  instructionRow?: React.ReactNode;
   pinnedRows?: React.ReactNode;
+  isWorkspaceRoot?: (relPath: string) => boolean;
 }
 
 const renderTree = (opts: RenderTreeOptions = {}) =>
@@ -26,8 +26,8 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
           onOpenAsWorkspace={opts.onOpenAsWorkspace ?? vi.fn()}
           {...(opts.onPreviewFile ? { onPreviewFile: opts.onPreviewFile } : {})}
           {...(opts.onNewAction ? { onNewAction: opts.onNewAction } : {})}
-          {...(opts.instructionRow !== undefined ? { instructionRow: opts.instructionRow } : {})}
           {...(opts.pinnedRows !== undefined ? { pinnedRows: opts.pinnedRows } : {})}
+          {...(opts.isWorkspaceRoot ? { isWorkspaceRoot: opts.isWorkspaceRoot } : {})}
         />
       </ThemeProvider>
     </QueryClientProvider>,
@@ -52,14 +52,7 @@ beforeEach(() => {
 });
 
 describe('FolderTree', () => {
-  it('renders the instructionRow slot pinned above the folders/files', async () => {
-    listing({ '': [{ name: 'src', kind: 'dir' }] });
-    renderTree({ instructionRow: <div data-testid="instruction-row-slot">Instructions</div> });
-    expect(await screen.findByTestId('instruction-row-slot')).toBeInTheDocument();
-    expect(await screen.findByText('src')).toBeInTheDocument();
-  });
-
-  it('renders the pinnedRows slot between instructionRow and the folders/files', async () => {
+  it('renders the pinnedRows slot above the folders/files', async () => {
     listing({ '': [{ name: 'src', kind: 'dir' }] });
     renderTree({ pinnedRows: <div data-testid="pinned-rows-slot">Launch Configurations</div> });
     expect(await screen.findByTestId('pinned-rows-slot')).toBeInTheDocument();
@@ -97,41 +90,41 @@ describe('FolderTree', () => {
     expect(onSelectFile).toHaveBeenCalledWith('src/index.ts');
   });
 
-  it('"Abrir como workspace" on a folder calls onOpenAsWorkspace with its resolved absolute path', async () => {
-    const user = userEvent.setup();
+  it('"Abrir como workspace" in a folder\'s context menu calls onOpenAsWorkspace with its resolved absolute path', async () => {
     const onOpenAsWorkspace = vi.fn();
     listing({ '': [{ name: 'apps', kind: 'dir' }] }, { 'workspace.resolvePath': { absolutePath: '/repos/monorepo/apps' } });
     renderTree({ onOpenAsWorkspace });
-    await user.click(await screen.findByTestId('tree-node-open-as-workspace-apps'));
+    fireEvent.contextMenu(await screen.findByText('apps'));
+    fireEvent.click(await screen.findByTestId('row-context-menu-open-as-workspace'));
     await waitFor(() => expect(onOpenAsWorkspace).toHaveBeenCalledWith('/repos/monorepo/apps'));
   });
 
-  it('"Abrir como workspace" is offered on nested folders too, never on files', async () => {
-    const user = userEvent.setup();
-    listing({ '': [{ name: 'apps', kind: 'dir' }, { name: 'README.md', kind: 'file' }], apps: [{ name: 'web', kind: 'dir' }] });
+  it('"Abrir como workspace" is offered on folders only, never on files, and no longer as an inline row action', async () => {
+    listing({ '': [{ name: 'apps', kind: 'dir' }, { name: 'README.md', kind: 'file' }] });
     renderTree();
-    await user.click(await screen.findByText('apps'));
-    expect(await screen.findByTestId('tree-node-open-as-workspace-web')).toBeInTheDocument();
-    expect(screen.queryByTestId('tree-node-open-as-workspace-README.md')).not.toBeInTheDocument();
-  });
-
-  it('"Abrir como workspace" is keyboard-operable via Enter', async () => {
-    const user = userEvent.setup();
-    const onOpenAsWorkspace = vi.fn();
-    listing({ '': [{ name: 'apps', kind: 'dir' }] }, { 'workspace.resolvePath': { absolutePath: '/repos/monorepo/apps' } });
-    renderTree({ onOpenAsWorkspace });
-    const control = await screen.findByTestId('tree-node-open-as-workspace-apps');
-    control.focus();
-    await user.keyboard('{Enter}');
-    await waitFor(() => expect(onOpenAsWorkspace).toHaveBeenCalledWith('/repos/monorepo/apps'));
+    expect(await screen.findByText('apps')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-node-open-as-workspace-apps')).not.toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByText('README.md'));
+    expect(await screen.findByTestId('row-context-menu-new-action')).toBeInTheDocument();
+    expect(screen.queryByTestId('row-context-menu-open-as-workspace')).not.toBeInTheDocument();
   });
 
   it('shows an error toast when resolving the absolute path fails', async () => {
-    const user = userEvent.setup();
     listing({ '': [{ name: 'apps', kind: 'dir' }] }, { 'workspace.resolvePath': new Error('boom') });
     renderTree();
-    await user.click(await screen.findByTestId('tree-node-open-as-workspace-apps'));
+    fireEvent.contextMenu(await screen.findByText('apps'));
+    fireEvent.click(await screen.findByTestId('row-context-menu-open-as-workspace'));
     expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
+  });
+
+  it('badges a sub-folder that is itself a registered workspace root', async () => {
+    const user = userEvent.setup();
+    listing({ '': [{ name: 'packages', kind: 'dir' }, { name: 'src', kind: 'dir' }], packages: [{ name: 'api', kind: 'dir' }] });
+    renderTree({ isWorkspaceRoot: (relPath) => relPath === 'packages/api' });
+    await user.click(await screen.findByText('packages'));
+    expect(await screen.findByTestId('tree-node-workspace-badge-api')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-node-workspace-badge-packages')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tree-node-workspace-badge-src')).not.toBeInTheDocument();
   });
 
   it('shows an error state when the root listing fails', async () => {

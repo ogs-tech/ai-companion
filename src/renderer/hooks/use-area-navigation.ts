@@ -4,32 +4,23 @@ import { openWorkspaceArea } from '../lib/workspace-area-store.js';
 import type { Area } from '../components/shell/nav.js';
 
 /**
- * CommandPalette's "go to X" entries, and the status bar sync entry's fallback
- * when it isn't already at Início. 'workspace' is the "Início" gesture (go
- * home, guarded against unsaved Workbench tabs); the other three open/focus
- * their Workbench tab inside WorkspaceScreen — see workspace-area-store.ts.
- * Starter Pack/Marketplaces/Diagnóstico only ever show as Explorer Panel rows
- * at Início itself, so those rows call `openWorkspaceArea` directly rather
- * than this hook — they never need the 'workspace' branch.
+ * CommandPalette's "go to X" entries and the status bar's health entry.
+ * 'workspace' is the "Início" gesture (go home, guarded against unsaved
+ * Workbench tabs). Starter Pack/Marketplaces/Diagnóstico are app-level tabs:
+ * they open in whichever context is current — see workspace-area-store.ts.
  */
 export function useAreaNavigation(): (area: Area) => void {
   const { data: activeWorkspace } = useActiveWorkspace();
   const goHome = useGoHome();
 
   return (area: Area): void => {
+    if (area !== 'workspace') {
+      openWorkspaceArea(area);
+      return;
+    }
     const inWorkspace = activeWorkspace !== undefined && activeWorkspace !== null;
-    if (area === 'workspace') {
-      if (inWorkspace) {
-        if (!confirmDiscardUnsavedTabs()) return;
-        void goHome.mutateAsync();
-      }
-      return;
-    }
-    if (inWorkspace) {
-      if (!confirmDiscardUnsavedTabs()) return;
-      void goHome.mutateAsync().then(() => openWorkspaceArea(area));
-      return;
-    }
-    openWorkspaceArea(area);
+    if (!inWorkspace) return;
+    if (!confirmDiscardUnsavedTabs()) return;
+    void goHome.mutateAsync();
   };
 }

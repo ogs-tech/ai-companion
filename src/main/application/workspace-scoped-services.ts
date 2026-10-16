@@ -157,6 +157,7 @@ export function buildWorkspaceScopedServices(
   // the service is per-workspace because its default scope, and its warm
   // readings, belong to the workspace being looked at.
   const sessionHistoryService = new SessionHistoryService(sessionTranscriptPort, settingsService, {
+    homedir,
     workspaceService,
   });
 

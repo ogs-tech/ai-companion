@@ -79,20 +79,17 @@ export class WorkspaceService {
     const existing = registry.workspaces.find((w) => w.rootPath === rootPath);
     if (existing) {
       await this.bootstrap.create(workspacePath(existing.rootPath));
-      await this.registry.save({ ...registry, activeWorkspaceId: existing.id });
-      return existing;
+      return this.activate(registry, existing);
     }
     const created = await this.register(registry, basename(rootPath) || rootPath, rootPath);
-    await this.registry.save({ ...(await this.load()), activeWorkspaceId: created.id });
-    return created;
+    return this.activate(await this.load(), created);
   }
 
   async switchTo(id: string): Promise<Workspace> {
     const registry = await this.load();
     const target = registry.workspaces.find((w) => w.id === id);
     if (!target) throw new DomainError('not_found', `Workspace not found: ${id}`);
-    await this.registry.save({ ...registry, activeWorkspaceId: id });
-    return target;
+    return this.activate(registry, target);
   }
 
   async goHome(): Promise<void> {
@@ -112,6 +109,17 @@ export class WorkspaceService {
       workspaces: registry.workspaces.filter((w) => w.id !== id),
       activeWorkspaceId: registry.activeWorkspaceId === id ? null : registry.activeWorkspaceId,
     });
+  }
+
+  /** Makes `target` the open workspace, stamping `lastOpenedAt` (what the switcher's "Recentes" sorts by). */
+  private async activate(registry: WorkspaceRegistryFile, target: Workspace): Promise<Workspace> {
+    const opened: Workspace = { ...target, lastOpenedAt: this.clock.now().toISOString() };
+    await this.registry.save({
+      ...registry,
+      workspaces: registry.workspaces.map((w) => (w.id === opened.id ? opened : w)),
+      activeWorkspaceId: opened.id,
+    });
+    return opened;
   }
 
   private async register(registry: WorkspaceRegistryFile, name: string, rootPath: string): Promise<Workspace> {

@@ -4,6 +4,7 @@ import type { OpenWithService } from '../application/services/open-with-service.
 import type { DialogPort } from '../application/ports/dialog-port.js';
 import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-port.js';
 import type { FileBrowserService } from '../application/services/file-browser-service.js';
+import type { WorkspaceService } from '../application/services/workspace-service.js';
 import { DomainError } from '../domain/errors.js';
 import { requireFileBrowser } from './workspace-handlers.js';
 import type { OpenWithKind } from '../../shared/open-with.js';
@@ -15,6 +16,7 @@ export interface OpenWithHandlerDeps {
   workspaceBrowser: FileBrowserService | null;
   dialogPort: DialogPort;
   embeddedBrowser: EmbeddedBrowserPort;
+  workspaceService: Pick<WorkspaceService, 'get'>;
 }
 
 function asKind(value: unknown): OpenWithKind {
@@ -34,7 +36,7 @@ function asKind(value: unknown): OpenWithKind {
  * symlinks pointing outside the root.
  */
 export function buildOpenWithHandlers(deps: OpenWithHandlerDeps): IpcHandlers {
-  const { openWithService, workspaceBrowser, dialogPort, embeddedBrowser } = deps;
+  const { openWithService, workspaceBrowser, dialogPort, embeddedBrowser, workspaceService } = deps;
 
   // Empty means the workspace root itself — a legitimate thing to open.
   const resolvePath = (raw: Record<string, unknown>): Promise<string> =>
@@ -79,6 +81,15 @@ export function buildOpenWithHandlers(deps: OpenWithHandlerDeps): IpcHandlers {
     'openWith.reveal': async (params) => {
       const raw = asObject(params, 'openWith.reveal');
       await openWithService.reveal(await resolvePath(raw));
+    },
+
+    // By id, not by path: the root comes from the registry, so this still never
+    // reveals an arbitrary renderer-supplied path. Works at Início, where
+    // Início's workspace rows have no open workspace to be relative to.
+    'openWith.revealWorkspace': async (params) => {
+      const raw = asObject(params, 'openWith.revealWorkspace');
+      const { rootPath } = await workspaceService.get(asString(raw['id'], 'id'));
+      await openWithService.reveal(rootPath);
     },
 
     'openWith.openInBrowser': async (params) => {

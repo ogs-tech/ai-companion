@@ -66,8 +66,8 @@ It then opens on the **Início** tab, showing the Global workspace.
 
 You're ready when:
 
-- **Início** shows the Global workspace, with **Novo workspace** in its workspace list and an
-  **INSTRUCTIONS** row in the Explorer.
+- The TopNav shows **🏠 Início**; the left panel lists **Workspaces** (with **+** to open a folder) and
+  **App**, and the right panel starts with **Global** and an **Instruction** group.
 - **Settings** (gear icon) → **Adapters** shows Claude switched on.
 - `ls ~/.ai-companion` lists `skills/`, `agents/`, `_backups/`, `settings.json` and `workspaces.json`.
 

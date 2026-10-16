@@ -63,6 +63,7 @@ export class SessionHistoryService {
     private readonly transcripts: SessionTranscriptPort,
     private readonly settingsService: Pick<SettingsService, 'load' | 'getDefaults'>,
     private readonly scopeDeps: {
+      homedir: string;
       workspaceService: Pick<WorkspaceService, 'get'>;
     },
   ) {}
@@ -122,8 +123,8 @@ export class SessionHistoryService {
   }
 
   private async rowsFor(scope: HistoryScope, filters?: HistoryFilters): Promise<HistoryRow[]> {
-    const root = await this.scopeRoot(scope);
-    const refs = (await this.transcripts.listRefs()).filter((ref) => inScope(ref, root));
+    const inScope = await this.scopeMatcher(scope);
+    const refs = (await this.transcripts.listRefs()).filter((ref) => inScope(ref.cwd));
     const overrides = await this.rateOverrides();
 
     // One disk round trip per file, all in flight together — a sequential
@@ -186,17 +187,15 @@ export class SessionHistoryService {
     return settings.pricing;
   }
 
-  /** The directory a scope covers, or `null` for "everything on this machine". */
-  private async scopeRoot(scope: HistoryScope): Promise<string | null> {
-    if (scope.kind === 'all') return null;
-    const workspace = await this.scopeDeps.workspaceService.get(scope.workspaceId);
-    return workspace.rootPath;
+  /** Which conversation directories a scope covers. */
+  private async scopeMatcher(scope: HistoryScope): Promise<(cwd: string) => boolean> {
+    if (scope.kind === 'all') return () => true;
+    // Exact match: everything below the home dir belongs to some folder, not to Global.
+    if (scope.kind === 'personal') return (cwd) => cwd === this.scopeDeps.homedir;
+    const { rootPath } = await this.scopeDeps.workspaceService.get(scope.workspaceId);
+    const prefix = rootPath.endsWith(sep) ? rootPath : rootPath + sep;
+    return (cwd) => cwd === rootPath || cwd.startsWith(prefix);
   }
-}
-
-function inScope(ref: TranscriptRef, root: string | null): boolean {
-  if (root === null) return true;
-  return ref.cwd === root || ref.cwd.startsWith(root.endsWith(sep) ? root : root + sep);
 }
 
 function toEntry(

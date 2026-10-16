@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TopNav } from '../../../../src/renderer/components/shell/TopNav.js';
 import {
@@ -8,6 +8,7 @@ import {
   resetWorkspaceHistoryForTests,
 } from '../../../../src/renderer/lib/workspace-history-store.js';
 import { getBrowserTabsSnapshot, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
+import { publishWorkspacePanels, registerWorkspaceShellCommands } from '../../../../src/renderer/lib/workspace-shell-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
 let call: CallSpy;
@@ -21,6 +22,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  registerWorkspaceShellCommands(null);
+  publishWorkspacePanels({ explorerCollapsed: false, controlCollapsed: false });
   resetWorkspaceHistoryForTests();
   resetBrowserTabsForTests();
 });
@@ -28,6 +31,26 @@ afterEach(() => {
 const noop = () => undefined;
 
 describe('TopNav', () => {
+  it('renders the context switcher', async () => {
+    renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
+    expect(await screen.findByTestId('context-switcher')).toHaveTextContent('Início');
+  });
+
+  it('toggles the side panels through the registered shell commands and reflects their state', async () => {
+    const user = userEvent.setup();
+    const togglePanel = vi.fn();
+    registerWorkspaceShellCommands({ focusOverview: vi.fn(), togglePanel });
+    renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
+
+    await user.click(screen.getByTestId('workspace-toggle-files'));
+    await user.click(screen.getByTestId('workspace-toggle-customizations'));
+    expect(togglePanel.mock.calls).toEqual([['explorer'], ['control']]);
+
+    act(() => publishWorkspacePanels({ explorerCollapsed: true, controlCollapsed: false }));
+    expect(screen.getByTestId('workspace-toggle-files')).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.getByTestId('workspace-toggle-customizations')).toHaveAttribute('data-collapsed', 'false');
+  });
+
   it('opens settings and the command palette via their controls', async () => {
     const onOpenSettings = vi.fn();
     const onOpenCommandPalette = vi.fn();

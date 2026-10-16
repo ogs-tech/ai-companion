@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
-import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderSearch, FolderX, Globe, SquareTerminal } from 'lucide-react';
+import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderRoot, FolderSearch, FolderX, Globe, SquareTerminal } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { TreeRow } from '../ds/TreeRow.js';
@@ -30,10 +30,10 @@ interface FolderTreeProps {
   onPreviewFile?: (relPath: string) => void;
   /** Right-click on a file OR folder row → "New Action" — opens a brand-new session with a draft first message referencing it. */
   onNewAction?: (relPath: string) => void;
-  /** Pinned row rendered above the folders/files, e.g. an `InstructionTreeRow` for the current scope. */
-  instructionRow?: React.ReactNode;
-  /** Pinned nodes rendered below `instructionRow` and above the folders/files, e.g. Skills/Agents/Hooks/MCP `TreeGroup`s for the current scope. */
+  /** Pinned nodes rendered above the folders/files, e.g. the workspace's Launch Configurations group. */
   pinnedRows?: React.ReactNode;
+  /** Whether a folder (by its root-relative path) is itself a registered workspace's root — gets a small badge. */
+  isWorkspaceRoot?: (relPath: string) => boolean;
 }
 
 interface TreeNodeProps {
@@ -41,9 +41,8 @@ interface TreeNodeProps {
   relPath: string;
   depth: number;
   onSelectFile: (relPath: string) => void;
-  onOpenAsWorkspace: (absolutePath: string) => void;
   onOpenRowMenu: (e: React.MouseEvent, target: RowMenuTarget) => void;
-  onError: (message: string) => void;
+  isWorkspaceRoot: (relPath: string) => boolean;
 }
 
 function TreeNode({
@@ -51,22 +50,12 @@ function TreeNode({
   relPath,
   depth,
   onSelectFile,
-  onOpenAsWorkspace,
   onOpenRowMenu,
-  onError,
+  isWorkspaceRoot,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
-  const resolveAbsolutePath = useResolveAbsolutePath();
   const isDir = entry.kind === 'dir';
   const { data: children, isError: childrenError } = useDirListing(relPath, { enabled: expanded && isDir });
-
-  const handleOpenAsWorkspace = async (): Promise<void> => {
-    try {
-      onOpenAsWorkspace(await resolveAbsolutePath.mutateAsync(relPath));
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  };
 
   return (
     <>
@@ -75,38 +64,22 @@ function TreeNode({
         chevron={isDir ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
         glyph={isDir ? Folder : FileIcon}
         primary={entry.name}
-        actionsVisibility="always"
         onClick={() => {
           if (isDir) setExpanded((v) => !v);
           else onSelectFile(relPath);
         }}
         onContextMenu={(e) => onOpenRowMenu(e, { relPath, kind: entry.kind })}
-        actions={
-          isDir ? (
-            <Tooltip title="Abrir como workspace">
-              <Box
-                component="span"
-                role="button"
-                tabIndex={0}
-                aria-label={`Abrir ${entry.name} como workspace`}
-                data-testid={`tree-node-open-as-workspace-${entry.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleOpenAsWorkspace();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  if (e.key === ' ') e.preventDefault();
-                  e.stopPropagation();
-                  void handleOpenAsWorkspace();
-                }}
-                sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-              >
-                <Icon glyph={FolderInput} size={14} />
-              </Box>
-            </Tooltip>
-          ) : undefined
-        }
+        {...(isDir && isWorkspaceRoot(relPath)
+          ? {
+              badge: (
+                <Tooltip title="Workspace">
+                  <Box component="span" data-testid={`tree-node-workspace-badge-${entry.name}`} sx={{ display: 'inline-flex', color: 'secondary.main' }}>
+                    <Icon glyph={FolderRoot} size={12} />
+                  </Box>
+                </Tooltip>
+              ),
+            }
+          : {})}
       />
       {isDir && (
         <Collapse in={expanded} unmountOnExit>
@@ -128,9 +101,8 @@ function TreeNode({
                   relPath={`${relPath}/${child.name}`}
                   depth={depth + 1}
                   onSelectFile={onSelectFile}
-                  onOpenAsWorkspace={onOpenAsWorkspace}
                   onOpenRowMenu={onOpenRowMenu}
-                  onError={onError}
+                  isWorkspaceRoot={isWorkspaceRoot}
                 />
               ))}
             </List>
@@ -146,8 +118,8 @@ export function FolderTree({
   onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
-  instructionRow,
   pinnedRows,
+  isWorkspaceRoot = () => false,
 }: FolderTreeProps): React.ReactElement {
   const { data: rootEntries, isError } = useDirListing('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -157,6 +129,7 @@ export function FolderTree({
   const [openWithTarget, setOpenWithTarget] = useState<OpenWithTarget | null>(null);
   const revealPath = useRevealPath();
   const openInBrowser = useOpenInBrowser();
+  const resolveAbsolutePath = useResolveAbsolutePath();
 
   const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({ relPath: target.relPath, kind: target.kind });
 
@@ -207,6 +180,21 @@ export function FolderTree({
           },
         },
         { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath) },
+        ...(rowMenuTarget.kind === 'dir'
+          ? [
+              {
+                key: 'open-as-workspace',
+                label: 'Abrir como workspace',
+                glyph: FolderInput,
+                onSelect: () => {
+                  resolveAbsolutePath
+                    .mutateAsync(rowMenuTarget.relPath)
+                    .then(onOpenAsWorkspace)
+                    .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+                },
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -226,7 +214,6 @@ export function FolderTree({
   return (
     <>
       <List disablePadding data-testid="folder-tree">
-        {instructionRow}
         {pinnedRows}
         {(rootEntries ?? []).map((entry) => (
           <TreeNode
@@ -235,9 +222,8 @@ export function FolderTree({
             relPath={entry.name}
             depth={0}
             onSelectFile={onSelectFile}
-            onOpenAsWorkspace={onOpenAsWorkspace}
             onOpenRowMenu={rowMenu.openMenu}
-            onError={(message) => setToast({ variant: 'error', message })}
+            isWorkspaceRoot={isWorkspaceRoot}
           />
         ))}
       </List>

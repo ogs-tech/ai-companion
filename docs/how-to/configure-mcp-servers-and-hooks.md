@@ -63,5 +63,5 @@ installed plugins (labeled with their plugin). From the app you can:
 Creating or editing a hook is not available in the UI yet. Add it to the `hooks` key of
 `~/.claude/settings.json` in Claude Code's own format; it appears in the list on the next refresh.
 
-Hooks are personal-only: inside a non-default workspace they are hidden until **Mais ações** →
-**Mostrar entidades globais**.
+Hooks are personal-only: they are listed on **Início** (right panel → **Integrações** → Hooks), not inside a
+workspace.

@@ -1,40 +1,33 @@
-import { useState } from 'react';
 import { Box, Stack, ToggleButton, ToggleButtonGroup, type SxProps, type Theme } from '@mui/material';
 import { FolderTree } from './FolderTree.js';
-import { WorkspaceBreadcrumbHeader } from './WorkspaceBreadcrumbHeader.js';
 import { WorkspaceManagementList } from './WorkspaceManagementList.js';
 import { GitView } from './git/GitView.js';
 import type { GitDiffSource } from '../../../shared/git.js';
 import type { Workspace } from '../../../shared/workspace.js';
+import { useWorkspaces } from '../../hooks/use-workspaces.js';
+
+export type ExplorerView = 'files' | 'git';
 
 interface ExplorerPanelContentProps {
   /** `null` at Início; `undefined` while loading. */
   activeWorkspace: Workspace | null | undefined;
-  /** True at Início (no workspace open) — shows the workspace list instead of a file tree. */
+  /** True at Início (no workspace open) — shows the Workspaces/App sections instead of a file tree. */
   isHome: boolean;
-  onNavigateToWorkspace: () => void;
-  /** The Explorer Panel's own "⋮" menu (global-entity visibility, panel toggles, destructive remove) — built by the parent screen, since it reaches state (both panels' collapse, `showGlobal`) that isn't local to this panel. */
-  headerMenu: React.ReactNode;
-  /** Trailing actions on the Files/Git toggle row, e.g. the "Reler do disco" refresh button. Início has no toggle row, so they sit beside `headerMenu` there. */
+  /** Arquivos | Git — owned by the screen, so the overview's "Ver alterações" can switch it. */
+  view: ExplorerView;
+  onViewChange: (view: ExplorerView) => void;
+  /** Trailing actions on the Files/Git toggle row, e.g. the "Reler do disco" refresh button. */
   toolbarActions?: React.ReactNode;
-  /** Início only: guards a workspace switch from `WorkspaceManagementList` the same way any other scope change does. */
-  beforeSwitch: () => boolean;
-  /** Início only: the Personal Instruction's own pinned row. */
-  personalInstructionRow: React.ReactNode;
-  /** Início only: Starter Pack/Marketplaces/Diagnóstico's own pinned rows. */
+  /** Início only: Starter Pack/Marketplaces/Diagnóstico's own rows. */
   appAreaRows: React.ReactNode;
   onSelectFile: (relPath: string) => void;
   onOpenAsWorkspace: (absolutePath: string) => void;
   onPreviewFile: (relPath: string) => void;
   onNewAction: (relPath: string) => void;
-  /** The active workspace's own pinned INSTRUCTIONS row, rendered above the file tree. */
-  instructionRow: React.ReactNode;
-  /** Content pinned below `instructionRow` and above the folders/files — e.g. the workspace's Launch Configurations group. */
+  /** Content pinned above the folders/files — e.g. the workspace's Launch Configurations group. */
   pinnedRows?: React.ReactNode;
   onOpenGitDiff: (args: { path: string; source: GitDiffSource }) => void;
 }
-
-type ExplorerView = 'files' | 'git';
 
 /** Segmented control: a `rail` track with a borderless `paper` thumb on the selected option. */
 const segmentedControlSx: SxProps<Theme> = (theme) => ({
@@ -57,74 +50,65 @@ const segmentedControlSx: SxProps<Theme> = (theme) => ({
 });
 
 /**
- * The Explorer Panel's body inside the shared `SidePanel` card: the
- * workspace breadcrumb (with the "⋮" menu) over the Files/Git segmented
- * control, then either the workspace list (Início) or the file/entity tree.
+ * The left panel — "where": at Início, the Workspaces and App sections; in a
+ * workspace, the Arquivos | Git segmented control over the file tree or the
+ * git view. The context itself (name, path, switch, remove) lives in the
+ * TopNav's context switcher.
  */
 export function ExplorerPanelContent({
   activeWorkspace,
   isHome,
-  onNavigateToWorkspace,
-  headerMenu,
+  view,
+  onViewChange,
   toolbarActions,
-  beforeSwitch,
-  personalInstructionRow,
   appAreaRows,
   onSelectFile,
   onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
-  instructionRow,
   pinnedRows,
   onOpenGitDiff,
 }: ExplorerPanelContentProps): React.ReactElement {
-  const [view, setView] = useState<ExplorerView>('files');
+  const { data: workspaces } = useWorkspaces();
+  const root = activeWorkspace?.rootPath;
+  // Registered roots are stored as real paths; a sub-folder matches when its
+  // path under this root is one of them.
+  const registeredRoots = new Set((workspaces ?? []).map((w) => w.rootPath));
+  const isWorkspaceRoot = (relPath: string): boolean => root !== undefined && registeredRoots.has(`${root}/${relPath}`);
+
+  if (isHome) {
+    return (
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <WorkspaceManagementList appAreaRows={appAreaRows} />
+      </Box>
+    );
+  }
 
   return (
     <>
       <Box sx={{ flexShrink: 0, px: 1.25, pt: 0.75, pb: 0.75, borderBottom: 1, borderColor: 'divider' }}>
-        <WorkspaceBreadcrumbHeader
-          workspaceName={isHome ? 'Início' : (activeWorkspace?.name ?? '…')}
-          isHome={isHome}
-          path={isHome ? '~' : (activeWorkspace?.rootPath ?? '')}
-          onNavigateToWorkspace={onNavigateToWorkspace}
-          actions={
-            isHome ? (
-              <>
-                {toolbarActions}
-                {headerMenu}
-              </>
-            ) : (
-              headerMenu
-            )
-          }
-        />
-        {!isHome && (
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: 0.75 }}>
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              fullWidth
-              value={view}
-              onChange={(_, next: ExplorerView | null) => next && setView(next)}
-              aria-label="Visão do Explorer"
-              sx={segmentedControlSx}
-            >
-              <ToggleButton value="files" data-testid="explorer-view-files">
-                Arquivos
-              </ToggleButton>
-              <ToggleButton value="git" data-testid="explorer-view-git">
-                Git
-              </ToggleButton>
-            </ToggleButtonGroup>
-            {toolbarActions}
-          </Stack>
-        )}
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            fullWidth
+            value={view}
+            onChange={(_, next: ExplorerView | null) => next && onViewChange(next)}
+            aria-label="Visão do Explorer"
+            sx={segmentedControlSx}
+          >
+            <ToggleButton value="files" data-testid="explorer-view-files">
+              Arquivos
+            </ToggleButton>
+            <ToggleButton value="git" data-testid="explorer-view-git">
+              Git
+            </ToggleButton>
+          </ToggleButtonGroup>
+          {toolbarActions}
+        </Stack>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {isHome ? (
-          <WorkspaceManagementList beforeSwitch={beforeSwitch} instructionRow={personalInstructionRow} appAreaRows={appAreaRows} />
-        ) : view === 'git' ? (
+        {view === 'git' ? (
           <GitView visible onOpenDiff={onOpenGitDiff} />
         ) : (
           <FolderTree
@@ -132,7 +116,7 @@ export function ExplorerPanelContent({
             onOpenAsWorkspace={onOpenAsWorkspace}
             onPreviewFile={onPreviewFile}
             onNewAction={onNewAction}
-            instructionRow={instructionRow}
+            isWorkspaceRoot={isWorkspaceRoot}
             {...(pinnedRows !== undefined ? { pinnedRows } : {})}
           />
         )}

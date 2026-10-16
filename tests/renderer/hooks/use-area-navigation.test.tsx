@@ -84,12 +84,8 @@ describe('useAreaNavigation', () => {
     expect(call).not.toHaveBeenCalledWith('workspace.goHome', expect.anything());
   });
 
-  it('switches home first, then opens the area tab, when starting from another workspace', async () => {
-    call.mockImplementation(async (method: string) => {
-      if (method === 'workspace.getActive') return ok(OTHER_WORKSPACE);
-      if (method === 'workspace.goHome') return ok(undefined);
-      return ok(undefined);
-    });
+  it('opens the area tab in the current workspace, without going home', async () => {
+    call.mockImplementation(async (method: string) => (method === 'workspace.getActive' ? ok(OTHER_WORKSPACE) : ok(undefined)));
     const opener = vi.fn();
     registerAreaOpener(opener);
     const { result } = setup();
@@ -97,21 +93,7 @@ describe('useAreaNavigation', () => {
 
     result.current.navigate('marketplaces');
 
-    await waitFor(() => expect(opener).toHaveBeenCalledWith('marketplaces'));
-    expect(call).toHaveBeenCalledWith('workspace.goHome', {});
-  });
-
-  it('does not open the area tab when a registered unsaved-tabs guard declines', async () => {
-    call.mockImplementation(async (method: string) => (method === 'workspace.getActive' ? ok(OTHER_WORKSPACE) : ok(undefined)));
-    registerUnsavedTabsGuard(() => false);
-    const opener = vi.fn();
-    registerAreaOpener(opener);
-    const { result } = setup();
-    await waitFor(() => expect(result.current.workspace.data).toEqual(OTHER_WORKSPACE));
-
-    result.current.navigate('starter-pack');
-
-    expect(opener).not.toHaveBeenCalled();
+    expect(opener).toHaveBeenCalledWith('marketplaces');
     expect(call).not.toHaveBeenCalledWith('workspace.goHome', expect.anything());
   });
 });

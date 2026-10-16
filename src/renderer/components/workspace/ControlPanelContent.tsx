@@ -1,16 +1,21 @@
 import { useState } from 'react';
 import { Box, IconButton, List, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, ChevronRight, Layers, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Globe, Layers, NotebookPen, Plus } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
+import { Kicker } from '../ds/Kicker.js';
 import { treeGroupLabelSx } from '../ds/TreeRow.js';
 import { EntityTreeGroup } from './EntityTreeGroup.js';
 import { HooksTreeGroup } from './HooksTreeGroup.js';
+import { InstructionTreeRow } from './InstructionTreeRow.js';
 import { McpTreeGroup } from './McpTreeGroup.js';
 import { PluginsTreeGroup } from './PluginsTreeGroup.js';
 import { SessionsTreeGroup } from './SessionsTreeGroup.js';
 import { TreeGroup } from './TreeGroup.js';
+import { useInstructionsList, usePersonalInstruction } from '../../hooks/use-instructions.js';
+import { blankCustomization } from '../../lib/blank-customization.js';
+import { isWorkspaceInstruction } from '../../../shared/entity.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
-import type { Agent, Skill } from '../../../shared/entity.js';
+import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import type { SessionSnapshot } from '../../../shared/session.js';
 
 interface LocalScope {
@@ -18,17 +23,28 @@ interface LocalScope {
   scopeId: string;
 }
 
+type EntityKind = 'skill' | 'agent';
+
 interface ControlPanelContentProps {
-  /** True at Início (no workspace open) — only Global entities exist, nothing to filter. */
+  /** True at Início (Global). False while a workspace is open — or still loading. */
   isHome: boolean;
-  showGlobal: boolean;
+  /** The open workspace's name, once known. */
+  workspaceName?: string;
   localScope?: LocalScope;
   mcpMatchPath?: string;
-  onEditEntity: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
-  onPreviewEntity: (entity: Skill | Agent) => void;
-  onEntityProperties: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
-  onNewActionForEntity: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
-  historyScope: HistoryScope | null;
+  onEditEntity: (kind: EntityKind, entity: Skill | Agent, isCreate: boolean) => void;
+  onPreviewEntity: (entity: Skill | Agent | Instruction) => void;
+  onEntityProperties: (kind: EntityKind, entity: Skill | Agent) => void;
+  onNewActionForEntity: (kind: EntityKind, entity: Skill | Agent) => void;
+  onOpenInstruction: (entity: Instruction, isCreate: boolean) => void;
+  onInstructionProperties: (entity: Instruction) => void;
+  onNewActionForInstruction: (entity: Instruction) => void;
+  /** Workspace only: a fresh, unsaved instruction for "+". */
+  seedWorkspaceInstruction?: () => Instruction;
+  /** Workspace only: opens a Global entity read-only, with an "Editar no Início" action. */
+  onOpenInherited: (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction') => void;
+  /** This scope's own sessions — `personal` at Início, the workspace otherwise. */
+  sessionsScope: HistoryScope;
   onOpenSession: (session: Pick<SessionSnapshot, 'sessionId' | 'anchor' | 'label'>) => void;
   onSessionRemoved: (sessionId: string) => void;
   onSeeAllSessions: () => void;
@@ -37,64 +53,122 @@ interface ControlPanelContentProps {
 }
 
 /**
- * The Control Panel's body inside the shared `SidePanel` card: the Sessões
- * block (own local collapse, independent of the panel itself), then the
- * Customizations tree (Skills/Agents/Hooks/MCP/Plugins).
+ * The right panel — "what": everything that belongs to the current scope,
+ * Instruction first, then Skills, Agents, Integrações and the scope's own
+ * Sessões. Inside a workspace, Global's skills/agents/instruction stay
+ * reachable — read-only — under a collapsed "Herdado do Global".
  */
 export function ControlPanelContent({
   isHome,
-  showGlobal,
+  workspaceName,
   localScope,
   mcpMatchPath,
   onEditEntity,
   onPreviewEntity,
   onEntityProperties,
   onNewActionForEntity,
-  historyScope,
+  onOpenInstruction,
+  onInstructionProperties,
+  onNewActionForInstruction,
+  seedWorkspaceInstruction,
+  onOpenInherited,
+  sessionsScope,
   onOpenSession,
   onSessionRemoved,
   onSeeAllSessions,
   canStartSession,
   onNewSession,
 }: ControlPanelContentProps): React.ReactElement {
-  // A local accordion (body only) — independent of the panel's own
-  // collapse-to-0, which hides this whole component instead.
+  const { data: personalInstruction } = usePersonalInstruction();
+  const { data: instructions } = useInstructionsList();
+  const workspaceInstructions = localScope
+    ? (instructions ?? []).filter((i) => isWorkspaceInstruction(i) && i.scopeId === localScope.scopeId)
+    : [];
+
+  // A local accordion (body only) — independent of the panel's own collapse.
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const toggleSessions = (): void => setSessionsExpanded((v) => !v);
 
-  const customizationRows = isHome ? (
-    <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
-      {/* Hooks/MCP/Plugins are the low-frequency, more technical kinds — set up once
-          rather than edited daily like Skills/Agents — so they share one collapsed
-          "Integrações" row instead of each claiming its own always-visible header. */}
-      <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
-        <HooksTreeGroup showGlobal={false} />
-        <McpTreeGroup showGlobal={false} />
-        <PluginsTreeGroup showGlobal={false} />
-      </TreeGroup>
-    </>
+  const entityHandlers = {
+    onEdit: onEditEntity,
+    onPreview: onPreviewEntity,
+    onProperties: onEntityProperties,
+    onNewAction: onNewActionForEntity,
+  };
+
+  const instructionGroup = isHome ? (
+    <TreeGroup testId="instruction" glyph={NotebookPen} label="Instruction" defaultExpanded>
+      <InstructionTreeRow
+        kind="personal"
+        depth={1}
+        instruction={personalInstruction}
+        seed={() => blankCustomization('instruction') as Instruction}
+        onOpen={onOpenInstruction}
+        onPreview={onPreviewEntity}
+        onNewAction={onNewActionForInstruction}
+      />
+    </TreeGroup>
   ) : (
-    <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} {...(localScope ? { localScope } : {})} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} {...(localScope ? { localScope } : {})} />
-      <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
-        <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
-        <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
-        <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
-      </TreeGroup>
-    </>
+    <TreeGroup
+      testId="instruction"
+      glyph={NotebookPen}
+      label="Instruction"
+      count={workspaceInstructions.length}
+      defaultExpanded
+      {...(seedWorkspaceInstruction
+        ? { onCreate: () => onOpenInstruction(seedWorkspaceInstruction(), true), createLabel: 'Nova instruction' }
+        : {})}
+    >
+      {workspaceInstructions.map((instruction) => (
+        <InstructionTreeRow
+          key={instruction.urn}
+          kind="workspace"
+          depth={1}
+          label={instruction.name}
+          testId={`workspace-instruction-row-${instruction.name}`}
+          instruction={instruction}
+          seed={() => instruction}
+          onOpen={onOpenInstruction}
+          onPreview={onPreviewEntity}
+          onProperties={onInstructionProperties}
+          onNewAction={onNewActionForInstruction}
+        />
+      ))}
+    </TreeGroup>
   );
 
   return (
-    <>
-      {/* Stacked above Customizations, not nested inside it as one more tree
-          row — a session is reachable/actionable even when its own
-          entity/workspace tab isn't open, so it earns its own
-          always-visible section instead of hiding inside a collapsed group.
-          Its collapse only hides this block's own body (a local accordion),
-          unlike the panel's own collapse, which hides this whole component. */}
+    <Box data-testid="workspace-customizations" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ px: 1.5, pt: 1, pb: 0.5, flexShrink: 0 }} data-testid="control-panel-kicker">
+        <Kicker>{isHome ? 'Global' : workspaceName ? `Workspace · ${workspaceName}` : 'Workspace'}</Kicker>
+      </Box>
+
+      <List disablePadding sx={{ flexShrink: 0 }}>
+        {instructionGroup}
+        <EntityTreeGroup kind="skill" label="Skills" {...entityHandlers} {...(localScope ? { localScope } : {})} />
+        <EntityTreeGroup kind="agent" label="Agents" {...entityHandlers} {...(localScope ? { localScope } : {})} />
+        {/* Hooks/MCP/Plugins are the low-frequency, more technical kinds — set up once
+            rather than edited daily like Skills/Agents — so they share one collapsed
+            "Integrações" row instead of each claiming its own always-visible header. */}
+        <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
+          {isHome ? (
+            <>
+              <HooksTreeGroup showGlobal={false} />
+              <McpTreeGroup showGlobal={false} />
+              <PluginsTreeGroup showGlobal={false} />
+            </>
+          ) : (
+            <>
+              <HooksTreeGroup isProjectContext showGlobal={false} />
+              <McpTreeGroup showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
+              <PluginsTreeGroup isProjectContext showGlobal={false} />
+            </>
+          )}
+        </TreeGroup>
+      </List>
+
+      {/* The scope's own sessions. Its collapse only hides this block's body (a
+          local accordion), unlike the panel's own collapse. */}
       <Box
         data-testid="workspace-sessions-panel"
         sx={{
@@ -102,7 +176,7 @@ export function ControlPanelContent({
           flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: sessionsExpanded ? 260 : 'auto',
+          maxHeight: sessionsExpanded ? 300 : 'auto',
           overflow: 'hidden',
         }}
       >
@@ -120,7 +194,7 @@ export function ControlPanelContent({
             Sessões
           </Typography>
           <Tooltip title="Nova sessão">
-            {/* span wrapper keeps the tooltip working while the button is disabled (no project/workspace in view yet) */}
+            {/* span wrapper keeps the tooltip working while the button is disabled */}
             <span>
               <IconButton
                 size="small"
@@ -136,17 +210,51 @@ export function ControlPanelContent({
           </Tooltip>
         </Stack>
         {sessionsExpanded && (
-          // No overflow here: SessionsTreeGroup owns its own internal scroll
-          // box now, so its fixed footer ("Ver todas") stays pinned below the
-          // rows rather than sharing their scroll area.
+          // SessionsTreeGroup owns its own internal scroll box, so its footer
+          // ("Ver todas") stays pinned below the rows.
           <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <SessionsTreeGroup scope={historyScope ?? { kind: 'all' }} onOpen={onOpenSession} onRemoved={onSessionRemoved} onSeeAll={onSeeAllSessions} />
+            <SessionsTreeGroup scope={sessionsScope} onOpen={onOpenSession} onRemoved={onSessionRemoved} onSeeAll={onSeeAllSessions} />
           </Box>
         )}
       </Box>
-      <Box data-testid="workspace-customizations" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', mt: 0.75 }}>
-        <List disablePadding>{customizationRows}</List>
-      </Box>
-    </>
+
+      {!isHome && (
+        <List disablePadding sx={{ flexShrink: 0, mt: 0.75 }}>
+          <TreeGroup testId="inherited" glyph={Globe} label="Herdado do Global">
+            {personalInstruction && (
+              <InstructionTreeRow
+                kind="personal"
+                depth={1}
+                testId="inherited-instruction-row"
+                instruction={personalInstruction}
+                seed={() => personalInstruction}
+                onOpen={(entity) => onOpenInherited(entity, 'instruction')}
+                onPreview={onPreviewEntity}
+              />
+            )}
+            <EntityTreeGroup
+              kind="skill"
+              label="Skills"
+              inherited
+              depth={1}
+              onEdit={(kind, entity) => onOpenInherited(entity, kind)}
+              onPreview={onPreviewEntity}
+              onNewAction={onNewActionForEntity}
+              {...(localScope ? { localScope } : {})}
+            />
+            <EntityTreeGroup
+              kind="agent"
+              label="Agents"
+              inherited
+              depth={1}
+              onEdit={(kind, entity) => onOpenInherited(entity, kind)}
+              onPreview={onPreviewEntity}
+              onNewAction={onNewActionForEntity}
+              {...(localScope ? { localScope } : {})}
+            />
+          </TreeGroup>
+        </List>
+      )}
+    </Box>
   );
 }

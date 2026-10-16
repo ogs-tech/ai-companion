@@ -35,6 +35,8 @@ interface InstructionTreeRowProps {
   onNewAction?: (entity: Instruction) => void;
   /** Overrides the default `data-testid` (`${kind}-instruction-row`). */
   testId?: string;
+  /** Overrides the row's "INSTRUCTIONS" label — e.g. the instruction's own name, when a workspace lists several. */
+  label?: string;
   /** Tree nesting level, matching `FolderTree`'s `TreeNode` indent formula (`pl: 1.5 + depth * 2`). Defaults to `0` (top-level, unindented). */
   depth?: number;
 }
@@ -45,7 +47,7 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const deleteTestId = testId ? `${testId}-delete` : `${kind}-instruction-delete`;
@@ -102,7 +104,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         />
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
           <Icon glyph={copy.glyph} size={14} />
-          <ListItemText primary={copy.label} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
+          <ListItemText primary={label ?? copy.label} slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.85rem' } } }} />
           {instruction && <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />}
         </Stack>
         {canDelete && (

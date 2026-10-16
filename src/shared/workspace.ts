@@ -8,6 +8,8 @@ export interface Workspace {
   name: string;
   rootPath: string;
   createdAt: string;
+  /** ISO timestamp of the last `switchTo`/`open`. Absent until first opened (and on pre-cycle-2 data) — sorts last. */
+  lastOpenedAt?: string;
 }
 
 export const WORKSPACE_REGISTRY_SCHEMA_VERSION = 2;

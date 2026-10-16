@@ -34,7 +34,7 @@ for example, into the body of the instruction that replaced it. Backups are neve
 ## Re-read files changed outside the app
 
 The file tree, previews and lists refresh by themselves when the app's own data changes. If something you
-edited elsewhere still looks stale, use **Reler do disco** (refresh icon) in the Explorer header.
+edited elsewhere still looks stale, use **Reler do disco** (refresh icon) next to the **Arquivos | Git** toggle in the left panel.
 
 ## Factory reset
 

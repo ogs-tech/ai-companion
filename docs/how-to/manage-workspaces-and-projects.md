@@ -1,70 +1,61 @@
 ---
-title: Manage workspaces and projects
-description: Create, switch and remove workspaces; register folders as Projects and remove them.
+title: Manage workspaces
+description: Open, switch and remove workspaces; reach Global entities from inside one.
 ---
 
-# Manage workspaces and projects
+# Manage workspaces
 
-A **workspace** is a root folder with its own set of customizations (its own `.ai-companion/` data dir).
-A **Project** is a folder registered inside a workspace, so entities, sessions, Git and Launch
-Configurations can be scoped to it. Neither is ever synced to a harness. Background:
-[Architecture → Global / Workspace](../reference/architecture.md#global--workspace).
+A **workspace** is any folder you opened, with its own set of customizations (its own `.ai-companion/`
+data dir). **Início** is Global (`~/.ai-companion`) — not a workspace. Nothing here is ever synced to a
+harness by itself. Background: [Architecture → Global / Workspace](../reference/architecture.md#global--workspace).
 
-## Create a workspace
+The context you are in is always shown in the TopNav, right of the back/forward buttons: `🏠 Início ▾` or
+`📁 <workspace> ▾` (hover it for the workspace's folder). Every action below starts from that switcher, ⌘K,
+or Início's own panels.
 
-1. Click the **Início** tab. If a non-default workspace is active, this switches back to the **Global**
-   workspace first.
-2. In the workspace list, click **Novo workspace** and pick the root folder.
+## Open a folder as a workspace
 
-The workspace is named after the folder, its data dir `<folder>/.ai-companion/` is created, and the
-folder itself is registered as the workspace's first Project. Creating does **not** switch to it.
+Any of:
+
+- **⌘O**, or the switcher → **Abrir pasta…**, or ⌘K → **Abrir pasta…**, then pick the folder.
+- On **Início**, the left panel's **Workspaces** header → **+**.
+- Inside a workspace, right-click a folder in **Arquivos** → **Abrir como workspace**.
+
+A folder already registered reopens its workspace; a new one is named after the folder and gets its data dir
+`<folder>/.ai-companion/`. Your home folder is Global and can't be opened as a workspace. A sub-folder that is
+itself a workspace shows a small folder badge in the file tree.
 
 ## Switch workspace
 
-- **To another workspace:** on **Início** (Global), click its row in the workspace list.
-- **Back to Global:** click the **Início** tab, or the `..` row at the top of the file tree.
+- **To another workspace:** the switcher → a **Recentes** entry (the last 5 you opened) or **Todos os
+  workspaces ▸**; ⌘K → **Ir para workspace…**; or, on **Início**, a row in **Workspaces** or the
+  **Recentes** card on Visão geral.
+- **Back to Início:** the switcher → **Início**, or ⌘K → **Ir para Início**.
 
-Switching stops every running `claude` session and launched process of the outgoing workspace, and closes
-its embedded browser tabs. Open sessions do not carry over. Symlinks already written to `~/.claude/` and
-`~/.cursor/` are **not** re-pointed — see [Adapter targets → Known issues](../reference/adapter-targets.md#known-issues).
+Choosing the context you are already in just brings its **Visão geral** tab (⌘0) to the front.
 
-## Register a folder as a Project
-
-Either:
-
-- **From the file tree:** in a non-default workspace, Explorer panel → **Arquivos**, click **Usar como
-  Project** on a top-level folder's row. Only folders directly under the workspace root offer this.
-- **From an entity's properties:** set **Scope** to **Project** and choose a folder in the **Project**
-  picker. Any folder works here; it is registered on the fly (`project.findOrCreateByPath`).
-
-Registering creates `<folder>/.ai-companion/index.md`, a symlink back to the workspace's marker file.
-
-Once a top-level folder is a Project, its row shows **Abrir customizations do projeto** instead. Click it
-to scope the Explorer, the Customizations list and the Git panel to that Project; `..` steps back out.
-
-## Remove a Project
-
-Scope the screen to it (see above), then **Mais ações** (⋮ in the Explorer header) → **Remover projeto**.
-This unregisters the Project and removes its `index.md` symlink. The folder and its files are untouched.
-Entities scoped to it remain in the data dir but can no longer be synced (their scope no longer resolves),
-so re-scope or delete them first.
+Switching closes the open Workbench tabs (it asks first if any has unsaved changes), stops every running
+`claude` session and launched process of the outgoing context, and closes its embedded browser tabs. Symlinks
+already written to `~/.claude/` and `~/.cursor/` are **not** re-pointed — see
+[Adapter targets → Known issues](../reference/adapter-targets.md#known-issues).
 
 ## Remove a workspace
 
-- **The active one:** **Mais ações** → **Remover workspace**. The app switches to Global first, then removes it.
-- **Another one:** on **Início** (Global), click the trash icon on its row.
+- **The open one:** the switcher → **Remover este workspace…**, then confirm. The app goes to Início first.
+- **Any one:** on **Início**, right-click its row in **Workspaces** → **Remover…**, then confirm.
 
-The Global workspace cannot be removed. Removal only drops the workspace from `workspaces.json`: its
-`<root>/.ai-companion/` dir, its entities and any symlinks they produced stay on disk. Delete the dir by
-hand if you want it gone.
+Removal only drops the workspace from `workspaces.json`: its folder, its `.ai-companion/` dir, its entities
+and any symlinks they produced stay on disk. Delete the dir by hand if you want it gone. The same row menu
+also offers **Revelar no Finder**.
 
-## Show or hide customizations from other scopes
+## Use Global entities from inside a workspace
 
-Inside a non-default workspace, the Customizations list shows only what is scoped to the workspace or
-Project in view. **Mais ações** → **Mostrar entidades globais** also shows Personal-scope and
-plugin-provided entities.
+Inside a workspace, the right panel's Skills and Agents list only what belongs to that workspace. Global
+skills, agents and your personal instruction are listed at the bottom, under **Herdado do Global**
+(collapsed). They open read-only; the **Editar no Início** button switches to Início and opens the entity
+there, editable.
 
 ## See also
 
 - [On-disk layout](../reference/on-disk-layout.md) — what each workspace stores and where.
-- [Write instructions](write-instructions.md) — per-workspace and per-Project instructions.
+- [Write instructions](write-instructions.md) — per-workspace instructions.

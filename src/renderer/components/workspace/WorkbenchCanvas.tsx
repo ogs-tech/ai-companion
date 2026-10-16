@@ -1,4 +1,4 @@
-import { Box, Stack, Typography } from '@mui/material';
+import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import { X, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
@@ -30,6 +30,8 @@ export interface WorkbenchTab {
    * session, a preview, Histórico).
    */
   breadcrumb?: string;
+  /** Renders the glyph alone — the label becomes the tooltip and aria-label. For the pinned "Visão geral" tab. */
+  iconOnly?: boolean;
   /** Rendered for every open tab on every render, not just the active one — visibility is a `display` toggle (via the `hidden` arg), never a mount/unmount, so scroll position survives switching away and back. */
   render: (hidden: boolean) => React.ReactNode;
 }
@@ -38,7 +40,6 @@ interface WorkbenchCanvasProps {
   tabs: readonly WorkbenchTab[];
   activeTabId: string | null;
   onSelect: (id: string) => void;
-  emptyState: React.ReactNode;
 }
 
 /**
@@ -46,7 +47,7 @@ interface WorkbenchCanvasProps {
  * open file AND every open Skill/Agent/Instruction tab lives here, all
  * rendered through the same EditorPanel; sessions share the tab strip too.
  */
-export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: WorkbenchCanvasProps): React.ReactElement {
+export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvasProps): React.ReactElement {
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   return (
     <Box data-testid="workbench-canvas" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -59,82 +60,87 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
           {tabs.map((tab) => {
             const active = tab.id === activeTabId;
             return (
-              <Box
-                key={tab.id}
-                role="button"
-                tabIndex={0}
-                aria-pressed={active}
-                aria-label={tab.dirty ? `${tab.label} (não salvo)` : tab.label}
-                data-testid={`workbench-tab-${tab.id}`}
-                onClick={() => onSelect(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  if (e.key === ' ') e.preventDefault();
-                  onSelect(tab.id);
-                }}
-                sx={(theme) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  borderRadius: `${theme.ogs.radius.pill}px`,
-                  color: active ? 'text.primary' : 'text.secondary',
-                  bgcolor: active ? theme.ogs.surfaces.rail : 'transparent',
-                  flexShrink: 0,
-                  '&:hover': active ? {} : { bgcolor: 'action.hover' },
-                  '&:hover .workbench-tab-close, &:focus-within .workbench-tab-close': { color: 'text.secondary' },
-                })}
-              >
-                <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', pl: 1.25, pr: tab.onClose ? 0.5 : 1.25, py: 0.25 }}>
-                  {tab.accentColor ? (
-                    <Box
-                      aria-hidden
-                      sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tab.accentColor, flexShrink: 0 }}
-                    />
-                  ) : (
-                    <Icon glyph={tab.glyph} size={14} />
-                  )}
-                  <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: active ? 500 : 400, maxWidth: 160 }}>
-                    {tab.label}
-                  </Typography>
-                  {tab.dirty && (
-                    <Box
-                      data-testid={`workbench-tab-dirty-${tab.id}`}
-                      aria-hidden
-                      sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }}
-                    />
-                  )}
-                  {tab.onClose && (
-                    <Box
-                      component="span"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`${tab.closeLabel ?? 'Fechar'} ${tab.label}`}
-                      data-testid={`workbench-tab-close-${tab.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        tab.onClose?.();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter' && e.key !== ' ') return;
-                        if (e.key === ' ') e.preventDefault();
-                        e.stopPropagation();
-                        tab.onClose?.();
-                      }}
-                      className="workbench-tab-close"
-                      sx={(theme) => ({
-                        display: 'inline-flex',
-                        p: 0.5,
-                        ml: 0.25,
-                        borderRadius: `${theme.ogs.radius.pill}px`,
-                        color: 'text.disabled',
-                        '&:hover': { bgcolor: 'action.hover' },
-                      })}
-                    >
-                      <Icon glyph={X} size={12} />
-                    </Box>
-                  )}
-                </Stack>
-              </Box>
+              <Tooltip key={tab.id} title={tab.iconOnly ? tab.label : ''}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  aria-label={tab.dirty ? `${tab.label} (não salvo)` : tab.label}
+                  data-testid={`workbench-tab-${tab.id}`}
+                  onClick={() => onSelect(tab.id)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    if (e.key === ' ') e.preventDefault();
+                    onSelect(tab.id);
+                  }}
+                  sx={(theme) => ({
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    borderRadius: `${theme.ogs.radius.pill}px`,
+                    color: active ? 'text.primary' : 'text.secondary',
+                    bgcolor: active ? theme.ogs.surfaces.rail : 'transparent',
+                    flexShrink: 0,
+                    '&:hover': active ? {} : { bgcolor: 'action.hover' },
+                    '&:hover .workbench-tab-close, &:focus-within .workbench-tab-close': { color: 'text.secondary' },
+                  })}
+                >
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', pl: tab.iconOnly ? 1 : 1.25, pr: tab.onClose ? 0.5 : tab.iconOnly ? 1 : 1.25, py: 0.25, minHeight: 24 }}>
+                    {tab.iconOnly ? (
+                      <Icon glyph={tab.glyph} size={14} />
+                    ) : tab.accentColor ? (
+                      <Box
+                        aria-hidden
+                        sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tab.accentColor, flexShrink: 0 }}
+                      />
+                    ) : (
+                      <Icon glyph={tab.glyph} size={14} />
+                    )}
+                    {!tab.iconOnly && (
+                      <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: active ? 500 : 400, maxWidth: 160 }}>
+                        {tab.label}
+                      </Typography>
+                    )}
+                    {tab.dirty && (
+                      <Box
+                        data-testid={`workbench-tab-dirty-${tab.id}`}
+                        aria-hidden
+                        sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }}
+                      />
+                    )}
+                    {tab.onClose && (
+                      <Box
+                        component="span"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${tab.closeLabel ?? 'Fechar'} ${tab.label}`}
+                        data-testid={`workbench-tab-close-${tab.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          tab.onClose?.();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          if (e.key === ' ') e.preventDefault();
+                          e.stopPropagation();
+                          tab.onClose?.();
+                        }}
+                        className="workbench-tab-close"
+                        sx={(theme) => ({
+                          display: 'inline-flex',
+                          p: 0.5,
+                          ml: 0.25,
+                          borderRadius: `${theme.ogs.radius.pill}px`,
+                          color: 'text.disabled',
+                          '&:hover': { bgcolor: 'action.hover' },
+                        })}
+                      >
+                        <Icon glyph={X} size={12} />
+                      </Box>
+                    )}
+                  </Stack>
+                </Box>
+              </Tooltip>
             );
           })}
         </Stack>
@@ -158,16 +164,14 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, emptyState }: Wor
         </Box>
       )}
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        {tabs.length === 0
-          ? emptyState
-          : tabs.map((tab) => (
-              <Box
-                key={tab.id}
-                sx={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%', p: tab.dense ? 0 : 2 }}
-              >
-                {tab.render(tab.id !== activeTabId)}
-              </Box>
-            ))}
+        {tabs.map((tab) => (
+          <Box
+            key={tab.id}
+            sx={{ display: tab.id === activeTabId ? 'block' : 'none', height: '100%', p: tab.dense ? 0 : 2 }}
+          >
+            {tab.render(tab.id !== activeTabId)}
+          </Box>
+        ))}
       </Box>
     </Box>
   );

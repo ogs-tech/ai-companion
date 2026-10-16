@@ -18,7 +18,7 @@ import type { HistoryScope, SessionHistoryEntry } from '../../../shared/session-
 import type { SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 
 interface SessionsTreeGroupProps {
-  /** Which conversations this panel covers — the project in view, or the workspace when none is. */
+  /** Which conversations this panel covers — the open workspace's, or Global's (`personal`) at Início. */
   scope: HistoryScope;
   /** Opens/focuses this session's own Workbench tab — the same "un-minimize" gesture whether the session is running or exited. */
   onOpen: (session: SessionSnapshot) => void;
@@ -65,8 +65,8 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
   );
 
   const rows = useMemo(
-    () => mergeRows(liveSessions ?? [], historyEntries),
-    [liveSessions, historyEntries],
+    () => mergeRows(liveInScope(liveSessions ?? [], scope), historyEntries),
+    [liveSessions, historyEntries, scope],
   );
 
   const sentinelRef = useInfiniteScrollSentinel(
@@ -296,6 +296,11 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
  * list, keyed on `claudeSessionId` so a running session — which is in both —
  * appears once.
  */
+/** Global (Início) lists its own sessions only — never one anchored to a workspace. */
+function liveInScope(live: readonly SessionSnapshot[], scope: HistoryScope): readonly SessionSnapshot[] {
+  return scope.kind === 'personal' ? live.filter((s) => s.anchor.kind !== 'workspace') : live;
+}
+
 function mergeRows(live: readonly SessionSnapshot[], history: readonly SessionHistoryEntry[]): MergedRow[] {
   const byConversation = new Map<string, SessionHistoryEntry>();
   for (const entry of history) byConversation.set(entry.claudeSessionId, entry);

@@ -321,22 +321,45 @@ user reviews and edits it like any other terminal input before sending. See "Ent
 what keeps adapter destinations in sync when that session goes on to edit a Skill/Agent/Instruction file
 directly.
 
+### Shell regions
+
+Same shell in both contexts; the content changes, the positions don't:
+
+| Region | Role | Início | Workspace |
+|---|---|---|---|
+| TopNav | context switcher (`ContextSwitcher`) | `🏠 Início ▾` | `📁 <name> ▾` (root path in the tooltip) |
+| Left panel (`ExplorerPanelContent`) | **where** | Workspaces + App sections (`WorkspaceManagementList`) | Arquivos \| Git |
+| Workbench (`WorkbenchCanvas`) | **work** | pinned Visão geral (`HomeOverview`) + tabs | pinned Visão geral (`WorkspaceOverview`) + tabs |
+| Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Workspace + "Herdado do Global" |
+
+The **Visão geral** tab (id `overview`) is not part of `WorkspaceScreen`'s `openTabs` state: it is
+prepended to the canvas tabs on every render, icon-only, with no close control. Every close/reset path only
+ever touches `openTabs`, so the overview survives them by construction; closing the last tab or any context
+switch (`resetTabs`) falls back to it, and ⌘0 activates it. Its cards are read-only summaries that link out
+(open a tab, switch context, switch the left panel to Git) — nothing is edited inside the overview.
+
 ### Workspace switching navigation
 
-Workspace switching/creation/removal is centralized at Início (`activeWorkspaceId === null`) —
-`WorkspaceManagementList` (`components/workspace/`) renders every registered workspace as a row (no menu to
-open first; with nothing open, every one is listed), switchable by clicking the row and deletable via a trash
-icon. There is no floating workspace switcher in `TopNav`.
+Every context change is reachable from the TopNav's `ContextSwitcher` (Início · Recentes, up to 5 by
+`Workspace.lastOpenedAt` excluding the current one · Todos os workspaces · Abrir pasta… · Remover este
+workspace…), ⌘K (`CommandPalette`: Abrir pasta…, Ir para workspace…, Ir para Início, Visão geral), the
+global ⌘O (`AppShell`), Início's Recentes card and the left panel's workspace rows. All of them go through
+`useContextNavigation` (`hooks/`), which runs the unsaved-tabs guard (`confirmDiscardUnsavedTabs`, i.e.
+`WorkspaceScreen`'s `resetTabs`) before `workspace.switchTo`/`workspace.open`/`workspace.goHome`, and turns a
+"switch" to the context already open into "focus its Visão geral". The TopNav reaches `WorkspaceScreen`'s
+own state through `lib/workspace-shell-store.ts` — the screen registers `focusOverview`/`togglePanel` while
+mounted and publishes both panels' collapse state, which the TopNav's `PanelLeft`/`PanelRight` toggles read.
 
-Going home is `workspace.goHome` (`useGoHome`). Inside a workspace, the Workspace screen's breadcrumb
-(`WorkspaceBreadcrumbHeader`) offers an "Início" action, and `useAreaNavigation` (CommandPalette, status-bar
-entries) goes home before opening an Início-only destination — each behind the unsaved-tabs guard.
+`WorkspaceManagementList` rows have no always-visible destructive action: right-click offers Abrir, Revelar
+no Finder (`openWith.revealWorkspace`, by id — Início has no open workspace to resolve a relative path
+against) and Remover…, behind `WorkspaceRemoveConfirmDialog`. The switcher's "Remover este workspace…" uses
+the same dialog. The backend's `workspace.delete` goes home first when the target is the open workspace, so
+the renderer just calls it (`useDeleteWorkspace`). The target is captured in local state when the action
+opens, so the dialog keeps naming it even as the activation resolves out from under it.
 
-The Workspace screen's "⋮" header menu carries a "Remover workspace" action while a workspace is open. The
-backend's `workspace.delete` goes home first when the target is the open workspace, so the renderer just
-calls it (`useDeleteWorkspace`) and lands back on the management list. The target is captured in local state
-when the action opens (not read live off `useActiveWorkspace()`) so the confirmation dialog
-(`WorkspaceRemoveConfirmDialog`) keeps naming it even as the activation resolves out from under it.
+Starter Pack, Marketplaces and Diagnóstico are app-level Workbench tabs: their entry rows live in Início's
+"App" section, but `useAreaNavigation` (⌘K, the status bar's health entry) opens them in whichever context is
+current — it only goes home for the "Início" entry itself.
 
 Every activation (`useSwitchWorkspace`/`useOpenWorkspace`/`useGoHome`/`useDeleteWorkspace`) invalidates the
 whole query cache (`queryClient.invalidateQueries()` with no filter) rather than `clear()`ing it — `clear()`
@@ -345,25 +368,21 @@ until something happened to force a remount. Workbench history entries (`lib/wor
 `{ workspaceId: string | null, activeTabId }` — `null` being Início — and tab ids carry no scope segment
 (`file:<relPath>`, `git-diff:<source>:<path>`), since every path is relative to the one open workspace.
 
-### Instructions on Visão geral
+### Instructions in the right panel
 
-There is no standalone Instructions screen — instruction management is inline in the Workspace screen's
-Explorer panel, as an **INSTRUCTIONS** tree row (`InstructionTreeRow`,
-`components/workspace/InstructionTreeRow.tsx`), scoped to whatever is open:
+There is no standalone Instructions screen — instructions head the right panel (`ControlPanelContent`) as an
+**Instruction** group, expanded by default, scoped to whatever is open:
 
-- **Início** → the `personal` row (pinned above `WorkspaceManagementList`) manages the Personal singleton
+- **Início** → one `InstructionTreeRow` (`kind="personal"`) for the Personal singleton
   (`scopes: ['personal']`) via `usePersonalInstruction()`.
-- **A workspace** → a `workspace` row pinned at the top of `FolderTree` manages an instruction scoped to the
-  open `Workspace` (`scopes: ['workspace']`, `scopeId: workspace.id`, resolved by `resolveScopePath` to
-  `workspace.rootPath`) via `useWorkspaceInstruction`.
+- **A workspace** → one row per instruction scoped to it (`scopes: ['workspace']`, `scopeId: workspace.id`),
+  filtered off `useInstructionsList`; the group's "+" opens a new one seeded by `seedWorkspaceInstruction`
+  (`lib/instruction-seed.ts`) with a slugified `name` and no folder picker.
 
-`useWorkspaceInstruction` (`hooks/use-instructions.ts`) `select`s off the shared `useInstructionsList`
-query cache instead of issuing its own IPC call. Creating one seeds a blank entity via
-`seedWorkspaceInstruction` (`lib/instruction-seed.ts`) with a slugified `name` and no folder picker — the
-scope's path is already known (`workspace.rootPath`). Clicking a row opens the instruction in a Workbench tab
-(`EditorPanel`), with `scope` always hidden (personal also hides `name`/`description`/`version` — the
-singleton's identity is fixed and its sidecar isn't persisted). Elsewhere, `PropertiesForm`'s scope toggle
-for skills/agents is Personal/Workspace, with Workspace disabled at Início.
+The left file tree carries no Instructions row in either context. Clicking a row opens the instruction in a
+Workbench tab (`EditorPanel`), with `scope` always hidden (personal also hides `name`/`description`/`version`
+— the singleton's identity is fixed and its sidecar isn't persisted). Elsewhere, `PropertiesForm`'s scope
+toggle for skills/agents is Personal/Workspace, with Workspace disabled at Início.
 
 ## Renderer structure
 
@@ -386,7 +405,7 @@ src/renderer/
 ```
 
 There is no `instructions/` screen — instruction management is inline on the Workspace screen (see
-"Instructions on Visão geral" above), via `InstructionTreeRow` under `components/workspace/`. There is no
+"Instructions in the right panel" above), via `InstructionTreeRow` under `components/workspace/`. There is no
 `commands/` screen either — the `command` entity kind was removed too. There are no `skills/`, `agents/`,
 `hooks/`, `mcps/`, or (as of the Plugins fold-in) top-level `plugins/` screens either — each kind is a
 collapsible `TreeGroup` node (`EntityTreeGroup` for Skill/Agent, `HooksTreeGroup`, `McpTreeGroup`,
@@ -401,28 +420,24 @@ old standalone screens used — only the surrounding chrome (a dense tree row in
 (`PluginImportDialog`/`PublishPluginDialog`, unchanged), previously toolbar buttons on the old `PluginList`
 screen, now the group's `TreeGroup` header "+" action and a per-row overflow menu respectively.
 
-`SessionsTreeGroup` sits in the same Control Panel, stacked above the customization groups, but isn't part
-of the local/global partition the other groups apply — every session already belongs to what's open (a
-workspace, or Início) by construction (see [Session bounded context](#session-bounded-context)), so there's no
-"more global than this" bucket to hide. Its own visibility axis is session `status`, not scope: a
-`showFinishedSessions` toggle in `ScreenHeader`'s `actions` (independent of, and always shown alongside,
-the local/global `showGlobal` toggle) filters exited sessions in or out. A row click doesn't open
-`CustomizationEditor`/`McpEditorDialog` like the other groups — it calls `useSessionFocus().focusSession`
-for that session's `anchor`, the same callback the header's "Abrir sessão" buttons already call, which
-focuses (or opens) that session's tab in the persistent `SessionsPanel` docked in `AppShell`.
+`SessionsTreeGroup` sits in the same Control Panel, after Integrações, and lists the current scope's own
+conversations: the open workspace's (`HistoryScope` `workspace`), or Global's at Início (`personal` — history
+whose `cwd` is the home dir itself, and live sessions not anchored to a workspace). Every live session
+already belongs to what's open by construction (activation kills the outgoing context's sessions — see
+[Session bounded context](#session-bounded-context)); live sessions of other contexts would only ever show
+on Início's Visão geral card. "Ver todas" opens the Histórico tab with scope `workspace`, or `all` at Início.
 
-Skill/Agent tree groups partition their list into "local" (`scopes[0] === 'workspace'` and `scopeId` is the
-open workspace) and "global" (everything else — Personal-scope or plugin-provided) via an
-`EntityTreeGroupProps.localScope` prop; `HooksTreeGroup` and `McpTreeGroup` apply the same local/global
-split on their own data shapes (Hooks have no scoping at all yet, so every hook counts as global inside a
-workspace; MCP's own `project-local`/`project-shared` scope is matched against the open workspace's
-`rootPath` instead of an `Entity.scopeId`). `PluginsTreeGroup` is coarser still: a plugin's own `scope` is
-Claude Code's `'personal' | 'project'` with no `scopeId`/path of its own; `isProjectContext` (set while a
-workspace is open) splits `project` plugins (local) from `personal` ones (global). The backend resolves that
-`'project'` tier against the open workspace's root (see "Global / Workspace" above) — at Início it isn't
-offered. The global bucket is hidden by default inside a workspace and revealed by the "Mostrar/Ocultar
-entidades globais" entry in the Workspace screen's "⋮" header menu (`WorkspaceScreen`'s `showGlobal`
-state) — omitted entirely at Início, where nothing is filtered.
+Skill/Agent tree groups show only the "local" entities (`scopes[0] === 'workspace'` and `scopeId` is the
+open workspace) via `EntityTreeGroupProps.localScope`; at Início, with no `localScope`, every item shows.
+Inside a workspace, Global's skills/agents (Personal-scope or plugin-provided) and the personal instruction
+are listed read-only under a collapsed **Herdado do Global** group at the bottom of the panel
+(`EntityTreeGroup`'s `inherited` mode: no create, no delete, no Properties). A row opens an `inherited:<urn>`
+tab whose `EditorPanel` is read-only (`inherited` prop) with an "Editar no Início" action — it runs the
+unsaved-tabs guard, goes home, then opens the entity's own editable `entity:<urn>` tab there.
+`HooksTreeGroup`/`McpTreeGroup`/`PluginsTreeGroup` keep their own local filters (Hooks have no scoping yet, so
+inside a workspace they list nothing; MCP's `project-local`/`project-shared` scope is matched against the
+open workspace's `rootPath`; `isProjectContext` keeps `project` plugins) and are not part of "Herdado do
+Global".
 
 Navigation is state-driven via a `Nav` discriminated union in `components/shell/nav.ts` (areas: `workspace`,
 `starter-pack`, `marketplaces`, `diagnostico`); `Main.tsx` maps `Nav` to a screen. No `react-router`, and no

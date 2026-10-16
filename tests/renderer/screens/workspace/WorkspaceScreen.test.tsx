@@ -10,6 +10,7 @@ import { WorkspaceScreen } from '../../../../src/renderer/screens/workspace/Work
 import { navigateWorkspaceHistory, resetWorkspaceHistoryForTests } from '../../../../src/renderer/lib/workspace-history-store.js';
 import { openManualTab, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { confirmDiscardUnsavedTabs } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
+import { toggleWorkspacePanel, type WorkspacePanelSide } from '../../../../src/renderer/lib/workspace-shell-store.js';
 import { mockApi } from '../../test-utils.js';
 
 // A session opens as a Workbench canvas tab (SessionPanel), which opens a
@@ -55,12 +56,12 @@ const renderScreen = () =>
     </QueryClientProvider>,
   );
 
-// Filters, panel toggles, and the destructive remove action all live behind
-// the header's "⋮" menu now, instead of being separate always-visible
-// buttons — open it before reaching for one of those testids.
-const openHeaderMenu = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByTestId('workspace-header-menu-button'));
-};
+// The panel toggles live in the TopNav now, outside this screen — they reach
+// it through the shell store, exactly as the TopNav buttons do.
+const togglePanel = (side: WorkspacePanelSide) => act(() => toggleWorkspacePanel(side));
+
+// Every Workbench tab button except the pinned "Visão geral" one.
+const OPEN_TAB_BUTTONS = /^workbench-tab-(?!close-|dirty-|overview$)/;
 
 // Expands the "apps" folder and opens one of its files.
 const openFolderFile = async (user: ReturnType<typeof userEvent.setup>, fileName: string) => {
@@ -106,15 +107,90 @@ beforeEach(() => {
 });
 
 describe('WorkspaceScreen', () => {
-  it('shows the active workspace name and root path', async () => {
-    renderScreen();
-    expect((await screen.findAllByText('Acme')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText('/repos/acme')).length).toBeGreaterThan(0);
-  });
+  describe('Visão geral tab', () => {
+    it('is pinned icon-only at index 0, active on entering a context, with no close control', async () => {
+      renderScreen();
+      const tab = await screen.findByTestId('workbench-tab-overview');
+      expect(screen.getAllByTestId(/^workbench-tab-(?!close-|dirty-)/)[0]).toBe(tab);
+      expect(tab).toHaveAttribute('aria-pressed', 'true');
+      expect(tab).not.toHaveTextContent('Visão geral');
+      expect(tab).toHaveAccessibleName('Visão geral');
+      expect(screen.queryByTestId('workbench-tab-close-overview')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('workspace-overview')).toBeInTheDocument();
+    });
 
-  it('shows the breadcrumb\'s "Início" button while a workspace is open', async () => {
-    renderScreen();
-    expect(await screen.findByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
+    it('renders the Início cards at Início', async () => {
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return null;
+        if (method === 'workspace.list') return [];
+        return undefined;
+      });
+      renderScreen();
+      expect(await screen.findByTestId('home-overview')).toBeInTheDocument();
+    });
+
+    it('becomes active again when the last other tab closes', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'workspace.listDir') return appsTree(params);
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+        return undefined;
+      });
+      renderScreen();
+      await openFolderFile(user, 'a.md');
+      expect(await screen.findByTestId('workbench-tab-file:apps/a.md')).toHaveAttribute('aria-pressed', 'true');
+      await user.click(screen.getByTestId('workbench-tab-close-file:apps/a.md'));
+      expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('survives a reset of every tab (a context switch) and is the one left active', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'workspace.listDir') return appsTree(params);
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+        return undefined;
+      });
+      renderScreen();
+      await openFolderFile(user, 'a.md');
+      await screen.findByTestId('workbench-tab-file:apps/a.md');
+      act(() => {
+        expect(confirmDiscardUnsavedTabs()).toBe(true);
+      });
+      await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
+      expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('⌘0 activates it', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'workspace.listDir') return appsTree(params);
+        if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
+        return undefined;
+      });
+      renderScreen();
+      await openFolderFile(user, 'a.md');
+      expect(await screen.findByTestId('workbench-tab-file:apps/a.md')).toHaveAttribute('aria-pressed', 'true');
+      fireEvent.keyDown(window, { key: '0', metaKey: true });
+      expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('"Ver alterações" switches the left panel to its Git view', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'git.status') {
+          return { isRepo: true, head: { name: 'main', oid: 'abc', ahead: 0, behind: 0 }, state: 'clean', files: [], truncated: false };
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('overview-show-git'));
+      expect(screen.getByTestId('explorer-view-git')).toHaveAttribute('aria-pressed', 'true');
+    });
   });
 
   it('opening a session on the workspace root calls session.spawn with a workspace anchor, opening its Workbench tab', async () => {
@@ -237,7 +313,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      const row = await screen.findByTestId('workspace-instruction-row');
+      const row = await screen.findByTestId(`workspace-instruction-row-${workspaceInstruction.name}`);
       fireEvent.contextMenu(row);
       const item = await screen.findByTestId('row-context-menu-new-action');
       await user.click(item);
@@ -352,7 +428,8 @@ describe('WorkspaceScreen', () => {
     });
     renderScreen();
     await openFolderFile(user, 'a.md');
-    await user.click(await screen.findByTestId('tree-node-open-as-workspace-apps'));
+    fireEvent.contextMenu(await screen.findByText('apps'));
+    await user.click(await screen.findByTestId('row-context-menu-open-as-workspace'));
     await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.open', { path: '/repos/acme/apps' }));
     expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
     expect(await screen.findByTestId('toast')).toHaveTextContent('Workspace aberto: apps');
@@ -368,26 +445,12 @@ describe('WorkspaceScreen', () => {
       return undefined;
     });
     renderScreen();
-    await user.click(await screen.findByTestId('tree-node-open-as-workspace-apps'));
+    fireEvent.contextMenu(await screen.findByText('apps'));
+    await user.click(await screen.findByTestId('row-context-menu-open-as-workspace'));
     expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
   });
 
-  it('clicking the breadcrumb\'s "Início" button goes home (workspace.goHome), discarding open tabs', async () => {
-    const user = userEvent.setup();
-    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.getActive') return projectWorkspace;
-      if (method === 'workspace.listDir') return appsTree(params);
-      if (method === 'workspace.readFile') return { previewable: true, kind: 'text', truncated: false, content: 'hi' };
-      return undefined;
-    });
-    renderScreen();
-    await openFolderFile(user, 'a.md');
-    await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
-    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
-    expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
-  });
-
-  it('reaching Home via the external "Início" nav (not the breadcrumb button) clears the open tabs through the registered guard', async () => {
+  it('reaching Home via the external "Início" nav (switcher, ⌘K) clears the open tabs through the registered guard', async () => {
     const user = userEvent.setup();
     (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
       if (method === 'workspace.getActive') return projectWorkspace;
@@ -405,16 +468,15 @@ describe('WorkspaceScreen', () => {
     await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
   });
 
-  describe('instructions row on a workspace tree', () => {
-    it('shows the Workspace Instruction row, empty, and opens the editor on click', async () => {
+  describe('Instruction group (right panel)', () => {
+    it('with no workspace instruction yet, "+" opens a new instruction editor', async () => {
       const user = userEvent.setup();
       renderScreen();
-      await screen.findByTestId('workspace-instruction-row');
-      await user.click(screen.getByTestId('workspace-instruction-row'));
+      await user.click(await screen.findByTestId('tree-group-new-instruction'));
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
     });
 
-    it('deleting a configured instruction asks for confirmation before calling instruction.delete', async () => {
+    it('lists the workspace instructions by name; deleting one asks for confirmation first', async () => {
       const user = userEvent.setup();
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
       const workspaceInstruction = {
@@ -431,24 +493,32 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('workspace-instruction-delete'));
+      expect(await screen.findByTestId('workspace-instruction-row-acme')).toHaveTextContent('acme');
+      await user.click(screen.getByTestId('workspace-instruction-row-acme-delete'));
       expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('acme'));
       await waitFor(() =>
         expect(ipc.callIpc).toHaveBeenCalledWith('instruction.delete', { name: 'acme', removeSymlinks: true }),
       );
       confirmSpy.mockRestore();
     });
+
+    it('is no longer a row in the left file tree', async () => {
+      renderScreen();
+      await screen.findByTestId('folder-tree');
+      expect(within(screen.getByTestId('workspace-files-panel')).queryByText('INSTRUCTIONS')).not.toBeInTheDocument();
+    });
   });
 
   describe('folder tree', () => {
-    it('offers "Abrir como workspace" on folders and no Project shortcuts at all', async () => {
+    it('offers "Abrir como workspace" in a folder\'s context menu and no Project shortcuts at all', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
         if (method === 'workspace.listDir') return appsTree(params);
         return undefined;
       });
       renderScreen();
-      expect(await screen.findByTestId('tree-node-open-as-workspace-apps')).toBeInTheDocument();
+      fireEvent.contextMenu(await screen.findByText('apps'));
+      expect(await screen.findByTestId('row-context-menu-open-as-workspace')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-node-open-project-apps')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tree-node-use-as-project-apps')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tree-node-instructions-apps')).not.toBeInTheDocument();
@@ -545,25 +615,37 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Início (no workspace open)', () => {
-    it('shows the Personal Instruction row pinned inside the Explorer Panel\'s workspace list, not a file browser tree', async () => {
+    it('shows the Workspaces/App sections on the left and the Personal Instruction on the right, never a file tree', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
         return undefined;
       });
       renderScreen();
       const managementList = await screen.findByTestId('workspace-management-list');
-      expect(managementList).toContainElement(await screen.findByTestId('personal-instruction-row'));
+      expect(managementList).toContainElement(await screen.findByTestId('explorer-area-diagnostico'));
+      expect(managementList).not.toContainElement(screen.getByTestId('personal-instruction-row'));
+      expect(screen.getByTestId('workspace-customizations')).toContainElement(screen.getByTestId('personal-instruction-row'));
       expect(screen.queryByTestId('folder-tree')).not.toBeInTheDocument();
     });
 
-    it('never shows the breadcrumb\'s "Início" button — there is nowhere further Home to go', async () => {
+    it('kicks the right panel off with "Global", and its Sessões list Global\'s own sessions only', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
+        if (method === 'session.list') {
+          return [
+            { sessionId: 'personal', claudeSessionId: 'c1', anchor: { kind: 'personal' }, cwd: '/home/u', label: 'Início', status: 'running', browserEnabled: false },
+            { sessionId: 'workspace:w9', claudeSessionId: 'c2', anchor: { kind: 'workspace', workspaceId: 'w9' }, cwd: '/repos/x', label: 'X', status: 'running', browserEnabled: false },
+          ];
+        }
         return undefined;
       });
       renderScreen();
-      await screen.findByTestId('workspace-management-list');
-      expect(screen.queryByTestId('workspace-breadcrumb-workspace-crumb')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('control-panel-kicker')).toHaveTextContent('Global'));
+      expect(await screen.findByTestId('tree-session-personal')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-session-workspace:w9')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(ipc.callIpc).toHaveBeenCalledWith('sessionHistory.list', expect.objectContaining({ scope: { kind: 'personal' } })),
+      );
     });
 
     it('lists every registered workspace in the management card', async () => {
@@ -595,8 +677,9 @@ describe('WorkspaceScreen', () => {
       await screen.findByTestId('workspace-list-row-w1');
       await user.click(screen.getByTestId('workspace-list-row-w1'));
       // The screen re-renders in place for the newly opened workspace — its
-      // name shows up and the Início-only management card is gone — with no re-navigation to "Visão geral" required.
-      await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0));
+      // file tree and overview show up and the Início-only list is gone.
+      expect(await screen.findByTestId('workspace-overview')).toBeInTheDocument();
+      expect(await screen.findByTestId('folder-tree')).toBeInTheDocument();
       expect(screen.queryByTestId('workspace-management-list')).not.toBeInTheDocument();
     });
 
@@ -614,7 +697,6 @@ describe('WorkspaceScreen', () => {
     });
 
     it('shows the workspace list in its own toggleable Files panel, matching the open-workspace treatment', async () => {
-      const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
         if (method === 'workspace.list') return [];
@@ -625,11 +707,9 @@ describe('WorkspaceScreen', () => {
       expect(panel).toContainElement(await screen.findByTestId('workspace-management-list'));
       // The panel is collapsible, not unmounted, so it stays in the DOM
       // (react-resizable-panels shrinks it to 0 rather than removing it).
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      togglePanel('explorer');
       await waitFor(() => expect(screen.getByTestId('workspace-files-panel')).toHaveAttribute('data-collapsed', 'true'));
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      togglePanel('explorer');
       await waitFor(() => expect(screen.getByTestId('workspace-files-panel')).toHaveAttribute('data-collapsed', 'false'));
     });
 
@@ -656,7 +736,7 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Skills/Agents/Hooks/MCP/Plugins tree nodes', () => {
-    it('shows every entity-kind tree node at Início, with no global toggle', async () => {
+    it('shows every entity-kind tree node at Início, with no "Herdado do Global" group', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
@@ -677,35 +757,65 @@ describe('WorkspaceScreen', () => {
       expect(screen.getByTestId('tree-group-mcp')).toBeInTheDocument();
       expect(screen.getByTestId('tree-group-plugin')).toBeInTheDocument();
       expect(screen.getByTestId('workspace-sessions-panel')).toBeInTheDocument();
-      await openHeaderMenu(user);
-      expect(screen.queryByTestId('workspace-toggle-global')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tree-group-inherited')).not.toBeInTheDocument();
     });
 
-    it('inside a workspace, offers a toggle to reveal global entities, hidden by default', async () => {
+    it('inside a workspace, keeps Global entities out of Skills and lists them read-only under a collapsed "Herdado do Global"', async () => {
       const user = userEvent.setup();
+      const globalSkill = { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '# Global body' };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
         if (method === 'workspace.listDir') return [];
         if (method === 'skill.list') {
           return [
             { urn: 'urn:skill:local', kind: 'skill', name: 'local', description: '', scopes: ['workspace'], scopeId: 'w1', metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '' },
-            { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '' },
+            globalSkill,
           ];
         }
         return undefined;
       });
       renderScreen();
-      await openHeaderMenu(user);
-      expect(await screen.findByTestId('workspace-toggle-global')).toHaveTextContent('Mostrar entidades globais');
-      // Clicking a menu item both applies the toggle and closes the menu.
-      await user.click(screen.getByTestId('workspace-toggle-global'));
-
+      await waitFor(() => expect(screen.getByTestId('control-panel-kicker')).toHaveTextContent('Workspace · Acme'));
       await user.click(await screen.findByTestId('tree-group-skill'));
       expect(await screen.findByTestId('tree-skill-local')).toBeInTheDocument();
-      expect(await screen.findByTestId('tree-skill-global')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-skill-global')).not.toBeInTheDocument();
 
-      await openHeaderMenu(user);
-      expect(await screen.findByTestId('workspace-toggle-global')).toHaveTextContent('Ocultar entidades globais');
+      // Collapsed by default.
+      expect(screen.queryByTestId('tree-group-inherited-skill')).not.toBeInTheDocument();
+      await user.click(screen.getByTestId('tree-group-inherited'));
+      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      await user.click(await screen.findByTestId('tree-inherited-skill-global'));
+
+      // Opens read-only, with the way to edit it at Início.
+      expect(await screen.findByTestId('workbench-tab-inherited:urn:skill:global')).toBeInTheDocument();
+      expect(screen.getByTestId('inherited-notice')).toBeInTheDocument();
+      expect(screen.queryByTestId('body-editor')).not.toBeInTheDocument();
+    });
+
+    it('"Editar no Início" goes home and opens the entity there, editable', async () => {
+      const user = userEvent.setup();
+      const globalSkill = { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '# Global body' };
+      let active: typeof projectWorkspace | null = projectWorkspace;
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return active;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'workspace.goHome') {
+          active = null;
+          return undefined;
+        }
+        if (method === 'skill.list') return [globalSkill];
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-group-inherited'));
+      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      await user.click(await screen.findByTestId('tree-inherited-skill-global'));
+      await user.click(await screen.findByTestId('inherited-edit-at-home'));
+
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
+      expect(await screen.findByTestId('workbench-tab-entity:urn:skill:global')).toBeInTheDocument();
+      expect(screen.queryByTestId('workbench-tab-inherited:urn:skill:global')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('inherited-notice')).not.toBeInTheDocument();
     });
   });
 
@@ -736,7 +846,7 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('workspace-sessions-new'));
       await screen.findByTestId('workbench-tab-session:sess-2');
 
-      const tabButtons = screen.getAllByTestId(/^workbench-tab-(?!close-)/);
+      const tabButtons = screen.getAllByTestId(OPEN_TAB_BUTTONS);
       expect(tabButtons).toHaveLength(2);
     });
 
@@ -756,7 +866,7 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('workbench-tab-session:workspace:w1')).toBeInTheDocument();
       await user.click(screen.getByTestId('workbench-tab-close-session:workspace:w1'));
       expect(screen.queryByTestId('workbench-tab-session:workspace:w1')).not.toBeInTheDocument();
-      expect(await screen.findByTestId('empty-state-workbench-empty')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('labels the close action "Minimizar" while the session is still running', async () => {
@@ -864,7 +974,7 @@ describe('WorkspaceScreen', () => {
     it('opening the instruction editor opens a tab and keeps the tree mounted alongside it', async () => {
       const user = userEvent.setup();
       renderScreen();
-      await user.click(await screen.findByTestId('workspace-instruction-row'));
+      await user.click(await screen.findByTestId('tree-group-new-instruction'));
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
       expect(screen.getByTestId('workbench-tabs')).toBeInTheDocument();
       expect(screen.getByTestId('folder-tree')).toBeInTheDocument();
@@ -894,9 +1004,9 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('workspace-instruction-row'));
-      await user.click(await screen.findByTestId('workspace-instruction-row'));
-      const tabButtons = screen.getAllByTestId(/^workbench-tab-(?!close-)/);
+      await user.click(await screen.findByTestId('workspace-instruction-row-acme'));
+      await user.click(await screen.findByTestId('workspace-instruction-row-acme'));
+      const tabButtons = screen.getAllByTestId(OPEN_TAB_BUTTONS);
       expect(tabButtons).toHaveLength(1);
     });
   });
@@ -920,7 +1030,7 @@ describe('WorkspaceScreen', () => {
       // The pinned Workspace INSTRUCTIONS row's own tab has no relation to
       // "apps" — the breadcrumb must follow the newly active tab, not stick
       // to the previous one.
-      await user.click(screen.getByTestId('workspace-instruction-row'));
+      await user.click(screen.getByTestId('tree-group-new-instruction'));
       expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('Acme › INSTRUCTIONS');
     });
 
@@ -992,12 +1102,6 @@ describe('WorkspaceScreen', () => {
       expect(screen.queryByTestId('body-editor')).not.toBeInTheDocument();
     });
 
-    it('has no context menu on an unconfigured instruction row — nothing saved yet to preview', async () => {
-      renderScreen();
-      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
-      expect(screen.queryByTestId('row-context-menu-preview')).not.toBeInTheDocument();
-    });
-
     it('right-clicking a configured workspace INSTRUCTIONS row opens its content as a read-only preview tab', async () => {
       const user = userEvent.setup();
       const workspaceInstruction = {
@@ -1013,7 +1117,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
+      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row-Acme'));
       await user.click(await screen.findByTestId('row-context-menu-preview'));
 
       expect(await screen.findByTestId('workbench-tab-preview:entity:urn:instruction:w1')).toBeInTheDocument();
@@ -1061,7 +1165,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
+      fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row-Acme'));
       await user.click(await screen.findByTestId('row-context-menu-properties'));
 
       expect(await screen.findByTestId('workbench-tab-entity:urn:instruction:w1')).toBeInTheDocument();
@@ -1082,22 +1186,22 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      fireEvent.contextMenu(await screen.findByTestId('personal-instruction-row'));
-      expect(await screen.findByTestId('row-context-menu-preview')).toBeInTheDocument();
+      // The row renders before the instruction loads; it only offers a menu once it has one.
+      await waitFor(() => {
+        fireEvent.contextMenu(screen.getByTestId('personal-instruction-row'));
+        expect(screen.getByTestId('row-context-menu-preview')).toBeInTheDocument();
+      });
       expect(screen.queryByTestId('row-context-menu-properties')).not.toBeInTheDocument();
     });
   });
 
   describe('Files panel', () => {
-    it('can be hidden and shown again from the header toggle', async () => {
-      const user = userEvent.setup();
+    it('can be hidden and shown again from the TopNav toggle', async () => {
       renderScreen();
       expect(await screen.findByTestId('workspace-files-panel')).toHaveAttribute('data-collapsed', 'false');
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      togglePanel('explorer');
       await waitFor(() => expect(screen.getByTestId('workspace-files-panel')).toHaveAttribute('data-collapsed', 'true'));
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-files'));
+      togglePanel('explorer');
       await waitFor(() => expect(screen.getByTestId('workspace-files-panel')).toHaveAttribute('data-collapsed', 'false'));
     });
 
@@ -1123,7 +1227,7 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByText('content of apps/b.md')).toBeVisible();
       expect(screen.getByText('content of apps/a.md')).not.toBeVisible();
 
-      const tabButtons = screen.getAllByTestId(/^workbench-tab-(?!close-)/);
+      const tabButtons = screen.getAllByTestId(OPEN_TAB_BUTTONS);
       expect(tabButtons).toHaveLength(2);
       await user.click(tabButtons[0]!);
       expect(screen.getByText('content of apps/a.md')).toBeVisible();
@@ -1148,10 +1252,10 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('tree-group-new-skill'));
       await screen.findByTestId('editor-panel');
       await user.keyboard('{Control>}s{/Control}');
-      await waitFor(() => expect(screen.getAllByTestId(/^workbench-tab-(?!close-)/)).toHaveLength(1));
+      await waitFor(() => expect(screen.getAllByTestId(OPEN_TAB_BUTTONS)).toHaveLength(1));
     });
 
-    it('closing a file tab removes it and shows the empty state once none remain', async () => {
+    it('closing the last file tab removes it and falls back to the Visão geral tab', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
         if (method === 'workspace.getActive') return projectWorkspace;
@@ -1167,7 +1271,7 @@ describe('WorkspaceScreen', () => {
       await screen.findByText('hello');
       await user.click(screen.getByLabelText(/^Fechar /));
       expect(screen.queryByText('hello')).not.toBeInTheDocument();
-      expect(await screen.findByTestId('empty-state-workbench-empty')).toBeInTheDocument();
+      expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
     });
   });
 
@@ -1201,25 +1305,28 @@ describe('WorkspaceScreen', () => {
       await waitFor(() => expect(screen.queryByTestId('workbench-tab-dirty-file:apps/a.md')).not.toBeInTheDocument());
     });
 
-    it('clicking the breadcrumb\'s "Início" button with unsaved edits asks for confirmation first — it is a real workspace switch, not a view toggle', async () => {
+    it('a context switch with unsaved edits asks for confirmation first, and declining changes nothing', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-      await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
+      let allowed = true;
+      act(() => {
+        allowed = confirmDiscardUnsavedTabs();
+      });
+      expect(allowed).toBe(false);
       expect(confirmSpy).toHaveBeenCalled();
-      // Declined — nothing changed.
       expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
       expect(screen.getByTestId('workbench-tab-dirty-file:apps/a.md')).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-breadcrumb-workspace-crumb')).toBeInTheDocument();
     });
 
-    it('confirming the discard on the breadcrumb\'s "Início" button goes home', async () => {
+    it('confirming the discard on a context switch clears the tabs', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
       vi.spyOn(window, 'confirm').mockReturnValue(true);
-      await user.click(await screen.findByTestId('workspace-breadcrumb-workspace-crumb'));
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
-      expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
+      act(() => {
+        expect(confirmDiscardUnsavedTabs()).toBe(true);
+      });
+      await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
     });
 
     const openDirtyEntityTab = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -1369,42 +1476,36 @@ describe('WorkspaceScreen', () => {
       expect(screen.getByTestId('explorer-view-files').parentElement?.parentElement).toContainElement(refresh);
     });
 
-    it('renders the workspace breadcrumb and its "⋮" menu inside the Explorer Panel, not above it', async () => {
+    it('no longer carries the workspace name, path or a "⋮" menu — those live in the TopNav switcher', async () => {
       renderScreen();
       const filesPanel = await screen.findByTestId('workspace-files-panel');
-      expect(filesPanel).toContainElement(await screen.findByTestId('workspace-header-menu-button'));
-      expect(filesPanel).toHaveTextContent('Acme');
-      expect(filesPanel).toHaveTextContent('/repos/acme');
+      await screen.findByTestId('folder-tree');
+      expect(screen.queryByTestId('workspace-header-menu-button')).not.toBeInTheDocument();
+      expect(filesPanel).not.toHaveTextContent('/repos/acme');
     });
   });
 
   describe('Customizations aside', () => {
-    it('can be collapsed and expanded from the header toggle', async () => {
-      const user = userEvent.setup();
+    it('can be collapsed and expanded from the TopNav toggle', async () => {
       renderScreen();
       expect(await screen.findByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false');
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-customizations'));
+      togglePanel('control');
       await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'true'));
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-customizations'));
+      togglePanel('control');
       await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false'));
     });
 
     it('collapses to 0 width the same way the Explorer Panel does, and stays in the DOM (react-resizable-panels shrinks it, never unmounts it)', async () => {
-      const user = userEvent.setup();
       renderScreen();
       const panel = await screen.findByTestId('workspace-customizations-aside');
       expect(panel).toContainElement(await screen.findByTestId('workspace-control-panel-label'));
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-customizations'));
+      togglePanel('control');
       await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'true'));
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-toggle-customizations'));
+      togglePanel('control');
       await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false'));
     });
 
-    it('stacks a separate Sessões panel above Customizations, with its own local collapse independent of the aside', async () => {
+    it('places Sessões after Integrações and before "Herdado do Global", with its own local collapse independent of the aside', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
@@ -1416,9 +1517,9 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       const sessionsPanel = await screen.findByTestId('workspace-sessions-panel');
-      const customizations = await screen.findByTestId('workspace-customizations');
-      const position = sessionsPanel.compareDocumentPosition(customizations);
-      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(screen.getByTestId('tree-group-integrations'), sessionsPanel)).toBe(true);
+      expect(follows(sessionsPanel, screen.getByTestId('tree-group-inherited'))).toBe(true);
       expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
 
       const collapseButton = screen.getByTestId('workspace-sessions-collapse');
@@ -1437,80 +1538,6 @@ describe('WorkspaceScreen', () => {
     });
   });
 
-  describe('removing the active workspace from its Visão geral header', () => {
-    const acme = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' };
-
-    it('shows a remove action for the open workspace', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return acme;
-        if (method === 'workspace.listDir') return [];
-        return undefined;
-      });
-      renderScreen();
-      await openHeaderMenu(user);
-      expect(await screen.findByTestId('workspace-context-remove')).toBeInTheDocument();
-    });
-
-    it('does not show a remove action at Início', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return null;
-        if (method === 'workspace.list') return [];
-        return undefined;
-      });
-      renderScreen();
-      await screen.findByTestId('workspace-management-list');
-      await openHeaderMenu(user);
-      expect(screen.queryByTestId('workspace-context-remove')).not.toBeInTheDocument();
-    });
-
-    it('confirming removal deletes the open workspace (which goes home server-side)', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return acme;
-        if (method === 'workspace.listDir') return [];
-        return undefined;
-      });
-      renderScreen();
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-context-remove'));
-      await user.click(await screen.findByTestId('workspace-remove-confirm-btn'));
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.delete', { id: 'w1' }));
-      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
-    });
-
-    it('canceling the confirmation does not delete', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return acme;
-        if (method === 'workspace.listDir') return [];
-        return undefined;
-      });
-      renderScreen();
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-context-remove'));
-      await user.click(await screen.findByTestId('workspace-remove-cancel-btn'));
-      await waitFor(() => expect(screen.queryByTestId('workspace-remove-confirm-dialog')).not.toBeInTheDocument());
-      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
-      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.delete', expect.anything());
-    });
-
-    it('shows an error toast when the removal fails', async () => {
-      const user = userEvent.setup();
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return acme;
-        if (method === 'workspace.listDir') return [];
-        if (method === 'workspace.delete') throw new Error('boom');
-        return undefined;
-      });
-      renderScreen();
-      await openHeaderMenu(user);
-      await user.click(await screen.findByTestId('workspace-context-remove'));
-      await user.click(await screen.findByTestId('workspace-remove-confirm-btn'));
-      expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
-    });
-  });
 });
 
 describe('Explorer Panel — re-reading the disk', () => {

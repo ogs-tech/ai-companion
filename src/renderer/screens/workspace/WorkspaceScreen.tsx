@@ -1,22 +1,20 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  Box, Divider, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip,
-} from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import {
-  Eye, EyeOff, File as FileIcon, FileX, GitCompare, Globe, MoreVertical, NotebookPen,
-  History, PanelLeft, PanelRight, Play, RefreshCw, SquareTerminal, Trash2, type LucideIcon,
+  Eye, File as FileIcon, Folder, GitCompare, Globe, House, NotebookPen,
+  History, Play, RefreshCw, SquareTerminal, type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
-import { EmptyState } from '../../components/ds/EmptyState.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
-import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
+import { ExplorerPanelContent, type ExplorerView } from '../../components/workspace/ExplorerPanelContent.js';
+import { HomeOverview } from '../../components/workspace/overview/HomeOverview.js';
+import { WorkspaceOverview } from '../../components/workspace/overview/WorkspaceOverview.js';
 import { DiffView } from '../../components/workspace/git/DiffView.js';
 import type { GitDiffSource } from '../../../shared/git.js';
 import { ControlPanelContent } from '../../components/workspace/ControlPanelContent.js';
-import { InstructionTreeRow } from '../../components/workspace/InstructionTreeRow.js';
 import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
@@ -25,14 +23,12 @@ import { SessionPanel } from '../../components/SessionPanel.js';
 import { LaunchConfigsTreeGroup } from '../../components/workspace/LaunchConfigsTreeGroup.js';
 import { LaunchProcessPanel } from '../../components/workspace/LaunchProcessPanel.js';
 import { BrowserPane } from '../../components/BrowserPane.js';
-import { WorkspaceRemoveConfirmDialog } from '../../components/shell/WorkspaceRemoveConfirmDialog.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR, NAV_AREAS, type AreaDef } from '../../components/shell/nav.js';
 import { TreeRow } from '../../components/ds/TreeRow.js';
 import { StarterPackScreen } from '../starter-pack/StarterPackScreen.js';
 import { MarketplaceList } from '../marketplaces/MarketplaceList.js';
 import { HealthScreen } from '../health/HealthScreen.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
-import { blankCustomization } from '../../lib/blank-customization.js';
 import { registerUnsavedTabsGuard } from '../../lib/workspace-tabs-guard.js';
 import {
   pushWorkspaceHistoryEntry,
@@ -41,6 +37,7 @@ import {
   type WorkspaceHistoryEntry,
 } from '../../lib/workspace-history-store.js';
 import { registerAreaOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
+import { publishWorkspacePanels, registerWorkspaceShellCommands } from '../../lib/workspace-shell-store.js';
 import {
   closeBrowserTab,
   getBrowserTabsSnapshot,
@@ -50,21 +47,16 @@ import {
 } from '../../lib/browser-tabs-store.js';
 import { seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
 import { entityBody } from '../../lib/entity-body.js';
-import { useActiveWorkspace, useDeleteWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
+import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useLaunchProcesses } from '../../hooks/use-launch-process.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
 import { useRefreshFiles } from '../../hooks/use-file-browser.js';
 import { useHealthReport } from '../../hooks/use-health-report.js';
-import {
-  useInvalidateInstructions,
-  usePersonalInstruction,
-  useWorkspaceInstruction,
-} from '../../hooks/use-instructions.js';
+import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
-import type { Workspace } from '../../../shared/workspace.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 import type { LaunchProcessSnapshot } from '../../../shared/launch-config.js';
 import { callIpc } from '../../lib/ipc.js';
@@ -78,10 +70,18 @@ const SCOPED_HIDDEN: ReadonlySet<EditorHiddenField> = new Set(['scope']);
 
 type EntityKind = 'skill' | 'agent';
 
+/**
+ * The pinned "Visão geral" tab — always first, never closed, never part of
+ * `openTabs`: every close/reset path only ever touches `openTabs`, so the
+ * overview survives them all by construction.
+ */
+const OVERVIEW_TAB_ID = 'overview';
+
 type OpenTab =
   | { id: string; kind: 'file'; relPath: string; dirty?: boolean }
-  | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean }
-  | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean }
+  // `inherited`: a Global entity opened read-only from a workspace's "Herdado do Global".
+  | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean; inherited?: boolean }
+  | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean; inherited?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
   | { id: string; kind: 'launch-process'; processId: string; label: string }
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
@@ -112,11 +112,9 @@ export function WorkspaceScreen(): React.ReactElement {
   // `null` = Início (Global, no workspace open); `undefined` while loading.
   const { data: activeWorkspace } = useActiveWorkspace();
   const isHome = activeWorkspace === null;
-  const { data: personalInstruction } = usePersonalInstruction();
   const switchWorkspace = useSwitchWorkspace();
   const openWorkspace = useOpenWorkspace();
   const goHomeMutation = useGoHome();
-  const deleteWorkspace = useDeleteWorkspace();
   const invalidateCustomization = useInvalidateCustomization();
   const invalidateInstructions = useInvalidateInstructions();
   const { data: sessions } = useSessions();
@@ -126,12 +124,7 @@ export function WorkspaceScreen(): React.ReactElement {
   useEntityChangeInvalidation();
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  // Hidden by default inside a workspace, to keep the tree focused on
-  // what's actually local to it — plugin-provided and Personal-scope entities
-  // are already visible everywhere else, so they're the ones worth hiding.
-  const [showGlobal, setShowGlobal] = useState(false);
-  // Captured when the dialog opens, not read live off `activeWorkspace` — see SubRail's old WorkspaceContext, which this replaces.
-  const [pendingRemoval, setPendingRemoval] = useState<Workspace | null>(null);
+  const showError = (err: unknown): void => setToast({ variant: 'error', message: errorMessage(err) });
 
   // Every open file, session, AND entity being edited is a Workbench canvas
   // tab — these used to live in separate models (a file-tab array, a modal
@@ -142,7 +135,8 @@ export function WorkspaceScreen(): React.ReactElement {
   // `claude` process it's attached to keeps running server-side regardless,
   // and SessionPanel reattaches to it on remount via `session.status`.
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeTabId, setActiveTabId] = useState<string>(OVERVIEW_TAB_ID);
+  const [explorerView, setExplorerView] = useState<ExplorerView>('files');
   const newTabSeq = useRef(0);
   // A tree row's right-click "Properties" action opens (or focuses) the
   // entity's own tab, then asks that specific tab's EditorPanel to show its
@@ -157,9 +151,6 @@ export function WorkspaceScreen(): React.ReactElement {
   // with its own 40px icon-strip collapse mode; that's retired.
   const controlPanelRef = usePanelRef();
   const [controlPanelCollapsed, setControlPanelCollapsed] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-
-  const { data: workspaceInstruction } = useWorkspaceInstruction(activeWorkspace?.id ?? '');
 
   const refreshFiles = useRefreshFiles();
 
@@ -179,6 +170,34 @@ export function WorkspaceScreen(): React.ReactElement {
     const id = isCreate ? `entity-new:instruction:${++newTabSeq.current}` : `entity:${entity.urn}`;
     setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'instruction', entity, isCreate }]));
     setActiveTabId(id);
+  };
+
+  // A Global entity seen from a workspace: its own tab id, so it never
+  // collides with an editable tab for the same urn.
+  const openInheritedTab = (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction'): void => {
+    const id = `inherited:${entity.urn}`;
+    setOpenTabs((prev) => {
+      if (prev.some((t) => t.id === id)) return prev;
+      const tab: OpenTab =
+        kind === 'instruction'
+          ? { id, kind, entity: entity as Instruction, isCreate: false, inherited: true }
+          : { id, kind, entity: entity as Skill | Agent, isCreate: false, inherited: true };
+      return [...prev, tab];
+    });
+    setActiveTabId(id);
+  };
+
+  // "Editar no Início": leave the workspace (same discard guard as any
+  // switch), then open the entity's real, editable tab there.
+  const editAtHome = (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction'): void => {
+    if (!resetTabs()) return;
+    goHomeMutation
+      .mutateAsync()
+      .then(() => {
+        if (kind === 'instruction') openInstructionTab(entity as Instruction, false);
+        else openEntityTab(kind, entity as Skill | Agent, false);
+      })
+      .catch(showError);
   };
 
   // Tab identity is keyed by the concrete sessionId (not the anchor), so a
@@ -295,7 +314,7 @@ export function WorkspaceScreen(): React.ReactElement {
     if (target && isDirty(target) && !window.confirm('Descartar alterações não salvas?')) return;
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
-      setActiveTabId((cur) => (cur === id ? (next[next.length - 1]?.id ?? null) : cur));
+      setActiveTabId((cur) => (cur === id ? (next[next.length - 1]?.id ?? OVERVIEW_TAB_ID) : cur));
       return next;
     });
   };
@@ -307,7 +326,7 @@ export function WorkspaceScreen(): React.ReactElement {
     const dirtyCount = openTabs.filter(isDirty).length;
     if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return false;
     setOpenTabs([]);
-    setActiveTabId(null);
+    setActiveTabId(OVERVIEW_TAB_ID);
     return true;
   };
 
@@ -347,8 +366,9 @@ export function WorkspaceScreen(): React.ReactElement {
       }
       return 'applied';
     }
-    if (entry.activeTabId !== null && !openTabs.some((t) => t.id === entry.activeTabId)) return 'stale';
-    setActiveTabId(entry.activeTabId);
+    const target = entry.activeTabId ?? OVERVIEW_TAB_ID;
+    if (target !== OVERVIEW_TAB_ID && !openTabs.some((t) => t.id === target)) return 'stale';
+    setActiveTabId(target);
     return 'applied';
   };
 
@@ -460,20 +480,6 @@ export function WorkspaceScreen(): React.ReactElement {
       return absolutePath;
     });
 
-  // Pinned at the top of the Explorer Panel's FolderTree (not the Control
-  // Panel) — the open workspace's own INSTRUCTIONS row.
-  const instructionRow = !activeWorkspace ? undefined : (
-    <InstructionTreeRow
-      kind="workspace"
-      instruction={workspaceInstruction}
-      seed={() => seedWorkspaceInstruction(activeWorkspace)}
-      onOpen={openInstructionEditor}
-      onPreview={previewEntity}
-      onProperties={requestInstructionProperties}
-      onNewAction={newActionForInstruction}
-    />
-  );
-
   // Skills/Agents split into the open workspace's own vs Global; Hooks have
   // no workspace tier of their own yet, and MCP's own local tier
   // ('project-local'/'project-shared') keys off a filesystem path instead.
@@ -482,13 +488,17 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const removeSessionTab = (sessionId: string): void => closeTab(`session:${sessionId}`);
 
-  // What the Sessões panel and the Histórico tab both mean by "here": the
-  // open workspace, or everything at Início (whose root is the home dir).
+  // What the Histórico tab means by "here": the open workspace, or every
+  // conversation on the machine at Início.
   const historyScope: HistoryScope | null = activeWorkspace
     ? { kind: 'workspace', workspaceId: activeWorkspace.id }
     : isHome
       ? { kind: 'all' }
       : null;
+  // The right panel's Sessões lists the scope's own: Global's at Início.
+  const sessionsScope: HistoryScope = activeWorkspace
+    ? { kind: 'workspace', workspaceId: activeWorkspace.id }
+    : { kind: 'personal' };
 
   // One fixed id, so "Ver todas" focuses the tab that is already open rather
   // than stacking a second copy of the same dashboard beside it.
@@ -546,15 +556,6 @@ export function WorkspaceScreen(): React.ReactElement {
     });
   };
 
-  // The breadcrumb's own "back" to Início, the same destination as
-  // AppShell's "Início" button. Leaving a workspace discards open tabs (same
-  // guard every other workspace change goes through), so it asks first.
-  const goHome = (): void => {
-    if (isHome) return;
-    if (!resetTabs()) return;
-    goHomeMutation.mutateAsync().catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
-  };
-
   // A folder row's "Abrir como workspace": leaves this workspace for that
   // folder's own (existing or new) — a real switch, so the same discard guard.
   const handleOpenAsWorkspace = async (absolutePath: string): Promise<void> => {
@@ -563,72 +564,70 @@ export function WorkspaceScreen(): React.ReactElement {
       const opened = await openWorkspace.mutateAsync(absolutePath);
       setToast({ variant: 'success', message: `Workspace aberto: ${opened.name}` });
     } catch (err) {
-      setToast({ variant: 'error', message: errorMessage(err) });
+      showError(err);
     }
   };
 
-  const handleRemoveWorkspace = async (): Promise<void> => {
-    const target = pendingRemoval;
-    setPendingRemoval(null);
-    if (!target) return;
-    if (!resetTabs()) return;
-    try {
-      // Deleting the open workspace goes home server-side.
-      await deleteWorkspace.mutateAsync(target.id);
-      setToast({ variant: 'success', message: `${target.name} removido` });
-    } catch (err) {
-      setToast({ variant: 'error', message: errorMessage(err) });
-    }
+  const focusOverviewTab = (): void => setActiveTabId(OVERVIEW_TAB_ID);
+
+  // The TopNav (switcher, panel toggles) and ⌘K live above this screen.
+  useEffect(() => {
+    registerWorkspaceShellCommands({
+      focusOverview: focusOverviewTab,
+      togglePanel: (side) => (side === 'explorer' ? toggleExplorerPanel() : toggleControlPanel()),
+    });
+    return () => registerWorkspaceShellCommands(null);
+  });
+
+  useEffect(() => {
+    publishWorkspacePanels({ explorerCollapsed, controlCollapsed: controlPanelCollapsed });
+  }, [explorerCollapsed, controlPanelCollapsed]);
+
+  // ⌘0 / Ctrl+0: Visão geral.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        e.preventDefault();
+        setActiveTabId(OVERVIEW_TAB_ID);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // "Ver alterações": the left panel's Git view, expanding the panel if it is collapsed.
+  const showGitView = (): void => {
+    setExplorerView('git');
+    if (explorerCollapsed) toggleExplorerPanel();
   };
 
-  const closeHeaderMenu = (): void => setMenuAnchor(null);
-  const showGlobalToggle = activeWorkspace !== undefined && activeWorkspace !== null;
-
-  // Lives at the top of the Explorer Panel now (see `ExplorerPanelContent`),
-  // anchored to the same breadcrumb row it always shared — these actions
-  // (global-entity visibility, panel toggles, destructive remove) apply to
-  // the whole screen, not just the tree, but the breadcrumb is still the
-  // most natural place to reach them from.
-  const headerMenu = (
-    <>
-      <Tooltip title="Mais ações">
-        <IconButton
-          data-testid="workspace-header-menu-button"
-          aria-label="Mais ações"
-          onClick={(e) => setMenuAnchor(e.currentTarget)}
-        >
-          <Icon glyph={MoreVertical} size={18} />
-        </IconButton>
-      </Tooltip>
-      <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeHeaderMenu} data-testid="workspace-header-menu">
-        {showGlobalToggle && (
-          <MenuItem data-testid="workspace-toggle-global" onClick={() => { setShowGlobal((v) => !v); closeHeaderMenu(); }}>
-            <ListItemIcon><Icon glyph={showGlobal ? EyeOff : Eye} size={16} /></ListItemIcon>
-            <ListItemText>{showGlobal ? 'Ocultar entidades globais' : 'Mostrar entidades globais'}</ListItemText>
-          </MenuItem>
-        )}
-        <MenuItem data-testid="workspace-toggle-files" onClick={() => { toggleExplorerPanel(); closeHeaderMenu(); }}>
-          <ListItemIcon><Icon glyph={PanelLeft} size={16} /></ListItemIcon>
-          <ListItemText>{explorerCollapsed ? 'Mostrar arquivos' : 'Ocultar arquivos'}</ListItemText>
-        </MenuItem>
-        <MenuItem data-testid="workspace-toggle-customizations" onClick={() => { toggleControlPanel(); closeHeaderMenu(); }}>
-          <ListItemIcon><Icon glyph={PanelRight} size={16} /></ListItemIcon>
-          <ListItemText>{controlPanelCollapsed ? 'Mostrar Customizations' : 'Ocultar Customizations'}</ListItemText>
-        </MenuItem>
-        {activeWorkspace && <Divider />}
-        {activeWorkspace && (
-          <MenuItem
-            data-testid="workspace-context-remove"
-            onClick={() => { closeHeaderMenu(); setPendingRemoval(activeWorkspace); }}
-            sx={{ color: 'error.main' }}
-          >
-            <ListItemIcon sx={{ color: 'inherit' }}><Icon glyph={Trash2} size={16} /></ListItemIcon>
-            <ListItemText>Remover workspace</ListItemText>
-          </MenuItem>
-        )}
-      </Menu>
-    </>
-  );
+  const overviewTab: WorkbenchTab = {
+    id: OVERVIEW_TAB_ID,
+    glyph: activeWorkspace ? Folder : House,
+    label: 'Visão geral',
+    iconOnly: true,
+    dense: true,
+    render: (hidden) =>
+      activeWorkspace ? (
+        <WorkspaceOverview
+          workspace={activeWorkspace}
+          visible={!hidden}
+          onShowGit={showGitView}
+          onNewSession={handleNewSession}
+          onOpenSession={openSessionTab}
+          onOpenInstruction={openInstructionTab}
+          onOpenProcess={openLaunchProcessTab}
+          onError={(message) => setToast({ variant: 'error', message })}
+        />
+      ) : (
+        <HomeOverview
+          onOpenSession={openSessionTab}
+          onOpenHistory={openHistoryTab}
+          onOpenDiagnostics={() => openAreaTab('diagnostico')}
+          onError={(message) => setToast({ variant: 'error', message })}
+        />
+      ),
+  };
 
   const canvasTabs: WorkbenchTab[] = openTabs.map((tab): WorkbenchTab => {
     if (tab.kind === 'file') {
@@ -751,7 +750,11 @@ export function WorkspaceScreen(): React.ReactElement {
     // `instruction-seed.ts`) — the same name a file/skill tab for that same
     // scope could also carry — so the tab label alone can't tell two tabs
     // apart. The scope name below is what actually does.
-    const scopeName = tab.entity.scopes[0] === 'workspace' ? activeWorkspace?.name : undefined;
+    const scopeName = tab.inherited
+      ? 'Global'
+      : tab.entity.scopes[0] === 'workspace'
+        ? activeWorkspace?.name
+        : undefined;
     const breadcrumb =
       tab.kind === 'instruction'
         ? scopeName
@@ -789,35 +792,16 @@ export function WorkspaceScreen(): React.ReactElement {
           onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
           openPropertiesRequest={tab.id === propertiesRequestTabId}
           onPropertiesRequestHandled={() => setPropertiesRequestTabId(null)}
+          {...(tab.inherited ? { inherited: { onEditAtHome: () => editAtHome(tab.entity, tab.kind) } } : {})}
         />
       ),
     };
   });
 
-  const emptyCanvasState = (
-    <EmptyState
-      glyph={FileX}
-      title="Nenhuma aba aberta"
-      description="Escolha um arquivo, skill, agent ou instruction nos painéis ao lado para abrir aqui."
-      testId="workbench-empty"
-    />
-  );
-
-  const personalInstructionRow = (
-    <InstructionTreeRow
-      kind="personal"
-      instruction={personalInstruction}
-      seed={() => blankCustomization('instruction') as Instruction}
-      onOpen={openInstructionEditor}
-      onPreview={previewEntity}
-      onNewAction={newActionForInstruction}
-    />
-  );
-
-  // Starter Pack/Marketplaces/Diagnóstico are global app destinations, not
-  // scoped to any one workspace — pinned above the workspace list only at
-  // Início, the same place the Personal Instruction
-  // row above already pins itself (see WorkspaceManagementList).
+  // Starter Pack/Marketplaces/Diagnóstico are app-level destinations, not
+  // scoped to any one workspace — their entry rows live under Início's "App"
+  // section (see WorkspaceManagementList); the tabs open in whichever
+  // context is current.
   const appAreaRows = (
     <>
       {NAV_AREAS.filter(isAreaTabDef).map((a) => {
@@ -886,17 +870,14 @@ export function WorkspaceScreen(): React.ReactElement {
             <ExplorerPanelContent
               activeWorkspace={activeWorkspace}
               isHome={isHome}
-              onNavigateToWorkspace={goHome}
-              headerMenu={headerMenu}
+              view={explorerView}
+              onViewChange={setExplorerView}
               toolbarActions={explorerToolbarActions}
-              beforeSwitch={resetTabs}
-              personalInstructionRow={personalInstructionRow}
               appAreaRows={appAreaRows}
               onSelectFile={openFileTab}
               onOpenAsWorkspace={(absolutePath) => void handleOpenAsWorkspace(absolutePath)}
               onPreviewFile={openFilePreviewTab}
               onNewAction={newActionForFile}
-              instructionRow={instructionRow}
               {...(pinnedRows !== undefined ? { pinnedRows } : {})}
               onOpenGitDiff={openGitDiffTab}
             />
@@ -904,7 +885,7 @@ export function WorkspaceScreen(): React.ReactElement {
           <ResizeHandle />
           <Panel id="workbench-canvas-panel" minSize="30" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={panelCardSx()}>
-              <WorkbenchCanvas tabs={canvasTabs} activeTabId={activeTabId} onSelect={setActiveTabId} emptyState={emptyCanvasState} />
+              <WorkbenchCanvas tabs={[overviewTab, ...canvasTabs]} activeTabId={activeTabId} onSelect={setActiveTabId} />
             </Box>
           </Panel>
           <ResizeHandle />
@@ -920,14 +901,18 @@ export function WorkspaceScreen(): React.ReactElement {
           >
             <ControlPanelContent
               isHome={isHome}
-              showGlobal={showGlobal}
+              {...(activeWorkspace ? { workspaceName: activeWorkspace.name, seedWorkspaceInstruction: () => seedWorkspaceInstruction(activeWorkspace) } : {})}
               {...(entityLocalScope ? { localScope: entityLocalScope } : {})}
               {...(mcpMatchPath ? { mcpMatchPath } : {})}
               onEditEntity={openEntityTab}
               onPreviewEntity={previewEntity}
               onEntityProperties={requestEntityProperties}
               onNewActionForEntity={newActionForEntity}
-              historyScope={historyScope}
+              onOpenInstruction={openInstructionEditor}
+              onInstructionProperties={requestInstructionProperties}
+              onNewActionForInstruction={newActionForInstruction}
+              onOpenInherited={openInheritedTab}
+              sessionsScope={sessionsScope}
               onOpenSession={openSessionTab}
               onSessionRemoved={removeSessionTab}
               onSeeAllSessions={openHistoryTab}
@@ -938,12 +923,6 @@ export function WorkspaceScreen(): React.ReactElement {
         </Group>
       </Box>
 
-      <WorkspaceRemoveConfirmDialog
-        open={pendingRemoval !== null}
-        workspaceName={pendingRemoval?.name ?? ''}
-        onConfirm={() => void handleRemoveWorkspace()}
-        onCancel={() => setPendingRemoval(null)}
-      />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );

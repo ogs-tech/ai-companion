@@ -1,10 +1,12 @@
 /**
  * Which conversations a history query covers. `workspace` matches a
  * conversation by the directory it ran in — including anything below it, so a
- * session opened in a subfolder still belongs to its workspace. `all` is every
- * conversation the CLI has ever recorded on this machine.
+ * session opened in a subfolder still belongs to its workspace. `personal` is
+ * Global (Início): conversations that ran in the home dir itself, never below
+ * it — every workspace lives below it. `all` is every conversation the CLI has
+ * ever recorded on this machine.
  */
-export type HistoryScope = { kind: 'workspace'; workspaceId: string } | { kind: 'all' };
+export type HistoryScope = { kind: 'workspace'; workspaceId: string } | { kind: 'personal' } | { kind: 'all' };
 
 export interface HistoryFilters {
   /** Model ids, as the transcripts spell them. Empty or absent means every model. */

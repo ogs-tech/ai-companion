@@ -3,6 +3,8 @@ import { Box } from '@mui/material';
 import { TopNav } from './TopNav.js';
 import { AppFooter } from './AppFooter.js';
 import { CommandPalette } from './CommandPalette.js';
+import { Toast, type ToastMessage } from '../Toast.js';
+import { useContextNavigation } from '../../hooks/use-context-navigation.js';
 
 interface AppShellProps {
   onOpenSettings: () => void;
@@ -12,17 +14,28 @@ interface AppShellProps {
 
 export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellProps): React.ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const { openFolder } = useContextNavigation();
 
+  // Re-registered every render so ⌘O always calls the current `openFolder`
+  // (it closes over the active workspace).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'k') {
         e.preventDefault();
         setPaletteOpen(true);
+      } else if (key === 'o') {
+        e.preventDefault();
+        openFolder().catch((err: unknown) =>
+          setToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) }),
+        );
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  });
 
   return (
     <Box
@@ -37,6 +50,7 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
       </Box>
       <AppFooter {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );
 }
