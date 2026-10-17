@@ -182,4 +182,110 @@ describe('SimpleGitRepoClient', () => {
     expect(status).toMatchObject({ isRepo: true, state: 'merging' });
     expect(filesOf(status)[0]).toMatchObject({ path: 'a.txt', conflicted: true });
   });
+  describe('commit-message inputs', () => {
+    it('lists recent subjects newest first, and none on an unborn branch', async () => {
+      expect(await client.recentSubjects(repo, 5)).toEqual([]);
+      await commitFile(repo, 'a.txt', '1');
+      await commitFile(repo, 'b.txt', '2');
+      expect(await client.recentSubjects(repo, 1)).toEqual(['add b.txt']);
+      expect(await client.recentSubjects(repo, 5)).toEqual(['add b.txt', 'add a.txt']);
+    });
+
+    it('keeps lockfiles out of the staged diff but in the stat', async () => {
+      await writeFile(path.join(repo, 'src.ts'), 'code\n');
+      await writeFile(path.join(repo, 'package-lock.json'), '{}\n');
+      await client.stage(repo, ['src.ts', 'package-lock.json']);
+      const { diff, truncated } = await client.stagedDiff(repo, 10_000);
+      expect(truncated).toBe(false);
+      expect(diff).toContain('src.ts');
+      expect(diff).not.toContain('package-lock.json');
+      expect(await client.stagedStat(repo)).toContain('package-lock.json');
+    });
+
+    it('truncates the staged diff on a file boundary', async () => {
+      await writeFile(path.join(repo, 'a.txt'), 'a'.repeat(500) + '\n');
+      await writeFile(path.join(repo, 'b.txt'), 'b'.repeat(500) + '\n');
+      await client.stage(repo, ['a.txt', 'b.txt']);
+      const { diff, truncated } = await client.stagedDiff(repo, 800);
+      expect(truncated).toBe(true);
+      expect(diff).toContain('a.txt');
+      expect(diff).not.toContain('b.txt');
+    });
+
+    it('reads commit.template, relative or absolute, and null when unset', async () => {
+      expect(await client.commitTemplate(repo)).toBeNull();
+      await writeFile(path.join(repo, 'tpl.txt'), 'TEMPLATE');
+      await simpleGit(repo).addConfig('commit.template', 'tpl.txt');
+      expect(await client.commitTemplate(repo)).toBe('TEMPLATE');
+    });
+  });
+
+  describe('remote sync', () => {
+    let remote: string;
+    beforeEach(async () => {
+      remote = await tempDir();
+      await simpleGit(remote).init(true);
+      await commitFile(repo, 'a.txt', 'a');
+      await simpleGit(repo).addRemote('origin', remote);
+    });
+
+    async function clone(): Promise<string> {
+      const dir = await tempDir();
+      await simpleGit().clone(remote, dir);
+      await simpleGit(dir).addConfig('user.email', 't@example.com').addConfig('user.name', 'T');
+      return dir;
+    }
+
+    function headOf(status: GitStatus) {
+      if (!status.isRepo) throw new Error('expected a repo');
+      return status.head;
+    }
+
+    it('publishes a branch with no upstream, then reports it tracked', async () => {
+      expect(headOf(await client.status(repo)).upstream).toBeUndefined();
+      await client.push(repo, { setUpstream: true });
+      expect(headOf(await client.status(repo)).upstream).toMatch(/^origin\//);
+    });
+
+    it('pushes new commits and pulls them fast-forward elsewhere', async () => {
+      await client.push(repo, { setUpstream: true });
+      const other = await clone();
+      await commitFile(repo, 'b.txt', 'b');
+      await client.push(repo, { setUpstream: false });
+      await client.fetch(other);
+      expect(headOf(await client.status(other)).behind).toBe(1);
+      await client.pull(other);
+      expect(existsSync(path.join(other, 'b.txt'))).toBe(true);
+    });
+
+    it('rejects a push the remote is ahead of', async () => {
+      await client.push(repo, { setUpstream: true });
+      const other = await clone();
+      await commitFile(other, 'c.txt', 'c');
+      await client.push(other, { setUpstream: false });
+      await commitFile(repo, 'd.txt', 'd');
+      await expect(client.push(repo, { setUpstream: false })).rejects.toMatchObject({
+        name: 'GitPushRejectedError',
+        details: { reason: 'push_rejected' },
+      });
+    });
+
+    it('refuses to pull diverged branches without touching the repo', async () => {
+      await client.push(repo, { setUpstream: true });
+      const other = await clone();
+      await commitFile(other, 'c.txt', 'c');
+      await client.push(other, { setUpstream: false });
+      await commitFile(repo, 'd.txt', 'd');
+      await client.fetch(repo);
+      const before = (await simpleGit(repo).revparse(['HEAD'])).trim();
+      await expect(client.pull(repo)).rejects.toMatchObject({ name: 'GitNonFastForwardError' });
+      expect((await simpleGit(repo).revparse(['HEAD'])).trim()).toBe(before);
+    });
+
+    it('fails fast when no remote is configured', async () => {
+      const lone = await newRepo();
+      await commitFile(lone, 'a.txt', 'a');
+      await expect(client.push(lone, { setUpstream: true })).rejects.toMatchObject({ kind: 'io' });
+    });
+  });
 });

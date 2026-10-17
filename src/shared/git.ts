@@ -91,5 +91,31 @@ export interface GitCommitResult {
   sha: string;
 }
 
+export interface GitGenerateCommitMessageResult {
+  message: string;
+}
+
 /** `GitStatus.files` cap — beyond it the list is cut and `truncated` is set. */
 export const GIT_STATUS_FILE_LIMIT = 5_000;
+
+/** What the smart sync button does for a repo state; `none` = nothing to offer. */
+export type GitSyncAction = 'publish' | 'push' | 'pull' | 'sync' | 'fetch' | 'none';
+
+/**
+ * The sync decision table (docs: git-sync design). Shared so the main process
+ * executes exactly what the renderer labels.
+ */
+export function syncActionFor(status: GitStatus): GitSyncAction {
+  if (!status.isRepo || status.state !== 'clean') return 'none';
+  const { name, oid, upstream, ahead, behind } = status.head;
+  if (name === null || oid === null) return 'none';
+  if (upstream === undefined) return 'publish';
+  if (ahead > 0 && behind > 0) return 'sync';
+  if (ahead > 0) return 'push';
+  if (behind > 0) return 'pull';
+  return 'fetch';
+}
+
+export interface GitSyncResult {
+  action: Exclude<GitSyncAction, 'none'>;
+}

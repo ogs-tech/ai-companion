@@ -9,6 +9,7 @@ import { Toast, type ToastMessage } from '../Toast.js';
 import { useMcpList } from '../../hooks/use-mcp-list.js';
 import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp } from '../../hooks/use-mcp-mutations.js';
 import { IpcCallError } from '../../lib/ipc.js';
+import { matchesQuery, useReportCount } from '../../lib/control-panel-filter.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
 import { needsAuth, type McpHealthState, type McpServer } from '../../../shared/mcp.js';
 
@@ -29,9 +30,17 @@ interface McpTreeGroupProps {
   /** The current project/workspace path a `project-local`/`project-shared` server must match to count as local. Omitted at the Default workspace, where nothing is filtered. */
   matchPath?: string;
   showGlobal: boolean;
+  /** Lists only the servers that are NOT local to `matchPath` — the workspace's read-only "Do Global" section. */
+  onlyGlobal?: boolean;
+  /** Rows only, no group header — see `TreeGroup`'s `flat`. */
+  flat?: boolean;
+  /** Keeps only servers whose name contains this text. */
+  query?: string;
+  /** Reports the number of rows this list renders. */
+  onCount?: (count: number) => void;
 }
 
-export function McpTreeGroup({ matchPath, showGlobal }: McpTreeGroupProps): React.ReactElement {
+export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat = false, query = '', onCount }: McpTreeGroupProps): React.ReactElement {
   const { data } = useMcpList();
   const del = useDeleteMcp();
   const setEnabled = useSetMcpEnabled();
@@ -40,9 +49,12 @@ export function McpTreeGroup({ matchPath, showGlobal }: McpTreeGroupProps): Reac
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const items = data ?? [];
-  const localItems = items.filter((s) => isLocal(s, matchPath));
-  const globalItems = matchPath !== undefined && showGlobal ? items.filter((s) => !isLocal(s, matchPath)) : [];
-  const visible = [...localItems, ...globalItems].sort((a, b) => a.name.localeCompare(b.name));
+  const localItems = onlyGlobal ? [] : items.filter((s) => isLocal(s, matchPath));
+  const globalItems = matchPath !== undefined && (showGlobal || onlyGlobal) ? items.filter((s) => !isLocal(s, matchPath)) : [];
+  const visible = [...localItems, ...globalItems]
+    .filter((s) => matchesQuery(query, s.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  useReportCount(visible.length, onCount);
 
   return (
     <>
@@ -51,6 +63,7 @@ export function McpTreeGroup({ matchPath, showGlobal }: McpTreeGroupProps): Reac
         glyph={Plug}
         label="MCP"
         count={visible.length}
+        flat={flat}
         onCreate={() => setEditor({ mode: 'create' })}
         createLabel="Novo servidor MCP"
       >

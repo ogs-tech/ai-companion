@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
-import type { GitCommitResult, GitDiffSource, GitFileDiff, GitStatus } from '../../shared/git.js';
+import type { GitCommitResult, GitDiffSource, GitFileDiff, GitGenerateCommitMessageResult, GitStatus, GitSyncResult } from '../../shared/git.js';
 
 /** How often status refetches while the Git view is on screen. */
 export const GIT_STATUS_POLL_MS = 5_000;
@@ -49,3 +49,17 @@ export const useGitDiscard = () => useGitMutation<{ paths: string[] }>('git.disc
 export const useGitCommit = () => useGitMutation<{ message: string; amend?: boolean }, GitCommitResult>('git.commit');
 
 export const useGitInit = () => useGitMutation<Record<string, never>>('git.init');
+
+export const useGitPush = () => useGitMutation<Record<string, never>>('git.push');
+
+export const useGitPull = () => useGitMutation<Record<string, never>>('git.pull');
+
+export const useGitFetch = () => useGitMutation<Record<string, never>>('git.fetch');
+
+export const useGitSync = () => useGitMutation<Record<string, never>, GitSyncResult>('git.sync');
+
+/** Reads the staged diff only — never changes the repo, so no invalidation. */
+export const useGitGenerateCommitMessage = () =>
+  useMutation<GitGenerateCommitMessageResult, Error, void>({
+    mutationFn: () => callIpc<GitGenerateCommitMessageResult>('git.generateCommitMessage', {}),
+  });

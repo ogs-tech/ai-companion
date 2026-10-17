@@ -1,5 +1,6 @@
 import type { IpcHandlers } from './dispatcher.js';
 import type { GitService } from '../application/services/git-service.js';
+import type { CommitMessageService } from '../application/services/commit-message-service.js';
 import type { GitDiffSource } from '../../shared/git.js';
 import { DomainError } from '../domain/errors.js';
 import {
@@ -22,7 +23,7 @@ function asDiffSource(value: unknown): GitDiffSource {
   );
 }
 
-export function buildGitHandlers(service: GitService): IpcHandlers {
+export function buildGitHandlers(service: GitService, commitMessages: CommitMessageService): IpcHandlers {
   return {
     'git.status': async (params) => {
       optParams(params, 'git.status');
@@ -50,6 +51,26 @@ export function buildGitHandlers(service: GitService): IpcHandlers {
         asRawString(raw['message'], 'message'),
         raw['amend'] === undefined ? false : asBoolean(raw['amend'], 'amend'),
       );
+    },
+    'git.generateCommitMessage': async (params) => {
+      optParams(params, 'git.generateCommitMessage');
+      return commitMessages.generate();
+    },
+    'git.push': async (params) => {
+      optParams(params, 'git.push');
+      return service.push();
+    },
+    'git.pull': async (params) => {
+      optParams(params, 'git.pull');
+      return service.pull();
+    },
+    'git.fetch': async (params) => {
+      optParams(params, 'git.fetch');
+      return service.fetch();
+    },
+    'git.sync': async (params) => {
+      optParams(params, 'git.sync');
+      return service.sync();
     },
     'git.init': async (params) => {
       optParams(params, 'git.init');

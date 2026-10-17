@@ -9,19 +9,27 @@ import { useDeleteHook, useHooks } from '../../hooks/use-hooks.js';
 import { describeHookHandler } from '../../lib/describe-hook-handler.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { IpcCallError } from '../../lib/ipc.js';
+import { matchesQuery, useReportCount } from '../../lib/control-panel-filter.js';
 
 interface HooksTreeGroupProps {
   /** Hooks have no project/workspace scoping today — everything is the "global" tier. Omitted at the Default workspace, where nothing is filtered. */
   isProjectContext?: boolean;
   showGlobal: boolean;
+  /** Rows only, no group header — see `TreeGroup`'s `flat`. */
+  flat?: boolean;
+  /** Keeps only hooks whose handler description contains this text. */
+  query?: string;
+  /** Reports the number of rows this list renders. */
+  onCount?: (count: number) => void;
 }
 
 /** Hooks are personal-only (no `scopeId`) — inside a project workspace they only show once "Mostrar entidades globais" is on, since none of them are local to begin with. */
-export function HooksTreeGroup({ isProjectContext, showGlobal }: HooksTreeGroupProps): React.ReactElement {
+export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, query = '', onCount }: HooksTreeGroupProps): React.ReactElement {
   const { data } = useHooks();
   const del = useDeleteHook();
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const items = isProjectContext && !showGlobal ? [] : (data ?? []);
+  const items = (isProjectContext && !showGlobal ? [] : (data ?? [])).filter((h) => matchesQuery(query, describeHookHandler(h.handler)));
+  useReportCount(items.length, onCount);
 
   const handleDelete = (hookId: string, label: string): void => {
     if (!window.confirm(`Remover hook "${label}"?`)) return;
@@ -34,7 +42,7 @@ export function HooksTreeGroup({ isProjectContext, showGlobal }: HooksTreeGroupP
 
   return (
     <>
-      <TreeGroup testId="hook" glyph={Webhook} label="Hooks" count={items.length}>
+      <TreeGroup testId="hook" glyph={Webhook} label="Hooks" count={items.length} flat={flat}>
         {items.map((item) => (
           <TreeGroupRow
             key={item.id}

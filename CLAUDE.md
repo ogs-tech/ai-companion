@@ -13,7 +13,7 @@ The app does two things for a harness, declared per harness as **capabilities** 
 - **`manage`** — owns that harness's customizations (skills, including slash-commands expressed as explicit-only skills; agent profiles; instructions) as canonical `Entity` objects backed by Markdown + YAML files, and materializes them into the harness's own config surface: Claude Code (`~/.claude/`, `<workspace>/.claude/`, plus `~/AGENTS.md` for instructions) via **symbolic links**, and optionally Cursor (`~/.cursor/`, `<workspace>/.cursor/`, plus a generated, marker-owned `<workspace>/AGENTS.md` per workspace instruction — toggle `adapters.cursor`, default off).
 - **`run`** — spawns and observes that harness's own sessions: a real `claude` CLI process per session inside a PTY, plus read-only history, token cost and health read off the CLI's own JSONL transcripts. CLI-only by construction — Cursor runs its loop inside its GUI, so it is `manage`-only. That asymmetry is the domain, not a gap.
 
-Breadth lives on `manage` (most harnesses will only ever support it); depth lives on `run`. No backend, no API, no telemetry.
+Breadth lives on `manage` (most harnesses will only ever support it); depth lives on `run`. No backend, no API, no telemetry. The one AI path is the user's own `claude` CLI run headless (`claude -p`) to draft commit messages (`git.generateCommitMessage`) — no SDK, no key.
 
 Authoritative docs live in `docs/` (Diátaxis):
 - `docs/explanation/harness-model.md` — what a harness is, the two capabilities, how to add one

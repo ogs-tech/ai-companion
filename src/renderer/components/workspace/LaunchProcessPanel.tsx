@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { attachEmbeddedBrowserLinks, embeddedBrowserLinkHandler } from '../../lib/terminal-links.js';
 import { useLaunchProcessOutput } from '../../hooks/use-launch-process.js';
 
 const TERMINAL_XTERM_THEME = { background: '#fdf6e3', foreground: '#586e75' };
@@ -22,9 +23,16 @@ export function LaunchProcessPanel({ processId, visible = true }: LaunchProcessP
   const { lines } = useLaunchProcessOutput(processId);
 
   useEffect(() => {
-    const terminal = new Terminal({ convertEol: true, fontSize: 13, theme: TERMINAL_XTERM_THEME, disableStdin: true });
+    const terminal = new Terminal({
+      convertEol: true,
+      fontSize: 13,
+      theme: TERMINAL_XTERM_THEME,
+      disableStdin: true,
+      linkHandler: embeddedBrowserLinkHandler,
+    });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    attachEmbeddedBrowserLinks(terminal);
     if (containerRef.current) terminal.open(containerRef.current);
     fitAddon.fit();
     terminalRef.current = terminal;

@@ -1,22 +1,26 @@
-import { Box, Stack, ToggleButton, ToggleButtonGroup, type SxProps, type Theme } from '@mui/material';
+import { useMemo } from 'react';
+import { Alert, Box, Typography } from '@mui/material';
 import { FolderTree } from './FolderTree.js';
 import { WorkspaceManagementList } from './WorkspaceManagementList.js';
-import { GitView } from './git/GitView.js';
+import { ExplorerToolbar } from './ExplorerToolbar.js';
+import { DiscardConfirmDialog } from './git/DiscardConfirmDialog.js';
+import { GitErrorAlert } from './git/GitErrorAlert.js';
+import { GitInitCard } from './git/GitInit.js';
+import { buildGitDecorations } from './git/git-decorations.js';
+import { useGitActions } from './git/use-git-actions.js';
+import { useGitStatus } from '../../hooks/use-git.js';
 import type { GitDiffSource } from '../../../shared/git.js';
 import type { Workspace } from '../../../shared/workspace.js';
 import { useWorkspaces } from '../../hooks/use-workspaces.js';
-
-export type ExplorerView = 'files' | 'git';
 
 interface ExplorerPanelContentProps {
   /** `null` at Início; `undefined` while loading. */
   activeWorkspace: Workspace | null | undefined;
   /** True at Início (no workspace open) — shows the Workspaces/App sections instead of a file tree. */
   isHome: boolean;
-  /** Arquivos | Git — owned by the screen, so the overview's "Ver alterações" can switch it. */
-  view: ExplorerView;
-  onViewChange: (view: ExplorerView) => void;
-  /** Trailing actions on the Files/Git toggle row, e.g. the "Reler do disco" refresh button. */
+  /** Git status polls only while the panel is on screen. */
+  gitPolling: boolean;
+  /** Trailing actions on the toolbar, e.g. the "Reler do disco" refresh button. */
   toolbarActions?: React.ReactNode;
   /** Início only: Starter Pack/Marketplaces/Diagnóstico's own rows. */
   appAreaRows: React.ReactNode;
@@ -29,47 +33,15 @@ interface ExplorerPanelContentProps {
   onOpenGitDiff: (args: { path: string; source: GitDiffSource }) => void;
 }
 
-/** Segmented control: a `rail` track with a borderless `paper` thumb on the selected option. */
-const segmentedControlSx: SxProps<Theme> = (theme) => ({
-  p: 0.25,
-  gap: 0.25,
-  bgcolor: theme.ogs.surfaces.rail,
-  borderRadius: `${theme.ogs.radius.xs}px`,
-  '& .MuiToggleButtonGroup-grouped': {
-    border: 0,
-    borderRadius: `${theme.ogs.radius.xs - 2}px !important`,
-    m: 0,
-  },
-  '& .MuiToggleButton-root': {
-    py: 0.125,
-    textTransform: 'none',
-    fontSize: '0.75rem',
-    color: 'text.secondary',
-    '&.Mui-selected, &.Mui-selected:hover': { bgcolor: 'background.paper', color: 'text.primary' },
-  },
-});
-
 /**
  * The left panel — "where": at Início, the Workspaces and App sections; in a
- * workspace, the Arquivos | Git segmented control over the file tree or the
- * git view. The context itself (name, path, switch, remove) lives in the
- * TopNav's context switcher.
+ * workspace, the git toolbar over one file tree decorated with git status.
+ * The context itself (name, path, switch, remove) lives in the TopNav's
+ * context switcher.
  */
-export function ExplorerPanelContent({
-  activeWorkspace,
-  isHome,
-  view,
-  onViewChange,
-  toolbarActions,
-  appAreaRows,
-  onSelectFile,
-  onOpenAsWorkspace,
-  onPreviewFile,
-  onNewAction,
-  pinnedRows,
-  onOpenGitDiff,
-}: ExplorerPanelContentProps): React.ReactElement {
+export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.ReactElement {
   const { data: workspaces } = useWorkspaces();
+  const { activeWorkspace, isHome, appAreaRows, onOpenAsWorkspace } = props;
   const root = activeWorkspace?.rootPath;
   // Registered roots are stored as real paths; a sub-folder matches when its
   // path under this root is one of them.
@@ -84,43 +56,72 @@ export function ExplorerPanelContent({
     );
   }
 
+  return <WorkspaceExplorer {...props} onOpenAsWorkspace={onOpenAsWorkspace} isWorkspaceRoot={isWorkspaceRoot} />;
+}
+
+/** Split out so Início never mounts the git hooks (there is no repo to query there). */
+function WorkspaceExplorer({
+  activeWorkspace,
+  gitPolling,
+  toolbarActions,
+  onSelectFile,
+  onOpenAsWorkspace,
+  onPreviewFile,
+  onNewAction,
+  pinnedRows,
+  onOpenGitDiff,
+  isWorkspaceRoot,
+}: ExplorerPanelContentProps & { isWorkspaceRoot: (relPath: string) => boolean }): React.ReactElement {
+  const status = useGitStatus({ visible: gitPolling });
+  const actions = useGitActions();
+  const data = status.data;
+  const repo = data?.isRepo ? data : null;
+  const decorations = useMemo(() => buildGitDecorations(repo?.files ?? []), [repo?.files]);
+
   return (
     <>
-      <Box sx={{ flexShrink: 0, px: 1.25, pt: 0.75, pb: 0.75, borderBottom: 1, borderColor: 'divider' }}>
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            fullWidth
-            value={view}
-            onChange={(_, next: ExplorerView | null) => next && onViewChange(next)}
-            aria-label="Visão do Explorer"
-            sx={segmentedControlSx}
-          >
-            <ToggleButton value="files" data-testid="explorer-view-files">
-              Arquivos
-            </ToggleButton>
-            <ToggleButton value="git" data-testid="explorer-view-git">
-              Git
-            </ToggleButton>
-          </ToggleButtonGroup>
-          {toolbarActions}
-        </Stack>
-      </Box>
+      <ExplorerToolbar
+        status={{ isPending: status.isPending, error: status.error, data }}
+        actions={actions}
+        trailing={toolbarActions}
+      />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {view === 'git' ? (
-          <GitView visible onOpenDiff={onOpenGitDiff} />
-        ) : (
-          <FolderTree
-            onSelectFile={onSelectFile}
-            onOpenAsWorkspace={onOpenAsWorkspace}
-            onPreviewFile={onPreviewFile}
-            onNewAction={onNewAction}
-            isWorkspaceRoot={isWorkspaceRoot}
-            {...(pinnedRows !== undefined ? { pinnedRows } : {})}
-          />
+        {actions.error && <GitErrorAlert report={actions.error} onClose={actions.clearError} onPullAndRetry={actions.sync} />}
+        {repo && repo.state !== 'clean' && (
+          <Alert severity="warning" sx={{ mx: 1.5, mt: 1, mb: 1 }} data-testid="git-state-banner">
+            Operação em andamento ({repo.state}). Resolva ou aborte pelo terminal.
+          </Alert>
+        )}
+        <FolderTree
+          onSelectFile={onSelectFile}
+          onOpenAsWorkspace={onOpenAsWorkspace}
+          onPreviewFile={onPreviewFile}
+          onNewAction={onNewAction}
+          isWorkspaceRoot={isWorkspaceRoot}
+          {...(pinnedRows !== undefined ? { pinnedRows } : {})}
+          {...(repo
+            ? {
+                git: {
+                  decorations,
+                  busy: actions.busy,
+                  onOpenDiff: onOpenGitDiff,
+                  onStage: actions.stage,
+                  onUnstage: actions.unstage,
+                  onDiscard: actions.requestDiscard,
+                },
+              }
+            : {})}
+        />
+        {repo?.truncated && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.5, py: 0.5 }} data-testid="git-truncated">
+            Mostrando os primeiros {repo.files.length} arquivos.
+          </Typography>
+        )}
+        {data && !data.isRepo && activeWorkspace && (
+          <GitInitCard workspaceId={activeWorkspace.id} busy={actions.busy} onInit={actions.init} />
         )}
       </Box>
+      <DiscardConfirmDialog files={actions.pendingDiscard} onCancel={actions.cancelDiscard} onConfirm={actions.confirmDiscard} />
     </>
   );
 }

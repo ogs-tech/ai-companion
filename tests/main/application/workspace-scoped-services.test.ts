@@ -135,6 +135,8 @@ function buildShared(): WorkspaceScopedSharedDeps {
     launchConfigReaderPort: new FsLaunchConfigReader(),
     launchProcessPort: new FakeLaunchProcessPort(),
     repoGitPort: new FakeRepoGitPort(),
+    conventionSourcePort: { list: async () => [], read: async () => null },
+    commitMessageGeneratorFor: () => ({ generate: async () => 'msg' }),
   };
 }
 

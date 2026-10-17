@@ -222,9 +222,14 @@ A git client over the open workspace's repository. No method takes a target: it 
 | `git.unstage` | `{ paths: string[] }` | `void` | `git restore --staged`; on an unborn branch, `git rm --cached`. |
 | `git.discard` | `{ paths: string[] }` | `void` | Tracked: back to the index (`restore --worktree`); untracked: deleted (`clean --force`). Never touches the index. The renderer confirms first. |
 | `git.commit` | `{ message: string; amend?: boolean }` | `{ sha: string }` | `validation` for a blank message or nothing staged (unless `amend`). Hooks run; a failing hook → `io` with its output in `details.stderr`. The message goes through a temp file (`--file`), never argv. |
+| `git.generateCommitMessage` | — | `{ message: string }` | Builds a prompt from the staged diff (capped ~30k chars; lockfiles/generated files only in `--stat`) plus the project's commit convention, and asks the user's own `claude -p` for a message. `validation`: nothing staged or no workspace open. `not_found`: `claude` not on PATH (message names the command). `io`: `ClaudeTimeout` (60 s), non-zero exit (`details.stderr`, truncated to 4 KB) or empty output. Never commits and never changes the repo. |
+| `git.push` | — | `void` | Pushes the current branch; with no upstream it publishes (`push --set-upstream <origin or first remote> <branch>`). Never forces. `validation`: detached HEAD, unborn branch or a merge/rebase in progress. `conflict` + `details.reason: 'push_rejected'`: the remote has newer commits. |
+| `git.pull` | — | `void` | `git pull --ff-only`. `validation` without an upstream. `conflict` + `details.reason: 'non_fast_forward'` when the branches diverged — nothing is merged or rebased. |
+| `git.fetch` | — | `void` | `git fetch` (the default remote). |
+| `git.sync` | — | `{ action: 'publish' \| 'push' \| 'pull' \| 'sync' \| 'fetch' }` | The smart button: picks the action from `GitStatus.head` (`syncActionFor` in `src/shared/git.ts`). `sync` = `pull --ff-only` then `push`; a failure's `message` starts with the half that failed (`Pull falhou:` / `Pull concluído, mas o push falhou:`). |
 | `git.init` | — | `void` | `conflict` if the target already is a repo. |
 
-Paths are repo-relative: absolute paths, `..` segments, NUL bytes and empty strings are rejected (`validation`); they always reach git after `--`. Mutations on the same repo run one at a time. Errors: `validation` (no workspace open), `not_found` (not a repo — except `git.status`), `conflict` (`index.lock` contention, merge conflicts, dirty-tree refusals; may carry `details.files`), `auth` (credential failures), `io` (anything else, stderr in `details.stderr` truncated to 4KB; `message` is `GitNotFound` when git isn't on PATH and `GitTimeout` after 30s).
+Paths are repo-relative: absolute paths, `..` segments, NUL bytes and empty strings are rejected (`validation`); they always reach git after `--`. Mutations on the same repo run one at a time. Errors: `validation` (no workspace open), `not_found` (not a repo — except `git.status`), `conflict` (`index.lock` contention, merge conflicts, dirty-tree refusals; may carry `details.files`), `auth` (credential failures — also a 401/403 from the remote), `io` (remote unreachable, or anything else; stderr in `details.stderr` truncated to 4KB; `message` is `GitNotFound` when git isn't on PATH and `GitTimeout` after 30s — 120s for push/pull/fetch). Network operations run with `GIT_TERMINAL_PROMPT=0` and ssh `-o BatchMode=yes`, so a missing credential fails fast.
 
 ### `launchConfig`
 
@@ -240,9 +245,9 @@ rationale. Not Entity-backed (no `urn`, no `scopes`) — same precedent as `hook
 | `launchConfig.kill` | `{ processId: string }` | `void` |
 | `launchConfig.status` | `{ processId: string }` | `LaunchProcessSnapshot & { outputBuffer: string } \| null` |
 
-`LaunchConfig` (`src/shared/launch-config.ts`): `{ name: string; type: string; request: string; program: string;
-args: string[]; cwd?: string; env?: Record<string,string>; supported: boolean }` — `supported` is `true` only for
-`type: 'node'`, `request: 'launch'`; anything else is listed but `launchConfig.run` on it throws
+`LaunchConfig` (`src/shared/launch-config.ts`): `{ name: string; type: string; request: string; program?: string;
+runtimeExecutable?: string; runtimeArgs?: string[]; args: string[]; cwd?: string; env?: Record<string,string>; supported: boolean }` — `supported` is `true` only for
+`type: 'node'`, `request: 'launch'` with a `program` or `runtimeExecutable`; anything else is listed but `launchConfig.run` on it throws
 `kind: 'validation'` (`resolveLaunchCommand`/`UnsupportedLaunchTypeError`,
 `src/main/domain/launch-config-command.ts`) even if called directly, re-deriving support from `type`/`request`
 rather than trusting a client-sent flag. `WorkspaceLaunchConfigs`: `{ workspaceId: string; configs: LaunchConfig[];

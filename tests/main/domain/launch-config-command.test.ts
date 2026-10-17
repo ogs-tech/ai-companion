@@ -33,6 +33,30 @@ describe('resolveLaunchCommand', () => {
     expect(resolved).toEqual({ command: 'node', args: ['/repo/dist/server.js', '--port', '/repo-suffix'], cwd: '/repo/sub' });
   });
 
+  it('runs runtimeExecutable with runtimeArgs, then program, then args', () => {
+    const config = nodeConfig({
+      runtimeExecutable: 'pnpm',
+      runtimeArgs: ['--filter', 'cms'],
+      program: '${workspaceFolder}/run.js',
+      args: ['develop'],
+    });
+    expect(resolveLaunchCommand(config, '/repo')).toEqual({
+      command: 'pnpm',
+      args: ['--filter', 'cms', '/repo/run.js', 'develop'],
+      cwd: '/repo',
+    });
+  });
+
+  it('omits program when only runtimeExecutable is set', () => {
+    const { program: _program, ...rest } = nodeConfig({ runtimeExecutable: 'pnpm', runtimeArgs: ['dev'] });
+    expect(resolveLaunchCommand(rest, '/repo')).toEqual({ command: 'pnpm', args: ['dev'], cwd: '/repo' });
+  });
+
+  it('throws UnsupportedLaunchTypeError when neither program nor runtimeExecutable is set', () => {
+    const { program: _program, ...rest } = nodeConfig();
+    expect(() => resolveLaunchCommand(rest, '/repo')).toThrow(UnsupportedLaunchTypeError);
+  });
+
   it('defaults cwd to the project path when the config has none', () => {
     const resolved = resolveLaunchCommand(nodeConfig(), '/repo');
     expect(resolved.cwd).toBe('/repo');

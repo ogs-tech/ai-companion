@@ -21,4 +21,24 @@ export interface RepoGitPort {
   discard(root: string, paths: string[]): Promise<void>;
   commit(root: string, message: string, amend: boolean): Promise<{ sha: string }>;
   init(root: string): Promise<void>;
+  /**
+   * The staged diff, at most `maxChars` long. Lockfiles and generated files are
+   * left out (they only show in {@link stagedStat}); past the cap it ends on a
+   * file boundary and reports `truncated`.
+   */
+  stagedDiff(root: string, maxChars: number): Promise<{ diff: string; truncated: boolean }>;
+  /** `git diff --staged --stat` — every staged file, lockfiles and binaries included. */
+  stagedStat(root: string): Promise<string>;
+  /** Subjects of the last `count` commits, newest first; `[]` on an unborn branch. */
+  recentSubjects(root: string, count: number): Promise<string[]>;
+  /** Contents of git's `commit.template`, or `null` when unset or unreadable. */
+  commitTemplate(root: string): Promise<string | null>;
+  /**
+   * Sends the current branch to its upstream. With `setUpstream` it publishes to
+   * the first remote (`origin` preferred) and tracks it. Never forces.
+   */
+  push(root: string, options: { setUpstream: boolean }): Promise<void>;
+  /** `git pull --ff-only`: fails `GitNonFastForwardError` rather than merging or rebasing. */
+  pull(root: string): Promise<void>;
+  fetch(root: string): Promise<void>;
 }

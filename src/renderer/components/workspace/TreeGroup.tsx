@@ -16,6 +16,8 @@ interface TreeGroupProps {
   depth?: number;
   /** Starts open — for a group that is the panel's primary content (e.g. Instruction). Defaults to collapsed. */
   defaultExpanded?: boolean;
+  /** Renders only the rows — no header, no collapse — for a list whose heading lives elsewhere (the Control Panel's unified Customizations list). */
+  flat?: boolean;
   children: React.ReactNode;
 }
 
@@ -24,9 +26,11 @@ interface TreeGroupProps {
  * styled to match FolderTree's own folder rows so the tree reads as one
  * structure rather than a nav list bolted onto a file browser.
  */
-export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, depth = 0, defaultExpanded = false, children }: TreeGroupProps): React.ReactElement {
+export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, depth = 0, defaultExpanded = false, flat = false, children }: TreeGroupProps): React.ReactElement {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const pl = 1.5 + depth * 2;
+
+  if (flat) return <List disablePadding>{children}</List>;
 
   return (
     <>

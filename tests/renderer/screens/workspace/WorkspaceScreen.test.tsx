@@ -23,6 +23,7 @@ vi.mock('@xterm/xterm', () => ({
     open = vi.fn();
     dispose = vi.fn();
     loadAddon = vi.fn();
+    registerLinkProvider = vi.fn();
     onData = vi.fn(() => ({ dispose: vi.fn() }));
     attachCustomKeyEventHandler = vi.fn();
   },
@@ -45,6 +46,12 @@ const appsTree = (params: unknown): unknown => {
   if (path === '') return [{ name: 'apps', kind: 'dir' }];
   if (path === 'apps') return [{ name: 'a.md', kind: 'file' }];
   return [];
+};
+
+/** Waits for the workspace to settle (the Customizations list remounts per scope), then opens the Control Panel's "+" menu. */
+const openNewMenu = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
+  await waitFor(() => expect(screen.getByTestId('control-panel-kicker')).toHaveTextContent('Workspace · Acme'));
+  await user.click(screen.getByTestId('control-panel-new'));
 };
 
 const renderScreen = () =>
@@ -177,7 +184,7 @@ describe('WorkspaceScreen', () => {
       expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('"Ver alterações" switches the left panel to its Git view', async () => {
+    it('"Ver alterações" leaves the Explorer showing the git toolbar over the tree', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
@@ -189,7 +196,8 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       await user.click(await screen.findByTestId('overview-show-git'));
-      expect(screen.getByTestId('explorer-view-git')).toHaveAttribute('aria-pressed', 'true');
+      expect(await screen.findByTestId('git-head')).toHaveTextContent('main');
+      expect(screen.getByTestId('folder-tree')).toBeInTheDocument();
     });
   });
 
@@ -353,7 +361,6 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
       const row = await screen.findByTestId('tree-skill-helper');
       fireEvent.contextMenu(row);
       const item = await screen.findByTestId('row-context-menu-new-action');
@@ -472,7 +479,8 @@ describe('WorkspaceScreen', () => {
     it('with no workspace instruction yet, "+" opens a new instruction editor', async () => {
       const user = userEvent.setup();
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-new-instruction'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-instruction'));
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
     });
 
@@ -736,7 +744,7 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Skills/Agents/Hooks/MCP/Plugins tree nodes', () => {
-    it('shows every entity-kind tree node at Início, with no "Herdado do Global" group', async () => {
+    it('shows one editable "Global" section at Início, with the type chips and no "Do Global" section', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
@@ -746,21 +754,21 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       await screen.findByTestId('workspace-management-list');
-      expect(screen.getByTestId('tree-group-skill')).toBeInTheDocument();
-      expect(screen.getByTestId('tree-group-agent')).toBeInTheDocument();
-      // Hooks/MCP/Plugins are the low-frequency kinds — collapsed by default
-      // under one shared "Integrações" row instead of three always-open ones.
-      expect(screen.getByTestId('tree-group-integrations')).toBeInTheDocument();
-      expect(screen.queryByTestId('tree-group-hook')).not.toBeInTheDocument();
-      await user.click(screen.getByTestId('tree-group-integrations'));
-      expect(screen.getByTestId('tree-group-hook')).toBeInTheDocument();
-      expect(screen.getByTestId('tree-group-mcp')).toBeInTheDocument();
-      expect(screen.getByTestId('tree-group-plugin')).toBeInTheDocument();
+      expect(screen.getByTestId('control-panel-section-local')).toHaveTextContent('Global');
+      expect(screen.queryByTestId('control-panel-section-global')).not.toBeInTheDocument();
+      for (const id of ['all', 'skill', 'agent', 'integrations']) {
+        expect(screen.getByTestId(`control-panel-chip-${id}`)).toBeInTheDocument();
+      }
+      expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
       expect(screen.getByTestId('workspace-sessions-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('tree-group-inherited')).not.toBeInTheDocument();
+
+      // Integrações (hooks, MCP, plugins) hides the instruction row.
+      await user.click(screen.getByTestId('control-panel-chip-integrations'));
+      expect(screen.queryByTestId('personal-instruction-row')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
     });
 
-    it('inside a workspace, keeps Global entities out of Skills and lists them read-only under a collapsed "Herdado do Global"', async () => {
+    it('inside a workspace, keeps Global entities out of Skills and lists them read-only under a collapsed "Do Global"', async () => {
       const user = userEvent.setup();
       const globalSkill = { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '# Global body' };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
@@ -776,14 +784,12 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       await waitFor(() => expect(screen.getByTestId('control-panel-kicker')).toHaveTextContent('Workspace · Acme'));
-      await user.click(await screen.findByTestId('tree-group-skill'));
       expect(await screen.findByTestId('tree-skill-local')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-skill-global')).not.toBeInTheDocument();
 
       // Collapsed by default.
-      expect(screen.queryByTestId('tree-group-inherited-skill')).not.toBeInTheDocument();
-      await user.click(screen.getByTestId('tree-group-inherited'));
-      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      expect(screen.getByTestId('tree-inherited-skill-global')).not.toBeVisible();
+      await user.click(screen.getByTestId('control-panel-section-global'));
       await user.click(await screen.findByTestId('tree-inherited-skill-global'));
 
       // Opens read-only, with the way to edit it at Início.
@@ -807,8 +813,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-inherited'));
-      await user.click(await screen.findByTestId('tree-group-inherited-skill'));
+      await user.click(await screen.findByTestId('control-panel-section-global'));
       await user.click(await screen.findByTestId('tree-inherited-skill-global'));
       await user.click(await screen.findByTestId('inherited-edit-at-home'));
 
@@ -974,7 +979,8 @@ describe('WorkspaceScreen', () => {
     it('opening the instruction editor opens a tab and keeps the tree mounted alongside it', async () => {
       const user = userEvent.setup();
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-new-instruction'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-instruction'));
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
       expect(screen.getByTestId('workbench-tabs')).toBeInTheDocument();
       expect(screen.getByTestId('folder-tree')).toBeInTheDocument();
@@ -983,10 +989,10 @@ describe('WorkspaceScreen', () => {
     it('creating a new skill opens a tab without replacing the tree group', async () => {
       const user = userEvent.setup();
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
-      await user.click(await screen.findByTestId('tree-group-new-skill'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-skill'));
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
-      expect(screen.getByTestId('tree-group-skill')).toBeInTheDocument();
+      expect(screen.getByTestId('control-panel-customizations')).toBeInTheDocument();
     });
 
     it('editing the same entity twice focuses the existing tab instead of duplicating it', async () => {
@@ -1030,7 +1036,8 @@ describe('WorkspaceScreen', () => {
       // The pinned Workspace INSTRUCTIONS row's own tab has no relation to
       // "apps" — the breadcrumb must follow the newly active tab, not stick
       // to the previous one.
-      await user.click(screen.getByTestId('tree-group-new-instruction'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-instruction'));
       expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('Acme › INSTRUCTIONS');
     });
 
@@ -1093,7 +1100,6 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
       fireEvent.contextMenu(await screen.findByTestId('tree-skill-acme'));
       await user.click(await screen.findByTestId('row-context-menu-preview'));
 
@@ -1141,7 +1147,6 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
       fireEvent.contextMenu(await screen.findByTestId('tree-skill-acme'));
       await user.click(await screen.findByTestId('row-context-menu-properties'));
 
@@ -1248,8 +1253,8 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
-      await user.click(await screen.findByTestId('tree-group-new-skill'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-skill'));
       await screen.findByTestId('editor-panel');
       await user.keyboard('{Control>}s{/Control}');
       await waitFor(() => expect(screen.getAllByTestId(OPEN_TAB_BUTTONS)).toHaveLength(1));
@@ -1336,8 +1341,8 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
-      await user.click(await screen.findByTestId('tree-group-new-skill'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-skill'));
       await screen.findByTestId('editor-panel');
       // A brand new entity opens straight into its Properties modal (Name is
       // required before it can be saved) — close it to reach the body editor.
@@ -1371,8 +1376,8 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-group-skill'));
-      await user.click(await screen.findByTestId('tree-group-new-skill'));
+      await openNewMenu(user);
+      await user.click(await screen.findByTestId('control-panel-new-skill'));
       await screen.findByTestId('editor-panel');
       await user.click(screen.getByLabelText('Fechar'));
       const editor = document.querySelector('[data-testid="body-editor"] .cm-content') as HTMLElement;
@@ -1470,10 +1475,10 @@ describe('WorkspaceScreen', () => {
       expect(controlCard).not.toHaveTextContent('Control Panel');
     });
 
-    it('puts the "Reler do disco" refresh button on the Files/Git toggle row', async () => {
+    it('puts the "Reler do disco" refresh button on the Explorer toolbar', async () => {
       renderScreen();
       const refresh = await screen.findByTestId('workspace-refresh-files');
-      expect(screen.getByTestId('explorer-view-files').parentElement?.parentElement).toContainElement(refresh);
+      expect(screen.getByTestId('explorer-toolbar')).toContainElement(refresh);
     });
 
     it('no longer carries the workspace name, path or a "⋮" menu — those live in the TopNav switcher', async () => {
@@ -1505,7 +1510,7 @@ describe('WorkspaceScreen', () => {
       await waitFor(() => expect(screen.getByTestId('workspace-customizations-aside')).toHaveAttribute('data-collapsed', 'false'));
     });
 
-    it('places Sessões after Integrações and before "Herdado do Global", with its own local collapse independent of the aside', async () => {
+    it('places Sessões before the Customizations list, with its own local collapse independent of the aside', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
@@ -1518,8 +1523,8 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       const sessionsPanel = await screen.findByTestId('workspace-sessions-panel');
       const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      expect(follows(screen.getByTestId('tree-group-integrations'), sessionsPanel)).toBe(true);
-      expect(follows(sessionsPanel, screen.getByTestId('tree-group-inherited'))).toBe(true);
+      expect(follows(sessionsPanel, screen.getByTestId('control-panel-customizations'))).toBe(true);
+      expect(follows(screen.getByTestId('control-panel-section-local'), screen.getByTestId('control-panel-section-global'))).toBe(true);
       expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
 
       const collapseButton = screen.getByTestId('workspace-sessions-collapse');

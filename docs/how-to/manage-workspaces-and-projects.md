@@ -51,7 +51,7 @@ also offers **Revelar no Finder**.
 ## Use Global entities from inside a workspace
 
 Inside a workspace, the right panel's Skills and Agents list only what belongs to that workspace. Global
-skills, agents and your personal instruction are listed at the bottom, under **Herdado do Global**
+skills, agents and your personal instruction are listed under **Do Global**
 (collapsed). They open read-only; the **Editar no Início** button switches to Início and opens the entity
 there, editable.
 

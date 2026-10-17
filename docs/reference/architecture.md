@@ -69,7 +69,8 @@ Cross-cutting:
 - `adapter-manager` — orchestrates all adapters (Claude, Cursor). Takes `entityDataDir: (entity) => string` (wired to `ScopedEntityRepository.dataDirFor`) instead of a single workspace path, so each entity's symlink source and the "does this link point into our data dir?" checks resolve against the store that entity actually lives in (Global or the open workspace).
 - `symlink-manager` — creates and reconciles symlinks.
 - `file-materializer` — write-side twin of `symlink-manager` for **generated** files (e.g. Cursor's per-repo `AGENTS.md`): ownership is signalled by a marker comment on the file's first line (`GENERATED_FILE_MARKER`), so the app only overwrites/removes files it owns; a foreign file (no marker) is backed up before overwrite and never deleted. Backup scheme mirrors `symlink-manager`'s (`<global data dir>/_backups/<ts>/<rel-path>` — both always back up under Global's `~/.ai-companion/_backups/`, whichever workspace is open).
-- `git-service` — the `git` IPC namespace's use cases over the open workspace root's own repository, through `RepoGitPort`. Built per activation with the open workspace (or `null`), so every call fails `validation` at Início; validates repo-relative paths and serializes mutations per repo root (reads bypass the queue). Replaced the old `repo-service` (`detectGit`/`getCurrentBranch`), which had no renderer caller.
+- `git-service` — the `git` IPC namespace's use cases over the open workspace root's own repository, through `RepoGitPort`. Built per activation with the open workspace (or `null`), so every call fails `validation` at Início; validates repo-relative paths and serializes mutations per repo root (reads bypass the queue). Owns the sync use cases (`push`/`pull`/`fetch`/`sync`); the state → action table is `syncActionFor` in `shared/git.ts`, shared with the renderer's smart button. Replaced the old `repo-service` (`detectGit`/`getCurrentBranch`), which had no renderer caller.
+- `commit-message-service` — `git.generateCommitMessage`: reads the staged diff/stat/recent subjects through `RepoGitPort`, the convention files through `ConventionSourcePort`, runs the pure `detectCommitConvention` (Markdown guidance → formal config → history ratio → style examples → Conventional Commits default) and `buildCommitPrompt`, then calls `CommitMessageGeneratorPort`. The generator is resolved per workspace root (`commitMessageGeneratorFor`), so the CLI runs in the workspace. Fails `validation` at Início.
 - `settings-service` — load/merge/persist settings.
 - `workspace-bootstrap` — creates the `.ai-companion/` directory tree for Global at startup, and for every workspace when it's registered and again on each activation (self-heal); also writes the static `.ai-companion/index.md` marker (see the "Global / Workspace" section below).
 - `workspace-service` — the `Workspace` registry: `list`/`get`/`getActive` (`Workspace | null`, `null` = Início)/`create`/`open(path)`/`switchTo`/`goHome`/`delete`. Roots are stored as real paths through the `DirectoryResolver` port (`application/ports/directory-resolver.ts`, implemented by `NodeFsAdapter.realDirectory`), so a symlinked path or a trailing slash finds the same workspace; a non-directory or the home dir itself is rejected (`validation`, `details.reason` `not-a-directory` / `home-dir`), and `create` rejects a folder that already has one (`duplicate-root`). Self-heals a dangling `activeWorkspaceId` to `null` rather than throwing. It only persists the selection — tearing down and rebuilding the service graph is `WorkspaceActivation`'s job (see below).
@@ -328,9 +329,9 @@ Same shell in both contexts; the content changes, the positions don't:
 | Region | Role | Início | Workspace |
 |---|---|---|---|
 | TopNav | context switcher (`ContextSwitcher`) | `🏠 Início ▾` | `📁 <name> ▾` (root path in the tooltip) |
-| Left panel (`ExplorerPanelContent`) | **where** | Workspaces + App sections (`WorkspaceManagementList`) | Arquivos \| Git |
+| Left panel (`ExplorerPanelContent`) | **where** | Workspaces + App sections (`WorkspaceManagementList`) | File tree decorated with git status, plus a git toolbar |
 | Workbench (`WorkbenchCanvas`) | **work** | pinned Visão geral (`HomeOverview`) + tabs | pinned Visão geral (`WorkspaceOverview`) + tabs |
-| Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Workspace + "Herdado do Global" |
+| Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Sessões + Workspace customizations, with "Do Global" |
 
 The **Visão geral** tab (id `overview`) is not part of `WorkspaceScreen`'s `openTabs` state: it is
 prepended to the canvas tabs on every render, icon-only, with no close control. Every close/reset path only
@@ -408,10 +409,15 @@ There is no `instructions/` screen — instruction management is inline on the W
 "Instructions in the right panel" above), via `InstructionTreeRow` under `components/workspace/`. There is no
 `commands/` screen either — the `command` entity kind was removed too. There are no `skills/`, `agents/`,
 `hooks/`, `mcps/`, or (as of the Plugins fold-in) top-level `plugins/` screens either — each kind is a
-collapsible `TreeGroup` node (`EntityTreeGroup` for Skill/Agent, `HooksTreeGroup`, `McpTreeGroup`,
-`PluginsTreeGroup`, the last three under one "Integrações" group) rendered in `WorkspaceScreen`'s Control
-Panel (`ControlPanelContent`), with an Início variant (`isHome`: Global entities only, nothing filtered) and a
-workspace variant (local/global split, below). `FolderTree`'s `pinnedRows` slot now carries only the open
+row source (`EntityTreeGroup` for Skill/Agent, `HooksTreeGroup`, `McpTreeGroup`, `PluginsTreeGroup`),
+rendered in `flat` mode (rows only, no group header) by `CustomizationsList`, the lower half of
+`WorkspaceScreen`'s Control Panel (`ControlPanelContent`). `CustomizationsList` is one searchable list with
+type chips (**Tudo · Skills · Agents · Integrações** — Integrações = hooks, MCP, plugins), a "+" button (creates
+the chip's type; a Skill/Agent/Instruction menu on Tudo; MCP/plugin import on Integrações) and a search box over
+name + description. Each flat group reports its row count (`useReportCount`) so the list can derive its empty
+state and auto-expand "Do Global" on a search hit. Chip and search text are local state; the list is keyed by
+scope, so they reset on workspace switch. Sections: at Início (`isHome`) one editable **Global** section; in a
+workspace, **Neste workspace** (editable) then **Do Global** (collapsed, read-only; see below). `FolderTree`'s `pinnedRows` slot now carries only the open
 workspace's **Launch Configurations** group (`LaunchConfigsTreeGroup`), pinned once at the top of the tree. Each group fetches its own data
 (`skill.list`/`agent.list`/`hook.list`/`mcp.list`/`plugin.list`) and opens the same
 `CustomizationEditor`/`CustomizationViewDrawer`/`McpEditorDialog`/`PluginDetail` (in a `DetailDrawer`) the
@@ -420,7 +426,7 @@ old standalone screens used — only the surrounding chrome (a dense tree row in
 (`PluginImportDialog`/`PublishPluginDialog`, unchanged), previously toolbar buttons on the old `PluginList`
 screen, now the group's `TreeGroup` header "+" action and a per-row overflow menu respectively.
 
-`SessionsTreeGroup` sits in the same Control Panel, after Integrações, and lists the current scope's own
+`SessionsTreeGroup` sits in the same Control Panel, above the Customizations list (the two split the panel height and each scrolls on its own), and lists the current scope's own
 conversations: the open workspace's (`HistoryScope` `workspace`), or Global's at Início (`personal` — history
 whose `cwd` is the home dir itself, and live sessions not anchored to a workspace). Every live session
 already belongs to what's open by construction (activation kills the outgoing context's sessions — see
@@ -430,14 +436,14 @@ on Início's Visão geral card. "Ver todas" opens the Histórico tab with scope 
 Skill/Agent tree groups show only the "local" entities (`scopes[0] === 'workspace'` and `scopeId` is the
 open workspace) via `EntityTreeGroupProps.localScope`; at Início, with no `localScope`, every item shows.
 Inside a workspace, Global's skills/agents (Personal-scope or plugin-provided) and the personal instruction
-are listed read-only under a collapsed **Herdado do Global** group at the bottom of the panel
+are listed read-only in the collapsed **Do Global** section below the workspace's own items
 (`EntityTreeGroup`'s `inherited` mode: no create, no delete, no Properties). A row opens an `inherited:<urn>`
 tab whose `EditorPanel` is read-only (`inherited` prop) with an "Editar no Início" action — it runs the
 unsaved-tabs guard, goes home, then opens the entity's own editable `entity:<urn>` tab there.
-`HooksTreeGroup`/`McpTreeGroup`/`PluginsTreeGroup` keep their own local filters (Hooks have no scoping yet, so
-inside a workspace they list nothing; MCP's `project-local`/`project-shared` scope is matched against the
-open workspace's `rootPath`; `isProjectContext` keeps `project` plugins) and are not part of "Herdado do
-Global".
+`HooksTreeGroup`/`McpTreeGroup`/`PluginsTreeGroup` keep their own local/global split (Hooks have no
+workspace scoping, so inside a workspace they all fall under **Do Global**; MCP's `project-local`/`project-shared`
+scope is matched against the open workspace's `rootPath`; `isProjectContext` keeps `project` plugins; their
+`onlyGlobal` prop selects the Global half).
 
 Navigation is state-driven via a `Nav` discriminated union in `components/shell/nav.ts` (areas: `workspace`,
 `starter-pack`, `marketplaces`, `diagnostico`); `Main.tsx` maps `Nav` to a screen. No `react-router`, and no
@@ -487,7 +493,8 @@ The plugin system extends the SDE customizations framework with package manageme
 **Core adapters** — located across `src/main/infrastructure/{git,github,plugins,settings,credentials}/`:
 
 - `SimpleGitClient` (GitPort) — wraps **simple-git** for branch tracking, tag creation, remote operations.
-- `SimpleGitRepoClient` (RepoGitPort) — the user's working tree: status, diff, stage/unstage/discard, commit, init. Parses machine formats only (`status --porcelain=v2 -z`, unified diff) with pure parsers in `infrastructure/git/parsers/`, and maps stderr to domain errors in `classify-git-error.ts`. Every git it spawns is non-interactive (`GIT_TERMINAL_PROMPT=0`, `GIT_EDITOR=true`, `LC_ALL=C`, …), lock-free for reads (`GIT_OPTIONAL_LOCKS=0`) and time-boxed (30s).
+- `SimpleGitRepoClient` (RepoGitPort) — the user's working tree: status, diff, stage/unstage/discard, commit, init, push/pull (`--ff-only`)/fetch (ssh in `BatchMode`, 120s). Parses machine formats only (`status --porcelain=v2 -z`, unified diff) with pure parsers in `infrastructure/git/parsers/`, and maps stderr to domain errors in `classify-git-error.ts`. Every git it spawns is non-interactive (`GIT_TERMINAL_PROMPT=0`, `GIT_EDITOR=true`, `LC_ALL=C`, …), lock-free for reads (`GIT_OPTIONAL_LOCKS=0`) and time-boxed (30s).
+- `ClaudeCliCommitMessageGenerator` (CommitMessageGeneratorPort) — the only AI path in the app: spawns the user's own `claude -p` with the prompt on **stdin**, `--tools ""` (no tools), `--no-session-persistence` (nothing lands in the `~/.claude` transcripts the history screen reads) and `--setting-sources project,local` (the personal `~/.claude/CLAUDE.md` does not leak into a project's commit message). 60 s timeout; strips code fences/quotes; `ENOENT` → `not_found`. `FsConventionSource` (ConventionSourcePort) reads `CONTRIBUTING.md`, `AGENTS.md`, commitlint config etc. from the workspace root.
   **Two git ports on purpose:** `GitPort` serves plugins/marketplaces; `RepoGitPort` serves the user's repos. They have different callers, error vocabularies and safety rules (e.g. the repo root must be the target itself — a workspace opened on a subfolder of a larger repo reports `isRepo: false` — and hooks always run). Don't merge them.
 - `PluginCacheFile` (PluginCachePort) — reads/writes `.json` plugin metadata cache.
 - `ClaudeSettingsFile` (ClaudeSettingsPort) — manages `~/.claude/settings.json` (and, for the `project` tier, the open workspace's `<root>/.claude/settings.json`) to expose plugin modules.

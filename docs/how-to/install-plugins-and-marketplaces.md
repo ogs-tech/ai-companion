@@ -31,14 +31,14 @@ delete its cached clone. Removing a marketplace does not uninstall plugins alrea
 
 ## Install straight from a Git repository
 
-1. **Customizations** → **Integrações** → **Plugins** → **+**.
+1. **Customizations** → **Integrações** chip → **+** → **Importar plugin**.
 2. Enter the repository (`owner/repo` or URL) and, optionally, a branch, tag or SHA. Leave it empty for
    the default branch.
 3. Click **Importar**.
 
 ## Manage installed plugins
 
-In **Integrações** → **Plugins**:
+In the **Integrações** chip, on a plugin row:
 
 - **Enable/disable** — the row's switch. Disabled plugins keep their files but Claude Code ignores them.
 - **Details** — click the row: source, installed ref, scope, manifest and every artifact it provides.

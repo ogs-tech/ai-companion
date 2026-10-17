@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildHandlers } from '../../../src/main/ipc/registry.js';
 import { SettingsService } from '../../../src/main/application/services/settings-service.js';
 import type { GitService } from '../../../src/main/application/services/git-service.js';
+import type { CommitMessageService } from '../../../src/main/application/services/commit-message-service.js';
 import type { SettingsRepository } from '../../../src/main/application/ports/settings-repository.js';
 import type { DialogPort } from '../../../src/main/application/ports/dialog-port.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
@@ -40,6 +41,7 @@ const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
 interface Deps {
   settingsService: SettingsService;
   gitService: GitService;
+  commitMessageService: CommitMessageService;
   adapterManager: AdapterManager;
   dialogPort: DialogPort;
   pluginService: PluginService;
@@ -134,6 +136,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   return {
     settingsService: new SettingsService(repo),
     gitService: null as unknown as GitService,
+    commitMessageService: null as unknown as CommitMessageService,
     adapterManager,
     dialogPort,
     pluginService,

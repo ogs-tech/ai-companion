@@ -9,6 +9,7 @@ vi.mock('@xterm/xterm', () => ({
     open = vi.fn();
     dispose = vi.fn();
     loadAddon = vi.fn();
+    registerLinkProvider = vi.fn();
   },
 }));
 vi.mock('@xterm/addon-fit', () => ({

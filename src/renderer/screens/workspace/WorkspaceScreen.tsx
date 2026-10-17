@@ -9,7 +9,7 @@ import {
 import { Icon } from '../../components/ds/Icon.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
-import { ExplorerPanelContent, type ExplorerView } from '../../components/workspace/ExplorerPanelContent.js';
+import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
 import { HomeOverview } from '../../components/workspace/overview/HomeOverview.js';
 import { WorkspaceOverview } from '../../components/workspace/overview/WorkspaceOverview.js';
 import { DiffView } from '../../components/workspace/git/DiffView.js';
@@ -79,7 +79,7 @@ const OVERVIEW_TAB_ID = 'overview';
 
 type OpenTab =
   | { id: string; kind: 'file'; relPath: string; dirty?: boolean }
-  // `inherited`: a Global entity opened read-only from a workspace's "Herdado do Global".
+  // `inherited`: a Global entity opened read-only from a workspace's "Do Global" section.
   | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean; inherited?: boolean }
   | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean; inherited?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
@@ -136,7 +136,6 @@ export function WorkspaceScreen(): React.ReactElement {
   // and SessionPanel reattaches to it on remount via `session.status`.
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>(OVERVIEW_TAB_ID);
-  const [explorerView, setExplorerView] = useState<ExplorerView>('files');
   const newTabSeq = useRef(0);
   // A tree row's right-click "Properties" action opens (or focuses) the
   // entity's own tab, then asks that specific tab's EditorPanel to show its
@@ -595,9 +594,8 @@ export function WorkspaceScreen(): React.ReactElement {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // "Ver alterações": the left panel's Git view, expanding the panel if it is collapsed.
+  // "Ver alterações": expands the Explorer if it is collapsed — its tree carries the git state.
   const showGitView = (): void => {
-    setExplorerView('git');
     if (explorerCollapsed) toggleExplorerPanel();
   };
 
@@ -870,8 +868,7 @@ export function WorkspaceScreen(): React.ReactElement {
             <ExplorerPanelContent
               activeWorkspace={activeWorkspace}
               isHome={isHome}
-              view={explorerView}
-              onViewChange={setExplorerView}
+              gitPolling={!explorerCollapsed}
               toolbarActions={explorerToolbarActions}
               appAreaRows={appAreaRows}
               onSelectFile={openFileTab}

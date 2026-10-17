@@ -9,6 +9,7 @@ import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { useCustomizationList, useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
+import { matchesQuery, useReportCount } from '../../lib/control-panel-filter.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import type { Agent, Entity, Skill } from '../../../shared/entity.js';
@@ -25,12 +26,18 @@ interface EntityTreeGroupProps {
   localScope?: LocalScope;
   /**
    * Lists the entities that do NOT belong to `localScope` instead — the
-   * workspace's read-only "Herdado do Global" view: no create, no delete,
+   * workspace's read-only "Do Global" view: no create, no delete,
    * and `onEdit` is expected to open a read-only tab.
    */
   inherited?: boolean;
   /** See `TreeGroup`'s own `depth`. */
   depth?: number;
+  /** Rows only, no group header — see `TreeGroup`'s `flat`. */
+  flat?: boolean;
+  /** Keeps only entities whose name or description contains this text. */
+  query?: string;
+  /** Reports the number of rows this list renders. */
+  onCount?: (count: number) => void;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
   onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
   /** Right-click on a row → "Preview" — opens a read-only rendered-Markdown tab instead of the editing tab `onEdit` opens. */
@@ -46,7 +53,13 @@ function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
   return entity.scopes[0] === localScope.scope && entity.scopeId === localScope.scopeId;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
+/** A blank entity of `kind`, pre-scoped to the open workspace when there is one. */
+export function seedNewEntity(kind: 'skill' | 'agent', localScope: LocalScope | undefined): Skill | Agent {
+  const blank = blankCustomization(kind) as Skill | Agent;
+  return localScope ? ({ ...blank, scopes: [localScope.scope], scopeId: localScope.scopeId } as Skill | Agent) : blank;
+}
+
+export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', onCount, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
@@ -66,16 +79,13 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
 
   const visible = items
     .filter((item) => (inherited ? !isLocal(item, localScope) : isLocal(item, localScope)))
+    .filter((item) => matchesQuery(query, item.name, item.description))
     .sort((a, b) => a.name.localeCompare(b.name));
   const groupTestId = inherited ? `inherited-${kind}` : kind;
 
-  const startCreate = (): void => {
-    const blank = blankCustomization(kind) as Skill | Agent;
-    const seeded = localScope
-      ? ({ ...blank, scopes: [localScope.scope], scopeId: localScope.scopeId } as Skill | Agent)
-      : blank;
-    onEdit(kind, seeded, true);
-  };
+  useReportCount(visible.length, onCount);
+
+  const startCreate = (): void => onEdit(kind, seedNewEntity(kind, localScope), true);
 
   const handleDelete = async (item: Entity): Promise<void> => {
     if (!window.confirm(`Remover ${item.name}?`)) return;
@@ -96,6 +106,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
         label={label}
         count={visible.length}
         depth={depth}
+        flat={flat}
         {...(inherited ? {} : { onCreate: startCreate, createLabel: `Novo ${kind === 'skill' ? 'skill' : 'agent'}` })}
       >
         {visible.map((item) => {

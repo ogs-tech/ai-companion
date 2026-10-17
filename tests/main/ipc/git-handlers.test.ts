@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildGitHandlers } from '../../../src/main/ipc/git-handlers.js';
 import type { GitService } from '../../../src/main/application/services/git-service.js';
+import type { CommitMessageService } from '../../../src/main/application/services/commit-message-service.js';
 import { DomainError } from '../../../src/main/domain/errors.js';
 
 function setup() {
@@ -12,8 +13,17 @@ function setup() {
     discard: vi.fn().mockResolvedValue(undefined),
     commit: vi.fn().mockResolvedValue({ sha: 'abc' }),
     init: vi.fn().mockResolvedValue(undefined),
+    push: vi.fn().mockResolvedValue(undefined),
+    pull: vi.fn().mockResolvedValue(undefined),
+    fetch: vi.fn().mockResolvedValue(undefined),
+    sync: vi.fn().mockResolvedValue({ action: 'fetch' }),
   };
-  return { service, handlers: buildGitHandlers(service as unknown as GitService) };
+  const commitMessages = { generate: vi.fn().mockResolvedValue({ message: 'feat: x' }) };
+  return {
+    service,
+    commitMessages,
+    handlers: buildGitHandlers(service as unknown as GitService, commitMessages as unknown as CommitMessageService),
+  };
 }
 
 describe('git handlers', () => {
@@ -62,9 +72,23 @@ describe('git handlers', () => {
     });
   });
 
+  it('git.generateCommitMessage ignores params and passes the result and error kinds through', async () => {
+    const { commitMessages, handlers } = setup();
+    await expect(handlers['git.generateCommitMessage']!({})).resolves.toEqual({ message: 'feat: x' });
+    commitMessages.generate.mockRejectedValueOnce(new DomainError('not_found', 'Command not found: claude'));
+    await expect(handlers['git.generateCommitMessage']!(undefined)).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
   it('passes domain error kinds through', async () => {
     const { service, handlers } = setup();
     service.init.mockRejectedValueOnce(new DomainError('conflict', 'Already a git repository'));
     await expect(handlers['git.init']!({})).rejects.toMatchObject({ kind: 'conflict' });
+  });
+
+  it.each(['push', 'pull', 'fetch', 'sync'] as const)('git.%s takes no params and calls the service', async (name) => {
+    const { service, handlers } = setup();
+    await handlers[`git.${name}`]!(undefined);
+    await handlers[`git.${name}`]!({});
+    expect(service[name]).toHaveBeenCalledTimes(2);
   });
 });

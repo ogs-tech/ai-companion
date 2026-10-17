@@ -6,27 +6,36 @@ import type { LaunchConfig } from '../../../shared/launch-config.js';
 
 const MALFORMED: LaunchConfigReadResult = { error: 'malformed launch.json' };
 
+/** `undefined` when absent, `null` when present but not an array of strings. */
+function stringArray(raw: unknown): string[] | undefined | null {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || !raw.every((a): a is string => typeof a === 'string')) return null;
+  return raw;
+}
+
 function toLaunchConfig(raw: unknown): LaunchConfig | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const obj = raw as Record<string, unknown>;
-  const { name, type, request, program } = obj;
-  if (typeof name !== 'string' || typeof type !== 'string' || typeof request !== 'string' || typeof program !== 'string') {
-    return null;
-  }
-  const rawArgs = obj['args'];
-  const args = Array.isArray(rawArgs) ? rawArgs.filter((a): a is string => typeof a === 'string') : [];
-  if (Array.isArray(rawArgs) && args.length !== rawArgs.length) return null;
+  const { name, type, request, program, runtimeExecutable } = obj;
+  if (typeof name !== 'string' || typeof type !== 'string' || typeof request !== 'string') return null;
+  if (program !== undefined && typeof program !== 'string') return null;
+  if (runtimeExecutable !== undefined && typeof runtimeExecutable !== 'string') return null;
+  const args = stringArray(obj['args']);
+  const runtimeArgs = stringArray(obj['runtimeArgs']);
+  if (args === null || runtimeArgs === null) return null;
   const cwd = obj['cwd'];
   const env = obj['env'];
   return {
     name,
     type,
     request,
-    program,
-    args,
+    ...(program !== undefined ? { program } : {}),
+    ...(runtimeExecutable !== undefined ? { runtimeExecutable } : {}),
+    ...(runtimeArgs ? { runtimeArgs } : {}),
+    args: args ?? [],
     ...(typeof cwd === 'string' ? { cwd } : {}),
     ...(typeof env === 'object' && env !== null ? { env: env as Record<string, string> } : {}),
-    supported: type === 'node' && request === 'launch',
+    supported: type === 'node' && request === 'launch' && (program !== undefined || runtimeExecutable !== undefined),
   };
 }
 

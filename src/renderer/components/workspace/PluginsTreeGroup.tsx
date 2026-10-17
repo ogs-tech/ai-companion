@@ -11,6 +11,7 @@ import {
   pluginsQueryKey, usePluginList, useRemovePlugin, useTogglePlugin, useUpdatePlugin, type PluginScope,
 } from '../../hooks/use-plugins.js';
 import { IpcCallError } from '../../lib/ipc.js';
+import { matchesQuery, useReportCount } from '../../lib/control-panel-filter.js';
 import { PluginDetail } from '../../screens/plugins/PluginDetail.js';
 import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
@@ -20,6 +21,14 @@ interface PluginsTreeGroupProps {
   /** True while a workspace is open — plugins then split into this workspace's own (Claude Code's 'project' plugin scope) vs Personal ones, matching how EntityTreeGroup's localScope works. Omitted at Início, where only 'personal' scope exists and nothing is filtered. */
   isProjectContext?: boolean;
   showGlobal: boolean;
+  /** Lists only the personal-scope plugins while a workspace is open — the read-only "Do Global" section. */
+  onlyGlobal?: boolean;
+  /** Rows only, no group header — see `TreeGroup`'s `flat`. */
+  flat?: boolean;
+  /** Keeps only plugins whose id contains this text. */
+  query?: string;
+  /** Reports the number of rows this list renders. */
+  onCount?: (count: number) => void;
 }
 
 type RowMenu = { anchorEl: HTMLElement; item: PluginListItemIpc };
@@ -33,7 +42,7 @@ function errorMessage(err: unknown): string {
   return err instanceof IpcCallError ? err.message : String(err);
 }
 
-export function PluginsTreeGroup({ isProjectContext, showGlobal }: PluginsTreeGroupProps): React.ReactElement {
+export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = false, flat = false, query = '', onCount }: PluginsTreeGroupProps): React.ReactElement {
   const qc = useQueryClient();
   const personal = usePluginList('personal');
   const project = usePluginList('project', Boolean(isProjectContext));
@@ -52,9 +61,12 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal }: PluginsTreeGr
   const [selected, setSelected] = useState<PluginListItemIpc | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const localItems = isProjectContext ? (project.data ?? []) : (personal.data ?? []);
-  const globalItems = isProjectContext && showGlobal ? (personal.data ?? []) : [];
-  const visible = [...localItems, ...globalItems].sort((a, b) => a.id.localeCompare(b.id));
+  const localItems = onlyGlobal ? [] : isProjectContext ? (project.data ?? []) : (personal.data ?? []);
+  const globalItems = isProjectContext && (showGlobal || onlyGlobal) ? (personal.data ?? []) : [];
+  const visible = [...localItems, ...globalItems]
+    .filter((p) => matchesQuery(query, p.id))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  useReportCount(visible.length, onCount);
   const importScope: PluginScope = isProjectContext ? 'project' : 'personal';
 
   const closeRowMenu = (): void => setRowMenu(null);
@@ -71,6 +83,7 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal }: PluginsTreeGr
         glyph={Puzzle}
         label="Plugins"
         count={visible.length}
+        flat={flat}
         onCreate={() => setImportOpen(true)}
         createLabel="Importar plugin"
       >

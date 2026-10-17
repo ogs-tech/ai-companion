@@ -50,18 +50,16 @@ describe('<Main> — shell navigation', () => {
     expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
   });
 
-  it('expands the Skills tree node inline on the Workspace overview', async () => {
+  it('lists Customizations inline on the Workspace overview, with an empty state', async () => {
     setupRoute();
     render(<Main onOpenSettings={() => undefined} />);
 
     // Wait for the Default-branch landmark first — until `workspace.getActive`
-    // resolves, the screen briefly renders the non-default (FolderTree)
-    // shape, whose own tree groups would otherwise get expanded and unmounted
-    // out from under this test.
+    // resolves, the screen briefly renders the non-default (FolderTree) shape.
     await screen.findByTestId('workspace-management-list');
-    await userEvent.click(screen.getByTestId('tree-group-skill'));
+    await userEvent.click(screen.getByTestId('control-panel-chip-skill'));
 
-    expect(await screen.findByTestId('tree-group-empty-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
   });
 
   it('opens Starter Pack as a Workbench tab from the Explorer Panel', async () => {

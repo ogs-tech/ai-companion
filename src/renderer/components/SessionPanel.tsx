@@ -5,6 +5,7 @@ import { SquareTerminal, Lock, Globe } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { attachEmbeddedBrowserLinks, embeddedBrowserLinkHandler } from '../lib/terminal-links.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
 import { sessionsQueryKey } from '../hooks/use-sessions.js';
 import {
@@ -232,9 +233,15 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   }, [sessionId]);
 
   useEffect(() => {
-    const terminal = new Terminal({ convertEol: true, fontSize: 13, theme: TERMINAL_XTERM_THEME });
+    const terminal = new Terminal({
+      convertEol: true,
+      fontSize: 13,
+      theme: TERMINAL_XTERM_THEME,
+      linkHandler: embeddedBrowserLinkHandler,
+    });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    attachEmbeddedBrowserLinks(terminal);
     // There is no React <textarea> here to intercept — the terminal is a real
     // PTY and every keystroke is already bytes. So Shift+Enter is claimed at
     // the DOM keyboard event, before xterm turns it into the same `\r` a

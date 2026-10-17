@@ -38,6 +38,8 @@ import type { CredentialStorePort } from './application/ports/credential-store-p
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
 import { SimpleGitRepoClient } from './infrastructure/git/simple-git-repo-client.js';
+import { FsConventionSource } from './infrastructure/git/fs-convention-source.js';
+import { ClaudeCliCommitMessageGenerator } from './infrastructure/claude-cli/claude-cli-commit-message-generator.js';
 import { augmentPath } from './infrastructure/system/augment-path.js';
 import { PluginCacheFile } from './infrastructure/plugins/plugin-cache-file.js';
 import { ClaudeSettingsFile } from './infrastructure/settings/claude-settings-file.js';
@@ -368,6 +370,8 @@ async function wireIpc(): Promise<void> {
     launchConfigReaderPort: new FsLaunchConfigReader(),
     launchProcessPort: new NodeChildProcessAdapter(),
     repoGitPort: new SimpleGitRepoClient(),
+    conventionSourcePort: new FsConventionSource(),
+    commitMessageGeneratorFor: (cwd: string) => new ClaudeCliCommitMessageGenerator({ cwd }),
   };
 
   if (migration.migrated) await syncAfterMigration(migration.touchedWorkspaceIds);
@@ -450,6 +454,7 @@ async function wireIpc(): Promise<void> {
   const buildDeps = () => ({
     settingsService,
     gitService: workspaceScoped.gitService,
+    commitMessageService: workspaceScoped.commitMessageService,
     adapterManager: workspaceScoped.adapterManager,
     dialogPort,
     pluginService,

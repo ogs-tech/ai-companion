@@ -35,6 +35,7 @@ import { buildOpenWithHandlers } from './open-with-handlers.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
 import { buildLaunchConfigHandlers } from './launch-config-handlers.js';
 import { buildGitHandlers } from './git-handlers.js';
+import type { CommitMessageService } from '../application/services/commit-message-service.js';
 import type { LaunchConfigService } from '../application/services/launch-config-service.js';
 import type { LaunchProcessService } from '../application/services/launch-process-service.js';
 import type { McpService } from '../application/services/mcp-service.js';
@@ -46,6 +47,7 @@ import { asLanguagePreference } from './_validators.js';
 export interface IpcDeps {
   settingsService: SettingsService;
   gitService: GitService;
+  commitMessageService: CommitMessageService;
   adapterManager: AdapterManager;
   dialogPort: DialogPort;
   pluginService: PluginService;
@@ -90,6 +92,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
   const {
     settingsService,
     gitService,
+    commitMessageService,
     adapterManager,
     dialogPort,
     pluginService,
@@ -232,6 +235,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       workspaceService,
     }),
     ...buildLaunchConfigHandlers(launchConfigService, launchProcessService),
-    ...buildGitHandlers(gitService),
+    ...buildGitHandlers(gitService, commitMessageService),
   };
 }

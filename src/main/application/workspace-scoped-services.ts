@@ -41,6 +41,9 @@ import type { LaunchConfigReaderPort } from './ports/launch-config-reader-port.j
 import type { LaunchProcessPort } from './ports/launch-process-port.js';
 import type { RepoGitPort } from './ports/repo-git-port.js';
 import { GitService } from './services/git-service.js';
+import type { ConventionSourcePort } from './ports/convention-source-port.js';
+import type { CommitMessageGeneratorPort } from './ports/commit-message-generator-port.js';
+import { CommitMessageService } from './services/commit-message-service.js';
 
 export interface WorkspaceScopedSharedDeps {
   clock: ClockPort;
@@ -61,6 +64,8 @@ export interface WorkspaceScopedSharedDeps {
   launchConfigReaderPort: LaunchConfigReaderPort;
   launchProcessPort: LaunchProcessPort;
   repoGitPort: RepoGitPort;
+  conventionSourcePort: ConventionSourcePort;
+  commitMessageGeneratorFor: (root: string) => CommitMessageGeneratorPort;
 }
 
 export interface WorkspaceScopedServices {
@@ -80,6 +85,7 @@ export interface WorkspaceScopedServices {
   launchConfigService: LaunchConfigService;
   launchProcessService: LaunchProcessService;
   gitService: GitService;
+  commitMessageService: CommitMessageService;
 }
 
 /** The workspace a graph is built for, with its already-bootstrapped `<rootPath>/.ai-companion`. */
@@ -103,6 +109,7 @@ export function buildWorkspaceScopedServices(
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
     claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
     launchConfigReaderPort, launchProcessPort, repoGitPort,
+    conventionSourcePort, commitMessageGeneratorFor,
   } = shared;
 
   const globalDataDir = globalEntities.dataDir;
@@ -189,11 +196,17 @@ export function buildWorkspaceScopedServices(
   const launchProcessService = new LaunchProcessService(launchConfigService, launchProcessPort);
   // Its per-root mutation queues are dropped with the old graph on a switch.
   const gitService = new GitService(repoGitPort, { activeWorkspace });
+  const commitMessageService = new CommitMessageService(
+    repoGitPort,
+    conventionSourcePort,
+    commitMessageGeneratorFor,
+    { activeWorkspace },
+  );
 
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
     skillService, agentService, instructionService, sessionService, sessionHistoryService,
     healthService, workspaceTeardownService, entityWatchService, launchConfigService, launchProcessService,
-    gitService,
+    gitService, commitMessageService,
   };
 }

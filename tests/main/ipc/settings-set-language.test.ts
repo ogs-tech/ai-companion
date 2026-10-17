@@ -38,6 +38,7 @@ const baseDeps = (): IpcDeps => {
     fileBrowserService: null,
     openWithService: {} as IpcDeps['openWithService'],
     gitService: {} as IpcDeps['gitService'],
+    commitMessageService: {} as IpcDeps['commitMessageService'],
     adapterManager: {} as IpcDeps['adapterManager'],
     dialogPort: {} as IpcDeps['dialogPort'],
     pluginService: {} as IpcDeps['pluginService'],
