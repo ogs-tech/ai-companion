@@ -7,6 +7,7 @@ import type { AdapterManager } from '../../../../src/main/application/services/a
 import { vi } from 'vitest';
 import { WORKSPACE_SOURCE, type Skill } from '../../../../src/shared/entity.js';
 import { skillId } from '../../../../src/main/domain/skill-id.js';
+import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const skill = (name = 'demo'): Skill => ({
   urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd', scopes: ['personal'],
@@ -16,7 +17,7 @@ const skill = (name = 'demo'): Skill => ({
 const setup = () => {
   const repo = new InMemoryEntityRepository();
   const adapterManager = { syncEntity: vi.fn().mockResolvedValue([]), removeEntity: vi.fn().mockResolvedValue([]) } as unknown as AdapterManager;
-  const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
+  const base = new EntityService(scopedRepository({ global: repo }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   return { repo, service: new SkillService(base) };
 };
 

@@ -29,6 +29,7 @@ vi.mock('@xterm/xterm', () => {
     open = vi.fn();
     dispose = vi.fn();
     loadAddon = vi.fn();
+    registerLinkProvider = vi.fn();
     _onDataCb: ((data: string) => void) | undefined;
     _keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
     onData = vi.fn((cb: (data: string) => void) => {

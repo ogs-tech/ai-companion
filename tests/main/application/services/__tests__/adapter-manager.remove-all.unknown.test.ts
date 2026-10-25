@@ -27,7 +27,7 @@ const setup = async () => {
     entityRepository,
     symlinkManager: sm,
     fileMaterializer,
-    workspacePath: '/workspace',
+    entityDataDir: () => '/workspace',
     adapters: new Map(),
   });
   const listSpy = vi.spyOn(entityRepository, 'list');

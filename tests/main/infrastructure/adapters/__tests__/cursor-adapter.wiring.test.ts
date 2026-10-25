@@ -18,7 +18,6 @@ const settings = (cursorEnabled: boolean): Settings => ({
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 describe('CursorAdapter wiring through AdapterManager', () => {

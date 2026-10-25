@@ -12,8 +12,8 @@ describe('sessionAnchorKey', () => {
     expect(sessionAnchorKey(anchor)).toBe('workspace:w1');
   });
 
-  it('derives project:<id> for a project anchor', () => {
-    const anchor: SessionAnchor = { kind: 'project', projectId: 'p1' };
-    expect(sessionAnchorKey(anchor)).toBe('project:p1');
+  it('derives a single key for the personal anchor (Início)', () => {
+    const anchor: SessionAnchor = { kind: 'personal' };
+    expect(sessionAnchorKey(anchor)).toBe('personal');
   });
 });

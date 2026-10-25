@@ -36,7 +36,6 @@ const instruction = (): Instruction => ({
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 const settingsWith = (over: Partial<Settings> = {}): Settings => ({
@@ -63,7 +62,7 @@ const setup = async () => {
     symlinkManager: {} as SymlinkManager,
     fileMaterializer: {} as FileMaterializer,
     adapters: new Map<string, Adapter>([['claude', adapter]]),
-    workspacePath: '/ws',
+    entityDataDir: () => '/ws',
   });
   return { manager };
 };
@@ -86,7 +85,7 @@ const setupInstruction = async () => {
     symlinkManager: {} as SymlinkManager,
     fileMaterializer: {} as FileMaterializer,
     adapters: new Map<string, Adapter>([['claude', adapter]]),
-    workspacePath: '/ws',
+    entityDataDir: () => '/ws',
   });
   return { manager };
 };

@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { Box, ButtonBase, Paper, Stack, Typography } from '@mui/material';
 import { CustomizationViewDrawer } from './CustomizationViewDrawer.js';
 import { useCustomizationList } from '../hooks/use-customization-list.js';
-import type { Entity, Scope } from '../../shared/entity.js';
+import type { Entity } from '../../shared/entity.js';
+import type { PluginScope } from '../hooks/use-plugins.js';
 
 interface PluginRelatedEntitiesProps {
   pluginId: string;
-  scope?: Scope;
+  scope?: PluginScope;
 }
 
 interface Group {

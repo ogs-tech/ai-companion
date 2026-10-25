@@ -62,7 +62,8 @@ describe('PluginsTreeGroup', () => {
     const user = userEvent.setup();
     renderWithShell(<PluginsTreeGroup isProjectContext showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-plugin'));
-    await user.click(await screen.findByLabelText('Toggle local-plugin'));
+    await user.click(await screen.findByTestId('tree-plugin-menu-local-plugin'));
+    await user.click(await screen.findByTestId('tree-plugin-toggle-local-plugin'));
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('plugin.toggle', { id: 'local-plugin', scope: 'project', enabled: false }),
     );

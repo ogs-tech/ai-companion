@@ -24,6 +24,9 @@ export interface ResolvedLaunchCommand {
  * Turns a `launch.json` config into a plain child-process invocation. Only
  * `type: 'node'`, `request: 'launch'` configs are runnable — this app has no
  * debug adapter, so anything else has no known launch command and throws.
+ * With `runtimeExecutable` the command is that executable, fed
+ * `runtimeArgs`, then `program` (if any), then `args` — VS Code's own order;
+ * otherwise it is `node <program> <args>`.
  * Re-derives support from `type`/`request` itself rather than trusting the
  * config's own precomputed `supported` flag — defense in depth alongside the
  * renderer already disabling the row.
@@ -37,9 +40,19 @@ export function resolveLaunchCommand(config: LaunchConfig, projectPath: string):
   }
   const vars = { workspaceFolder: projectPath };
   const sub = (value: string): string => substituteVariables(value, vars);
+  if (config.runtimeExecutable === undefined && config.program === undefined) {
+    throw new UnsupportedLaunchTypeError(`Launch config '${config.name}' has neither 'program' nor 'runtimeExecutable'`, {
+      type: config.type,
+      request: config.request,
+    });
+  }
   return {
-    command: 'node',
-    args: [sub(config.program), ...config.args.map(sub)],
+    command: sub(config.runtimeExecutable ?? 'node'),
+    args: [
+      ...(config.runtimeArgs ?? []).map(sub),
+      ...(config.program !== undefined ? [sub(config.program)] : []),
+      ...config.args.map(sub),
+    ],
     cwd: sub(config.cwd ?? projectPath),
     ...(config.env ? { env: config.env } : {}),
   };

@@ -57,7 +57,6 @@ const skillRealFile: Skill = {
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 describe('disable-claude e2e (AC#10)', () => {
@@ -87,7 +86,7 @@ describe('disable-claude e2e (AC#10)', () => {
       entityRepository,
       symlinkManager: sm,
       fileMaterializer,
-      workspacePath: WORKSPACE,
+      entityDataDir: () => WORKSPACE,
       adapters: new Map([['claude', claudeAdapter]]),
     });
 

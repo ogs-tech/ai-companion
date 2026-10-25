@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CMS: develop",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "cms", "develop"],
+      "cwd": "${workspaceFolder}",
+      "env": { "NODE_ENV": "production" }
+    },
+    {
+      "name": "Web (chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000"
+    },
+    {
+      "name": "Neither",
+      "type": "node",
+      "request": "launch"
+    }
+  ]
+}

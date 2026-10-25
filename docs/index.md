@@ -46,6 +46,7 @@ Using the app:
 - [Enable or disable a harness](how-to/enable-cursor-adapter.md) — Cursor sync on/off, cleanup.
 - [Run and review sessions](how-to/run-and-review-sessions.md) — terminals, session browser, history, cost.
 - [Use the Git panel](how-to/use-the-git-panel.md)
+- [Use integrated terminals](how-to/use-terminals.md)
 - [Run launch configurations](how-to/run-launch-configs.md)
 - [Connect GitHub](how-to/connect-github.md)
 - [Diagnose and reset](how-to/diagnose-and-reset.md) — Diagnóstico, backups, factory reset.

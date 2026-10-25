@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Divider, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
@@ -50,6 +50,8 @@ export interface RowContextMenuAction {
   keepOpen?: boolean;
   /** Draws the affordance that says "this opens another menu". */
   hasSubmenu?: boolean;
+  /** A destructive action — drawn in the error color and set apart from the others by a divider. */
+  danger?: boolean;
 }
 
 interface RowContextMenuProps {
@@ -68,21 +70,23 @@ export function RowContextMenu({ state, onClose, actions }: RowContextMenuProps)
       anchorReference="anchorPosition"
       anchorPosition={state ? { top: state.mouseY, left: state.mouseX } : undefined}
     >
-      {actions.map((action) => (
+      {actions.flatMap((action, i) => [
+        ...(action.danger === true && i > 0 ? [<Divider key={`${action.key}-divider`} />] : []),
         <MenuItem
           key={action.key}
           data-testid={`row-context-menu-${action.key}`}
+          {...(action.danger === true ? { sx: { color: 'error.main' } } : {})}
           onClick={(event) => {
             const anchor = event.currentTarget;
             if (action.keepOpen !== true) onClose();
             action.onSelect(anchor);
           }}
         >
-          <ListItemIcon><Icon glyph={action.glyph} size={16} /></ListItemIcon>
+          <ListItemIcon sx={action.danger === true ? { color: 'inherit' } : {}}><Icon glyph={action.glyph} size={16} /></ListItemIcon>
           <ListItemText>{action.label}</ListItemText>
           {action.hasSubmenu === true && <Icon glyph={ChevronRight} size={14} />}
-        </MenuItem>
-      ))}
+        </MenuItem>,
+      ])}
     </Menu>
   );
 }

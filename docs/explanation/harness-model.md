@@ -118,7 +118,8 @@ the table above cannot drift from the code without the tests noticing.
    `FileMaterializer` never overwrites a file the app does not own.
 4. **Wire it into the `AdapterManager`'s adapter map** in
    `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`),
-   rebuilt on every workspace switch.
+   rebuilt on every activation (opening/switching a workspace, or going home to
+   Início).
 
 Step by step, with tests: [Add a harness adapter](../how-to/add-a-harness-adapter.md).
 

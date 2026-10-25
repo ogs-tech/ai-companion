@@ -43,7 +43,7 @@ Create `src/main/infrastructure/adapters/<id>-adapter.ts` implementing `Adapter`
 - `resolveEntityDestinations({ entity })` — return one `AdapterDestination` per path the harness should see:
   - branch on `entity.kind`, then on `entity.scopes[0]`;
   - `personal` → under the injected `homedir` (never call `os.homedir()` yourself);
-  - `project` / `workspace` → `await resolveScopePath(entity, { workspaceService, projectService })`, then
+  - `workspace` → `await resolveScopePath(entity, { workspaceService })` (the workspace's root folder), then
     append the harness's repo-level subpath. Never read a path stored on the entity;
   - return `[]` for kinds the harness has no equivalent for;
   - throw `DomainError` for a malformed entity (e.g. missing scope). `AdapterManager` turns a throw into a
@@ -73,7 +73,7 @@ Instantiate it in `buildWorkspaceScopedServices` (`src/main/application/workspac
 add it to the `adapters` map passed to `AdapterManager`:
 
 ```ts
-const acmeAdapter = new AcmeAdapter({ homedir, workspaceService, projectService });
+const acmeAdapter = new AcmeAdapter({ homedir, workspaceService });
 // ...
 adapters: new Map<string, Adapter>([
   [claudeAdapter.adapterId, claudeAdapter],

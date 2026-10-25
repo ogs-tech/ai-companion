@@ -36,7 +36,6 @@ const makeSkillEntity = (name: string): Skill => ({
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 describe('AdapterManager.countDestinations (AC#17)', () => {
@@ -62,7 +61,7 @@ describe('AdapterManager.countDestinations (AC#17)', () => {
       entityRepository,
       symlinkManager: sm,
       fileMaterializer,
-      workspacePath: WORKSPACE,
+      entityDataDir: () => WORKSPACE,
       adapters: new Map([['claude', claudeAdapter]]),
     });
 
@@ -84,7 +83,7 @@ describe('AdapterManager.countDestinations (AC#17)', () => {
       kind: 'instruction',
       name: 'broken',
       description: '',
-      scopes: ['project'],
+      scopes: ['workspace'],
       scopeId: 'gone',
       metadata: meta,
       source: WORKSPACE_SOURCE,
@@ -98,22 +97,21 @@ describe('AdapterManager.countDestinations (AC#17)', () => {
 
     const sm = new SymlinkManager(fs, new FixedClock(new Date()), WORKSPACE);
     const fileMaterializer = new FileMaterializer(fs, new FixedClock(new Date()), WORKSPACE);
-    const throwingProjectService = {
+    const throwingWorkspaceService = {
       get: async () => {
-        throw new DomainError('not_found', 'Project not found: gone');
+        throw new DomainError('not_found', 'Workspace not found: gone');
       },
     };
     const claudeAdapter = new ClaudeAdapter({
       homedir: HOMEDIR,
-      workspaceService: scopeDeps.workspaceService,
-      projectService: throwingProjectService,
+      workspaceService: throwingWorkspaceService,
     });
     const manager = new AdapterManager({
       settingsService,
       entityRepository,
       symlinkManager: sm,
       fileMaterializer,
-      workspacePath: WORKSPACE,
+      entityDataDir: () => WORKSPACE,
       adapters: new Map([['claude', claudeAdapter]]),
     });
 

@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
-import { InstructionTreeRow, ProjectInstructionRow } from '../../../../src/renderer/components/workspace/InstructionTreeRow.js';
+import { InstructionTreeRow } from '../../../../src/renderer/components/workspace/InstructionTreeRow.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import type { Instruction } from '../../../../src/shared/entity.js';
-import type { Project } from '../../../../src/shared/project.js';
 
 function instruction(overrides: Partial<Instruction> = {}): Instruction {
   return {
@@ -63,31 +62,24 @@ describe('InstructionTreeRow session badge', () => {
 });
 
 describe('InstructionTreeRow labels', () => {
-  it('labels the personal row plainly "INSTRUCTIONS"', () => {
+  it('labels the personal row plainly "instructions"', () => {
     renderWithShell(
       <InstructionTreeRow kind="personal" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('INSTRUCTIONS');
+    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('instructions');
   });
 
-  it('labels the workspace row plainly "INSTRUCTIONS"', () => {
+  it('labels the workspace row plainly "instructions"', () => {
     renderWithShell(
       <InstructionTreeRow kind="workspace" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('INSTRUCTIONS');
-  });
-
-  it('labels a project row plainly "INSTRUCTIONS" too — depth-based indentation, not a name prefix, conveys which project it belongs to', () => {
-    renderWithShell(
-      <InstructionTreeRow kind="project" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
-    );
-    expect(screen.getByTestId('project-instruction-row')).toHaveTextContent('INSTRUCTIONS');
+    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('instructions');
   });
 
   it('overrides the default data-testid when a testId is supplied', () => {
     renderWithShell(
       <InstructionTreeRow
-        kind="project"
+        kind="workspace"
         instruction={null}
         seed={() => instruction()}
         onOpen={vi.fn()}
@@ -95,7 +87,7 @@ describe('InstructionTreeRow labels', () => {
       />,
     );
     expect(screen.getByTestId('tree-node-instructions-apps')).toBeInTheDocument();
-    expect(screen.queryByTestId('project-instruction-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-instruction-row')).not.toBeInTheDocument();
   });
 });
 
@@ -113,13 +105,13 @@ describe('InstructionTreeRow context menu — New Action', () => {
     expect(onNewAction).toHaveBeenCalledWith(target);
   });
 
-  it('offers "New Action" for a configured project instruction', async () => {
+  it('offers "New Action" for a configured workspace instruction', async () => {
     const onNewAction = vi.fn();
-    const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['project'], scopeId: 'p1' });
+    const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['workspace'], scopeId: 'w1' });
     renderWithShell(
-      <InstructionTreeRow kind="project" instruction={target} seed={() => target} onOpen={vi.fn()} onNewAction={onNewAction} />,
+      <InstructionTreeRow kind="workspace" instruction={target} seed={() => target} onOpen={vi.fn()} onNewAction={onNewAction} />,
     );
-    const row = await screen.findByTestId('project-instruction-row');
+    const row = await screen.findByTestId('workspace-instruction-row');
     fireEvent.contextMenu(row);
     const item = await screen.findByTestId('row-context-menu-new-action');
     fireEvent.click(item);
@@ -137,33 +129,3 @@ describe('InstructionTreeRow context menu — New Action', () => {
   });
 });
 
-describe('ProjectInstructionRow', () => {
-  const project: Project = { id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' };
-
-  it('fetches that Project\'s own instruction and labels it plainly "INSTRUCTIONS"', async () => {
-    const projectInstruction = instruction({
-      urn: 'urn:instruction:apps', name: 'apps', scopes: ['project'], scopeId: 'p1',
-    });
-    call.mockImplementation(async (method: string) =>
-      method === 'instruction.list' ? ok([projectInstruction]) : ok(undefined),
-    );
-    renderWithShell(<ProjectInstructionRow project={project} onOpen={vi.fn()} />);
-    const row = await screen.findByTestId('project-instruction-row');
-    expect(row).toHaveTextContent('INSTRUCTIONS');
-  });
-
-  it('renders with a custom testId, for when several Project rows are mounted at once', async () => {
-    renderWithShell(
-      <ProjectInstructionRow project={project} onOpen={vi.fn()} testId="tree-node-instructions-apps" />,
-    );
-    expect(await screen.findByTestId('tree-node-instructions-apps')).toBeInTheDocument();
-  });
-
-  it('opens the seeded (unsaved) instruction when clicked and none exists yet', async () => {
-    const onOpen = vi.fn();
-    renderWithShell(<ProjectInstructionRow project={project} onOpen={onOpen} />);
-    const row = await screen.findByTestId('project-instruction-row');
-    row.click();
-    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ scopes: ['project'], scopeId: 'p1' }), true);
-  });
-});

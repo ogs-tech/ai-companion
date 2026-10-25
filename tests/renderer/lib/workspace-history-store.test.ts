@@ -9,9 +9,9 @@ import {
   type WorkspaceHistoryEntry,
 } from '../../../src/renderer/lib/workspace-history-store.js';
 
-const scopeA: WorkspaceHistoryEntry = { workspaceId: 'w1', projectId: null, activeTabId: null };
-const tabA1: WorkspaceHistoryEntry = { workspaceId: 'w1', projectId: null, activeTabId: 'a1' };
-const tabA2: WorkspaceHistoryEntry = { workspaceId: 'w1', projectId: null, activeTabId: 'a2' };
+const scopeA: WorkspaceHistoryEntry = { workspaceId: 'w1', activeTabId: null };
+const tabA1: WorkspaceHistoryEntry = { workspaceId: 'w1', activeTabId: 'a1' };
+const tabA2: WorkspaceHistoryEntry = { workspaceId: 'w1', activeTabId: 'a2' };
 
 afterEach(() => {
   resetWorkspaceHistoryForTests();

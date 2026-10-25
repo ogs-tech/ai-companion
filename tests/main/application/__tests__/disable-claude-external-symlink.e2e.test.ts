@@ -33,7 +33,6 @@ const skillPersonal: Skill = {
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 describe('disable-claude-external-symlink e2e (AC#13)', () => {
@@ -56,7 +55,7 @@ describe('disable-claude-external-symlink e2e (AC#13)', () => {
       entityRepository,
       symlinkManager: sm,
       fileMaterializer,
-      workspacePath: WORKSPACE,
+      entityDataDir: () => WORKSPACE,
       adapters: new Map([['claude', claudeAdapter]]),
     });
 

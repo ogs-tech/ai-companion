@@ -6,11 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
 import { brand } from '../shared/brand.js';
-import {
-  devLockPath,
-  projectWorkspacePath,
-  workspacePath as workspaceDataDir,
-} from '../shared/brand-paths.js';
+import { devLockPath, workspacePath as workspaceDataDir } from '../shared/brand-paths.js';
 import type { Workspace } from '../shared/workspace.js';
 import { SettingsService } from './application/services/settings-service.js';
 import { WorkspaceBootstrapService } from './application/services/workspace-bootstrap.js';
@@ -18,10 +14,13 @@ import { WorkspaceService } from './application/services/workspace-service.js';
 import { ProductMigrationService } from './application/services/product-migration-service.js';
 import {
   buildWorkspaceScopedServices,
-  buildProjectService,
+  type ActiveWorkspaceScope,
   type WorkspaceScopedServices,
 } from './application/workspace-scoped-services.js';
-import { SymlinkManager } from './application/services/symlink-manager.js';
+import { WorkspaceModelMigration } from './application/services/workspace-model-migration.js';
+import { FsEntityRepository } from './infrastructure/entity/fs-entity-repository.js';
+import type { WorkspaceActivation } from './ipc/workspace-handlers.js';
+import { DomainError } from './domain/errors.js';
 import { createTaskQueue } from './application/task-queue.js';
 import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repository.js';
 import { FsWorkspaceBootstrap } from './infrastructure/workspace/fs-workspace-bootstrap.js';
@@ -39,6 +38,8 @@ import type { CredentialStorePort } from './application/ports/credential-store-p
 import { SafeStorageCredentials } from './infrastructure/credentials/safe-storage-credentials.js';
 import { SimpleGitClient } from './infrastructure/git/simple-git-client.js';
 import { SimpleGitRepoClient } from './infrastructure/git/simple-git-repo-client.js';
+import { FsConventionSource } from './infrastructure/git/fs-convention-source.js';
+import { ClaudeCliCommitMessageGenerator } from './infrastructure/claude-cli/claude-cli-commit-message-generator.js';
 import { augmentPath } from './infrastructure/system/augment-path.js';
 import { PluginCacheFile } from './infrastructure/plugins/plugin-cache-file.js';
 import { ClaudeSettingsFile } from './infrastructure/settings/claude-settings-file.js';
@@ -58,9 +59,9 @@ import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-p
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
-import { LAUNCH_PROCESS_OUTPUT_CHANNEL, LAUNCH_PROCESS_EXIT_CHANNEL } from '../shared/launch-config.js';
+import { TERMINAL_OUTPUT_CHANNEL, TERMINAL_EXIT_CHANNEL } from '../shared/terminal.js';
 import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
-import { NodeChildProcessAdapter } from './infrastructure/launch-process/node-child-process-adapter.js';
+import { NodePtyTerminalAdapter } from './infrastructure/terminal/node-pty-terminal-adapter.js';
 import { ChokidarFileWatcher } from './infrastructure/file-watcher/chokidar-file-watcher.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
@@ -70,6 +71,8 @@ import { FsMcpConfigStore } from './infrastructure/mcp/fs-mcp-config-store.js';
 import { PluginMcpReader } from './infrastructure/mcp/plugin-mcp-reader.js';
 import { McpService } from './application/services/mcp-service.js';
 import { McpDisabledStash } from './infrastructure/mcp/mcp-disabled-stash.js';
+import { UnixSocketLinkRouter } from './infrastructure/link-routing/unix-socket-link-router.js';
+import { EXTERNAL_LINK_CHANNEL } from '../shared/external-link.js';
 import { ElectronShell } from './infrastructure/shell/electron-shell.js';
 import { ElectronNotificationAdapter } from './infrastructure/notification/electron-notification-adapter.js';
 import { buildHandlers } from './ipc/registry.js';
@@ -172,26 +175,65 @@ async function wireIpc(): Promise<void> {
   const workspaceBootstrap = new WorkspaceBootstrapService(new FsWorkspaceBootstrap());
   await workspaceBootstrap.create(workspacePath);
 
-  const clock = new SystemClock();
+  const shellPort = new ElectronShell();
+  const linkRouter = new UnixSocketLinkRouter({ baseDir: workspacePath });
+  // A URL the session's CLI opened itself: show it in the embedded browser,
+  // or — with no window to show it in — fall back to the default browser.
+  linkRouter.onUrl((url) => {
+    if (mainWindow !== null && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(EXTERNAL_LINK_CHANNEL, { url });
+    } else {
+      void shellPort.openExternal(url).catch((error: unknown) => console.error('[link-routing] openExternal failed', error));
+    }
+  });
+  // Best-effort: without the socket, sessions spawn with the plain env and links keep going to the default browser.
+  await linkRouter.start().catch((error: unknown) => console.error('[link-routing] disabled:', error));
+  app.on('before-quit', () => void linkRouter.stop());
 
-  const workspaceService = new WorkspaceService(
-    new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json')),
-    clock,
-    workspaceBootstrap,
-    home,
-  );
-  /**
-   * The default workspace reuses the already-migrated `workspacePath` constant instead of
-   * recomputing the identical string a second time.
-   */
-  const dataDirFor = (workspace: Workspace): string =>
-    workspace.rootPath === home ? workspacePath : workspaceDataDir(workspace.rootPath);
-  const activeWorkspace = await workspaceService.getActive();
-  const activeDataDir = dataDirFor(activeWorkspace);
-  // Self-heals a non-default active workspace bootstrapped before a later addition (e.g. index.md) existed.
-  if (activeDataDir !== workspacePath) {
-    await workspaceBootstrap.create(activeDataDir);
+  const clock = new SystemClock();
+  const workspaceRegistry = new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json'));
+
+  // Before any service graph exists: moves project-era data onto the
+  // Global/workspace model. A failure leaves the old files untouched and the
+  // app on the IoError screen (see wireMigrationFailure).
+  let migration: Awaited<ReturnType<WorkspaceModelMigration['run']>>;
+  try {
+    migration = await new WorkspaceModelMigration({
+      fs: nodeFsAdapter,
+      registry: workspaceRegistry,
+      bootstrap: workspaceBootstrap,
+      clock,
+      homedir: home,
+      globalDataDir: workspacePath,
+    }).run();
+  } catch (error) {
+    wireMigrationFailure(error);
+    return;
   }
+
+  const workspaceService = new WorkspaceService(workspaceRegistry, clock, workspaceBootstrap, home, nodeFsAdapter);
+  const globalEntities = { repository: new FsEntityRepository(workspacePath, 'personal'), dataDir: workspacePath };
+
+  /** Bootstraps (self-heals) the workspace's data dir — a no-op scope at Início. */
+  const scopeFor = async (workspace: Workspace | null): Promise<ActiveWorkspaceScope | null> => {
+    if (workspace === null) return null;
+    const dataDir = workspaceDataDir(workspace.rootPath);
+    await workspaceBootstrap.create(dataDir);
+    return { workspace, dataDir };
+  };
+  let activeWorkspace = await workspaceService.getActive();
+
+  /**
+   * Harness-native `project` tiers (plugin cache, Claude settings, marketplace
+   * cache) resolve against the open workspace's root. At Início there is none,
+   * so those tiers are not offered.
+   */
+  const activeRoot = (): string => {
+    if (activeWorkspace === null) {
+      throw new DomainError('validation', 'No workspace is open — project-scoped settings need one');
+    }
+    return activeWorkspace.rootPath;
+  };
 
   const settingsService = new SettingsService(
     new FsSettingsRepository(join(workspacePath, 'settings.json')),
@@ -208,22 +250,22 @@ async function wireIpc(): Promise<void> {
     pluginsDir: (scope) =>
       scope === 'personal'
         ? pluginsWorkspaceDir
-        : join(projectWorkspacePath(process.cwd()), 'plugins'),
+        : join(workspaceDataDir(activeRoot()), 'plugins'),
     cacheDir: (scope) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'plugins', 'cache', 'local')
-        : join(process.cwd(), '.claude', 'plugins', 'cache', 'local'),
+        : join(activeRoot(), '.claude', 'plugins', 'cache', 'local'),
   });
 
   const claudeSettingsFile = new ClaudeSettingsFile({
     settingsPath: (scope) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'settings.json')
-        : join(process.cwd(), '.claude', 'settings.json'),
+        : join(activeRoot(), '.claude', 'settings.json'),
     symlinkPath: (scope, id) =>
       scope === 'personal'
         ? join(homedir(), '.claude', 'plugins', 'cache', 'local', id)
-        : join(process.cwd(), '.claude', 'plugins', 'cache', 'local', id),
+        : join(activeRoot(), '.claude', 'plugins', 'cache', 'local', id),
   });
 
   const manifestParser = new PluginManifestParser(nodeFsAdapter);
@@ -277,7 +319,7 @@ async function wireIpc(): Promise<void> {
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
-      : join(projectWorkspacePath(process.cwd()), 'marketplaces-cache');
+      : join(workspaceDataDir(activeRoot()), 'marketplaces-cache');
   const marketplaceService = new MarketplaceService({
     repository: new SettingsMarketplaceRepository(claudeSettingsFile),
     parser: marketplaceParser,
@@ -312,7 +354,7 @@ async function wireIpc(): Promise<void> {
     // repoPath in a follow-up iteration. For now, only personal + plugin MCPs.
     linkedRepoPaths: async () => [],
     disabledStash: mcpDisabledStash,
-    shell: new ElectronShell(),
+    shell: shellPort,
   });
 
   const embeddedBrowserAdapter = new EmbeddedBrowserAdapter({
@@ -331,28 +373,56 @@ async function wireIpc(): Promise<void> {
     settingsService,
     homedir: home,
     workspaceService,
+    globalEntities,
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,
     claudeSettingsFile,
-    claudeSessionPort: new NodePtySessionAdapter(),
+    claudeSessionPort: new NodePtySessionAdapter('claude', () => ({ ...process.env, ...linkRouter.shimEnv() })),
     embeddedBrowserPort: embeddedBrowserAdapter,
     // The CLI's own transcript directory — resolved here, like every other
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
     fileWatcherPort: new ChokidarFileWatcher(),
     launchConfigReaderPort: new FsLaunchConfigReader(),
-    launchProcessPort: new NodeChildProcessAdapter(),
+    terminalPort: new NodePtyTerminalAdapter(),
     repoGitPort: new SimpleGitRepoClient(),
+    conventionSourcePort: new FsConventionSource(),
+    commitMessageGeneratorFor: (cwd: string) => new ClaudeCliCommitMessageGenerator({ cwd }),
   };
 
+  if (migration.migrated) await syncAfterMigration(migration.touchedWorkspaceIds);
+
   let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
-    activeDataDir,
+    await scopeFor(activeWorkspace),
     sharedDeps,
   );
 
   const fileBrowserPort = new NodeFileBrowserAdapter([new NumbersConverterAdapter()]);
-  let fileBrowserService = new FileBrowserService(fileBrowserPort, activeWorkspace.rootPath);
+  const fileBrowserFor = (workspace: Workspace | null): FileBrowserService | null =>
+    workspace === null ? null : new FileBrowserService(fileBrowserPort, workspace.rootPath);
+  let fileBrowserService = fileBrowserFor(activeWorkspace);
+
+  /**
+   * Re-points every adapter destination at the canonical files the migration
+   * moved — Global first, then each touched workspace (whose graph also
+   * re-syncs Global's entities, harmlessly). Best-effort: a failed sync is
+   * what `adapter.syncAll` and the health screen already surface.
+   */
+  async function syncAfterMigration(touchedWorkspaceIds: string[]): Promise<void> {
+    const targets: (Workspace | null)[] = [null];
+    for (const id of touchedWorkspaceIds) {
+      const workspace = await workspaceService.get(id).catch(() => null);
+      if (workspace !== null) targets.push(workspace);
+    }
+    for (const target of targets) {
+      try {
+        await buildWorkspaceScopedServices(await scopeFor(target), sharedDeps).adapterManager.syncAll({});
+      } catch (error) {
+        console.error('[migration] adapter sync failed for', target?.rootPath ?? 'Global', error);
+      }
+    }
+  }
 
   const attachSessionBridges = (services: WorkspaceScopedServices): void => {
     services.sessionService.onOutput((sessionId, chunk) => {
@@ -364,15 +434,15 @@ async function wireIpc(): Promise<void> {
   };
   attachSessionBridges(workspaceScoped);
 
-  const attachLaunchProcessBridges = (services: WorkspaceScopedServices): void => {
-    services.launchProcessService.onOutput((event) => {
-      mainWindow?.webContents.send(LAUNCH_PROCESS_OUTPUT_CHANNEL, event);
+  const attachTerminalBridges = (services: WorkspaceScopedServices): void => {
+    services.terminalService.onOutput((event) => {
+      mainWindow?.webContents.send(TERMINAL_OUTPUT_CHANNEL, event);
     });
-    services.launchProcessService.onExit((event) => {
-      mainWindow?.webContents.send(LAUNCH_PROCESS_EXIT_CHANNEL, event);
+    services.terminalService.onExit((event) => {
+      mainWindow?.webContents.send(TERMINAL_EXIT_CHANNEL, event);
     });
   };
-  attachLaunchProcessBridges(workspaceScoped);
+  attachTerminalBridges(workspaceScoped);
 
   const attachEntityWatch = (services: WorkspaceScopedServices): void => {
     services.entityWatchService.onEntityChanged((event) => {
@@ -384,7 +454,7 @@ async function wireIpc(): Promise<void> {
 
   app.on('before-quit', () => {
     workspaceScoped.sessionService.killAll();
-    workspaceScoped.launchProcessService.killAll();
+    workspaceScoped.terminalService.killAll();
     void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
   });
@@ -401,6 +471,7 @@ async function wireIpc(): Promise<void> {
   const buildDeps = () => ({
     settingsService,
     gitService: workspaceScoped.gitService,
+    commitMessageService: workspaceScoped.commitMessageService,
     adapterManager: workspaceScoped.adapterManager,
     dialogPort,
     pluginService,
@@ -413,11 +484,8 @@ async function wireIpc(): Promise<void> {
     embeddedBrowserPort: embeddedBrowserAdapter,
     sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,
-    projectService: workspaceScoped.projectService,
-    switchActiveWorkspace,
-    registerRootProject,
+    workspaceActivation,
     fileBrowserService,
-    fileBrowserPort,
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
@@ -425,54 +493,65 @@ async function wireIpc(): Promise<void> {
     notificationPort,
     workspaceTeardownService: workspaceScoped.workspaceTeardownService,
     launchConfigService: workspaceScoped.launchConfigService,
-    launchProcessService: workspaceScoped.launchProcessService,
+    terminalService: workspaceScoped.terminalService,
+    openEditorsService: workspaceScoped.openEditorsService,
     appQuit: () => app.quit(),
   });
 
   const switchQueue = createTaskQueue();
 
-  let dispatch = createDispatcher(buildHandlers(buildDeps()));
+  // Assigned below, once `workspaceActivation` exists — `buildDeps()` reads it,
+  // so building the first dispatcher here would hit its TDZ.
+  let dispatch: ReturnType<typeof createDispatcher>;
 
   /**
-   * Serialized: `workspace.switchTo` is renderer-triggerable, and two
-   * overlapping switches would interleave across the `await` below — leaving
-   * the workspace that "wins" up to which registry write happened to land
-   * last rather than which switch was requested last, and leaving the on-disk
+   * Serialized: activation is renderer-triggerable, and two overlapping
+   * switches would interleave across the `await`s below — leaving the
+   * workspace that "wins" up to which registry write happened to land last
+   * rather than which switch was requested last, and leaving the on-disk
    * active pointer free to disagree with the graph every later IPC call reads.
-   * Queuing makes each switch atomic with respect to the others.
+   * Queuing makes each activation atomic with respect to the others.
+   *
+   * `select` runs first and persists the new active id; only once it succeeds
+   * is the old graph torn down, so a rejected `workspace.open` (not a folder,
+   * the home dir) leaves the open workspace and its sessions alone.
    */
-  function switchActiveWorkspace(id: string): Promise<Workspace> {
+  function activate<T extends Workspace | null>(select: () => Promise<T>): Promise<T> {
     return switchQueue(async () => {
+      const target = await select();
       workspaceScoped.sessionService.killAll();
-      workspaceScoped.launchProcessService.killAll();
+      workspaceScoped.terminalService.killAll();
       await embeddedBrowserAdapter.destroyAll();
       await workspaceScoped.entityWatchService.stop();
-      const target = await workspaceService.switchTo(id);
-      const targetDataDir = dataDirFor(target);
-      await workspaceBootstrap.create(targetDataDir); // same self-heal as at startup
-      workspaceScoped = buildWorkspaceScopedServices(targetDataDir, sharedDeps);
-      fileBrowserService = new FileBrowserService(fileBrowserPort, target.rootPath);
+      activeWorkspace = target;
+      workspaceScoped = buildWorkspaceScopedServices(await scopeFor(target), sharedDeps);
+      fileBrowserService = fileBrowserFor(target);
       attachSessionBridges(workspaceScoped);
-      attachLaunchProcessBridges(workspaceScoped);
+      attachTerminalBridges(workspaceScoped);
       attachEntityWatch(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));
       return target;
     });
   }
 
-  /**
-   * Registers a freshly created workspace's picked root folder as its first `Project` (see
-   * docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #4). Built against
-   * that workspace's own dataDir rather than `workspaceScoped.projectService` — a brand-new
-   * workspace is never the active one yet (`workspace.create` doesn't switch to it), so writing
-   * through the active graph's `ProjectService` would register the project onto the wrong
-   * workspace's `projects.json`.
-   */
-  async function registerRootProject(rootPath: string): Promise<void> {
-    const rootDataDir = workspaceDataDir(rootPath);
-    const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, rootDataDir);
-    await buildProjectService(rootDataDir, symlinkManager, clock).findOrCreateByPath(rootPath);
-  }
+  const goHome = async (): Promise<void> => {
+    await activate(async () => {
+      await workspaceService.goHome();
+      return null;
+    });
+  };
+
+  const workspaceActivation: WorkspaceActivation = {
+    switchTo: (id) => activate(() => workspaceService.switchTo(id)),
+    open: (path) => activate(() => workspaceService.open(path)),
+    goHome,
+    delete: async (id) => {
+      if (activeWorkspace?.id === id) await goHome();
+      await workspaceService.delete(id);
+    },
+  };
+
+  dispatch = createDispatcher(buildHandlers(buildDeps()));
 
   ipcMain.handle(IPC_CHANNEL, async (_event, payload: unknown) => {
     if (!isCallPayload(payload)) {
@@ -483,6 +562,18 @@ async function wireIpc(): Promise<void> {
     }
     return dispatch(payload.method, payload.params);
   });
+}
+
+/**
+ * Boots into a dispatcher that answers every call with the migration's
+ * `io` error, so the renderer's first `settings.get` lands on the IoError
+ * screen with the message — which names the backup folder — instead of the
+ * app quitting on a dialog.
+ */
+function wireMigrationFailure(error: unknown): void {
+  console.error('[boot] workspace migration failed:', error);
+  const message = error instanceof Error ? error.message : String(error);
+  ipcMain.handle(IPC_CHANNEL, () => ({ ok: false, error: { kind: 'io', message } }));
 }
 
 function createWindow(): void {

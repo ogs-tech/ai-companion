@@ -36,7 +36,7 @@ const projectInstruction: Instruction = {
   kind: 'instruction',
   name: 'acme',
   description: 'acme rules',
-  scopes: ['project'],
+  scopes: ['workspace'],
   metadata: meta,
   source: WORKSPACE_SOURCE,
   content: '# acme',
@@ -44,8 +44,7 @@ const projectInstruction: Instruction = {
 };
 
 const scopeDeps = {
-  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
+  workspaceService: { get: async (id: string) => ({ id, name: 'acme', rootPath: '/repos/acme', createdAt: '' }) },
 };
 
 const buildSettings = (): Settings => ({
@@ -72,7 +71,7 @@ const setup = async (settings: Settings) => {
     entityRepository,
     symlinkManager,
     fileMaterializer,
-    workspacePath: WORKSPACE,
+    entityDataDir: () => WORKSPACE,
     adapters: new Map([[claudeAdapter.adapterId, claudeAdapter]]),
   });
   return { adapterManager, entityRepository, fs, settingsService };

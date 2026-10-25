@@ -1,71 +1,52 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LaunchConfigService } from '../../../../src/main/application/services/launch-config-service.js';
 import type { LaunchConfigReaderPort } from '../../../../src/main/application/ports/launch-config-reader-port.js';
-import type { Project } from '../../../../src/shared/project.js';
 
-const project = (overrides: Partial<Project> = {}): Project => ({
-  id: 'p1', name: 'acme', path: '/repos/acme', createdAt: '', ...overrides,
-});
+const WORKSPACE = { id: 'ws-1', rootPath: '/repos/acme' };
+const runConfig = { name: 'Run', type: 'node', request: 'launch', program: 'index.js', args: [], supported: true };
 
 describe('LaunchConfigService', () => {
-  it('listForProject resolves the project path and returns its configs', async () => {
-    const reader: LaunchConfigReaderPort = {
-      read: vi.fn().mockResolvedValue({ configs: [{ name: 'Run', type: 'node', request: 'launch', program: 'index.js', args: [], supported: true }] }),
-    };
-    const projectService = { get: vi.fn().mockResolvedValue(project()), list: vi.fn() };
-    const service = new LaunchConfigService(projectService, reader);
-    const result = await service.listForProject('p1');
+  it("list reads the open workspace root's launch.json", async () => {
+    const reader: LaunchConfigReaderPort = { read: vi.fn().mockResolvedValue({ configs: [runConfig] }) };
+    const service = new LaunchConfigService(WORKSPACE, reader);
+    const result = await service.list();
     expect(reader.read).toHaveBeenCalledWith('/repos/acme');
-    expect(result).toEqual({
-      projectId: 'p1',
-      configs: [{ name: 'Run', type: 'node', request: 'launch', program: 'index.js', args: [], supported: true }],
-    });
+    expect(result).toEqual({ workspaceId: 'ws-1', configs: [runConfig] });
   });
 
-  it('listForProject surfaces a reader error without configs, keyed to the project', async () => {
+  it('list surfaces a reader error without configs', async () => {
     const reader: LaunchConfigReaderPort = { read: vi.fn().mockResolvedValue({ error: 'malformed launch.json' }) };
-    const projectService = { get: vi.fn().mockResolvedValue(project()), list: vi.fn() };
-    const service = new LaunchConfigService(projectService, reader);
-    const result = await service.listForProject('p1');
-    expect(result).toEqual({ projectId: 'p1', configs: [], error: 'malformed launch.json' });
+    const service = new LaunchConfigService(WORKSPACE, reader);
+    expect(await service.list()).toEqual({ workspaceId: 'ws-1', configs: [], error: 'malformed launch.json' });
   });
 
-  it("listAll isolates one project's malformed launch.json from the others", async () => {
-    const projects = [project({ id: 'p1', path: '/repos/a' }), project({ id: 'p2', path: '/repos/b' })];
-    const reader: LaunchConfigReaderPort = {
-      read: vi.fn().mockImplementation(async (path: string) =>
-        path === '/repos/a' ? { error: 'malformed launch.json' } : { configs: [] },
-      ),
-    };
-    const projectService = { get: vi.fn(), list: vi.fn().mockResolvedValue(projects) };
-    const service = new LaunchConfigService(projectService, reader);
-    const result = await service.listAll();
-    expect(result).toEqual([
-      { projectId: 'p1', configs: [], error: 'malformed launch.json' },
-      { projectId: 'p2', configs: [] },
-    ]);
+  it('list returns null at Início (no workspace open) without reading anything', async () => {
+    const reader: LaunchConfigReaderPort = { read: vi.fn() };
+    const service = new LaunchConfigService(null, reader);
+    expect(await service.list()).toBeNull();
+    expect(reader.read).not.toHaveBeenCalled();
   });
 
-  it('getConfig finds a config by name and returns it with the project path', async () => {
-    const configs = [{ name: 'Run', type: 'node', request: 'launch', program: 'index.js', args: [], supported: true }];
-    const reader: LaunchConfigReaderPort = { read: vi.fn().mockResolvedValue({ configs }) };
-    const projectService = { get: vi.fn().mockResolvedValue(project()), list: vi.fn() };
-    const service = new LaunchConfigService(projectService, reader);
-    const result = await service.getConfig('p1', 'Run');
-    expect(result).toEqual({ config: configs[0], projectPath: '/repos/acme' });
+  it('getConfig finds a config by name and returns it with the workspace root', async () => {
+    const reader: LaunchConfigReaderPort = { read: vi.fn().mockResolvedValue({ configs: [runConfig] }) };
+    const service = new LaunchConfigService(WORKSPACE, reader);
+    expect(await service.getConfig('Run')).toEqual({ config: runConfig, workspaceId: 'ws-1', rootPath: '/repos/acme' });
   });
 
   it('getConfig throws not_found for an unknown config name', async () => {
     const reader: LaunchConfigReaderPort = { read: vi.fn().mockResolvedValue({ configs: [] }) };
-    const projectService = { get: vi.fn().mockResolvedValue(project()), list: vi.fn() };
-    const service = new LaunchConfigService(projectService, reader);
-    await expect(service.getConfig('p1', 'Missing')).rejects.toMatchObject({ kind: 'not_found' });
+    const service = new LaunchConfigService(WORKSPACE, reader);
+    await expect(service.getConfig('Missing')).rejects.toMatchObject({ kind: 'not_found' });
   });
 
-  it("getConfig throws io when the project's launch.json is malformed", async () => {
+  it('getConfig throws io when launch.json is malformed', async () => {
     const reader: LaunchConfigReaderPort = { read: vi.fn().mockResolvedValue({ error: 'malformed launch.json' }) };
-    const projectService = { get: vi.fn().mockResolvedValue(project()), list: vi.fn() };
-    const service = new LaunchConfigService(projectService, reader);
-    await expect(service.getConfig('p1', 'Run')).rejects.toMatchObject({ kind: 'io' });
+    const service = new LaunchConfigService(WORKSPACE, reader);
+    await expect(service.getConfig('Run')).rejects.toMatchObject({ kind: 'io' });
+  });
+
+  it('getConfig throws validation at Início', async () => {
+    const service = new LaunchConfigService(null, { read: vi.fn() });
+    await expect(service.getConfig('Run')).rejects.toMatchObject({ kind: 'validation' });
   });
 });

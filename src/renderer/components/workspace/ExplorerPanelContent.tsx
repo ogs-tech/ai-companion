@@ -1,130 +1,140 @@
-import { useState } from 'react';
-import { Box, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { useMemo } from 'react';
+import { Alert, Box, Typography } from '@mui/material';
 import { FolderTree } from './FolderTree.js';
-import { WorkspaceBreadcrumbHeader } from './WorkspaceBreadcrumbHeader.js';
-import { WorkspaceManagementList } from './WorkspaceManagementList.js';
-import { GitView } from './git/GitView.js';
+import { HomeNavList } from './HomeNavList.js';
+import { ExplorerToolbar } from './ExplorerToolbar.js';
+import { DiscardConfirmDialog } from './git/DiscardConfirmDialog.js';
+import { GitErrorAlert } from './git/GitErrorAlert.js';
+import { GitInitCard } from './git/GitInit.js';
+import { buildGitDecorations } from './git/git-decorations.js';
+import { useGitActions } from './git/use-git-actions.js';
+import { useGitStatus } from '../../hooks/use-git.js';
 import type { GitDiffSource } from '../../../shared/git.js';
-import type { Project } from '../../../shared/project.js';
 import type { Workspace } from '../../../shared/workspace.js';
+import { useWorkspaces } from '../../hooks/use-workspaces.js';
 
 interface ExplorerPanelContentProps {
-  activeWorkspace: Workspace | undefined;
-  isDefaultWorkspace: boolean;
-  /** The Control Panel's own current scope, only surfaced here for the header — the tree below never filters by it, it only expands folders in place. */
-  selectedProject: Project | null;
-  onNavigateToWorkspace: () => void;
-  /** The Explorer Panel's own "⋮" menu (global-entity visibility, panel toggles, destructive remove) — built by the parent screen, since it reaches state (both panels' collapse, `showGlobal`) that isn't local to this panel. */
-  headerMenu: React.ReactNode;
-  /** Default workspace only: guards a workspace switch from `WorkspaceManagementList` the same way any other scope change does. */
-  beforeSwitch: () => boolean;
-  /** Default workspace only: the Personal Instruction's own pinned row. */
-  personalInstructionRow: React.ReactNode;
-  /** Default workspace only: Starter Pack/Marketplaces/Diagnóstico's own pinned rows. */
+  /** `null` at Início; `undefined` while loading. */
+  activeWorkspace: Workspace | null | undefined;
+  /** True at Início (no workspace open) — shows the navigation menu instead of a file tree. */
+  isHome: boolean;
+  /** Git status polls only while the panel is on screen. */
+  gitPolling: boolean;
+  /** Trailing actions on the toolbar, e.g. the "Reler do disco" refresh button. */
+  toolbarActions?: React.ReactNode;
+  /** Início only: Starter Pack/Marketplaces/Diagnóstico's own rows. */
   appAreaRows: React.ReactNode;
-  projects: ReadonlyArray<Project>;
-  onSelectFile: (relPath: string, projectId?: string) => void;
-  onUseAsProject: (absolutePath: string) => void;
-  onPreviewFile: (relPath: string, projectId?: string) => void;
-  onNewAction: (relPath: string, projectId?: string) => void;
-  /** The active workspace's own pinned INSTRUCTIONS row, rendered above the file tree. */
-  instructionRow: React.ReactNode;
-  /** Content pinned below `instructionRow` and above the folders/files — e.g. the workspace-root Project's own Launch Configurations group. */
-  pinnedRows?: React.ReactNode;
-  renderProjectInstructionRow: (project: Project, depth: number) => React.ReactNode;
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
-  workspaceRootPath?: string;
-  /** The Git view's repo picker writes the shared Project scope, so the Control Panel follows it. */
-  onSelectProject: (projectId: string | null) => void;
-  onOpenGitDiff: (args: { projectId?: string; path: string; source: GitDiffSource }) => void;
+  /** Início only: whether the menu's Workspaces row is the tab on screen, and how to open it. */
+  homeNav: Pick<React.ComponentProps<typeof HomeNavList>, 'workspacesActive' | 'onOpenWorkspaces'>;
+  onSelectFile: (relPath: string) => void;
+  onOpenAsWorkspace: (absolutePath: string) => void;
+  onPreviewFile: (relPath: string) => void;
+  onNewAction: (relPath: string) => void;
+  /** The Editores abertos section, pinned at the top of the panel (also at Início). */
+  openEditorsSection?: React.ReactNode;
+  /** The Terminais section, pinned at the bottom of the panel under the file tree. */
+  terminalsSection?: React.ReactNode;
+  /** Right-click a folder/file → "Abrir terminal aqui". */
+  onOpenTerminalHere?: (relDir: string) => void;
+  onOpenGitDiff: (args: { path: string; source: GitDiffSource }) => void;
 }
 
-type ExplorerView = 'files' | 'git';
-
 /**
- * The Explorer Panel's body, below the shared `SidePanel` header: the
- * workspace/project breadcrumb (with the "⋮" menu), then either the
- * workspace list (Default workspace) or the file/entity tree.
+ * The left panel — "where": at Início, the navigation menu; in a
+ * workspace, the git toolbar over one file tree decorated with git status.
+ * The context itself (name, path, switch, remove) lives in the TopNav's
+ * context switcher.
  */
-export function ExplorerPanelContent({
+export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.ReactElement {
+  const { data: workspaces } = useWorkspaces();
+  const { activeWorkspace, isHome, appAreaRows, homeNav, onOpenAsWorkspace } = props;
+  const root = activeWorkspace?.rootPath;
+  // Registered roots are stored as real paths; a sub-folder matches when its
+  // path under this root is one of them.
+  const registeredRoots = new Set((workspaces ?? []).map((w) => w.rootPath));
+  const isWorkspaceRoot = (relPath: string): boolean => root !== undefined && registeredRoots.has(`${root}/${relPath}`);
+
+  if (isHome) {
+    return (
+      <>
+        {props.openEditorsSection}
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <HomeNavList {...homeNav} appAreaRows={appAreaRows} />
+        </Box>
+      </>
+    );
+  }
+
+  return <WorkspaceExplorer {...props} onOpenAsWorkspace={onOpenAsWorkspace} isWorkspaceRoot={isWorkspaceRoot} />;
+}
+
+/** Split out so Início never mounts the git hooks (there is no repo to query there). */
+function WorkspaceExplorer({
   activeWorkspace,
-  isDefaultWorkspace,
-  selectedProject,
-  onNavigateToWorkspace,
-  headerMenu,
-  beforeSwitch,
-  personalInstructionRow,
-  appAreaRows,
-  projects,
+  gitPolling,
+  toolbarActions,
   onSelectFile,
-  onUseAsProject,
+  onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
-  instructionRow,
-  pinnedRows,
-  renderProjectInstructionRow,
-  renderProjectLaunchConfigsRow,
-  workspaceRootPath,
-  onSelectProject,
+  openEditorsSection,
+  terminalsSection,
+  onOpenTerminalHere,
   onOpenGitDiff,
-}: ExplorerPanelContentProps): React.ReactElement {
-  const [view, setView] = useState<ExplorerView>('files');
+  isWorkspaceRoot,
+}: ExplorerPanelContentProps & { isWorkspaceRoot: (relPath: string) => boolean }): React.ReactElement {
+  const status = useGitStatus({ visible: gitPolling });
+  const actions = useGitActions();
+  const data = status.data;
+  const repo = data?.isRepo ? data : null;
+  const decorations = useMemo(() => buildGitDecorations(repo?.files ?? []), [repo?.files]);
 
   return (
     <>
-      <Box sx={{ flexShrink: 0, px: 1.5, pb: 1.25, borderBottom: 1, borderColor: 'divider' }}>
-        <WorkspaceBreadcrumbHeader
-          workspaceName={activeWorkspace?.name ?? '…'}
-          isDefaultWorkspace={activeWorkspace?.isDefault ?? false}
-          path={selectedProject ? selectedProject.path : (activeWorkspace?.rootPath ?? '')}
-          onNavigateToWorkspace={onNavigateToWorkspace}
-          actions={headerMenu}
-        />
-        {!isDefaultWorkspace && (
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            fullWidth
-            value={view}
-            onChange={(_, next: ExplorerView | null) => next && setView(next)}
-            aria-label="Visão do Explorer"
-            sx={{ mt: 1, '& .MuiToggleButton-root': { py: 0.25, textTransform: 'none', fontSize: '0.75rem' } }}
-          >
-            <ToggleButton value="files" data-testid="explorer-view-files">
-              Arquivos
-            </ToggleButton>
-            <ToggleButton value="git" data-testid="explorer-view-git">
-              Git
-            </ToggleButton>
-          </ToggleButtonGroup>
-        )}
-      </Box>
+      {openEditorsSection}
+      <ExplorerToolbar
+        status={{ isPending: status.isPending, error: status.error, data }}
+        actions={actions}
+        trailing={toolbarActions}
+      />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {isDefaultWorkspace ? (
-          <WorkspaceManagementList beforeSwitch={beforeSwitch} instructionRow={personalInstructionRow} appAreaRows={appAreaRows} />
-        ) : view === 'git' ? (
-          <GitView
-            projectId={selectedProject?.id}
-            visible
-            projects={projects}
-            onSelectProject={onSelectProject}
-            onOpenDiff={onOpenGitDiff}
-          />
-        ) : (
-          <FolderTree
-            onSelectFile={onSelectFile}
-            onUseAsProject={onUseAsProject}
-            onPreviewFile={onPreviewFile}
-            onNewAction={onNewAction}
-            projects={projects}
-            instructionRow={instructionRow}
-            {...(pinnedRows !== undefined ? { pinnedRows } : {})}
-            renderProjectInstructionRow={renderProjectInstructionRow}
-            {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
-            {...(workspaceRootPath ? { workspaceRootPath } : {})}
-          />
+        {actions.error && <GitErrorAlert report={actions.error} onClose={actions.clearError} onPullAndRetry={actions.sync} />}
+        {repo && repo.state !== 'clean' && (
+          <Alert severity="warning" sx={{ mx: 1.5, mt: 1, mb: 1 }} data-testid="git-state-banner">
+            Operação em andamento ({repo.state}). Resolva ou aborte pelo terminal.
+          </Alert>
+        )}
+        <FolderTree
+          onSelectFile={onSelectFile}
+          onOpenAsWorkspace={onOpenAsWorkspace}
+          onPreviewFile={onPreviewFile}
+          onNewAction={onNewAction}
+          isWorkspaceRoot={isWorkspaceRoot}
+          {...(onOpenTerminalHere !== undefined ? { onOpenTerminalHere } : {})}
+          {...(repo
+            ? {
+                git: {
+                  decorations,
+                  busy: actions.busy,
+                  onOpenDiff: onOpenGitDiff,
+                  onStage: actions.stage,
+                  onUnstage: actions.unstage,
+                  onDiscard: actions.requestDiscard,
+                },
+              }
+            : {})}
+        />
+        {repo?.truncated && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.5, py: 0.5 }} data-testid="git-truncated">
+            Mostrando os primeiros {repo.files.length} arquivos.
+          </Typography>
+        )}
+        {data && !data.isRepo && activeWorkspace && (
+          <GitInitCard workspaceId={activeWorkspace.id} busy={actions.busy} onInit={actions.init} />
         )}
       </Box>
+      {terminalsSection}
+      <DiscardConfirmDialog files={actions.pendingDiscard} onCancel={actions.cancelDiscard} onConfirm={actions.confirmDiscard} />
     </>
   );
 }

@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { FileSystemEntry } from '../../application/ports/filesystem-port.js';
 import type { FileStat, WritableFileSystemPort } from '../../application/ports/writable-filesystem-port.js';
+import type { DirectoryResolver } from '../../application/ports/directory-resolver.js';
 
 const toEntryKind = async (path: string): Promise<FileSystemEntry['kind']> => {
   const stat = await fs.lstat(path);
@@ -19,7 +20,7 @@ const resolveLinkTarget = (linkPath: string, target: string): string => {
   return resolve(dirname(linkPath), target);
 };
 
-export class NodeFsAdapter implements WritableFileSystemPort {
+export class NodeFsAdapter implements WritableFileSystemPort, DirectoryResolver {
   async lstat(path: string): Promise<FileSystemEntry> {
     try {
       const kind = await toEntryKind(path);
@@ -102,5 +103,15 @@ export class NodeFsAdapter implements WritableFileSystemPort {
 
   async makeTempDir(prefix: string): Promise<string> {
     return fs.mkdtemp(join(tmpdir(), prefix));
+  }
+
+  async realDirectory(path: string): Promise<string | null> {
+    try {
+      const real = await fs.realpath(path);
+      if (!(await fs.stat(real)).isDirectory()) return null;
+      return real.length > 1 ? real.replace(/[\\/]+$/, '') : real;
+    } catch {
+      return null;
+    }
   }
 }

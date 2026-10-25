@@ -12,7 +12,7 @@ own — there is no separate kind for it. Field rules (name format, length limit
 
 ## Create one
 
-1. In the **Customizations** panel (right side; **Mais ações** → **Mostrar Customizations** if hidden),
+1. In the right panel (the **PanelRight** toggle in the TopNav shows it if hidden),
    click **+** (**Novo**) on the **Skills** or **Agents** row. A new tab opens with its properties form.
 2. Fill in:
    - **Name** — lowercase letters, digits and hyphens, starting with a letter or digit

@@ -1,7 +1,7 @@
 import type { Entity, EntityKind } from '../../../shared/entity.js';
 import { entityUrn } from '../../../shared/entity.js';
 import type { SyncResult } from '../../../shared/sync-result.js';
-import type { EntityRepository } from '../ports/entity-repository.js';
+import type { ScopedEntityRepository } from '../entity/scoped-entity-repository.js';
 import type { ClockPort } from '../ports/clock-port.js';
 import type { AdapterManager } from './adapter-manager.js';
 import type { EntityValidator } from './entity-validator.js';
@@ -24,9 +24,14 @@ export interface DeleteEntityResult {
   syncReport?: SyncResult[];
 }
 
+/**
+ * Save/delete/list over Global ∪ the active workspace. Writes route by
+ * `scopes[0]` (see `ScopedEntityRepository`); a `workspace` entity may only
+ * target the workspace that is open right now.
+ */
 export class EntityService {
   constructor(
-    private readonly repository: EntityRepository,
+    private readonly repository: ScopedEntityRepository,
     private readonly clock: ClockPort,
     private readonly adapterManager: AdapterManager,
     private readonly validator?: EntityValidator,
@@ -47,6 +52,7 @@ export class EntityService {
   async save(command: SaveEntityCommand): Promise<SaveEntityResult> {
     const { entity, isCreate = false } = command;
     this.validator?.validate(entity);
+    this.assertWritableScope(entity);
 
     const urn = entityUrn(entity.kind, entity.name);
     const previousUrn = entity.urn;
@@ -58,15 +64,13 @@ export class EntityService {
     }
 
     const nowIso = this.clock.now().toISOString();
-    let createdAt = nowIso;
     let previous: Entity | undefined;
     if (isRename) {
       previous = await this.repository.get(previousUrn);
-      createdAt = previous.metadata.createdAt || nowIso;
     } else if (exists) {
-      const current = await this.repository.get(urn);
-      createdAt = current.metadata.createdAt || nowIso;
+      previous = await this.repository.get(urn);
     }
+    const createdAt = previous?.metadata.createdAt || nowIso;
 
     const persisted: Entity = {
       ...entity,
@@ -75,14 +79,34 @@ export class EntityService {
     };
     const saved = await this.repository.save(persisted);
 
+    // A rename, or a scope change (which moves the canonical file between the
+    // Global and workspace stores), leaves the old copy and its destinations
+    // behind — remove both.
     const removeReport: SyncResult[] = [];
-    if (isRename && previous) {
+    if (previous !== undefined && (isRename || previous.scopes[0] !== saved.scopes[0])) {
       removeReport.push(...(await this.adapterManager.removeEntity({ entity: previous })));
-      await this.repository.delete(previousUrn);
+      await this.repository.storeFor(previous.scopes[0]).repository.delete(previous.urn);
     }
 
     const syncReport = await this.adapterManager.syncEntity({ entity: saved });
     return { entity: saved, syncReport: [...removeReport, ...syncReport] };
+  }
+
+  private assertWritableScope(entity: Entity): void {
+    if (entity.scopes[0] !== 'workspace') return;
+    const activeId = this.repository.activeWorkspaceId;
+    if (activeId === null) {
+      throw validationError({
+        message: 'No workspace is open — a workspace entity needs one',
+        details: { reason: 'no-active-workspace' },
+      });
+    }
+    if (entity.scopeId !== activeId) {
+      throw validationError({
+        message: `Entity scopeId '${String(entity.scopeId)}' is not the open workspace '${activeId}'`,
+        details: { reason: 'scope-id-mismatch', invalid: ['scopeId'] },
+      });
+    }
   }
 
   async delete(command: DeleteEntityCommand): Promise<DeleteEntityResult> {

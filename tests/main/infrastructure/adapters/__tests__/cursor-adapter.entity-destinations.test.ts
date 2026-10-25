@@ -16,8 +16,7 @@ import { brand } from '../../../../../src/shared/brand.js';
 const meta = { version: '0.1.0', createdAt: '', updatedAt: '' };
 
 const scopeDeps = {
-  workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
+  workspaceService: { get: async (id: string) => ({ id, name: 'acme', rootPath: '/repos/acme', createdAt: '' }) },
 };
 
 const adapter = new CursorAdapter({ homedir: '/home/u', ...scopeDeps });
@@ -39,19 +38,18 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     ]);
   });
 
-  it('routes a project-scoped skill to <resolved project path>/.cursor/skills/<name>', async () => {
+  it('routes a workspace-scoped skill to <resolved workspace root>/.cursor/skills/<name>', async () => {
     const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd',
-      scopes: ['project'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
+      scopes: ['workspace'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
-      { scope: 'project', destination: '/repos/acme/.cursor/skills/acme', strategy: 'symlink' },
+      { scope: 'workspace', destination: '/repos/acme/.cursor/skills/acme', strategy: 'symlink' },
     ]);
   });
 
   it('routes a workspace-scoped agent to <resolved workspace root>/.cursor/agents/<name>.md', async () => {
     const wsAdapter = new CursorAdapter({
       homedir: '/home/u',
-      workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
-      projectService: { get: async () => { throw new Error('not stubbed'); } },
+      workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) },
     });
     const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'd',
       scopes: ['workspace'], scopeId: 'ws-1', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
@@ -60,14 +58,13 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     ]);
   });
 
-  it('rejects a project-scoped agent when the referenced project no longer exists', async () => {
+  it('rejects a workspace-scoped agent when the referenced workspace no longer exists', async () => {
     const goneAdapter = new CursorAdapter({
       homedir: '/home/u',
-      workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-      projectService: { get: async () => { throw new DomainError('not_found', 'Project not found'); } },
+      workspaceService: { get: async () => { throw new DomainError('not_found', 'Workspace not found'); } },
     });
     const agent: Agent = { urn: 'urn:agent:gone', kind: 'agent', name: 'gone', description: 'd',
-      scopes: ['project'], scopeId: 'gone', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
+      scopes: ['workspace'], scopeId: 'gone', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
     await expect(goneAdapter.resolveEntityDestinations({ entity: agent })).rejects.toMatchObject({ kind: 'not_found' });
   });
 
@@ -100,16 +97,16 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     expect((rule as { content: string }).content.startsWith('---\n')).toBe(true);
   });
 
-  it('routes a project instruction to <resolved project path>/AGENTS.md (write, marker-owned)', async () => {
+  it('routes a workspace instruction to <resolved workspace root>/AGENTS.md (write, marker-owned)', async () => {
     const ins: Instruction = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
-      description: '', scopes: ['project'], scopeId: 'proj-1', metadata: meta,
+      description: '', scopes: ['workspace'], scopeId: 'proj-1', metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };
     const result = await adapter.resolveEntityDestinations({ entity: ins });
     expect(result).toEqual([
       {
-        scope: 'project',
+        scope: 'workspace',
         destination: '/repos/acme/AGENTS.md',
         strategy: 'write',
         content: expect.stringContaining('body'),

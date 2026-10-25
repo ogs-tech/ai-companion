@@ -8,6 +8,7 @@ import type { AdapterManager } from '../../../src/main/application/services/adap
 import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
 import { FakeEmbeddedBrowserPort } from '../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill } from '../../../src/shared/entity.js';
+import { scopedRepository } from '../helpers/scoped-repository.js';
 
 const skill = (name = 'foo'): Skill => ({
   urn: entityUrn('skill', name), kind: 'skill', name, description: '',
@@ -21,15 +22,13 @@ const setup = () => {
     syncEntity: vi.fn().mockResolvedValue([]),
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
-  const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
+  const base = new EntityService(scopedRepository({ global: repo }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
   const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
-    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/workspace', isDefault: false, createdAt: '' }) },
-    projectService: {
-      get: async (id: string) => ({ id, name: 'Test', path: '/project', createdAt: '' }),
-      findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
-    },
+    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/workspace', createdAt: '' }) },
+    activeWorkspace: null,
+    homedir: '/home/u',
   };
   const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
   const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps, fs);

@@ -8,15 +8,16 @@ export type SessionStatus = 'running' | 'exited';
  */
 export const MAX_SESSION_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
+/** `personal` runs in the home dir (Global/Início); `workspace` in that workspace's root. */
 export type SessionAnchor =
   | { kind: 'entity'; urn: string }
-  | { kind: 'workspace'; workspaceId: string }
-  | { kind: 'project'; projectId: string };
+  | { kind: 'personal' }
+  | { kind: 'workspace'; workspaceId: string };
 
 export function sessionAnchorKey(anchor: SessionAnchor): string {
   if (anchor.kind === 'entity') return `entity:${anchor.urn}`;
   if (anchor.kind === 'workspace') return `workspace:${anchor.workspaceId}`;
-  return `project:${anchor.projectId}`;
+  return 'personal';
 }
 
 export interface SessionSnapshot {
@@ -34,7 +35,7 @@ export interface SessionSnapshot {
   claudeSessionId: string;
   anchor: SessionAnchor;
   cwd: string;
-  /** Human-readable name of the anchor (entity/workspace/project name), for display in a session list. */
+  /** Human-readable name of the anchor (entity/workspace name), for display in a session list. */
   label: string;
   status: SessionStatus;
   /**

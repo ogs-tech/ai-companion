@@ -43,7 +43,12 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
 
   // `bin` is overridable so tests can point at a stub script and exercise the
   // real ENOENT/exit-code branches without depending on `claude` being installed.
-  constructor(private readonly bin = 'claude') {}
+  // `buildSessionEnv` supplies the PTY's env (inherited env + whatever the
+  // composition root wants injected) so this class stays free of app paths.
+  constructor(
+    private readonly bin = 'claude',
+    private readonly buildSessionEnv: () => NodeJS.ProcessEnv = () => process.env,
+  ) {}
 
   onData(listener: ClaudeSessionDataListener): void {
     this.dataListener = listener;
@@ -99,7 +104,7 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
           cols: opts.cols,
           rows: opts.rows,
           cwd,
-          env: process.env as Record<string, string>,
+          env: this.buildSessionEnv() as Record<string, string>,
         });
       } catch (err) {
         reject(err instanceof Error ? err : new Error(String(err)));

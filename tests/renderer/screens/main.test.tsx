@@ -18,8 +18,6 @@ beforeEach(() => {
   call = mockApi();
 });
 
-const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
-
 const setupRoute = (overrides: Record<string, unknown> = {}) => {
   call.mockImplementation((method: string) => {
     if (method in overrides) return Promise.resolve(overrides[method]);
@@ -35,8 +33,8 @@ const setupRoute = (overrides: Record<string, unknown> = {}) => {
     if (method === 'marketplace.list') return Promise.resolve(ok([]));
     // Lands the Workspace landing screen on the Global/default branch —
     // no active project, so no file browser (and its xterm session panel).
-    if (method === 'workspace.getActive') return Promise.resolve(ok(DEFAULT_WORKSPACE));
-    if (method === 'workspace.list') return Promise.resolve(ok([DEFAULT_WORKSPACE]));
+    if (method === 'workspace.getActive') return Promise.resolve(ok(null));
+    if (method === 'workspace.list') return Promise.resolve(ok([]));
     if (method === 'project.list') return Promise.resolve(ok([]));
     return Promise.resolve(ok(undefined));
   });
@@ -52,18 +50,16 @@ describe('<Main> — shell navigation', () => {
     expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
   });
 
-  it('expands the Skills tree node inline on the Workspace overview', async () => {
+  it('lists Customizations inline on the Workspace overview, with an empty state', async () => {
     setupRoute();
     render(<Main onOpenSettings={() => undefined} />);
 
     // Wait for the Default-branch landmark first — until `workspace.getActive`
-    // resolves, the screen briefly renders the non-default (FolderTree)
-    // shape, whose own tree groups would otherwise get expanded and unmounted
-    // out from under this test.
-    await screen.findByTestId('workspace-management-list');
-    await userEvent.click(screen.getByTestId('tree-group-skill'));
+    // resolves, the screen briefly renders the non-default (FolderTree) shape.
+    await screen.findByTestId('home-nav-list');
+    await userEvent.click(screen.getByTestId('control-panel-chip-skill'));
 
-    expect(await screen.findByTestId('tree-group-empty-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
   });
 
   it('opens Starter Pack as a Workbench tab from the Explorer Panel', async () => {
@@ -71,8 +67,8 @@ describe('<Main> — shell navigation', () => {
     render(<Main onOpenSettings={() => undefined} />);
 
     // Same landmark wait as above — the pinned area rows only exist once the
-    // Default-branch (WorkspaceManagementList) shape has settled.
-    await screen.findByTestId('workspace-management-list');
+    // Default-branch (HomeNavList) shape has settled.
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('explorer-area-starter-pack'));
 
     expect(await screen.findByTestId('starter-pack-screen')).toBeInTheDocument();

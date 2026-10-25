@@ -1,22 +1,25 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
-import type { ProjectLaunchConfigs } from '../../shared/launch-config.js';
+import { terminalsQueryKey } from './use-terminals.js';
+import type { WorkspaceLaunchConfigs } from '../../shared/launch-config.js';
+import type { TerminalSnapshot } from '../../shared/terminal.js';
 
 export const launchConfigsQueryKey = ['launchConfigs'] as const;
 
-/** Every registered Project's launch.json configs, across the active workspace. */
-export function useLaunchConfigs(): UseQueryResult<ProjectLaunchConfigs[]> {
-  return useQuery<ProjectLaunchConfigs[]>({
+/** The open workspace's own launch.json configs — `null` at Início. */
+export function useLaunchConfigs(enabled = true): UseQueryResult<WorkspaceLaunchConfigs | null> {
+  return useQuery<WorkspaceLaunchConfigs | null>({
     queryKey: launchConfigsQueryKey,
-    queryFn: async () => {
-      const list = await callIpc<ProjectLaunchConfigs[]>('launchConfig.list');
-      return Array.isArray(list) ? list : [];
-    },
+    queryFn: async () => (await callIpc<WorkspaceLaunchConfigs | null>('launchConfig.list')) ?? null,
+    enabled,
   });
 }
 
-/** One Project's own launch configs, derived from the shared list query. */
-export function useProjectLaunchConfigs(projectId: string): ProjectLaunchConfigs | undefined {
-  const { data } = useLaunchConfigs();
-  return data?.find((entry) => entry.projectId === projectId);
+/** Runs a configuration as a new terminal (two runs are two terminals) and resolves with its snapshot. */
+export function useRunLaunchConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { configName: string }) => callIpc<TerminalSnapshot>('launchConfig.run', args),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: terminalsQueryKey }),
+  });
 }

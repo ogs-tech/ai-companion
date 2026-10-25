@@ -24,7 +24,8 @@ export class EntityWatchService {
   private readonly listeners = new Set<(event: EntityChangedEvent) => void>();
 
   constructor(
-    private readonly dataDir: string,
+    /** Global's data dir, plus the open workspace's when there is one. */
+    private readonly dataDirs: readonly string[],
     private readonly repository: Pick<EntityRepository, 'get'>,
     private readonly adapterManager: Pick<AdapterManager, 'syncEntity'>,
     private readonly watcher: FileWatcherPort,
@@ -32,11 +33,11 @@ export class EntityWatchService {
 
   start(): void {
     if (this.handle) return;
-    // Watches dataDir as a whole (recursively) — the watcher port has no
+    // Watches each dataDir as a whole (recursively) — the watcher port has no
     // glob support (chokidar v4 dropped it), so filtering down to the four
     // canonical entity source files happens in handleChange below, reusing
     // the same mapFilePathToEntity every other change is checked against.
-    this.handle = this.watcher.watch([this.dataDir], (path) => {
+    this.handle = this.watcher.watch([...this.dataDirs], (path) => {
       void this.handleChange(path);
     });
   }
@@ -52,7 +53,9 @@ export class EntityWatchService {
   }
 
   private async handleChange(absolutePath: string): Promise<void> {
-    const target = mapFilePathToEntity(this.dataDir, absolutePath);
+    const target = this.dataDirs
+      .map((dataDir) => mapFilePathToEntity(dataDir, absolutePath))
+      .find((candidate) => candidate !== null);
     if (!target) return;
     const urn = entityUrn(target.kind, target.name);
     let entity: Entity;

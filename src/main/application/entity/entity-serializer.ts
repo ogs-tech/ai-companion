@@ -50,15 +50,15 @@ function readMetadata(fm: Record<string, unknown>): EntityMetadata {
 function readScopes(fm: Record<string, unknown>): Scope[] {
   const raw = fm['scopes'];
   if (Array.isArray(raw)) {
-    return raw.filter((s): s is Scope => s === 'personal' || s === 'project' || s === 'workspace');
+    return raw.filter((s): s is Scope => s === 'personal' || s === 'workspace');
   }
   return ['personal'];
 }
 
 export function renderEntityFile(entity: Entity): string {
   if (entity.kind === 'instruction') {
-    // Frontmatter-free: the body is the whole file. Repo/description/metadata
-    // for project instructions lives in a sidecar meta.json (not this file).
+    // Frontmatter-free: the body is the whole file. Description/metadata
+    // for workspace instructions lives in a sidecar meta.json (not this file).
     const content = (entity as Instruction).content;
     return content.endsWith('\n') ? content : `${content}\n`;
   }
@@ -92,7 +92,7 @@ export interface ParseEntityFileArgs {
   source: EntitySource;
   /**
    * Only used when `kind === 'instruction'`. When present, carries the
-   * repoPath (project only), description, version and timestamps that would
+   * owning workspace (workspace instructions only), description, version and timestamps that would
    * otherwise be lost to the frontmatter-free storage. Personal instructions
    * default this to zeroed values when omitted.
    */
@@ -172,7 +172,7 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
         kind: 'instruction',
         name,
         description: sidecar.description,
-        scopes: [sidecar.scope ?? 'project'],
+        scopes: ['workspace'],
         scopeId: sidecar.scopeId,
         metadata: meta,
         source,
@@ -180,25 +180,8 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
       };
       return scoped;
     }
-    if (sidecar.repoPath !== undefined && sidecar.repoPath !== '') {
-      // Pre-migration shape: no scopeId persisted yet. InstructionService
-      // lazily finds-or-creates a matching Project and re-saves with a real
-      // scopeId — see InstructionService.get/.list.
-      const legacy: Instruction = {
-        urn: entityUrn('instruction', name),
-        kind: 'instruction',
-        name,
-        description: sidecar.description,
-        scopes: ['project'],
-        legacyRepoPath: sidecar.repoPath,
-        metadata: meta,
-        source,
-        content: body,
-      };
-      return legacy;
-    }
     throw new Error(
-      `parseEntityFile: non-personal instruction '${name}' requires sidecar.scopeId (or legacy sidecar.repoPath)`,
+      `parseEntityFile: non-personal instruction '${name}' requires sidecar.scopeId`,
     );
   }
   throw new Error(`parseEntityFile: unsupported kind '${kind}'`);

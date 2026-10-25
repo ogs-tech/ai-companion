@@ -37,13 +37,13 @@ Handlers are grouped per namespace in `src/main/ipc/<namespace>-handlers.ts`, ea
 ```ts
 export function buildLaunchConfigHandlers(
   configService: LaunchConfigService,
-  processService: LaunchProcessService,
+  terminalService: TerminalService,
 ): IpcHandlers {
   return {
-    'launchConfig.list': async () => configService.listAll(),
+    'launchConfig.list': async () => configService.list(),
     'launchConfig.run': async (params) => {
       const raw = asObject(params, 'launchConfig.run');
-      return processService.run(asString(raw['projectId'], 'projectId'), asString(raw['configName'], 'configName'));
+      return terminalService.runLaunch(asString(raw['configName'], 'configName'));
     },
   };
 }
@@ -62,7 +62,9 @@ export function buildLaunchConfigHandlers(
 
 If the service is per-workspace (built in `src/main/application/workspace-scoped-services.ts`), read it from
 `workspaceScoped` inside `buildDeps()`. The dispatcher is rebuilt from `buildDeps()` on every
-`workspace.switchTo`, so the handler always closes over the active workspace's graph.
+activation (`workspace.switchTo`/`open`/`goHome`), so the handler always closes over the current graph —
+which exists at Início too, with no workspace open. A use case that needs an open workspace (git, launch
+configs, the file browser) must fail `validation` there, or return `null`, rather than assume one.
 
 ## 4. Test the handler
 
@@ -78,10 +80,10 @@ Wrap the call in a react-query hook under `src/renderer/hooks/`:
 ```ts
 export const launchConfigsQueryKey = ['launchConfigs'] as const;
 
-export function useLaunchConfigs(): UseQueryResult<ProjectLaunchConfigs[]> {
-  return useQuery<ProjectLaunchConfigs[]>({
+export function useLaunchConfigs(): UseQueryResult<WorkspaceLaunchConfigs | null> {
+  return useQuery<WorkspaceLaunchConfigs | null>({
     queryKey: launchConfigsQueryKey,
-    queryFn: () => callIpc<ProjectLaunchConfigs[]>('launchConfig.list'),
+    queryFn: () => callIpc<WorkspaceLaunchConfigs | null>('launchConfig.list'),
   });
 }
 ```

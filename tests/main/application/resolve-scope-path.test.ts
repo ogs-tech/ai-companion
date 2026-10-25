@@ -8,52 +8,33 @@ const base = {
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'x',
 };
 
-describe('resolveScopePath', () => {
-  it('resolves a project scope via projectService.get, called with the entity scopeId (not urn or anything else)', async () => {
-    const entity: Instruction = { ...base, scopes: ['project'], scopeId: 'proj-1' };
-    const getSpy = vi.fn(async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }));
-    const deps = {
-      workspaceService: { get: async () => { throw new Error('should not be called'); } },
-      projectService: { get: getSpy },
-    };
-    expect(await resolveScopePath(entity, deps)).toBe('/repos/acme');
-    expect(getSpy).toHaveBeenCalledWith('proj-1');
-    expect(getSpy).toHaveBeenCalledTimes(1);
-  });
+const unused = { workspaceService: { get: async () => { throw new Error('n/a'); } } };
 
+describe('resolveScopePath', () => {
   it('resolves a workspace scope via workspaceService.get, called with the entity scopeId (not urn or anything else)', async () => {
     const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'ws-1' };
-    const getSpy = vi.fn(async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }));
-    const deps = {
-      workspaceService: { get: getSpy },
-      projectService: { get: async () => { throw new Error('should not be called'); } },
-    };
-    expect(await resolveScopePath(entity, deps)).toBe('/repos/ws');
+    const getSpy = vi.fn(async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }));
+    expect(await resolveScopePath(entity, { workspaceService: { get: getSpy } })).toBe('/repos/ws');
     expect(getSpy).toHaveBeenCalledWith('ws-1');
     expect(getSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('throws validation when scope is project but scopeId is missing', async () => {
-    const entity: Instruction = { ...base, scopes: ['project'] };
-    const deps = { workspaceService: { get: async () => { throw new Error('n/a'); } }, projectService: { get: async () => { throw new Error('n/a'); } } };
-    const err = await resolveScopePath(entity, deps).catch((e: unknown) => e);
+  it('throws validation when scope is workspace but scopeId is missing', async () => {
+    const entity: Instruction = { ...base, scopes: ['workspace'] };
+    const err = await resolveScopePath(entity, unused).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('validation');
   });
 
-  it('propagates not_found when the referenced project no longer exists', async () => {
-    const entity: Instruction = { ...base, scopes: ['project'], scopeId: 'gone' };
-    const deps = {
-      workspaceService: { get: async () => { throw new Error('n/a'); } },
-      projectService: { get: async () => { throw new DomainError('not_found', 'Project not found: gone'); } },
-    };
+  it('propagates not_found when the referenced workspace no longer exists', async () => {
+    const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'gone' };
+    const deps = { workspaceService: { get: async () => { throw new DomainError('not_found', 'Workspace not found: gone'); } } };
     await expect(resolveScopePath(entity, deps)).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('throws internal for personal scope — callers must branch before calling this', async () => {
     const entity: Instruction = { ...base, scopes: ['personal'], name: 'default' };
-    const deps = { workspaceService: { get: async () => { throw new Error('n/a'); } }, projectService: { get: async () => { throw new Error('n/a'); } } };
-    const err = await resolveScopePath(entity, deps).catch((e: unknown) => e);
+    const err = await resolveScopePath(entity, unused).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('internal');
   });

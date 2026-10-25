@@ -1,27 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitService } from '../../../../src/main/application/services/git-service.js';
+import { GitNonFastForwardError, GitPushRejectedError } from '../../../../src/main/domain/git-errors.js';
+import type { GitBranchHead } from '../../../../src/shared/git.js';
 import { FakeRepoGitPort } from '../../../../src/main/application/services/__fixtures__/fake-repo-git-port.js';
-import { DomainError } from '../../../../src/main/domain/errors.js';
 
 const WORKSPACE_ROOT = '/ws';
-const PROJECT_ROOT = '/ws/app';
 
-function setup() {
+function setup(activeRoot: string | null = WORKSPACE_ROOT) {
   const port = new FakeRepoGitPort();
   port.repos.add(WORKSPACE_ROOT);
-  port.repos.add(PROJECT_ROOT);
-  const projectService = {
-    get: vi.fn(async (id: string) => {
-      if (id !== 'p1') throw new DomainError('not_found', `Project not found: ${id}`);
-      return { id, name: 'app', path: PROJECT_ROOT, createdAt: '' };
-    }),
-  };
-  const workspaceService = { getActive: vi.fn(async () => ({ rootPath: WORKSPACE_ROOT })) };
-  const service = new GitService(port, {
-    projectService,
-    workspaceService: workspaceService as never,
-  });
-  return { port, service, projectService };
+  const service = new GitService(port, { activeWorkspace: activeRoot === null ? null : { rootPath: activeRoot } });
+  return { port, service };
 }
 
 describe('GitService', () => {
@@ -31,26 +20,23 @@ describe('GitService', () => {
   });
 
   describe('root resolution', () => {
-    it('targets the active workspace root without a projectId', async () => {
+    it('targets the open workspace root', async () => {
       await ctx.service.status();
       expect(ctx.port.calls).toEqual([{ op: 'status', root: WORKSPACE_ROOT }]);
     });
 
-    it("targets the Project's path with a projectId, resolved on every call", async () => {
-      await ctx.service.status('p1');
-      await ctx.service.status('p1');
-      expect(ctx.port.calls.map((c) => c.root)).toEqual([PROJECT_ROOT, PROJECT_ROOT]);
-      expect(ctx.projectService.get).toHaveBeenCalledTimes(2);
-    });
-
-    it('raises not_found for an unknown projectId', async () => {
-      await expect(ctx.service.status('nope')).rejects.toMatchObject({ kind: 'not_found' });
+    it('fails validation for every call when no workspace is open (Início)', async () => {
+      const home = setup(null);
+      await expect(home.service.status()).rejects.toMatchObject({ kind: 'validation' });
+      await expect(home.service.stage(['a.ts'])).rejects.toMatchObject({ kind: 'validation' });
+      await expect(home.service.init()).rejects.toMatchObject({ kind: 'validation' });
+      expect(home.port.calls).toEqual([]);
     });
 
     it('reports a non-repo from status but rejects mutations with not_found', async () => {
       ctx.port.repos.delete(WORKSPACE_ROOT);
       expect(await ctx.service.status()).toEqual({ isRepo: false });
-      await expect(ctx.service.stage(undefined, ['a.ts'])).rejects.toMatchObject({
+      await expect(ctx.service.stage(['a.ts'])).rejects.toMatchObject({
         kind: 'not_found',
       });
     });
@@ -66,19 +52,19 @@ describe('GitService', () => {
       [''],
       ['C:\\x'],
     ])('rejects %j', async (bad) => {
-      await expect(ctx.service.stage(undefined, ['ok.ts', bad])).rejects.toMatchObject({
+      await expect(ctx.service.stage(['ok.ts', bad])).rejects.toMatchObject({
         kind: 'validation',
       });
       expect(ctx.port.calls).toEqual([]);
     });
 
     it('allows a leading dash (paths always follow `--`)', async () => {
-      await ctx.service.stage(undefined, ['-rf']);
+      await ctx.service.stage(['-rf']);
       expect(ctx.port.calls).toContainEqual({ op: 'stage', root: WORKSPACE_ROOT, paths: ['-rf'] });
     });
 
     it('rejects an empty paths list', async () => {
-      await expect(ctx.service.discard(undefined, [])).rejects.toMatchObject({
+      await expect(ctx.service.discard([])).rejects.toMatchObject({
         kind: 'validation',
       });
     });
@@ -86,10 +72,10 @@ describe('GitService', () => {
 
   describe('diff', () => {
     it('passes the source kind through', async () => {
-      await ctx.service.diff('p1', 'a.ts', { kind: 'index' });
+      await ctx.service.diff('a.ts', { kind: 'index' });
       expect(ctx.port.calls).toContainEqual({
         op: 'diff',
-        root: PROJECT_ROOT,
+        root: WORKSPACE_ROOT,
         path: 'a.ts',
         source: 'index',
       });
@@ -97,7 +83,7 @@ describe('GitService', () => {
 
     it('rejects the commit source until history ships', async () => {
       await expect(
-        ctx.service.diff(undefined, 'a.ts', { kind: 'commit', sha: 'abc' }),
+        ctx.service.diff('a.ts', { kind: 'commit', sha: 'abc' }),
       ).rejects.toMatchObject({
         kind: 'validation',
       });
@@ -106,7 +92,7 @@ describe('GitService', () => {
 
   describe('commit', () => {
     it('rejects a blank message', async () => {
-      await expect(ctx.service.commit(undefined, '  \n', false)).rejects.toMatchObject({
+      await expect(ctx.service.commit('  \n', false)).rejects.toMatchObject({
         kind: 'validation',
       });
     });
@@ -115,20 +101,20 @@ describe('GitService', () => {
       ctx.port.files = [
         { path: 'a.ts', index: 'unmodified', worktree: 'modified', conflicted: false },
       ];
-      await expect(ctx.service.commit(undefined, 'msg', false)).rejects.toMatchObject({
+      await expect(ctx.service.commit('msg', false)).rejects.toMatchObject({
         kind: 'validation',
       });
-      await expect(ctx.service.commit(undefined, 'msg', true)).resolves.toEqual({ sha: 'new-sha' });
+      await expect(ctx.service.commit('msg', true)).resolves.toEqual({ sha: 'new-sha' });
     });
 
     it('commits when something is staged', async () => {
       ctx.port.files = [
         { path: 'a.ts', index: 'modified', worktree: 'unmodified', conflicted: false },
       ];
-      await expect(ctx.service.commit('p1', 'msg', false)).resolves.toEqual({ sha: 'new-sha' });
+      await expect(ctx.service.commit('msg', false)).resolves.toEqual({ sha: 'new-sha' });
       expect(ctx.port.calls).toContainEqual({
         op: 'commit',
-        root: PROJECT_ROOT,
+        root: WORKSPACE_ROOT,
         message: 'msg',
         amend: false,
       });
@@ -150,8 +136,8 @@ describe('GitService', () => {
   describe('mutation serialization', () => {
     it('runs two mutations on the same root in order', async () => {
       const release = ctx.port.hold('stage');
-      const first = ctx.service.stage(undefined, ['a.ts']);
-      const second = ctx.service.unstage(undefined, ['b.ts']);
+      const first = ctx.service.stage(['a.ts']);
+      const second = ctx.service.unstage(['b.ts']);
 
       await vi.waitFor(() => expect(ctx.port.calls.map((c) => c.op)).toEqual(['stage']));
       release();
@@ -160,20 +146,90 @@ describe('GitService', () => {
       expect(ctx.port.calls.map((c) => c.op)).toEqual(['stage', 'unstage']);
     });
 
-    it('does not block a mutation on a different root', async () => {
-      const release = ctx.port.hold('stage');
-      const blocked = ctx.service.stage(undefined, ['a.ts']);
-      await ctx.service.discard('p1', ['b.ts']);
-      expect(ctx.port.calls.map((c) => c.op)).toEqual(['stage', 'discard']);
-      release();
-      await blocked;
-    });
-
     it('keeps the queue alive after a failed mutation', async () => {
-      await expect(ctx.service.commit(undefined, 'msg', false)).rejects.toMatchObject({
+      await expect(ctx.service.commit('msg', false)).rejects.toMatchObject({
         kind: 'validation',
       });
-      await expect(ctx.service.stage(undefined, ['a.ts'])).resolves.toBeUndefined();
+      await expect(ctx.service.stage(['a.ts'])).resolves.toBeUndefined();
+    });
+  });
+
+  describe('sync', () => {
+    const head = (over: Partial<GitBranchHead>, tracked = true): void => {
+      const { upstream: _drop, ...base } = ctx.port.head;
+      ctx.port.head = { ...base, ahead: 0, behind: 0, ...(tracked ? { upstream: 'origin/main' } : {}), ...over };
+    };
+    const untracked = (): void => head({}, false);
+    const ops = () => ctx.port.calls.filter((c) => c.op !== 'status').map((c) => c.op);
+
+    it.each([
+      [{ ahead: 2 }, 'push', ['push']],
+      [{ behind: 3 }, 'pull', ['pull']],
+      [{ ahead: 1, behind: 1 }, 'sync', ['pull', 'push']],
+      [{}, 'fetch', ['fetch']],
+    ] as const)('%j → %s', async (over, action, expected) => {
+      head(over);
+      await expect(ctx.service.sync()).resolves.toEqual({ action });
+      expect(ops()).toEqual(expected);
+    });
+
+    it('publishes a branch with no upstream', async () => {
+      untracked();
+      await expect(ctx.service.sync()).resolves.toEqual({ action: 'publish' });
+      expect(ops()).toEqual(['push']);
+    });
+
+    it('publishes with setUpstream and pushes without it otherwise', async () => {
+      untracked();
+      await ctx.service.push();
+      head({ ahead: 1 });
+      await ctx.service.push();
+      expect(ctx.port.calls.filter((c) => c.op === 'push')).toEqual([
+        { op: 'push', root: WORKSPACE_ROOT, setUpstream: true },
+        { op: 'push', root: WORKSPACE_ROOT, setUpstream: false },
+      ]);
+    });
+
+    it.each([
+      ['detached HEAD', { name: null }],
+      ['unborn branch', { oid: null }],
+    ] as const)('refuses on %s', async (_label, over) => {
+      head(over);
+      await expect(ctx.service.sync()).rejects.toMatchObject({ kind: 'validation' });
+      await expect(ctx.service.push()).rejects.toMatchObject({ kind: 'validation' });
+      expect(ops()).toEqual([]);
+    });
+
+    it('refuses mid-merge', async () => {
+      ctx.port.state = 'merging';
+      await expect(ctx.service.sync()).rejects.toMatchObject({ kind: 'validation' });
+      await expect(ctx.service.pull()).rejects.toMatchObject({ kind: 'validation' });
+    });
+
+    it('pull needs an upstream', async () => {
+      untracked();
+      await expect(ctx.service.pull()).rejects.toMatchObject({ kind: 'validation' });
+    });
+
+    it('a diverged pull stops before pushing and says the pull failed', async () => {
+      head({ ahead: 1, behind: 1 });
+      ctx.port.failures.set('pull', new GitNonFastForwardError('diverged'));
+      await expect(ctx.service.sync()).rejects.toMatchObject({
+        kind: 'conflict',
+        message: 'Pull falhou: diverged',
+        details: { reason: 'non_fast_forward' },
+      });
+      expect(ops()).toEqual(['pull']);
+    });
+
+    it('names the push as the failed half after a successful pull', async () => {
+      head({ ahead: 1, behind: 1 });
+      ctx.port.failures.set('push', new GitPushRejectedError('rejected'));
+      await expect(ctx.service.sync()).rejects.toMatchObject({
+        message: 'Pull concluído, mas o push falhou: rejected',
+        details: { reason: 'push_rejected' },
+      });
+      expect(ops()).toEqual(['pull', 'push']);
     });
   });
 });

@@ -22,6 +22,8 @@ import { Icon } from '../components/ds/Icon.js';
 import { Kicker } from '../components/ds/Kicker.js';
 import { ScreenHeader } from '../components/ds/ScreenHeader.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
+import { queryClient } from '../lib/query-client.js';
+import { settingsQueryKey } from '../hooks/use-settings.js';
 import { SyncReportModal } from '../components/SyncReportModal.js';
 import { ConfirmDisableModal } from './settings/ConfirmDisableModal.js';
 import { RestoreConfirmDialog } from './settings/RestoreConfirmDialog.js';
@@ -115,6 +117,7 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
         adapterId: key,
         enabled: true,
       });
+      void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
       const current = await callIpc<SettingsModel | null>('settings.get', {});
       if (current !== null) setSettings(current);
       if (result.syncReport.some((e) => e.status !== 'ok')) {
@@ -136,6 +139,7 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
       'adapter.setEnabled',
       { adapterId: key, enabled: false, removeSymlinks },
     );
+    void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
     const current = await callIpc<SettingsModel | null>('settings.get', {});
     if (current !== null) setSettings(current);
     if (removeSymlinks) {

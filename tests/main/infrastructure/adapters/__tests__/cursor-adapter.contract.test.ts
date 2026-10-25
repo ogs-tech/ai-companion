@@ -4,7 +4,6 @@ import { DomainError } from '../../../../../src/main/domain/errors.js';
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 describe('CursorAdapter — Adapter port contract', () => {

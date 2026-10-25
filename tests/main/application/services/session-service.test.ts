@@ -9,6 +9,7 @@ import { FakeEmbeddedBrowserPort } from '../../../../src/main/application/servic
 import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
 import type { SessionAnchor } from '../../../../src/shared/session.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
+import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const WORKSPACE = '/home/user/.ai-companion';
 
@@ -18,15 +19,15 @@ const skill = (name = 'foo'): Skill => ({
   source: WORKSPACE_SOURCE, content: 'body',
 });
 
-const projectScopedSkill = (name = 'acme', scopeId = 'proj-1'): Skill => ({
+const workspaceScopedSkill = (name = 'acme', scopeId = 'ws-1'): Skill => ({
   urn: entityUrn('skill', name), kind: 'skill', name, description: '',
-  scopes: ['project'], scopeId, metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+  scopes: ['workspace'], scopeId, metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'body',
 });
 
-const projectInstruction = (name = 'acme', scopeId = 'proj-1'): Instruction => ({
+const workspaceInstruction = (name = 'acme', scopeId = 'ws-1'): Instruction => ({
   urn: entityUrn('instruction', name), kind: 'instruction', name, description: '',
-  scopes: ['project'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
+  scopes: ['workspace'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: '# notes\n',
 });
 
@@ -36,15 +37,13 @@ const setup = (options?: { maxBufferChars?: number }) => {
     syncEntity: vi.fn().mockResolvedValue([]),
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
-  const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
+  const base = new EntityService(scopedRepository({ global: repo, workspaceId: 'ws-1' }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
   const claudeSession = new FakeClaudeSessionPort();
   const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
-    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
-    projectService: {
-      get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }),
-      findOrCreateByPath: async (path: string) => ({ id: `project-for:${path}`, name: 'adopted', path, createdAt: '' }),
-    },
+    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) },
+    activeWorkspace: { id: 'ws-1', name: 'W', rootPath: '/repos/ws', createdAt: '' },
+    homedir: '/home/u',
   };
   const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
   const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, fs, options);
@@ -64,18 +63,18 @@ describe('SessionService', () => {
     expect(session.status).toBe('running');
   });
 
-  it('spawn resolves cwd via resolveScopePath for a project instruction entity anchor', async () => {
+  it('spawn resolves cwd via resolveScopePath for a workspace instruction entity anchor', async () => {
     const { service, base } = setup();
-    await base.save({ entity: projectInstruction('acme', 'proj-1'), isCreate: true });
+    await base.save({ entity: workspaceInstruction('acme', 'ws-1'), isCreate: true });
     const session = await service.spawn(entityAnchor(entityUrn('instruction', 'acme')));
-    expect(session.cwd).toBe('/repos/acme');
+    expect(session.cwd).toBe('/repos/ws');
   });
 
-  it('spawn resolves cwd via resolveScopePath for a project-scoped skill entity anchor', async () => {
+  it('spawn resolves cwd via resolveScopePath for a workspace-scoped skill entity anchor', async () => {
     const { service, base } = setup();
-    await base.save({ entity: projectScopedSkill('acme', 'proj-1'), isCreate: true });
+    await base.save({ entity: workspaceScopedSkill('acme', 'ws-1'), isCreate: true });
     const session = await service.spawn(entityAnchor(entityUrn('skill', 'acme')));
-    expect(session.cwd).toBe('/repos/acme');
+    expect(session.cwd).toBe('/repos/ws');
   });
 
   it('spawn resolves cwd directly for a workspace anchor (no entity lookup)', async () => {
@@ -84,10 +83,11 @@ describe('SessionService', () => {
     expect(session.cwd).toBe('/repos/ws');
   });
 
-  it('spawn resolves cwd directly for a project anchor (no entity lookup)', async () => {
+  it('spawn runs a personal anchor (Início) in the home dir', async () => {
     const { service } = setup();
-    const session = await service.spawn({ kind: 'project', projectId: 'p1' });
-    expect(session.cwd).toBe('/repos/acme');
+    const session = await service.spawn({ kind: 'personal' });
+    expect(session.cwd).toBe('/home/u');
+    expect(session.label).toBe('Início');
   });
 
   it('spawn reuses the existing live session for the same anchor (idempotent open)', async () => {
@@ -180,7 +180,7 @@ describe('SessionService', () => {
 
   it('onOutput/onExit relay by sessionId regardless of anchor kind', async () => {
     const { service, claudeSession } = setup();
-    const session = await service.spawn({ kind: 'project', projectId: 'p1' });
+    const session = await service.spawn({ kind: 'personal' });
     const received: Array<[string, string]> = [];
     service.onOutput((sessionId, chunk) => received.push([sessionId, chunk]));
     claudeSession.simulateData(session.sessionId, 'hello');
@@ -192,10 +192,10 @@ describe('SessionService', () => {
     await base.save({ entity: skill('foo'), isCreate: true });
     const entitySession = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
     const wsSession = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
-    const projectSession = await service.spawn({ kind: 'project', projectId: 'p1' });
+    const homeSession = await service.spawn({ kind: 'personal' });
     expect(entitySession.label).toBe('foo');
     expect(wsSession.label).toBe('W');
-    expect(projectSession.label).toBe('acme');
+    expect(homeSession.label).toBe('Início');
   });
 
   it('list returns an empty array before any session is spawned', () => {
@@ -228,7 +228,7 @@ describe('SessionService', () => {
   });
 });
 
-describe('SessionService concurrent workspace/project sessions', () => {
+describe('SessionService concurrent workspace/personal sessions', () => {
   it('spawn mints a fresh sessionId on every call for a workspace anchor, and both stay live in list()', async () => {
     const { service, claudeSession } = setup();
     const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'w1' };
@@ -241,9 +241,9 @@ describe('SessionService concurrent workspace/project sessions', () => {
     expect(service.list().every((s) => s.status === 'running')).toBe(true);
   });
 
-  it('spawn mints a fresh sessionId on every call for a project anchor, and both stay live in list()', async () => {
+  it('spawn mints a fresh sessionId on every call for a personal anchor, and both stay live in list()', async () => {
     const { service, claudeSession } = setup();
-    const anchor: SessionAnchor = { kind: 'project', projectId: 'p1' };
+    const anchor: SessionAnchor = { kind: 'personal' };
     const first = await service.spawn(anchor);
     const second = await service.spawn(anchor);
     expect(second.sessionId).not.toBe(first.sessionId);
@@ -251,7 +251,7 @@ describe('SessionService concurrent workspace/project sessions', () => {
     expect(service.list()).toHaveLength(2);
   });
 
-  it('entity spawn/resume identity is unaffected by the workspace/project change (regression)', async () => {
+  it('entity spawn/resume identity is unaffected by the workspace/personal change (regression)', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     const first = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
@@ -282,7 +282,7 @@ describe('SessionService concurrent workspace/project sessions', () => {
     expect(third.label).toBe('W (3)');
   });
 
-  it('spawn for a workspace/project anchor starts a brand-new conversation, never reattaching to a sibling sharing the cwd', async () => {
+  it('spawn for a workspace/personal anchor starts a brand-new conversation, never reattaching to a sibling sharing the cwd', async () => {
     const { service, claudeSession } = setup();
     await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
     expect(claudeSession.spawnCalls[0]?.opts.conversation.mode).toBe('start');
@@ -334,9 +334,9 @@ describe('SessionService concurrent workspace/project sessions', () => {
     const { service } = setup();
     await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
     const secondWs = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
-    const firstProject = await service.spawn({ kind: 'project', projectId: 'p1' });
+    const firstHome = await service.spawn({ kind: 'personal' });
     expect(secondWs.label).toBe('W (2)');
-    expect(firstProject.label).toBe('acme');
+    expect(firstHome.label).toBe('Início');
   });
 });
 
@@ -484,7 +484,20 @@ describe('SessionService output buffering', () => {
       });
     });
 
-    it('anchors it to the directory it actually ran in, registering that directory as a project if it is not one yet', async () => {
+    it('anchors a conversation that ran inside the open workspace to that workspace, keeping its own cwd', async () => {
+      const { service } = setup();
+
+      const adopted = await service.adoptConversation({
+        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        cwd: '/repos/ws/packages/api',
+        label: 'x',
+      });
+
+      expect(adopted.anchor).toEqual({ kind: 'workspace', workspaceId: 'ws-1' });
+      expect(adopted.cwd).toBe('/repos/ws/packages/api');
+    });
+
+    it('anchors a conversation that ran anywhere else to Início, keeping its own cwd', async () => {
       const { service } = setup();
 
       const adopted = await service.adoptConversation({
@@ -493,7 +506,7 @@ describe('SessionService output buffering', () => {
         label: 'x',
       });
 
-      expect(adopted.anchor).toEqual({ kind: 'project', projectId: 'project-for:/repos/from-history' });
+      expect(adopted.anchor).toEqual({ kind: 'personal' });
       expect(adopted.cwd).toBe('/repos/from-history');
     });
 

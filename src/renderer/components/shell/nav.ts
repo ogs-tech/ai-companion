@@ -1,14 +1,14 @@
 import {
-  House, Rocket, Store, Activity, Sparkles, Bot,
+  House, FolderOpen, Rocket, Store, Activity, Sparkles, Bot,
   Webhook, Plug, type LucideIcon,
 } from 'lucide-react';
 
-export type Area = 'workspace' | 'starter-pack' | 'marketplaces' | 'diagnostico';
+export type Area = 'workspace' | 'workspaces' | 'starter-pack' | 'marketplaces' | 'diagnostico';
 
 // No area carries a `sub` anymore — Skills/Agents/Hooks/MCP/Plugins all moved
 // from standalone sub-screens into tree nodes inside the one Workspace screen
 // (see WorkspaceScreen + EntityTreeGroup/HooksTreeGroup/McpTreeGroup/PluginsTreeGroup).
-// Starter Pack/Marketplaces/Diagnóstico followed the same trend: they're
+// Workspaces/Starter Pack/Marketplaces/Diagnóstico followed the same trend: they're
 // Workbench tabs now (see workspace-area-store.ts), opened from the Explorer
 // Panel's own pinned rows on the Default/Global workspace (WorkspaceScreen's
 // `appAreaRows`) rather than a TopNav tab. 'workspace' itself needs no tab —
@@ -19,6 +19,7 @@ export interface AreaDef { area: Area; label: string; glyph: LucideIcon; }
 
 export const NAV_AREAS: ReadonlyArray<AreaDef> = [
   { area: 'workspace', label: 'Início', glyph: House },
+  { area: 'workspaces', label: 'Workspaces', glyph: FolderOpen },
   { area: 'starter-pack', label: 'Starter Pack', glyph: Rocket },
   { area: 'marketplaces', label: 'Marketplaces', glyph: Store },
   { area: 'diagnostico', label: 'Diagnóstico', glyph: Activity },
@@ -43,4 +44,8 @@ export const ENTITY_ACCENT_COLOR = {
   skill: 'info.main',
   agent: 'success.main',
   instruction: 'warning.main',
-} as const satisfies Record<'skill' | 'agent' | 'instruction', string>;
+  // Integrações share one color (ink), matching the "Integrações" chip and bar segment.
+  hook: 'primary.main',
+  mcp: 'primary.main',
+  plugin: 'primary.main',
+} as const satisfies Record<'skill' | 'agent' | 'instruction' | 'hook' | 'mcp' | 'plugin', string>;

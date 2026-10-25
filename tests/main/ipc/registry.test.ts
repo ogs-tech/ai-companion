@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildHandlers } from '../../../src/main/ipc/registry.js';
 import { SettingsService } from '../../../src/main/application/services/settings-service.js';
 import type { GitService } from '../../../src/main/application/services/git-service.js';
+import type { CommitMessageService } from '../../../src/main/application/services/commit-message-service.js';
 import type { SettingsRepository } from '../../../src/main/application/ports/settings-repository.js';
 import type { DialogPort } from '../../../src/main/application/ports/dialog-port.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
@@ -13,8 +14,8 @@ import type { SessionService } from '../../../src/main/application/services/sess
 import type { EmbeddedBrowserPort } from '../../../src/main/application/ports/embedded-browser-port.js';
 import type { SessionHistoryService } from '../../../src/main/application/services/session-history-service.js';
 import type { WorkspaceService } from '../../../src/main/application/services/workspace-service.js';
-import type { ProjectService } from '../../../src/main/application/services/project-service.js';
-import type { Workspace } from '../../../src/shared/workspace.js';
+import type { WorkspaceActivation } from '../../../src/main/ipc/workspace-handlers.js';
+import { createDispatcher } from '../../../src/main/ipc/dispatcher.js';
 import type { MarketplaceService } from '../../../src/main/application/services/marketplace-service.js';
 import type { HookService } from '../../../src/main/application/services/hook-service.js';
 import type { CredentialStorePort } from '../../../src/main/application/ports/credential-store-port.js';
@@ -24,10 +25,10 @@ import type { WorkspaceTeardownService } from '../../../src/main/application/ser
 import type { McpService } from '../../../src/main/application/services/mcp-service.js';
 import type { OpenWithService } from '../../../src/main/application/services/open-with-service.js';
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
-import type { FileBrowserPort } from '../../../src/main/application/ports/file-browser-port.js';
 import type { Settings } from '../../../src/shared/settings.js';
 import type { LaunchConfigService } from '../../../src/main/application/services/launch-config-service.js';
-import type { LaunchProcessService } from '../../../src/main/application/services/launch-process-service.js';
+import type { TerminalService } from '../../../src/main/application/services/terminal-service.js';
+import type { OpenEditorsService } from '../../../src/main/application/services/open-editors-service.js';
 
 const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
   adapters: {
@@ -41,6 +42,7 @@ const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
 interface Deps {
   settingsService: SettingsService;
   gitService: GitService;
+  commitMessageService: CommitMessageService;
   adapterManager: AdapterManager;
   dialogPort: DialogPort;
   pluginService: PluginService;
@@ -52,11 +54,8 @@ interface Deps {
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
-  switchActiveWorkspace: (id: string) => Promise<Workspace>;
-  registerRootProject: (rootPath: string) => Promise<void>;
-  fileBrowserService: FileBrowserService;
-  fileBrowserPort: FileBrowserPort;
-  projectService: ProjectService;
+  workspaceActivation: WorkspaceActivation;
+  fileBrowserService: FileBrowserService | null;
   marketplaceService: MarketplaceService;
   hookService: HookService;
   healthService: HealthService;
@@ -65,7 +64,8 @@ interface Deps {
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   launchConfigService: LaunchConfigService;
-  launchProcessService: LaunchProcessService;
+  terminalService: TerminalService;
+  openEditorsService: OpenEditorsService;
   appQuit: () => void;
   settingsRepoSpy: {
     load: ReturnType<typeof vi.fn>;
@@ -111,11 +111,13 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const embeddedBrowserPort = null as unknown as EmbeddedBrowserPort;
   const sessionHistoryService = null as unknown as SessionHistoryService;
   const workspaceService = null as unknown as WorkspaceService;
-  const switchActiveWorkspace = vi.fn() as unknown as (id: string) => Promise<Workspace>;
-  const registerRootProject = vi.fn().mockResolvedValue(undefined);
-  const fileBrowserService = null as unknown as FileBrowserService;
-  const fileBrowserPort = null as unknown as FileBrowserPort;
-  const projectService = null as unknown as ProjectService;
+  const workspaceActivation = {
+    switchTo: vi.fn(),
+    open: vi.fn(),
+    goHome: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as WorkspaceActivation;
+  const fileBrowserService = null;
   const marketplaceService = null as unknown as MarketplaceService;
   const hookService = null as unknown as HookService;
   const healthService = null as unknown as HealthService;
@@ -125,7 +127,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     restore: vi.fn().mockResolvedValue(undefined),
   } as unknown as WorkspaceTeardownService;
   const launchConfigService = null as unknown as LaunchConfigService;
-  const launchProcessService = null as unknown as LaunchProcessService;
+  const terminalService = null as unknown as TerminalService;
+  const openEditorsService = null as unknown as OpenEditorsService;
   const credentialStore: CredentialStorePort = {
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue(undefined),
@@ -136,6 +139,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   return {
     settingsService: new SettingsService(repo),
     gitService: null as unknown as GitService,
+    commitMessageService: null as unknown as CommitMessageService,
     adapterManager,
     dialogPort,
     pluginService,
@@ -147,11 +151,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     embeddedBrowserPort,
     sessionHistoryService,
     workspaceService,
-    switchActiveWorkspace,
-    registerRootProject,
+    workspaceActivation,
     fileBrowserService,
-    fileBrowserPort,
-    projectService,
     marketplaceService,
     hookService,
     healthService,
@@ -160,7 +161,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     notificationPort,
     workspaceTeardownService,
     launchConfigService,
-    launchProcessService,
+    terminalService,
+    openEditorsService,
     appQuit: () => undefined,
     settingsRepoSpy,
     dialogSpy,
@@ -216,6 +218,19 @@ describe('buildHandlers', () => {
     expect(handlers['repo.link']).toBeUndefined();
     expect(handlers['repo.unlink']).toBeUndefined();
     expect(handlers['repo.list']).toBeUndefined();
+  });
+
+  it('project.* is no longer registered (a folder is a workspace now) — the dispatcher answers not_found', async () => {
+    const handlers = buildHandlers(buildDeps());
+    expect(Object.keys(handlers).filter((method) => method.startsWith('project.'))).toEqual([]);
+    const dispatch = createDispatcher(handlers);
+    expect(await dispatch('project.list', {})).toMatchObject({ ok: false, error: { kind: 'not_found' } });
+  });
+
+  it('registers workspace.open and workspace.goHome', () => {
+    const handlers = buildHandlers(buildDeps());
+    expect(handlers['workspace.open']).toBeTypeOf('function');
+    expect(handlers['workspace.goHome']).toBeTypeOf('function');
   });
 
   it('dialog.selectFolder delegates to DialogPort.selectFolder', async () => {

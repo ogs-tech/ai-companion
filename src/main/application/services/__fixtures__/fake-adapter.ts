@@ -6,7 +6,7 @@ export class FakeAdapter implements Adapter {
   constructor(
     public readonly adapterId: string,
     private readonly personalDestination: string,
-    private readonly projectDestinationTemplate: (repoPath: string) => string = (repoPath) => `${repoPath}/.fake-adapter`,
+    private readonly workspaceDestinationTemplate: (scopeId: string) => string = (scopeId) => `${scopeId}/.fake-adapter`,
     /**
      * Optional per-entity failure injection — mirrors how ClaudeAdapter/CursorAdapter
      * can now throw from `resolveEntityDestinations` (via `resolveScopePath`) for an
@@ -26,14 +26,13 @@ export class FakeAdapter implements Adapter {
       out.push({ scope: 'personal', destination: this.personalDestination, strategy: 'symlink' });
     }
 
-    // Since linkedRepos was removed, only project *instructions* carry their
-    // own repoPath. Everything else (skill/agent 'project' scope) is a no-op
-    // until per-entity repoPath lands for those kinds too.
-    if (scopes.includes('project') && args.entity.kind === 'instruction') {
-      const project = args.entity as Instruction;
+    // Only workspace *instructions* get a destination here; skill/agent
+    // `workspace` scope is a no-op in this fake.
+    if (scopes.includes('workspace') && args.entity.kind === 'instruction') {
+      const instruction = args.entity as Instruction;
       out.push({
-        scope: 'project',
-        destination: this.projectDestinationTemplate(project.scopeId ?? ''),
+        scope: 'workspace',
+        destination: this.workspaceDestinationTemplate(instruction.scopeId ?? ''),
         strategy: 'symlink',
       });
     }

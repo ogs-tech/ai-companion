@@ -34,19 +34,19 @@ for example, into the body of the instruction that replaced it. Backups are neve
 ## Re-read files changed outside the app
 
 The file tree, previews and lists refresh by themselves when the app's own data changes. If something you
-edited elsewhere still looks stale, use **Reler do disco** (refresh icon) in the Explorer header.
+edited elsewhere still looks stale, use **Reler do disco** (refresh icon) next to the **Arquivos | Git** toggle in the left panel.
 
 ## Factory reset
 
-**Settings** → **Zona de perigo** → **Restaurar para estado inicial**, then confirm. Switch to the Global
-workspace first for a full reset. The app:
+**Settings** → **Zona de perigo** → **Restaurar para estado inicial**, then confirm. The app:
 
-1. removes every symlink and owned generated file it created for the active workspace's entities;
-2. removes each registered Project's `.ai-companion/index.md` link;
-3. deletes the active workspace's data dir — entities, settings, backups;
-4. resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to empty —
+1. removes every symlink and owned generated file it created for the entities in view (Global's, plus the
+   open workspace's if one is open);
+2. deletes Global's data dir `~/.ai-companion/` — personal entities, settings, the workspace registry,
+   backups. Each workspace's own `<folder>/.ai-companion/` stays in place;
+3. resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to empty —
    **including entries you added outside the app**;
-5. quits.
+4. quits.
 
-Copy `_backups/` somewhere else first if you might need it. The next launch starts from scratch, re-seeding
+Copy `~/.ai-companion/_backups/` somewhere else first if you might need it. The next launch starts from scratch, re-seeding
 the official marketplace. Details: [On-disk layout → Factory reset](../reference/on-disk-layout.md#factory-reset).

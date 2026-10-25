@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:net';
 import { ChokidarFileWatcher } from '../../../../src/main/infrastructure/file-watcher/chokidar-file-watcher.js';
 import type { FileWatcherHandle } from '../../../../src/main/application/ports/file-watcher-port.js';
 
@@ -49,5 +50,19 @@ describe('ChokidarFileWatcher', () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(onChange).not.toHaveBeenCalled();
     await rm(otherDir, { recursive: true, force: true });
+  });
+
+  it('skips a unix socket under a watched root instead of failing to watch it', async () => {
+    const socketServer = createServer();
+    await new Promise<void>((resolve) => socketServer.listen(join(dir, 'link.sock'), resolve));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      handle = new ChokidarFileWatcher({ stabilityThresholdMs: 30 }).watch([dir], vi.fn());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      await new Promise<void>((resolve) => socketServer.close(() => resolve()));
+    }
   });
 });

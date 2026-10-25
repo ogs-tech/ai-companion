@@ -35,7 +35,6 @@ const buildSettings = (claudeEnabled: boolean): Settings => ({
 
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 
 const setup = async (settings: Settings) => {
@@ -54,7 +53,7 @@ const setup = async (settings: Settings) => {
     entityRepository,
     symlinkManager,
     fileMaterializer,
-    workspacePath: WORKSPACE,
+    entityDataDir: () => WORKSPACE,
     adapters: new Map([[claudeAdapter.adapterId, claudeAdapter]]),
   });
   await entityRepository.save(skillPersonal);

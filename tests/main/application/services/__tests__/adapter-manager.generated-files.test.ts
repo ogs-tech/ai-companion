@@ -27,7 +27,6 @@ const instruction: Instruction = {
 };
 const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
-  projectService: { get: async () => { throw new Error('not stubbed'); } },
 };
 const settings: Settings = {
   adapters: { claude: { enabled: false }, cursor: { enabled: true } },  ui: { theme: 'system' }, language: 'off',
@@ -49,7 +48,7 @@ const setup = async () => {
     settingsService, entityRepository,
     symlinkManager: new SymlinkManager(fs, clock, '/workspace'),
     fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
-    workspacePath: '/workspace',
+    entityDataDir: () => '/workspace',
     adapters: new Map<string, Adapter>([['cursor', new CursorAdapter({ homedir: '/home/u', ...scopeDeps })]]),
   });
   return { manager, fs };
@@ -94,7 +93,7 @@ describe('AdapterManager generated-file lifecycle', () => {
       kind: 'instruction',
       name: 'broken',
       description: '',
-      scopes: ['project'],
+      scopes: ['workspace'],
       scopeId: 'gone',
       metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
       source: WORKSPACE_SOURCE,
@@ -103,9 +102,9 @@ describe('AdapterManager generated-file lifecycle', () => {
     await entityRepository.save(brokenProjectInstruction as Entity);
     const fs = new InMemoryFileSystem();
     const clock = new FixedClock(new Date('2026-07-02T10:00:00.000Z'));
-    const throwingProjectService = {
+    const throwingWorkspaceService = {
       get: async () => {
-        throw new DomainError('not_found', 'Project not found: gone');
+        throw new DomainError('not_found', 'Workspace not found: gone');
       },
     };
     const manager = new AdapterManager({
@@ -113,9 +112,9 @@ describe('AdapterManager generated-file lifecycle', () => {
       entityRepository,
       symlinkManager: new SymlinkManager(fs, clock, '/workspace'),
       fileMaterializer: new FileMaterializer(fs, clock, '/workspace'),
-      workspacePath: '/workspace',
+      entityDataDir: () => '/workspace',
       adapters: new Map<string, Adapter>([
-        ['cursor', new CursorAdapter({ homedir: '/home/u', workspaceService: scopeDeps.workspaceService, projectService: throwingProjectService })],
+        ['cursor', new CursorAdapter({ homedir: '/home/u', workspaceService: throwingWorkspaceService })],
       ]),
     });
 

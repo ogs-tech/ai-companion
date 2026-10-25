@@ -26,8 +26,6 @@ const report = (worst: HealthReport['worst']): HealthReport => ({
       : [],
 });
 
-const DEFAULT_WORKSPACE = { id: 'default', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' };
-
 const setupRoute = (worst: HealthReport['worst']) => {
   call.mockImplementation((method: string) => {
     if (method === 'health.getReport') return Promise.resolve(ok(report(worst)));
@@ -36,8 +34,8 @@ const setupRoute = (worst: HealthReport['worst']) => {
     }
     // Lands the Workspace landing screen on the Global/default branch — no
     // active project, so no file browser (and its xterm session panel).
-    if (method === 'workspace.getActive') return Promise.resolve(ok(DEFAULT_WORKSPACE));
-    if (method === 'workspace.list') return Promise.resolve(ok([DEFAULT_WORKSPACE]));
+    if (method === 'workspace.getActive') return Promise.resolve(ok(null));
+    if (method === 'workspace.list') return Promise.resolve(ok([]));
     if (method === 'project.list') return Promise.resolve(ok([]));
     return Promise.resolve(ok(undefined));
   });
@@ -48,7 +46,7 @@ beforeEach(() => {
 });
 
 describe('<Main> — sync status + diagnostics', () => {
-  it('paints the TopNav sync pill with the report worst severity', async () => {
+  it('paints the status bar sync entry with the report worst severity', async () => {
     setupRoute('error');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
@@ -56,11 +54,11 @@ describe('<Main> — sync status + diagnostics', () => {
     expect(pill).toHaveAttribute('data-variant', 'error');
   });
 
-  it('opens Diagnóstico as a Workbench tab from the TopNav sync pill', async () => {
+  it('opens Diagnóstico as a Workbench tab from the status bar sync entry', async () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-management-list');
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('status-pill-sync'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();
@@ -70,7 +68,7 @@ describe('<Main> — sync status + diagnostics', () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-management-list');
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('explorer-area-diagnostico'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();

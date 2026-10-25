@@ -11,7 +11,7 @@ import { mockApi, ok, fail, renderWithShell, type CallSpy } from '../../test-uti
 import { intersectionObservers } from '../../setup.js';
 import type { SessionHistoryEntry, SessionHistoryPage } from '../../../../src/shared/session-history.js';
 
-const SCOPE = { kind: 'project', projectId: 'p1' } as const;
+const SCOPE = { kind: 'workspace', workspaceId: 'ws-1' } as const;
 
 const runningSession = {
   sessionId: 'workspace:w1',
@@ -348,7 +348,7 @@ describe('SessionsTreeGroup', () => {
       render({ onSeeAll });
 
       const link = await screen.findByTestId('sessions-see-all');
-      expect(link).toHaveTextContent('Ver todas as 41');
+      expect(link).toHaveTextContent('Ver as 41 sessões');
       await userEvent.click(link);
 
       expect(onSeeAll).toHaveBeenCalled();

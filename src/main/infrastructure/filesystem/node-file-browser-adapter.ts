@@ -23,6 +23,7 @@ import { createFormulaResolver, formulaOf } from './spreadsheet-formula-resolver
 const MAX_READABLE_BYTES = 5 * 1024 * 1024; // 5MB — above this, never even read the file.
 const PREVIEW_CONTENT_CAP = 256 * 1024; // 256KB — previewable content is truncated to this.
 const BINARY_SNIFF_BYTES = 8000;
+const NEVER_LISTED = new Set(['.git', '.DS_Store']); // VCS internals and Finder litter, even with hidden files shown.
 const MAX_PREVIEW_ROWS = 2000; // per sheet — keeps the render-side table light for very long catalogs.
 const CURRENCY_SYMBOLS = ['R$', '$', '€', '£', '¥'];
 
@@ -345,7 +346,7 @@ export class NodeFileBrowserAdapter implements FileBrowserPort {
   /** Converters are consulted before any size cap or content sniffing — see `readFile`. */
   constructor(private readonly converters: readonly SpreadsheetConverterPort[] = []) {}
 
-  async listDir(absPath: string): Promise<FileBrowserEntry[]> {
+  async listDir(absPath: string, options: { showHidden?: boolean } = {}): Promise<FileBrowserEntry[]> {
     let dirents: import('node:fs').Dirent[];
     try {
       dirents = await fs.readdir(absPath, { withFileTypes: true });
@@ -356,7 +357,8 @@ export class NodeFileBrowserAdapter implements FileBrowserPort {
 
     const entries: FileBrowserEntry[] = [];
     for (const dirent of dirents) {
-      if (dirent.name.startsWith('.')) continue;
+      if (NEVER_LISTED.has(dirent.name)) continue;
+      if (dirent.name.startsWith('.') && !options.showHidden) continue;
       if (dirent.isDirectory()) {
         entries.push({ name: dirent.name, kind: 'dir' });
         continue;

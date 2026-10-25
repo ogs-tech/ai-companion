@@ -19,7 +19,7 @@ describe('use-file-browser', () => {
     vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'a.txt', kind: 'file' }]);
     const { result } = renderHook(() => useDirListing('sub'), { wrapper });
     await waitFor(() => expect(result.current.data).toEqual([{ name: 'a.txt', kind: 'file' }]));
-    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'sub' });
+    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'sub', showHidden: false });
   });
 
   it('useDirListing does not fetch when enabled:false', () => {
@@ -51,32 +51,11 @@ describe('use-file-browser', () => {
     expect(res).toBe('/repos/acme/sub');
   });
 
-  it('useDirListing fetches via project.listDir when scoped to a projectId', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'a.txt', kind: 'file' }]);
-    const { result } = renderHook(() => useDirListing('sub', { projectId: 'p1' }), { wrapper });
-    await waitFor(() => expect(result.current.data).toEqual([{ name: 'a.txt', kind: 'file' }]));
-    expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: 'sub' });
-  });
-
-  it('useFilePreview fetches via project.readFile when scoped to a projectId', async () => {
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue({ previewable: true, kind: 'text', content: 'hi', truncated: false });
-    const { result } = renderHook(() => useFilePreview('a.txt', { projectId: 'p1' }), { wrapper });
-    await waitFor(() => expect(result.current.data).toEqual({ previewable: true, kind: 'text', content: 'hi', truncated: false }));
-    expect(ipc.callIpc).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'a.txt' });
-  });
-
-  it('useWriteFile calls workspace.writeFile when no projectId is given', async () => {
+  it('useWriteFile calls workspace.writeFile', async () => {
     const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
     const { result } = renderHook(() => useWriteFile(), { wrapper });
     await result.current.mutateAsync({ path: 'a.txt', content: 'new content' });
     expect(spy).toHaveBeenCalledWith('workspace.writeFile', { path: 'a.txt', content: 'new content' });
-  });
-
-  it('useWriteFile calls project.writeFile when scoped to a projectId', async () => {
-    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
-    const { result } = renderHook(() => useWriteFile(), { wrapper });
-    await result.current.mutateAsync({ path: 'a.txt', content: 'new content', projectId: 'p1' });
-    expect(spy).toHaveBeenCalledWith('project.writeFile', { projectId: 'p1', path: 'a.txt', content: 'new content' });
   });
 
   it('useWriteFile updates the matching readFile query cache on success', async () => {
@@ -121,28 +100,6 @@ describe('use-file-browser — staying in step with the disk', () => {
     });
 
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
-  });
-
-  it('useRefreshFiles covers both scopes, since the tree mixes them', async () => {
-    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue([]);
-    const { result } = renderHook(
-      () => ({
-        workspaceListing: useDirListing('sub'),
-        projectListing: useDirListing('sub', { projectId: 'p1' }),
-        refresh: useRefreshFiles(),
-      }),
-      { wrapper },
-    );
-    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
-
-    await act(async () => {
-      await result.current.refresh();
-    });
-
-    const callsTo = (method: string): number =>
-      spy.mock.calls.filter(([m]) => m === method).length;
-    await waitFor(() => expect(callsTo('project.listDir')).toBe(2));
-    expect(callsTo('workspace.listDir')).toBe(2);
   });
 
   it('useRefreshFiles re-reads open file contents too, not just listings', async () => {

@@ -26,14 +26,15 @@ export interface AdapterManagerDeps {
   symlinkManager: SymlinkManager;
   fileMaterializer: FileMaterializer;
   adapters: Map<string, Adapter>;
-  workspacePath: string;
+  /** The data dir holding an entity's canonical files (Global or the active workspace's) — see `ScopedEntityRepository.dataDirFor`. */
+  entityDataDir: (entity: Entity) => string;
 }
 
 export interface SymlinkPlanEntry {
   adapterId: string;
   source: string;
   destination: string;
-  scope: 'personal' | 'project' | 'workspace';
+  scope: 'personal' | 'workspace';
 }
 
 export interface GeneratedFilePlanEntry {
@@ -84,7 +85,7 @@ export class AdapterManager {
           results.push(
             await this.syncDestination(
               adapter.adapterId,
-              this.entitySourcePath(entity, this.deps.workspacePath),
+              this.entitySourcePath(entity),
               destination,
             ),
           );
@@ -99,7 +100,7 @@ export class AdapterManager {
     const enabledAdapters = this.enabledAdapters(settings);
     const results: SyncResult[] = [];
 
-    const source = this.entitySourcePath(command.entity, this.deps.workspacePath);
+    const source = this.entitySourcePath(command.entity);
     for (const adapter of enabledAdapters) {
       const destinations = await adapter.resolveEntityDestinations({ entity: command.entity });
       for (const destination of destinations) {
@@ -140,7 +141,6 @@ export class AdapterManager {
     const adapter = this.deps.adapters.get(adapterId);
     if (!adapter) return { removed: 0, skipped: 0, errors: [] };
 
-    const workspacePath = this.deps.workspacePath;
     const entities = await this.deps.entityRepository.list();
     let removed = 0;
     let skipped = 0;
@@ -164,7 +164,7 @@ export class AdapterManager {
       for (const dest of destinations) {
         if (dest.strategy !== 'symlink') continue;
         try {
-          const result = await this.deps.symlinkManager.removeIfPointsToWorkspace(dest.destination, workspacePath);
+          const result = await this.deps.symlinkManager.removeIfPointsToWorkspace(dest.destination, this.deps.entityDataDir(entity));
           if (result === 'removed') {
             removed++;
           } else {
@@ -263,7 +263,6 @@ export class AdapterManager {
     const adapter = this.deps.adapters.get(adapterId);
     if (!adapter) return 0;
 
-    const workspacePath = this.deps.workspacePath;
     const entities = await this.deps.entityRepository.list();
     let count = 0;
 
@@ -280,7 +279,7 @@ export class AdapterManager {
       for (const dest of destinations) {
         try {
           if (dest.strategy === 'symlink') {
-            const isWorkspaceLink = await this.deps.symlinkManager.isSymlinkToWorkspace(dest.destination, workspacePath);
+            const isWorkspaceLink = await this.deps.symlinkManager.isSymlinkToWorkspace(dest.destination, this.deps.entityDataDir(entity));
             if (isWorkspaceLink) count++;
           } else {
             const validateArgs: Parameters<typeof this.deps.fileMaterializer.validate>[0] = {
@@ -313,7 +312,7 @@ export class AdapterManager {
 
     const entries: SymlinkPlanEntry[] = [];
     for (const entity of entities) {
-      const source = this.entitySourcePath(entity, this.deps.workspacePath);
+      const source = this.entitySourcePath(entity);
       for (const adapter of enabledAdapters) {
         const destinations = await adapter.resolveEntityDestinations({ entity });
         for (const dest of destinations) {
@@ -380,16 +379,17 @@ export class AdapterManager {
     return adapters;
   }
 
-  private entitySourcePath(entity: Entity, workspacePath: string): string {
-    if (entity.kind === 'skill') return join(workspacePath, 'skills', entity.name);
-    if (entity.kind === 'agent') return join(workspacePath, 'agents', `${entity.name}.md`);
+  private entitySourcePath(entity: Entity): string {
+    const dataDir = this.deps.entityDataDir(entity);
+    if (entity.kind === 'skill') return join(dataDir, 'skills', entity.name);
+    if (entity.kind === 'agent') return join(dataDir, 'agents', `${entity.name}.md`);
     if (entity.kind === 'instruction') {
-      // Personal singleton lives at instructions/default.md; project instructions
+      // Personal singleton lives at instructions/default.md; workspace instructions
       // live at instructions/project/<slug>/INSTRUCTION.md (see FsEntityRepository).
       if (entity.name === 'default' && entity.scopes[0] === 'personal') {
-        return join(workspacePath, 'instructions', 'default.md');
+        return join(dataDir, 'instructions', 'default.md');
       }
-      return join(workspacePath, 'instructions', 'project', entity.name, 'INSTRUCTION.md');
+      return join(dataDir, 'instructions', 'project', entity.name, 'INSTRUCTION.md');
     }
     throw new DomainError('validation', `Unsupported entity kind for sync: ${entity.kind}`);
   }

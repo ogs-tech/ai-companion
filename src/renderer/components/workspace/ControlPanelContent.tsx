@@ -1,43 +1,19 @@
 import { useState } from 'react';
-import { Box, Chip, IconButton, List, Stack, Tooltip } from '@mui/material';
-import { ChevronDown, ChevronRight, Layers, Plus, SquareTerminal } from 'lucide-react';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Group, Panel, usePanelRef } from 'react-resizable-panels';
+import { Plus } from 'lucide-react';
+import { ContainerHeader } from '../ds/ContainerChrome.js';
 import { Icon } from '../ds/Icon.js';
-import { Kicker } from '../ds/Kicker.js';
-import { EntityTreeGroup } from './EntityTreeGroup.js';
-import { HooksTreeGroup } from './HooksTreeGroup.js';
-import { McpTreeGroup } from './McpTreeGroup.js';
-import { PluginsTreeGroup } from './PluginsTreeGroup.js';
-import { SessionsTreeGroup } from './SessionsTreeGroup.js';
-import { TreeGroup } from './TreeGroup.js';
+import { ResizeHandle } from '../ds/ResizeHandle.js';
+import { CustomizationsList, type CustomizationsListProps } from './CustomizationsList.js';
+import { SessionsTreeGroup, liveInScope } from './SessionsTreeGroup.js';
+import { useSessions } from '../../hooks/use-sessions.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
-import type { Agent, Skill } from '../../../shared/entity.js';
 import type { SessionSnapshot } from '../../../shared/session.js';
 
-interface LocalScope {
-  scope: 'workspace' | 'project';
-  scopeId: string;
-}
-
-/**
- * A non-default workspace is always "as a Project" (a single registered Project, or none yet)
- * or "with multiple projects" — fully derived from `projects.length`, never persisted. See
- * docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md decision #1.
- */
-export type WorkspaceViewMode = 'project' | 'multi-project';
-
-interface ControlPanelContentProps {
-  isDefaultWorkspace: boolean;
-  showGlobal: boolean;
-  viewMode: WorkspaceViewMode;
-  /** The Project currently in view (whichever Workbench tab is active) — `undefined` when no tab is Project-scoped. Only rendered when `viewMode === 'multi-project'`; a single Project needs no disambiguation. */
-  selectedProjectName?: string;
-  localScope?: LocalScope;
-  mcpMatchPath?: string;
-  onEditEntity: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
-  onPreviewEntity: (entity: Skill | Agent) => void;
-  onEntityProperties: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
-  onNewActionForEntity: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
-  historyScope: HistoryScope | null;
+interface ControlPanelContentProps extends CustomizationsListProps {
+  /** This scope's own sessions — `personal` at Início, the workspace otherwise. */
+  sessionsScope: HistoryScope;
   onOpenSession: (session: Pick<SessionSnapshot, 'sessionId' | 'anchor' | 'label'>) => void;
   onSessionRemoved: (sessionId: string) => void;
   onSeeAllSessions: () => void;
@@ -46,134 +22,113 @@ interface ControlPanelContentProps {
 }
 
 /**
- * The Control Panel's body, below the shared `SidePanel` header: the
- * Sessões block (own local collapse, independent of the panel itself), then
- * the Customizations tree (Skills/Agents/Hooks/MCP/Plugins).
+ * The right panel — "what", with no scope title (the main header already
+ * names the scope): the scope's own Sessões first (live, used constantly),
+ * then its Customizations as one searchable list. Inside a workspace,
+ * Global's items stay reachable — read-only and dimmed — after the
+ * workspace's own. Sessões and Customizations split the panel height with a
+ * draggable divider (Sessões collapses to its title by dragging down to
+ * nothing, or with its chevron) and each scrolls on its own.
  */
 export function ControlPanelContent({
-  isDefaultWorkspace,
-  showGlobal,
-  viewMode,
-  selectedProjectName,
-  localScope,
-  mcpMatchPath,
-  onEditEntity,
-  onPreviewEntity,
-  onEntityProperties,
-  onNewActionForEntity,
-  historyScope,
+  sessionsScope,
   onOpenSession,
   onSessionRemoved,
   onSeeAllSessions,
   canStartSession,
   onNewSession,
+  ...customizations
 }: ControlPanelContentProps): React.ReactElement {
-  // A local accordion (body only) — independent of the panel's own
-  // collapse-to-0, which hides this whole component instead.
-  const [sessionsExpanded, setSessionsExpanded] = useState(true);
-  const toggleSessions = (): void => setSessionsExpanded((v) => !v);
+  const { isHome, localScope } = customizations;
 
-  const customizationRows = isDefaultWorkspace ? (
-    <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={false} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} />
-      {/* Hooks/MCP/Plugins are the low-frequency, more technical kinds — set up once
-          rather than edited daily like Skills/Agents — so they share one collapsed
-          "Integrações" row instead of each claiming its own always-visible header. */}
-      <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
-        <HooksTreeGroup showGlobal={false} />
-        <McpTreeGroup showGlobal={false} />
-        <PluginsTreeGroup showGlobal={false} />
-      </TreeGroup>
-    </>
-  ) : (
-    <>
-      <EntityTreeGroup kind="skill" label="Skills" showGlobal={showGlobal} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} {...(localScope ? { localScope } : {})} />
-      <EntityTreeGroup kind="agent" label="Agents" showGlobal={showGlobal} onEdit={onEditEntity} onPreview={onPreviewEntity} onProperties={onEntityProperties} onNewAction={onNewActionForEntity} {...(localScope ? { localScope } : {})} />
-      <TreeGroup testId="integrations" glyph={Layers} label="Integrações">
-        <HooksTreeGroup isProjectContext showGlobal={showGlobal} />
-        <McpTreeGroup showGlobal={showGlobal} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} />
-        <PluginsTreeGroup isProjectContext showGlobal={showGlobal} />
-      </TreeGroup>
-    </>
-  );
+  const sessionsPanelRef = usePanelRef();
+  const customizationsPanelRef = usePanelRef();
+  const [sessionsExpanded, setSessionsExpanded] = useState(true);
+  const [customizationsExpanded, setCustomizationsExpanded] = useState(true);
+  const { data: liveSessions } = useSessions();
+  const running = liveInScope(liveSessions ?? [], sessionsScope).filter((s) => s.status === 'running').length;
+
+  // `onResize` keeps these in step with dragging; they are also set here
+  // because jsdom never lays panels out, so `collapse()` alone would not
+  // report back.
+  const toggle = (panel: ReturnType<typeof usePanelRef>, expanded: boolean, set: (v: boolean) => void): void => {
+    if (expanded) panel.current?.collapse();
+    else panel.current?.expand();
+    set(!expanded);
+  };
 
   return (
-    <>
-      {/* Stacked above Customizations, not nested inside it as one more tree
-          row — a session is reachable/actionable even when its own
-          entity/project/workspace tab isn't open, so it earns its own
-          always-visible section instead of hiding inside a collapsed group.
-          Its collapse only hides this block's own body (a local accordion),
-          unlike the panel's own collapse, which hides this whole component. */}
-      <Box
-        data-testid="workspace-sessions-panel"
-        sx={{
-          borderBottom: 1,
-          borderColor: 'divider',
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          maxHeight: sessionsExpanded ? 260 : 'auto',
-          overflow: 'hidden',
-        }}
-      >
-        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, flexShrink: 0 }}>
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-            <Icon glyph={SquareTerminal} size={14} />
-            <Kicker>Sessões</Kicker>
-          </Stack>
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            <Tooltip title="Nova sessão">
-              {/* span wrapper keeps the tooltip working while the button is disabled (no project/workspace in view yet) */}
-              <span>
-                <IconButton size="small" data-testid="workspace-sessions-new" aria-label="Nova sessão" disabled={!canStartSession} onClick={onNewSession}>
-                  <Icon glyph={Plus} size={16} />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <IconButton
-              size="small"
-              data-testid="workspace-sessions-collapse"
-              aria-label={sessionsExpanded ? 'Ocultar sessões' : 'Mostrar sessões'}
-              onClick={toggleSessions}
-            >
-              <Icon glyph={sessionsExpanded ? ChevronDown : ChevronRight} size={16} />
-            </IconButton>
-          </Stack>
-        </Stack>
-        {sessionsExpanded && (
-          // No overflow here: SessionsTreeGroup owns its own internal scroll
-          // box now, so its fixed footer ("Ver todas") stays pinned below the
-          // rows rather than sharing their scroll area.
-          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <SessionsTreeGroup scope={historyScope ?? { kind: 'all' }} onOpen={onOpenSession} onRemoved={onSessionRemoved} onSeeAll={onSeeAllSessions} />
+    <Box data-testid="workspace-customizations" sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Group orientation="vertical" style={{ flex: 1, minHeight: 0 }}>
+        <Panel
+          id="control-panel-sessions-split"
+          panelRef={sessionsPanelRef}
+          collapsible
+          collapsedSize={40}
+          defaultSize="40"
+          minSize={120}
+          onResize={(size) => setSessionsExpanded(size.inPixels > 48)}
+          style={{ overflow: 'hidden' }}
+        >
+          <Box data-testid="workspace-sessions-panel" sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <ContainerHeader
+              title="Sessões"
+              testId="workspace-sessions"
+              collapsed={!sessionsExpanded}
+              onToggle={() => toggle(sessionsPanelRef, sessionsExpanded, setSessionsExpanded)}
+              status={
+                running > 0 ? (
+                  <Typography
+                    component="span"
+                    data-testid="workspace-sessions-running"
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 0.625, fontSize: '0.75rem', fontWeight: 500, color: 'success.main',
+                      '&::before': { content: '""', width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main' },
+                    }}
+                  >
+                    {running === 1 ? '1 ativa' : `${running} ativas`}
+                  </Typography>
+                ) : undefined
+              }
+              actions={
+                <Tooltip title="Nova sessão">
+                  {/* span wrapper keeps the tooltip working while the button is disabled */}
+                  <span>
+                    <IconButton size="small" data-testid="workspace-sessions-new" aria-label="Nova sessão" disabled={!canStartSession} onClick={onNewSession} sx={{ p: 0.5 }}>
+                      <Icon glyph={Plus} size={14} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              }
+            />
+            {sessionsExpanded && (
+              // SessionsTreeGroup owns its own internal scroll box, so its footer
+              // stays pinned below the rows.
+              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <SessionsTreeGroup scope={sessionsScope} onOpen={onOpenSession} onRemoved={onSessionRemoved} onSeeAll={onSeeAllSessions} />
+              </Box>
+            )}
           </Box>
-        )}
-      </Box>
-      <Stack
-        data-testid="workspace-customizations-header"
-        direction="row"
-        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
-      >
-        <Kicker>Customizations</Kicker>
-        {/* Only meaningful once a workspace juggles more than one Project — a
-            single Project needs nothing to disambiguate. Falls back to a
-            neutral "Workspace" label whenever the active tab isn't scoped to
-            any Project (a workspace-anchored session, Starter Pack, ...). */}
-        {viewMode === 'multi-project' && (
-          <Chip
-            size="small"
-            variant="outlined"
-            data-testid="control-panel-scope-chip"
-            label={selectedProjectName ? `Projeto: ${selectedProjectName}` : 'Workspace'}
-            sx={{ height: 18, fontSize: '0.6875rem' }}
+        </Panel>
+        <ResizeHandle orientation="vertical" />
+        <Panel
+          id="control-panel-customizations-split"
+          panelRef={customizationsPanelRef}
+          collapsible
+          collapsedSize={40}
+          minSize={160}
+          onResize={(size) => setCustomizationsExpanded(size.inPixels > 48)}
+          style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        >
+          {/* Remounts on scope change, so chip, search text and origin reset. */}
+          <CustomizationsList
+            key={isHome ? 'home' : (localScope?.scopeId ?? 'workspace')}
+            {...customizations}
+            collapsed={!customizationsExpanded}
+            onToggleCollapsed={() => toggle(customizationsPanelRef, customizationsExpanded, setCustomizationsExpanded)}
           />
-        )}
-      </Stack>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <List disablePadding>{customizationRows}</List>
-      </Box>
-    </>
+        </Panel>
+      </Group>
+    </Box>
   );
 }

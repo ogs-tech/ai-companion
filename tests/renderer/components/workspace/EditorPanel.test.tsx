@@ -58,8 +58,8 @@ function instruction(overrides: Partial<Instruction> = {}): Instruction {
     kind: 'instruction',
     name: 'acme-proj',
     description: '',
-    scopes: ['project'],
-    scopeId: 'p1',
+    scopes: ['workspace'],
+    scopeId: 'w1',
     metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
     source: { kind: 'workspace' },
     content: 'instructions body',
@@ -78,9 +78,8 @@ let call: CallSpy;
 beforeEach(() => {
   call = mockApi();
   call.mockImplementation(async (method: string) => {
-    if (method === 'project.list') return ok([{ id: 'p1', name: 'Acme', path: '/repos/acme' }]);
     if (method === 'workspace.getActive')
-      return ok({ id: 'w1', name: 'Default', rootPath: '/home/u', isDefault: true, createdAt: '' });
+      return ok({ id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' });
     return ok(undefined);
   });
 });
@@ -105,13 +104,11 @@ describe('EditorPanel — entity subject', () => {
     const user = userEvent.setup();
     const onSaved = vi.fn();
     call.mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'project.list') return ok([]);
       if (method === 'workspace.getActive')
         return ok({
           id: 'w1',
-          name: 'Default',
-          rootPath: '/home/u',
-          isDefault: true,
+          name: 'Acme',
+          rootPath: '/repos/acme',
           createdAt: '',
         });
       if (method === 'skill.save') {
@@ -254,7 +251,7 @@ describe('EditorPanel — entity subject', () => {
         onDirtyChange={vi.fn()}
       />,
     );
-    expect(await screen.findByRole('checkbox', { name: 'project' })).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: 'workspace' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Workspace' })).not.toBeInTheDocument();
   });
 
@@ -351,7 +348,7 @@ describe('EditorPanel — entity subject', () => {
 });
 
 describe('EditorPanel — file subject', () => {
-  it('loads content via workspace.readFile when no projectId is given', async () => {
+  it('loads content via workspace.readFile', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.readFile')
         return ok({ previewable: true, kind: 'text', content: 'file body', truncated: false });
@@ -362,20 +359,6 @@ describe('EditorPanel — file subject', () => {
       expect(call).toHaveBeenCalledWith('workspace.readFile', { path: 'notes.md' }),
     );
     expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
-  });
-
-  it('loads content via project.readFile when scoped to a projectId', async () => {
-    call.mockImplementation(async (method: string) => {
-      if (method === 'project.readFile')
-        return ok({ previewable: true, kind: 'text', content: 'file body', truncated: false });
-      return ok(undefined);
-    });
-    renderWithQuery(
-      <EditorPanel subject="file" path="notes.md" projectId="p1" onDirtyChange={vi.fn()} />,
-    );
-    await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('project.readFile', { projectId: 'p1', path: 'notes.md' }),
-    );
   });
 
   it('saves edits via workspace.writeFile and clears the dirty flag on Ctrl/Cmd+S', async () => {

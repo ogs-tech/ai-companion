@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import type { Adapter } from './ports/adapter.js';
 import type { NodeFsAdapter } from '../infrastructure/filesystem/node-fs-adapter.js';
 import type { SettingsService } from './services/settings-service.js';
@@ -12,8 +11,9 @@ import type { EmbeddedBrowserPort } from './ports/embedded-browser-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
-import { workspaceIndexMarkerPath } from '../../shared/brand-paths.js';
+import type { Workspace } from '../../shared/workspace.js';
 import { FsEntityRepository } from '../infrastructure/entity/fs-entity-repository.js';
+import { ScopedEntityRepository, type DataDirRepository } from './entity/scoped-entity-repository.js';
 import { AdapterManager } from './services/adapter-manager.js';
 import { EntityService } from './services/entity-service.js';
 import { EntityValidator } from './services/entity-validator.js';
@@ -23,8 +23,6 @@ import { InstructionService } from './services/instruction-service.js';
 import { SessionService } from './services/session-service.js';
 import { SessionHistoryService } from './services/session-history-service.js';
 import type { SessionTranscriptPort } from './ports/session-transcript-port.js';
-import { ProjectService } from './services/project-service.js';
-import { FsProjectRegistry } from '../infrastructure/project/fs-project-registry.js';
 import { HealthService } from './services/health/health-service.js';
 import { McpAuthCollector } from './services/health/mcp-auth-collector.js';
 import { McpRuntimeCollector } from './services/health/mcp-runtime-collector.js';
@@ -38,18 +36,24 @@ import { CursorAdapter } from '../infrastructure/adapters/cursor-adapter.js';
 import { EntityWatchService } from './services/entity-watch-service.js';
 import type { FileWatcherPort } from './ports/file-watcher-port.js';
 import { LaunchConfigService } from './services/launch-config-service.js';
-import { LaunchProcessService } from './services/launch-process-service.js';
+import { TerminalService } from './services/terminal-service.js';
+import { OpenEditorsService } from './services/open-editors-service.js';
 import type { LaunchConfigReaderPort } from './ports/launch-config-reader-port.js';
-import type { LaunchProcessPort } from './ports/launch-process-port.js';
+import type { TerminalPort } from './ports/terminal-port.js';
 import type { RepoGitPort } from './ports/repo-git-port.js';
 import { GitService } from './services/git-service.js';
+import type { ConventionSourcePort } from './ports/convention-source-port.js';
+import type { CommitMessageGeneratorPort } from './ports/commit-message-generator-port.js';
+import { CommitMessageService } from './services/commit-message-service.js';
 
 export interface WorkspaceScopedSharedDeps {
   clock: ClockPort;
   nodeFsAdapter: NodeFsAdapter;
   settingsService: SettingsService;
   homedir: string;
-  workspaceService: Pick<WorkspaceService, 'get' | 'getActive'>;
+  workspaceService: Pick<WorkspaceService, 'get'>;
+  /** Global's store (`~/.ai-companion`, `personal` entities) — built once, shared by every graph. */
+  globalEntities: DataDirRepository;
   pluginProvenance: PluginProvenanceService;
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
@@ -59,12 +63,14 @@ export interface WorkspaceScopedSharedDeps {
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
   launchConfigReaderPort: LaunchConfigReaderPort;
-  launchProcessPort: LaunchProcessPort;
+  terminalPort: TerminalPort;
   repoGitPort: RepoGitPort;
+  conventionSourcePort: ConventionSourcePort;
+  commitMessageGeneratorFor: (root: string) => CommitMessageGeneratorPort;
 }
 
 export interface WorkspaceScopedServices {
-  entityRepository: FsEntityRepository;
+  entityRepository: ScopedEntityRepository;
   symlinkManager: SymlinkManager;
   fileMaterializer: FileMaterializer;
   adapterManager: AdapterManager;
@@ -74,60 +80,68 @@ export interface WorkspaceScopedServices {
   instructionService: InstructionService;
   sessionService: SessionService;
   sessionHistoryService: SessionHistoryService;
-  projectService: ProjectService;
   healthService: HealthService;
   workspaceTeardownService: WorkspaceTeardownService;
   entityWatchService: EntityWatchService;
   launchConfigService: LaunchConfigService;
-  launchProcessService: LaunchProcessService;
+  terminalService: TerminalService;
+  openEditorsService: OpenEditorsService;
   gitService: GitService;
+  commitMessageService: CommitMessageService;
+}
+
+/** The workspace a graph is built for, with its already-bootstrapped `<rootPath>/.ai-companion`. */
+export interface ActiveWorkspaceScope {
+  workspace: Workspace;
+  dataDir: string;
 }
 
 /**
- * Standalone `ProjectService` factory — pulled out of `buildWorkspaceScopedServices` so a
- * caller that only needs project registration (e.g. registering a fresh workspace's root
- * folder as its first Project) doesn't have to pay for the rest of that graph (adapters,
- * entity/session services, health collectors, ...).
+ * Everything that depends on which workspace is open, rebuilt on every
+ * activation — including going home (`active === null`), where the graph still
+ * serves Global's entities, sessions and health but every workspace-only use
+ * case (git, launch configs, terminals) fails `validation`.
  */
-export function buildProjectService(
-  dataDir: string,
-  symlinkManager: Pick<SymlinkManager, 'create' | 'removeIfPointsToWorkspace'>,
-  clock: ClockPort,
-): ProjectService {
-  return new ProjectService(
-    new FsProjectRegistry(join(dataDir, 'projects.json')),
-    clock,
-    { symlinkManager, sourcePath: workspaceIndexMarkerPath(dataDir), dataDir },
-  );
-}
-
-/** `dataDir` is `<workspace.rootPath>/.ai-companion` — already bootstrapped by the caller. */
 export function buildWorkspaceScopedServices(
-  dataDir: string,
+  active: ActiveWorkspaceScope | null,
   shared: WorkspaceScopedSharedDeps,
 ): WorkspaceScopedServices {
   const {
-    clock, nodeFsAdapter, settingsService, homedir, workspaceService,
+    clock, nodeFsAdapter, settingsService, homedir, workspaceService, globalEntities,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
     claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
-    launchConfigReaderPort, launchProcessPort, repoGitPort,
+    launchConfigReaderPort, terminalPort, repoGitPort,
+    conventionSourcePort, commitMessageGeneratorFor,
   } = shared;
 
-  const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
-  const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, dataDir);
+  const globalDataDir = globalEntities.dataDir;
+  const activeWorkspace = active?.workspace ?? null;
+  // The data dir this graph works in: the workspace's when one is open, Global's otherwise.
+  const dataDir = active?.dataDir ?? globalDataDir;
 
-  const projectService = buildProjectService(dataDir, symlinkManager, clock);
+  // Backups of anything a sync displaces always land under Global's `_backups/`.
+  const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, globalDataDir);
+  const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, globalDataDir);
 
-  const claudeAdapter = new ClaudeAdapter({ homedir, workspaceService, projectService });
-  const cursorAdapter = new CursorAdapter({ homedir, workspaceService, projectService });
+  const claudeAdapter = new ClaudeAdapter({ homedir, workspaceService });
+  const cursorAdapter = new CursorAdapter({ homedir, workspaceService });
 
-  const entityRepository = new FsEntityRepository(dataDir);
+  const entityRepository = new ScopedEntityRepository(
+    globalEntities,
+    active === null
+      ? null
+      : {
+          repository: new FsEntityRepository(active.dataDir, 'workspace'),
+          dataDir: active.dataDir,
+          workspaceId: active.workspace.id,
+        },
+  );
   const adapterManager = new AdapterManager({
     settingsService,
     entityRepository,
     symlinkManager,
     fileMaterializer,
-    workspacePath: dataDir,
+    entityDataDir: (entity) => entityRepository.dataDirFor(entity),
     adapters: new Map<string, Adapter>([
       [claudeAdapter.adapterId, claudeAdapter],
       [cursorAdapter.adapterId, cursorAdapter],
@@ -139,21 +153,21 @@ export function buildWorkspaceScopedServices(
 
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
-  const instructionService = new InstructionService(entityService, projectService);
+  const instructionService = new InstructionService(entityService);
   const sessionService = new SessionService(
     entityService,
     claudeSessionPort,
     embeddedBrowserPort,
     dataDir,
-    { workspaceService: shared.workspaceService, projectService },
+    { workspaceService, activeWorkspace, homedir },
     nodeFsAdapter,
   );
   // Reads the CLI's own transcripts, which live outside any workspace — but
   // the service is per-workspace because its default scope, and its warm
   // readings, belong to the workspace being looked at.
   const sessionHistoryService = new SessionHistoryService(sessionTranscriptPort, settingsService, {
-    workspaceService: shared.workspaceService,
-    projectService,
+    homedir,
+    workspaceService,
   });
 
   const healthCollectors: HealthCollector[] = [
@@ -165,27 +179,37 @@ export function buildWorkspaceScopedServices(
   ];
   const healthService = new HealthService(healthCollectors, clock);
 
+  // Factory reset wipes Global's data dir; a workspace's own `.ai-companion` stays in its folder.
   const workspaceTeardownService = new WorkspaceTeardownService(
     adapterManager,
     nodeFsAdapter,
-    dataDir,
+    globalDataDir,
     claudeSettingsFile,
-    projectService,
-    symlinkManager,
   );
 
-  const entityWatchService = new EntityWatchService(dataDir, entityRepository, adapterManager, fileWatcherPort);
+  const entityWatchService = new EntityWatchService(
+    active === null ? [globalDataDir] : [globalDataDir, active.dataDir],
+    entityRepository,
+    adapterManager,
+    fileWatcherPort,
+  );
 
-  const launchConfigService = new LaunchConfigService(projectService, launchConfigReaderPort);
-  const launchProcessService = new LaunchProcessService(launchConfigService, launchProcessPort);
-  // Per-workspace like the other project-resolving services; its per-root
-  // mutation queues are dropped with the old graph on a switch.
-  const gitService = new GitService(repoGitPort, { projectService, workspaceService });
+  const launchConfigService = new LaunchConfigService(activeWorkspace, launchConfigReaderPort);
+  const terminalService = new TerminalService(activeWorkspace, launchConfigService, terminalPort);
+  const openEditorsService = new OpenEditorsService(nodeFsAdapter, dataDir);
+  // Its per-root mutation queues are dropped with the old graph on a switch.
+  const gitService = new GitService(repoGitPort, { activeWorkspace });
+  const commitMessageService = new CommitMessageService(
+    repoGitPort,
+    conventionSourcePort,
+    commitMessageGeneratorFor,
+    { activeWorkspace },
+  );
 
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
-    skillService, agentService, instructionService, sessionService, sessionHistoryService, projectService,
-    healthService, workspaceTeardownService, entityWatchService, launchConfigService, launchProcessService,
-    gitService,
+    skillService, agentService, instructionService, sessionService, sessionHistoryService,
+    healthService, workspaceTeardownService, entityWatchService, launchConfigService, terminalService, openEditorsService,
+    gitService, commitMessageService,
   };
 }

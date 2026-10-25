@@ -46,14 +46,13 @@ describe('DiffBody', () => {
 });
 
 describe('DiffView', () => {
-  it('fetches the diff for its own target and source', async () => {
+  it('fetches the diff for the open workspace and source', async () => {
     const call = mockApi();
     call.mockResolvedValue(ok(text));
-    renderWithQuery(<DiffView projectId="p1" path="a.ts" source={{ kind: 'index' }} />);
+    renderWithQuery(<DiffView path="a.ts" source={{ kind: 'index' }} />);
 
     expect(await screen.findByTestId('git-diff')).toBeInTheDocument();
     expect(call).toHaveBeenCalledWith('git.diff', {
-      projectId: 'p1',
       path: 'a.ts',
       source: { kind: 'index' },
     });

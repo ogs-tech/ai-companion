@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { lstat, mkdtemp, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { simpleGit, GitPluginError, type SimpleGit } from 'simple-git';
 import type { RepoGitPort } from '../../application/ports/repo-git-port.js';
 import {
@@ -13,9 +13,12 @@ import {
 import { GitCommandError } from '../../domain/git-errors.js';
 import { classifyGitError, truncateStderr } from './classify-git-error.js';
 import { addedFileDiff, parseFileDiff } from './parsers/diff.js';
+import { truncateDiff } from './parsers/truncate-diff.js';
 import { parseStatus } from './parsers/status.js';
 
 const LOCAL_TIMEOUT_MS = 30_000;
+/** Network ops get more room; the timeout is per silent period, not total. */
+const REMOTE_TIMEOUT_MS = 120_000;
 
 /**
  * Every spawned git is non-interactive and produces stable, parseable C-locale
@@ -30,6 +33,21 @@ const GIT_ENV: Record<string, string> = {
   GIT_OPTIONAL_LOCKS: '0',
   LC_ALL: 'C',
 };
+
+/** Lockfiles and generated output: they appear in `--stat` but never in the diff sent to a model. */
+const DIFF_EXCLUDES = [
+  '*.lock',
+  '*lock.json',
+  '*lock.yaml',
+  'go.sum',
+  '*.min.js',
+  '*.min.css',
+  '*.map',
+  '*.snap',
+  'dist/**',
+  'build/**',
+  'out/**',
+].map((glob) => `:(exclude,glob)**/${glob}`);
 
 /** Marker files under the git dir that name an in-progress operation, checked in this order. */
 const STATE_MARKERS: ReadonlyArray<[string, GitRepoState]> = [
@@ -110,8 +128,58 @@ export class SimpleGitRepoClient implements RepoGitPort {
     return { sha: (await this.run(root, ['rev-parse', 'HEAD'])).trim() };
   }
 
+  async push(root: string, options: { setUpstream: boolean }): Promise<void> {
+    if (!options.setUpstream) {
+      await this.runRemote(root, ['push']);
+      return;
+    }
+    const branch = (await this.run(root, ['symbolic-ref', '--short', 'HEAD'])).trim();
+    await this.runRemote(root, ['push', '--set-upstream', await this.publishRemote(root), branch]);
+  }
+
+  async pull(root: string): Promise<void> {
+    await this.runRemote(root, ['pull', '--ff-only']);
+  }
+
+  async fetch(root: string): Promise<void> {
+    await this.runRemote(root, ['fetch']);
+  }
+
   async init(root: string): Promise<void> {
     await this.run(root, ['init']);
+  }
+
+  async stagedDiff(root: string, maxChars: number): Promise<{ diff: string; truncated: boolean }> {
+    const output = await this.run(root, [
+      '--no-optional-locks', 'diff', '--cached', '--no-color', '--no-ext-diff', '-U3',
+      '--', '.', ...DIFF_EXCLUDES,
+    ]);
+    return truncateDiff(output, maxChars);
+  }
+
+  async stagedStat(root: string): Promise<string> {
+    return this.run(root, ['--no-optional-locks', 'diff', '--cached', '--no-color', '--stat']);
+  }
+
+  async recentSubjects(root: string, count: number): Promise<string[]> {
+    if (!(await this.hasHead(root))) return [];
+    const output = await this.run(root, ['--no-optional-locks', 'log', `-${count}`, '--format=%s']);
+    return output.split('\n').filter((line) => line.length > 0);
+  }
+
+  async commitTemplate(root: string): Promise<string | null> {
+    let path: string;
+    try {
+      path = (await this.run(root, ['config', '--path', '--get', 'commit.template'])).trim();
+    } catch {
+      return null; // unset
+    }
+    if (path.length === 0) return null;
+    try {
+      return await readFile(isAbsolute(path) ? path : join(root, path), 'utf8');
+    } catch {
+      return null;
+    }
   }
 
   /** The target itself must be the top level — a subfolder of a larger repo is not a repo here. */
@@ -134,6 +202,29 @@ export class SimpleGitRepoClient implements RepoGitPort {
       if (existsSync(join(gitDir, marker))) return state;
     }
     return 'clean';
+  }
+
+  /** `origin` when it exists, else the first configured remote. */
+  private async publishRemote(root: string): Promise<string> {
+    const remotes = (await this.run(root, ['remote'])).split('\n').filter((r) => r.length > 0);
+    const remote = remotes.includes('origin') ? 'origin' : remotes[0];
+    if (remote === undefined) throw new GitCommandError('No remote configured');
+    return remote;
+  }
+
+  /**
+   * Network ops fail fast instead of waiting on a credential prompt: git's own
+   * prompts are off (`GIT_TERMINAL_PROMPT`) and ssh runs in `BatchMode`, on top
+   * of the user's own `GIT_SSH_COMMAND` / `core.sshCommand`.
+   */
+  private async runRemote(root: string, args: string[]): Promise<void> {
+    const configured = await this.run(root, ['config', '--get', 'core.sshCommand']).catch(() => '');
+    const ssh = process.env['GIT_SSH_COMMAND'] ?? (configured.trim() || 'ssh');
+    try {
+      await this.git(root, REMOTE_TIMEOUT_MS, { GIT_SSH_COMMAND: `${ssh} -o BatchMode=yes` }).raw(args);
+    } catch (err) {
+      throw toDomainError(err, root);
+    }
   }
 
   private async hasHead(root: string): Promise<boolean> {
@@ -165,10 +256,10 @@ export class SimpleGitRepoClient implements RepoGitPort {
     }
   }
 
-  private git(root: string): SimpleGit {
+  private git(root: string, timeoutMs = LOCAL_TIMEOUT_MS, extraEnv: Record<string, string> = {}): SimpleGit {
     return simpleGit({
       baseDir: root,
-      timeout: { block: LOCAL_TIMEOUT_MS },
+      timeout: { block: timeoutMs },
       // The env we set (editor/pager) and the user's own SSH/askpass setup are
       // deliberate; simple-git refuses them without these opt-ins.
       unsafe: {
@@ -182,7 +273,7 @@ export class SimpleGitRepoClient implements RepoGitPort {
       errors: (error, result) =>
         error ??
         (result.exitCode !== 0 ? Buffer.concat([...result.stdOut, ...result.stdErr]) : undefined),
-    }).env({ ...process.env, ...GIT_ENV });
+    }).env({ ...process.env, ...GIT_ENV, ...extraEnv });
   }
 }
 

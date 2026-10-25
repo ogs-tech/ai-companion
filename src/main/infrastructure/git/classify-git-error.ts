@@ -3,6 +3,9 @@ import {
   GitAuthError,
   GitCommandError,
   GitConflictError,
+  GitNetworkError,
+  GitNonFastForwardError,
+  GitPushRejectedError,
   NotARepositoryError,
 } from '../../domain/git-errors.js';
 
@@ -19,7 +22,18 @@ const AUTH = [
   /Permission denied \(publickey/i,
   /could not read (Username|Password)/i,
   /terminal prompts disabled/i,
+  /The requested URL returned error: (401|403)/,
 ];
+
+const NETWORK = [
+  /Could not resolve host/i,
+  /unable to access/i,
+  /Connection (timed out|refused|reset)/i,
+  /Network is unreachable/i,
+];
+
+const PUSH_REJECTED = [/\[rejected\]/, /\(fetch first\)/];
+const NON_FAST_FORWARD = [/Not possible to fast-forward/i, /diverging branches/i];
 
 const CONFLICT = [
   /index\.lock/,
@@ -51,6 +65,18 @@ export function classifyGitError(stderr: string, root: string): DomainError {
   if (/not a git repository/i.test(stderr)) return new NotARepositoryError(root);
   if (AUTH.some((re) => re.test(stderr)))
     return new GitAuthError(firstLine || 'Authentication failed', details);
+  if (NETWORK.some((re) => re.test(stderr)))
+    return new GitNetworkError(firstLine || 'Remote unreachable', details);
+  if (NON_FAST_FORWARD.some((re) => re.test(stderr)))
+    return new GitNonFastForwardError(
+      'Não foi possível avançar (fast-forward): a branch local e a remota divergiram. Nada foi alterado.',
+      details,
+    );
+  if (PUSH_REJECTED.some((re) => re.test(stderr)))
+    return new GitPushRejectedError(
+      'Push rejeitado: o remoto tem commits que você ainda não baixou.',
+      details,
+    );
   if (CONFLICT.some((re) => re.test(stderr))) {
     const files = indentedFiles(stderr);
     return new GitConflictError(

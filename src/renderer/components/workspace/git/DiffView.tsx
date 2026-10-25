@@ -3,14 +3,13 @@ import { useGitDiff } from '../../../hooks/use-git.js';
 import type { GitDiffLine, GitDiffSource, GitFileDiff } from '../../../../shared/git.js';
 
 interface DiffViewProps {
-  projectId?: string;
   path: string;
   source: GitDiffSource;
 }
 
-/** A Workbench tab's body: one file's diff, fetched for its own target. */
-export function DiffView({ projectId, path, source }: DiffViewProps): React.ReactElement {
-  const query = useGitDiff(projectId, path, source);
+/** A Workbench tab's body: one file's diff in the open workspace's repo. */
+export function DiffView({ path, source }: DiffViewProps): React.ReactElement {
+  const query = useGitDiff(path, source);
 
   if (query.isPending) return <Notice testId="git-diff-loading">Carregando diff…</Notice>;
   if (query.isError)

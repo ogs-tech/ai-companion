@@ -41,9 +41,9 @@ describe('session-history handlers', () => {
     it('forwards a validated scope', async () => {
       const { service, handlers } = setup();
 
-      await handlers['sessionHistory.list']!({ scope: { kind: 'project', projectId: 'p1' } });
+      await handlers['sessionHistory.list']!({ scope: { kind: 'workspace', workspaceId: 'w1' } });
 
-      expect(service.list).toHaveBeenCalledWith({ scope: { kind: 'project', projectId: 'p1' } });
+      expect(service.list).toHaveBeenCalledWith({ scope: { kind: 'workspace', workspaceId: 'w1' } });
     });
 
     it.each([
@@ -77,7 +77,7 @@ describe('session-history handlers', () => {
 
     it.each([
       ['a scope of an unknown kind', { scope: { kind: 'galaxy' } }],
-      ['a project scope with no id', { scope: { kind: 'project' } }],
+      ['the removed project scope', { scope: { kind: 'project', projectId: 'p1' } }],
       ['a workspace scope with no id', { scope: { kind: 'workspace' } }],
       ['no scope at all', {}],
       ['a scope that is not an object', { scope: 'all' }],

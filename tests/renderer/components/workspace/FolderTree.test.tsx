@@ -7,21 +7,14 @@ import { queryClient } from '../../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { FolderTree } from '../../../../src/renderer/components/workspace/FolderTree.js';
-import type { Project } from '../../../../src/shared/project.js';
 
 interface RenderTreeOptions {
-  onSelectFile?: (relPath: string, projectId?: string) => void;
-  onUseAsProject?: (absolutePath: string) => void;
-  onPreviewFile?: (relPath: string, projectId?: string) => void;
-  onNewAction?: (relPath: string, projectId?: string) => void;
-  instructionRow?: React.ReactNode;
-  pinnedRows?: React.ReactNode;
-  scopeProjectId?: string;
-  workspaceRootPath?: string;
-  projects?: ReadonlyArray<Project>;
-  onOpenProject?: (projectId: string) => void;
-  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
+  onSelectFile?: (relPath: string) => void;
+  onOpenAsWorkspace?: (absolutePath: string) => void;
+  onPreviewFile?: (relPath: string) => void;
+  onNewAction?: (relPath: string) => void;
+  onOpenTerminalHere?: (relDir: string) => void;
+  isWorkspaceRoot?: (relPath: string) => boolean;
 }
 
 const renderTree = (opts: RenderTreeOptions = {}) =>
@@ -30,21 +23,27 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
       <ThemeProvider theme={createAppTheme('light')}>
         <FolderTree
           onSelectFile={opts.onSelectFile ?? vi.fn()}
-          onUseAsProject={opts.onUseAsProject ?? vi.fn()}
+          onOpenAsWorkspace={opts.onOpenAsWorkspace ?? vi.fn()}
           {...(opts.onPreviewFile ? { onPreviewFile: opts.onPreviewFile } : {})}
           {...(opts.onNewAction ? { onNewAction: opts.onNewAction } : {})}
-          {...(opts.instructionRow !== undefined ? { instructionRow: opts.instructionRow } : {})}
-          {...(opts.pinnedRows !== undefined ? { pinnedRows: opts.pinnedRows } : {})}
-          {...(opts.scopeProjectId ? { scopeProjectId: opts.scopeProjectId } : {})}
-          {...(opts.workspaceRootPath !== undefined ? { workspaceRootPath: opts.workspaceRootPath } : {})}
-          {...(opts.projects !== undefined ? { projects: opts.projects } : {})}
-          {...(opts.onOpenProject !== undefined ? { onOpenProject: opts.onOpenProject } : {})}
-          {...(opts.renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow: opts.renderProjectInstructionRow } : {})}
-          {...(opts.renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow: opts.renderProjectLaunchConfigsRow } : {})}
+          {...(opts.onOpenTerminalHere ? { onOpenTerminalHere: opts.onOpenTerminalHere } : {})}
+          {...(opts.isWorkspaceRoot ? { isWorkspaceRoot: opts.isWorkspaceRoot } : {})}
         />
       </ThemeProvider>
     </QueryClientProvider>,
   );
+
+/** `workspace.listDir` answers from `tree` by path; anything else resolves `undefined`. */
+const listing = (tree: Record<string, { name: string; kind: 'file' | 'dir' }[]>, extra: Record<string, unknown> = {}) =>
+  vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
+    if (method === 'workspace.listDir') return tree[(params as { path: string }).path] ?? [];
+    if (method in extra) {
+      const value = extra[method];
+      if (value instanceof Error) throw value;
+      return value;
+    }
+    return undefined;
+  });
 
 beforeEach(() => {
   queryClient.clear();
@@ -53,161 +52,107 @@ beforeEach(() => {
 });
 
 describe('FolderTree', () => {
-  it('renders the instructionRow slot pinned above the folders/files', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.listDir') return [{ name: 'src', kind: 'dir' }];
-      return [];
+  describe('context menu — Abrir terminal aqui', () => {
+    it('opens a terminal in the folder that was right-clicked', async () => {
+      const user = userEvent.setup();
+      const onOpenTerminalHere = vi.fn();
+      listing({ '': [{ name: 'apps', kind: 'dir' }] });
+      renderTree({ onOpenTerminalHere });
+      fireEvent.contextMenu(await screen.findByText('apps'));
+      await user.click(await screen.findByText('Abrir terminal aqui'));
+      expect(onOpenTerminalHere).toHaveBeenCalledWith('apps');
     });
-    renderTree({ instructionRow: <div data-testid="instruction-row-slot">Instructions</div> });
-    expect(await screen.findByTestId('instruction-row-slot')).toBeInTheDocument();
-    expect(await screen.findByText('src')).toBeInTheDocument();
+
+    it('on a file, opens the containing folder — the root for a top-level file', async () => {
+      const user = userEvent.setup();
+      const onOpenTerminalHere = vi.fn();
+      listing({ '': [{ name: 'apps', kind: 'dir' }, { name: 'README.md', kind: 'file' }], apps: [{ name: 'main.ts', kind: 'file' }] });
+      renderTree({ onOpenTerminalHere });
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      await user.click(await screen.findByText('Abrir terminal aqui'));
+      expect(onOpenTerminalHere).toHaveBeenLastCalledWith('');
+
+      await user.click(await screen.findByText('apps'));
+      fireEvent.contextMenu(await screen.findByText('main.ts'));
+      await user.click(await screen.findByText('Abrir terminal aqui'));
+      expect(onOpenTerminalHere).toHaveBeenLastCalledWith('apps');
+    });
+
+    it('is not offered without a handler', async () => {
+      listing({ '': [{ name: 'apps', kind: 'dir' }] });
+      renderTree();
+      fireEvent.contextMenu(await screen.findByText('apps'));
+      await screen.findByText('New Action');
+      expect(screen.queryByText('Abrir terminal aqui')).not.toBeInTheDocument();
+    });
   });
 
-  it('renders the pinnedRows slot between instructionRow and the folders/files', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.listDir') return [{ name: 'src', kind: 'dir' }];
-      return [];
-    });
-    renderTree({ pinnedRows: <div data-testid="pinned-rows-slot">Skills/Agents/Hooks/MCP</div> });
-    expect(await screen.findByTestId('pinned-rows-slot')).toBeInTheDocument();
-    expect(await screen.findByText('src')).toBeInTheDocument();
-  });
-
-  it('lists both root folders and root files in the (unscoped) workspace listing', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'src', kind: 'dir' }, { name: 'README.md', kind: 'file' }];
-      }
-      return [];
-    });
+  it('lists both root folders and root files of the workspace', async () => {
+    listing({ '': [{ name: 'src', kind: 'dir' }, { name: 'README.md', kind: 'file' }] });
     renderTree();
     expect(await screen.findByText('src')).toBeInTheDocument();
     expect(await screen.findByText('README.md')).toBeInTheDocument();
   });
 
-  it('calls onSelectFile with no projectId for a root-level file in the (unscoped) workspace listing', async () => {
+  it('expands any folder on click, fetching its children by workspace-relative path', async () => {
     const user = userEvent.setup();
-    const onSelectFile = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'README.md', kind: 'file' }];
-      }
-      return [];
-    });
-    renderTree({ onSelectFile });
-    await user.click(await screen.findByText('README.md'));
-    expect(onSelectFile).toHaveBeenCalledWith('README.md', undefined);
-  });
-
-  it('lists both folders and files when scoped to a Project', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'project.listDir' && (params as { projectId: string }).projectId === 'p1') {
-        return [{ name: 'src', kind: 'dir' }, { name: 'README.md', kind: 'file' }];
-      }
-      return [];
-    });
-    renderTree({ scopeProjectId: 'p1' });
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(await screen.findByText('README.md')).toBeInTheDocument();
-  });
-
-  it('expands a folder node on click, fetching its children, when scoped to a Project', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path: string }).path;
-      if (method === 'project.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
-      if (method === 'project.listDir' && path === 'src') return [{ name: 'index.ts', kind: 'file' }];
-      return [];
-    });
-    renderTree({ scopeProjectId: 'p1' });
-    await user.click(await screen.findByText('src'));
-    expect(await screen.findByText('index.ts')).toBeInTheDocument();
-  });
-
-  it('does not expand a root-level folder in the (unscoped) workspace listing — flat, no depth, for now', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path: string }).path;
-      if (method === 'workspace.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
-      if (method === 'workspace.listDir' && path === 'src') return [{ name: 'index.ts', kind: 'file' }];
-      return [];
+    listing({
+      '': [{ name: 'apps', kind: 'dir' }],
+      apps: [{ name: 'web', kind: 'dir' }],
+      'apps/web': [{ name: 'index.ts', kind: 'file' }],
     });
     renderTree();
-    await user.click(await screen.findByText('src'));
-    expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.listDir', { path: 'src' });
-    expect(screen.queryByText('index.ts')).not.toBeInTheDocument();
-  });
-
-  it('calls onSelectFile with the file\'s relative path and Project id when clicked, when scoped to a Project', async () => {
-    const user = userEvent.setup();
-    const onSelectFile = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'README.md', kind: 'file' }]);
-    renderTree({ onSelectFile, scopeProjectId: 'p1' });
-    await user.click(await screen.findByText('README.md'));
-    expect(onSelectFile).toHaveBeenCalledWith('README.md', 'p1');
-  });
-
-  it('calls onSelectFile with the matched Project id for a file inside a root folder expanded in place — not the (unset) screen scope', async () => {
-    const user = userEvent.setup();
-    const onSelectFile = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir' && (params as { projectId: string; path: string }).projectId === 'p1') {
-        if ((params as { path: string }).path === '') return [{ name: 'README.md', kind: 'file' }];
-      }
-      return [];
-    });
-    renderTree({
-      onSelectFile,
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject: vi.fn(),
-    });
     await user.click(await screen.findByText('apps'));
-    await user.click(await screen.findByText('README.md'));
-    expect(onSelectFile).toHaveBeenCalledWith('README.md', 'p1');
+    await user.click(await screen.findByText('web'));
+    expect(await screen.findByText('index.ts')).toBeInTheDocument();
+    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'apps/web', showHidden: false });
   });
 
-  it('"Use as Project" on a folder node calls onUseAsProject with the resolved absolute path', async () => {
+  it("calls onSelectFile with a nested file's workspace-relative path", async () => {
     const user = userEvent.setup();
-    const onUseAsProject = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.listDir') return [{ name: 'apps', kind: 'dir' }];
-      if (method === 'workspace.resolvePath') return { absolutePath: '/repos/monorepo/apps' };
-      return [];
-    });
-    renderTree({ onUseAsProject });
-    await user.click(await screen.findByTestId('tree-node-use-as-project-apps'));
-    await waitFor(() => expect(onUseAsProject).toHaveBeenCalledWith('/repos/monorepo/apps'));
+    const onSelectFile = vi.fn();
+    listing({ '': [{ name: 'src', kind: 'dir' }], src: [{ name: 'index.ts', kind: 'file' }] });
+    renderTree({ onSelectFile });
+    await user.click(await screen.findByText('src'));
+    await user.click(await screen.findByText('index.ts'));
+    expect(onSelectFile).toHaveBeenCalledWith('src/index.ts');
   });
 
-  it('"Use as Project" is keyboard-operable via Enter', async () => {
-    const user = userEvent.setup();
-    const onUseAsProject = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.listDir') return [{ name: 'apps', kind: 'dir' }];
-      if (method === 'workspace.resolvePath') return { absolutePath: '/repos/monorepo/apps' };
-      return [];
-    });
-    renderTree({ onUseAsProject });
-    const control = await screen.findByTestId('tree-node-use-as-project-apps');
-    control.focus();
-    await user.keyboard('{Enter}');
-    await waitFor(() => expect(onUseAsProject).toHaveBeenCalledWith('/repos/monorepo/apps'));
+  it('"Abrir como workspace" in a folder\'s context menu calls onOpenAsWorkspace with its resolved absolute path', async () => {
+    const onOpenAsWorkspace = vi.fn();
+    listing({ '': [{ name: 'apps', kind: 'dir' }] }, { 'workspace.resolvePath': { absolutePath: '/repos/monorepo/apps' } });
+    renderTree({ onOpenAsWorkspace });
+    fireEvent.contextMenu(await screen.findByText('apps'));
+    fireEvent.click(await screen.findByTestId('row-context-menu-open-as-workspace'));
+    await waitFor(() => expect(onOpenAsWorkspace).toHaveBeenCalledWith('/repos/monorepo/apps'));
+  });
+
+  it('"Abrir como workspace" is offered on folders only, never on files, and no longer as an inline row action', async () => {
+    listing({ '': [{ name: 'apps', kind: 'dir' }, { name: 'README.md', kind: 'file' }] });
+    renderTree();
+    expect(await screen.findByText('apps')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-node-open-as-workspace-apps')).not.toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByText('README.md'));
+    expect(await screen.findByTestId('row-context-menu-new-action')).toBeInTheDocument();
+    expect(screen.queryByTestId('row-context-menu-open-as-workspace')).not.toBeInTheDocument();
   });
 
   it('shows an error toast when resolving the absolute path fails', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string) => {
-      if (method === 'workspace.listDir') return [{ name: 'apps', kind: 'dir' }];
-      if (method === 'workspace.resolvePath') throw new Error('boom');
-      return [];
-    });
+    listing({ '': [{ name: 'apps', kind: 'dir' }] }, { 'workspace.resolvePath': new Error('boom') });
     renderTree();
-    await user.click(await screen.findByTestId('tree-node-use-as-project-apps'));
+    fireEvent.contextMenu(await screen.findByText('apps'));
+    fireEvent.click(await screen.findByTestId('row-context-menu-open-as-workspace'));
     expect(await screen.findByTestId('toast')).toHaveTextContent('boom');
+  });
+
+  it('badges a sub-folder that is itself a registered workspace root', async () => {
+    const user = userEvent.setup();
+    listing({ '': [{ name: 'packages', kind: 'dir' }, { name: 'src', kind: 'dir' }], packages: [{ name: 'api', kind: 'dir' }] });
+    renderTree({ isWorkspaceRoot: (relPath) => relPath === 'packages/api' });
+    await user.click(await screen.findByText('packages'));
+    expect(await screen.findByTestId('tree-node-workspace-badge-api')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-node-workspace-badge-packages')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tree-node-workspace-badge-src')).not.toBeInTheDocument();
   });
 
   it('shows an error state when the root listing fails', async () => {
@@ -216,280 +161,40 @@ describe('FolderTree', () => {
     expect(await screen.findByTestId('folder-tree-error')).toBeInTheDocument();
   });
 
-  it('shows an inline error indicator when a folder\'s children fail to load, when scoped to a Project', async () => {
+  it("shows an inline error indicator when a folder's children fail to load", async () => {
     const user = userEvent.setup();
     vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
       const path = (params as { path: string }).path;
-      if (method === 'project.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
-      if (method === 'project.listDir' && path === 'src') throw new Error('boom');
+      if (method === 'workspace.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
+      if (method === 'workspace.listDir' && path === 'src') throw new Error('boom');
       return [];
     });
-    renderTree({ scopeProjectId: 'p1' });
+    renderTree();
     await user.click(await screen.findByText('src'));
     expect(await screen.findByTestId('tree-node-error-src')).toBeInTheDocument();
   });
 
-  it('"Use as Project" appears on root-level folders in the (unscoped) workspace listing', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path: string }).path;
-      if (method === 'workspace.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
-      return [];
-    });
-    renderTree();
-    expect(await screen.findByTestId('tree-node-use-as-project-src')).toBeInTheDocument();
-  });
-
-  it('lists the root via project.listDir and hides "Use as Project" when scoped to a project', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'project.listDir' && (params as { projectId: string }).projectId === 'p1') {
-        return [{ name: 'src', kind: 'dir' }];
-      }
-      return [];
-    });
-    renderTree({ scopeProjectId: 'p1' });
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(ipc.callIpc).toHaveBeenCalledWith('project.listDir', { projectId: 'p1', path: '' });
-    expect(screen.queryByTestId('tree-node-use-as-project-src')).not.toBeInTheDocument();
-  });
-
-  it('swaps "Use as Project" for "Abrir customizations do projeto" on a root folder already registered as a Project', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path: string }).path;
-      if (method === 'workspace.listDir' && path === '') {
-        return [{ name: 'apps', kind: 'dir' }, { name: 'other', kind: 'dir' }];
-      }
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject: vi.fn(),
-    });
-    expect(await screen.findByTestId('tree-node-open-project-apps')).toBeInTheDocument();
-    expect(screen.queryByTestId('tree-node-use-as-project-apps')).not.toBeInTheDocument();
-    // Unmatched sibling folder keeps the normal "Use as Project" affordance.
-    expect(await screen.findByTestId('tree-node-use-as-project-other')).toBeInTheDocument();
-  });
-
-  it('clicking "Abrir customizations do projeto" calls onOpenProject with the matched Project id', async () => {
-    const user = userEvent.setup();
-    const onOpenProject = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path: string }).path;
-      if (method === 'workspace.listDir' && path === '') return [{ name: 'apps', kind: 'dir' }];
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject,
-    });
-    await user.click(await screen.findByTestId('tree-node-open-project-apps'));
-    expect(onOpenProject).toHaveBeenCalledWith('p1');
-  });
-
-  it('shows a running-session badge on a root folder row already registered as a Project with an active session', async () => {
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params?: unknown) => {
-      const path = (params as { path?: string } | undefined)?.path;
-      if (method === 'workspace.listDir' && path === '') {
-        return [{ name: 'apps', kind: 'dir' }, { name: 'other', kind: 'dir' }];
-      }
-      if (method === 'session.list') {
-        return [
-          {
-            sessionId: 'project:p1',
-            anchor: { kind: 'project', projectId: 'p1' },
-            cwd: '/repos/monorepo/apps',
-            label: 'apps',
-            status: 'running',
-          },
-        ];
-      }
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject: vi.fn(),
-    });
-    expect(await screen.findByText('Ativa')).toBeInTheDocument();
-    // Only "apps" has a session — the sibling "other" folder gets no badge.
-    expect(screen.getAllByText('Ativa')).toHaveLength(1);
-  });
-
-  it('clicking a root folder row already registered as a Project expands it in place, fetching its own children, instead of navigating away', async () => {
-    const user = userEvent.setup();
-    const onOpenProject = vi.fn();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir' && (params as { projectId: string; path: string }).projectId === 'p1') {
-        const path = (params as { path: string }).path;
-        if (path === '') return [{ name: 'src', kind: 'dir' }, { name: 'README.md', kind: 'file' }];
-      }
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject,
-    });
-    await user.click(await screen.findByText('apps'));
-    expect(await screen.findByText('src')).toBeInTheDocument();
-    expect(await screen.findByText('README.md')).toBeInTheDocument();
-    expect(onOpenProject).not.toHaveBeenCalled();
-  });
-
-  it('renders renderProjectInstructionRow pinned above a Project folder\'s own children once expanded in place, without "entering" it', async () => {
-    const user = userEvent.setup();
-    const renderProjectInstructionRow = vi.fn((project: Project, _depth: number) => (
-      <div data-testid={`instruction-row-${project.name}`}>{project.name}/INSTRUCTIONS</div>
-    ));
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir' && (params as { projectId: string }).projectId === 'p1') {
-        return [{ name: 'src', kind: 'dir' }];
-      }
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject: vi.fn(),
-      renderProjectInstructionRow,
-    });
-    expect(screen.queryByTestId('instruction-row-apps')).not.toBeInTheDocument();
-    await user.click(await screen.findByText('apps'));
-    expect(await screen.findByTestId('instruction-row-apps')).toBeInTheDocument();
-    expect(renderProjectInstructionRow).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1', name: 'apps' }), 1);
-  });
-
-  it('does not call renderProjectInstructionRow for a root-level folder that is not a registered Project', async () => {
-    const renderProjectInstructionRow = vi.fn(() => <div data-testid="never-rendered" />);
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path?: string } | undefined)?.path;
-      if (method === 'workspace.listDir' && path === '') return [{ name: 'plain', kind: 'dir' }];
-      return [];
-    });
-    renderTree({ renderProjectInstructionRow });
-    expect(screen.queryByTestId('never-rendered')).not.toBeInTheDocument();
-    expect(renderProjectInstructionRow).not.toHaveBeenCalled();
-  });
-
-  it("renders renderProjectLaunchConfigsRow pinned above a Project folder's own children, right after renderProjectInstructionRow", async () => {
-    const user = userEvent.setup();
-    const calls: string[] = [];
-    const renderProjectInstructionRow = vi.fn((project: Project) => {
-      calls.push('instructions');
-      return <div data-testid={`instructions-${project.name}`} />;
-    });
-    const renderProjectLaunchConfigsRow = vi.fn((project: Project) => {
-      calls.push('launch-configs');
-      return <div data-testid={`launch-configs-${project.name}`} />;
-    });
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'apps', kind: 'dir' }];
-      }
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      renderProjectInstructionRow,
-      renderProjectLaunchConfigsRow,
-    });
-    await user.click(await screen.findByText('apps'));
-    expect(await screen.findByTestId('launch-configs-apps')).toBeInTheDocument();
-    // Both are re-invoked on every re-render (they're plain function calls in
-    // TreeNode's render body, not components) — only their relative order matters.
-    expect(calls[0]).toBe('instructions');
-    expect(calls[1]).toBe('launch-configs');
-    expect(renderProjectLaunchConfigsRow).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1', name: 'apps' }), 1);
-  });
-
-  it('does not call renderProjectLaunchConfigsRow for a root-level folder that is not a registered Project', async () => {
-    const renderProjectLaunchConfigsRow = vi.fn(() => <div data-testid="never-rendered" />);
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      const path = (params as { path?: string } | undefined)?.path;
-      if (method === 'workspace.listDir' && path === '') return [{ name: 'plain', kind: 'dir' }];
-      return [];
-    });
-    renderTree({ renderProjectLaunchConfigsRow });
-    expect(screen.queryByTestId('never-rendered')).not.toBeInTheDocument();
-    expect(renderProjectLaunchConfigsRow).not.toHaveBeenCalled();
-  });
-
-  it('expands a grandchild of a root-level Project row using paths relative to the Project, not the workspace', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'workspace.listDir' && (params as { path: string }).path === '') {
-        return [{ name: 'apps', kind: 'dir' }];
-      }
-      if (method === 'project.listDir' && (params as { projectId: string; path: string }).projectId === 'p1') {
-        const path = (params as { path: string }).path;
-        if (path === '') return [{ name: 'src', kind: 'dir' }];
-        if (path === 'src') return [{ name: 'index.ts', kind: 'file' }];
-      }
-      return [];
-    });
-    renderTree({
-      workspaceRootPath: '/repos/monorepo',
-      projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-      onOpenProject: vi.fn(),
-    });
-    await user.click(await screen.findByText('apps'));
-    await user.click(await screen.findByText('src'));
-    expect(await screen.findByText('index.ts')).toBeInTheDocument();
-  });
-
   describe('context menu — New Action', () => {
-    it('offers both "Preview" and "New Action" on a file row, when scoped to a Project', async () => {
+    it('offers both "Preview" and "New Action" on a file row', async () => {
       const onPreviewFile = vi.fn();
       const onNewAction = vi.fn();
-      vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'README.md', kind: 'file' }]);
-      renderTree({ scopeProjectId: 'p1', onPreviewFile, onNewAction });
-      const row = await screen.findByText('README.md');
-      fireEvent.contextMenu(row);
+      listing({ '': [{ name: 'README.md', kind: 'file' }] });
+      renderTree({ onPreviewFile, onNewAction });
+      fireEvent.contextMenu(await screen.findByText('README.md'));
       expect(await screen.findByTestId('row-context-menu-preview')).toBeInTheDocument();
-      const newActionItem = await screen.findByTestId('row-context-menu-new-action');
-      fireEvent.click(newActionItem);
-      expect(onNewAction).toHaveBeenCalledWith('README.md', 'p1');
+      fireEvent.click(await screen.findByTestId('row-context-menu-new-action'));
+      expect(onNewAction).toHaveBeenCalledWith('README.md');
     });
 
-    it('offers only "New Action" (no "Preview") on a folder row that can expand, when scoped to a Project', async () => {
+    it('offers only "New Action" (no "Preview") on a folder row', async () => {
       const onPreviewFile = vi.fn();
       const onNewAction = vi.fn();
-      vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'project.listDir' && (params as { path: string }).path === '') return [{ name: 'src', kind: 'dir' }];
-        return [];
-      });
-      renderTree({ scopeProjectId: 'p1', onPreviewFile, onNewAction });
-      const row = await screen.findByText('src');
-      fireEvent.contextMenu(row);
+      listing({ '': [{ name: 'src', kind: 'dir' }] });
+      renderTree({ onPreviewFile, onNewAction });
+      fireEvent.contextMenu(await screen.findByText('src'));
       expect(screen.queryByTestId('row-context-menu-preview')).not.toBeInTheDocument();
-      const newActionItem = await screen.findByTestId('row-context-menu-new-action');
-      fireEvent.click(newActionItem);
-      expect(onNewAction).toHaveBeenCalledWith('src', 'p1');
-    });
-
-    it('offers "New Action" (no "Preview") on an unmatched root-level folder in the unscoped workspace listing', async () => {
-      const onNewAction = vi.fn();
-      vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-        const path = (params as { path?: string } | undefined)?.path;
-        if (method === 'workspace.listDir' && path === '') return [{ name: 'src', kind: 'dir' }];
-        return [];
-      });
-      renderTree({ onNewAction });
-      const row = await screen.findByText('src');
-      fireEvent.contextMenu(row);
-      expect(screen.queryByTestId('row-context-menu-preview')).not.toBeInTheDocument();
-      const newActionItem = await screen.findByTestId('row-context-menu-new-action');
-      fireEvent.click(newActionItem);
-      expect(onNewAction).toHaveBeenCalledWith('src', undefined);
+      fireEvent.click(await screen.findByTestId('row-context-menu-new-action'));
+      expect(onNewAction).toHaveBeenCalledWith('src');
     });
   });
 
@@ -593,51 +298,6 @@ describe('FolderTree', () => {
 
       expect(await screen.findByTestId('open-with-menu')).toBeInTheDocument();
       expect(screen.getByTestId('row-context-menu-open-with')).toBeInTheDocument();
-    });
-
-    it('targets the Project root itself, not its name joined onto its own path', async () => {
-      const callIpc = vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-        const path = (params as { path?: string } | undefined)?.path;
-        if (method === 'workspace.listDir' && path === '') return [{ name: 'apps', kind: 'dir' }];
-        if (method === 'openWith.suggest') return { primary: [], more: [] };
-        return undefined;
-      });
-      renderTree({
-        workspaceRootPath: '/repos/monorepo',
-        projects: [{ id: 'p1', name: 'apps', path: '/repos/monorepo/apps', createdAt: '' }],
-        onOpenProject: vi.fn(),
-      });
-
-      fireEvent.contextMenu(await screen.findByText('apps'));
-      fireEvent.click(await screen.findByTestId('row-context-menu-reveal'));
-
-      // Not { path: 'apps', projectId: 'p1' } — the handler roots that at the
-      // Project's own path and would resolve <root>/apps/apps.
-      await waitFor(() =>
-        expect(callIpc).toHaveBeenCalledWith('openWith.reveal', { path: '', projectId: 'p1' }),
-      );
-    });
-
-    it('carries the project scope of the row into the suggestion request', async () => {
-      const callIpc = vi.spyOn(ipc, 'callIpc').mockImplementation(async (method: string, params: unknown) => {
-        if (method === 'project.listDir' && (params as { path: string }).path === '') {
-          return [{ name: 'README.md', kind: 'file' }];
-        }
-        if (method === 'openWith.suggest') return { primary: [], more: [] };
-        return undefined;
-      });
-      renderTree({ scopeProjectId: 'p1' });
-
-      fireEvent.contextMenu(await screen.findByText('README.md'));
-      fireEvent.click(await screen.findByTestId('row-context-menu-open-with'));
-
-      await waitFor(() =>
-        expect(callIpc).toHaveBeenCalledWith('openWith.suggest', {
-          path: 'README.md',
-          projectId: 'p1',
-          kind: 'file',
-        }),
-      );
     });
   });
 });

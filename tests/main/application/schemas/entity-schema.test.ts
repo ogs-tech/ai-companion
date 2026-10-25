@@ -25,15 +25,15 @@ describe('instructionEntitySchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects name "default" for a project-scoped instruction', () => {
+  it('rejects name "default" for a workspace-scoped instruction', () => {
     const result = instructionEntitySchema.safeParse({
-      ...base, name: 'default', scopes: ['project'], scopeId: 'proj-1',
+      ...base, name: 'default', scopes: ['workspace'], scopeId: 'ws-1',
     });
     expect(result.success).toBe(false);
   });
 
-  it('requires a non-empty scopeId for project scope', () => {
-    const result = instructionEntitySchema.safeParse({ ...base, name: 'acme', scopes: ['project'] });
+  it('requires a non-empty scopeId for workspace scope', () => {
+    const result = instructionEntitySchema.safeParse({ ...base, name: 'acme', scopes: ['workspace'] });
     expect(result.success).toBe(false);
   });
 
@@ -69,18 +69,18 @@ describe.each([
     expect(result.success).toBe(false);
   });
 
-  it('accepts scopes: ["project"] with a scopeId', () => {
+  it('rejects the removed scopes: ["project"]', () => {
     const result = schema.safeParse({ ...skillAgentBase, scopes: ['project'], scopeId: 'proj-1' });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects scopes: ["project"] with a missing scopeId', () => {
-    const result = schema.safeParse({ ...skillAgentBase, scopes: ['project'] });
     expect(result.success).toBe(false);
   });
 
-  it('rejects scopes: ["project"] with an empty scopeId', () => {
-    const result = schema.safeParse({ ...skillAgentBase, scopes: ['project'], scopeId: '  ' });
+  it('rejects scopes: ["workspace"] with a missing scopeId', () => {
+    const result = schema.safeParse({ ...skillAgentBase, scopes: ['workspace'] });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects scopes: ["workspace"] with an empty scopeId', () => {
+    const result = schema.safeParse({ ...skillAgentBase, scopes: ['workspace'], scopeId: '  ' });
     expect(result.success).toBe(false);
   });
 

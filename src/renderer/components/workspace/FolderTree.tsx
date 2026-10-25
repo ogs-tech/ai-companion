@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
-import { Eye, ExternalLink, Folder, File as FileIcon, FolderInput, FolderOpen, FolderSearch, FolderX, Globe, SquareTerminal } from 'lucide-react';
+import { Box, Collapse, IconButton, List, Tooltip, Typography } from '@mui/material';
+import { Eye, ExternalLink, FileDiff, Folder, File as FileIcon, FolderInput, FolderRoot, FolderSearch, FolderX, Globe, Minus, Plus, SquareTerminal, TerminalSquare, Undo2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { TreeRow } from '../ds/TreeRow.js';
@@ -9,79 +9,133 @@ import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './
 import { useDirListing, useResolveAbsolutePath } from '../../hooks/use-file-browser.js';
 import { useOpenInBrowser, useRevealPath, type OpenWithTarget } from '../../hooks/use-open-with.js';
 import { OpenWithMenu } from './OpenWithMenu.js';
-import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { focusManualTab } from '../../lib/browser-tabs-store.js';
+import { EMPTY_GIT_DECORATIONS, type GitDecoration, type GitDecorations } from './git/git-decorations.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
-import type { Project } from '../../../shared/project.js';
+import type { GitDiffSource, GitFileChange } from '../../../shared/git.js';
 
 interface RowMenuTarget {
   relPath: string;
   kind: 'file' | 'dir';
-  projectId?: string;
+  /** A file removed from disk (listed under "Removidos"): only the git actions apply. */
+  removed?: boolean;
+}
+
+/** Git state and actions the tree decorates its rows with; omitted at a workspace without a usable repo. */
+export interface FolderTreeGit {
+  decorations: GitDecorations;
+  busy: boolean;
+  onOpenDiff: (args: { path: string; source: GitDiffSource }) => void;
+  onStage: (paths: string[]) => void;
+  onUnstage: (paths: string[]) => void;
+  onDiscard: (files: GitFileChange[]) => void;
+}
+
+/** The folder containing a root-relative path; `''` for a top-level entry. */
+function parentDir(relPath: string): string {
+  const slash = relPath.lastIndexOf('/');
+  return slash === -1 ? '' : relPath.slice(0, slash);
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** A depth-0 folder's absolute path is always `<workspace root>/<folder name>`. */
-function joinRootPath(root: string, name: string): string {
-  return `${root.replace(/[\\/]+$/, '')}/${name}`;
-}
-
 interface FolderTreeProps {
-  /**
-   * `projectId` is the file's own scope — the closest ancestor Project, whether
-   * that's an explicit `scopeProjectId` or a root-level folder expanded in place
-   * because it matched a registered Project. Callers must route reads/writes
-   * through that project, not whatever project (if any) the screen itself is
-   * currently scoped to — those can differ when a Project folder is browsed
-   * inline without "entering" it.
-   */
-  onSelectFile: (relPath: string, projectId?: string) => void;
-  onUseAsProject: (absolutePath: string) => void;
+  /** Every path is relative to the open workspace's root. */
+  onSelectFile: (relPath: string) => void;
+  /** A folder row's "Abrir como workspace" — opens that folder as its own workspace (`workspace.open`). */
+  onOpenAsWorkspace: (absolutePath: string) => void;
   /** Right-click on a file row → "Preview" — opens a read-only rendered-Markdown tab instead of the normal editing tab. Never offered for folders (nothing to preview). */
-  onPreviewFile?: (relPath: string, projectId?: string) => void;
+  onPreviewFile?: (relPath: string) => void;
   /** Right-click on a file OR folder row → "New Action" — opens a brand-new session with a draft first message referencing it. */
-  onNewAction?: (relPath: string, projectId?: string) => void;
-  /** Pinned row rendered above the folders/files, e.g. an `InstructionTreeRow` for the current scope. */
-  instructionRow?: React.ReactNode;
-  /** Pinned nodes rendered below `instructionRow` and above the folders/files, e.g. Skills/Agents/Hooks/MCP `TreeGroup`s for the current scope. */
-  pinnedRows?: React.ReactNode;
-  /** Root-level folders already registered as a `Project` swap "Usar como Project" for an "Abrir customizations do projeto" shortcut into that project. */
-  workspaceRootPath?: string;
-  projects?: ReadonlyArray<Project>;
-  onOpenProject?: (projectId: string) => void;
-  scopeProjectId?: string;
-  /** Renders a Project's own INSTRUCTIONS row pinned above its children once its folder node is expanded in place — lets a Project's instruction be reached without "entering" it via `onOpenProject`. `depth` matches its children's own indent level (see `TreeNode`'s `pl: 1.5 + depth * 2`), so the row reads as nested under the Project folder rather than flush with it. */
-  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
-  /**
-   * Renders a Project's own LAUNCH CONFIGURATIONS group pinned above its
-   * children once its folder node is expanded in place — gated on
-   * `matchedProject` only, never the workspace-root's own `rootProject`
-   * fallback (unlike this file's `effectiveProjectId`), since `rootProject`
-   * is recomputed identically for every depth-0 entry and would render this
-   * group once per expanded top-level folder instead of once. The
-   * workspace-root case is handled separately, via `pinnedRows`. `depth`
-   * matches `renderProjectInstructionRow`'s own formula.
-   */
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
+  onNewAction?: (relPath: string) => void;
+  /** Right-click → "Abrir terminal aqui": a shell in that folder (a file's containing folder; `''` is the root). */
+  onOpenTerminalHere?: (relDir: string) => void;
+  /** Whether a folder (by its root-relative path) is itself a registered workspace's root — gets a small badge. */
+  isWorkspaceRoot?: (relPath: string) => boolean;
+  git?: FolderTreeGit;
 }
 
 interface TreeNodeProps {
   entry: FileBrowserEntry;
   relPath: string;
   depth: number;
-  onSelectFile: (relPath: string, projectId?: string) => void;
-  onUseAsProject: (absolutePath: string) => void;
+  onSelectFile: (relPath: string) => void;
   onOpenRowMenu: (e: React.MouseEvent, target: RowMenuTarget) => void;
-  onError: (message: string) => void;
-  workspaceRootPath?: string;
-  projects?: ReadonlyArray<Project>;
-  onOpenProject?: (projectId: string) => void;
-  scopeProjectId?: string;
-  renderProjectInstructionRow?: (project: Project, depth: number) => React.ReactNode;
-  renderProjectLaunchConfigsRow?: (project: Project, depth: number) => React.ReactNode;
+  isWorkspaceRoot: (relPath: string) => boolean;
+  decorations: GitDecorations;
+  git: FolderTreeGit | undefined;
+}
+
+function GitBadge({ letters, color, testId }: { letters: string; color: string; testId: string }): React.ReactElement {
+  return (
+    <Box
+      component="span"
+      data-testid={testId}
+      sx={(theme) => ({ color, fontFamily: theme.ogs.fonts.mono, fontSize: '0.75rem', fontWeight: 600, ml: 'auto' })}
+    >
+      {letters}
+    </Box>
+  );
+}
+
+interface RowGitAction {
+  key: 'stage' | 'unstage' | 'discard';
+  label: string;
+  glyph: typeof Plus;
+  run: () => void;
+}
+
+/** Inline icon buttons on a row; real buttons, so they stay reachable by keyboard (the row reveals them on focus-within). */
+function RowGitActions({ actions, busy, testIdBase }: { actions: RowGitAction[]; busy: boolean; testIdBase: string }): React.ReactElement | null {
+  if (actions.length === 0) return null;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+      {actions.map((action) => (
+        <Tooltip key={action.key} title={action.label}>
+          <span>
+            <IconButton
+              size="small"
+              aria-label={`${action.label}: ${testIdBase}`}
+              data-testid={`git-row-${action.key}-${testIdBase}`}
+              disabled={busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                action.run();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              sx={{ p: 0.25 }}
+            >
+              <Icon glyph={action.glyph} size={12} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      ))}
+    </Box>
+  );
+}
+
+function rowGitActions(
+  git: FolderTreeGit | undefined,
+  relPath: string,
+  isDir: boolean,
+  change: GitDecoration | undefined,
+  dirState: { staged: boolean; unstaged: boolean } | undefined,
+): RowGitAction[] {
+  if (!git) return [];
+  if (isDir) {
+    return [
+      ...(dirState?.unstaged ? [{ key: 'stage' as const, label: 'Stage pasta', glyph: Plus, run: () => git.onStage([relPath]) }] : []),
+      ...(dirState?.staged ? [{ key: 'unstage' as const, label: 'Unstage pasta', glyph: Minus, run: () => git.onUnstage([relPath]) }] : []),
+    ];
+  }
+  if (!change) return [];
+  return [
+    ...(change.unstaged ? [{ key: 'stage' as const, label: 'Stage', glyph: Plus, run: () => git.onStage([relPath]) }] : []),
+    ...(change.staged ? [{ key: 'unstage' as const, label: 'Unstage', glyph: Minus, run: () => git.onUnstage([relPath]) }] : []),
+    ...(change.unstaged ? [{ key: 'discard' as const, label: 'Descartar…', glyph: Undo2, run: () => git.onDiscard([change.file]) }] : []),
+  ];
 }
 
 function TreeNode({
@@ -89,135 +143,62 @@ function TreeNode({
   relPath,
   depth,
   onSelectFile,
-  onUseAsProject,
   onOpenRowMenu,
-  onError,
-  workspaceRootPath,
-  projects,
-  onOpenProject,
-  scopeProjectId,
-  renderProjectInstructionRow,
-  renderProjectLaunchConfigsRow,
+  isWorkspaceRoot,
+  decorations,
+  git,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
-  const resolveAbsolutePath = useResolveAbsolutePath();
-  const isRootLevel = entry.kind === 'dir' && depth === 0 && !scopeProjectId;
-  const matchedProject =
-    isRootLevel && workspaceRootPath !== undefined
-      ? projects?.find((p) => p.path === joinRootPath(workspaceRootPath, entry.name))
-      : undefined;
-  const canUseAsProject = isRootLevel && matchedProject === undefined;
-  // The workspace root itself may be registered as a Project (see decision
-  // #4/#6 of docs/superpowers/specs/2026-09-19-workspace-view-mode-design.md) —
-  // every depth-0 entry, file or dir, belongs to it unless it matches a more
-  // specific child Project above (`matchedProject` always wins when both apply).
-  const rootProject =
-    depth === 0 && !scopeProjectId && workspaceRootPath !== undefined
-      ? projects?.find((p) => p.path === workspaceRootPath)
-      : undefined;
-  // A root-level folder already registered as a Project expands in place too,
-  // browsing its own tree without leaving the workspace-root view — full
-  // navigation into the Project (Skills/Agents/Instructions/Sessions) stays
-  // behind the dedicated "Gerir instructions" shortcut further below. Every
-  // other root-level folder stays flat, for now — only inside a Project's own
-  // tree (scoped, or expanded in place here) can you drill into subfolders.
-  const effectiveProjectId = scopeProjectId ?? matchedProject?.id ?? rootProject?.id;
-  const canExpand = entry.kind === 'dir' && effectiveProjectId !== undefined;
-  // A Project row's own listing is relative to ITS root ('') when expanded in
-  // place from the unscoped workspace view — `relPath` there is
-  // workspace-relative (e.g. "apps"), not what `project.listDir` expects.
-  const listingPath = scopeProjectId ? relPath : matchedProject ? '' : relPath;
-  const { data: children, isError: childrenError } = useDirListing(listingPath, {
-    enabled: expanded && canExpand,
-    ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
-  });
-
-  const handleUseAsProject = async (): Promise<void> => {
-    try {
-      const absolutePath = await resolveAbsolutePath.mutateAsync(relPath);
-      onUseAsProject(absolutePath);
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  };
+  const isDir = entry.kind === 'dir';
+  const change = isDir ? undefined : decorations.byPath.get(relPath);
+  const dirty = isDir && decorations.dirtyDirs.has(relPath);
+  const { data: children, isError: childrenError } = useDirListing(relPath, { enabled: expanded && isDir });
 
   return (
     <>
       <TreeRow
         pl={1.5 + depth * 2}
-        // Reserved uniformly so folder names line up whether or not a given row
-        // can expand — root-level Project folders now can, plain root-level
-        // folders still can't ("flat, for now").
-        chevron={canExpand ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
-        glyph={entry.kind === 'dir' ? Folder : FileIcon}
-        primary={entry.name}
-        badge={matchedProject && <SessionStatusBadge anchor={{ kind: 'project', projectId: matchedProject.id }} />}
-        actionsVisibility="always"
+        chevron={isDir ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
+        glyph={isDir ? Folder : FileIcon}
+        primary={change ? <Box component="span" sx={{ color: change.color }}>{entry.name}</Box> : entry.name}
         onClick={() => {
-          if (canExpand) setExpanded((v) => !v);
-          else if (entry.kind === 'file') onSelectFile(relPath, effectiveProjectId);
+          if (isDir) setExpanded((v) => !v);
+          else onSelectFile(relPath);
         }}
-        onContextMenu={(e) => {
-          // `listingPath`, not `relPath`, for the same reason the children
-          // listing uses it: a Project folder expanded in place is addressed
-          // relative to ITS root (''), and pairing the workspace-relative name
-          // with its own projectId would resolve <project>/<project name>.
-          onOpenRowMenu(e, { relPath: listingPath, kind: entry.kind, ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}) });
-        }}
-        actions={
-          <>
-            {canUseAsProject && (
-              <Tooltip title="Usar como Project">
-                <Box
-                  component="span"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Usar ${entry.name} como Project`}
-                  data-testid={`tree-node-use-as-project-${entry.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleUseAsProject();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    if (e.key === ' ') e.preventDefault();
-                    e.stopPropagation();
-                    void handleUseAsProject();
-                  }}
-                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                >
-                  <Icon glyph={FolderInput} size={14} />
-                </Box>
-              </Tooltip>
-            )}
-            {matchedProject && onOpenProject && (
-              <Tooltip title="Abrir customizations do projeto">
-                <Box
-                  component="span"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Abrir customizations do projeto ${entry.name}`}
-                  data-testid={`tree-node-open-project-${entry.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenProject(matchedProject.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    if (e.key === ' ') e.preventDefault();
-                    e.stopPropagation();
-                    onOpenProject(matchedProject.id);
-                  }}
-                  sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                >
-                  <Icon glyph={FolderOpen} size={14} />
-                </Box>
-              </Tooltip>
-            )}
-          </>
-        }
+        onContextMenu={(e) => onOpenRowMenu(e, { relPath, kind: entry.kind })}
+        {...(isDir && (isWorkspaceRoot(relPath) || dirty)
+          ? {
+              badge: (
+                <>
+                  {isWorkspaceRoot(relPath) && (
+                    <Tooltip title="Workspace">
+                      <Box component="span" data-testid={`tree-node-workspace-badge-${entry.name}`} sx={{ display: 'inline-flex', color: 'secondary.main' }}>
+                        <Icon glyph={FolderRoot} size={12} />
+                      </Box>
+                    </Tooltip>
+                  )}
+                  {dirty && (
+                    <Tooltip title="Contém alterações">
+                      <Box
+                        component="span"
+                        data-testid={`git-dirty-dir-${relPath}`}
+                        sx={{ ml: 'auto', width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }}
+                      />
+                    </Tooltip>
+                  )}
+                </>
+              ),
+            }
+          : {})}
+        {...(() => {
+          const actions = rowGitActions(git, relPath, isDir, change, decorations.dirState.get(relPath));
+          return actions.length > 0
+            ? { actions: <RowGitActions actions={actions} busy={git?.busy ?? false} testIdBase={relPath} /> }
+            : {};
+        })()}
+        {...(change ? { badge: <GitBadge letters={change.letters} color={change.color} testId={`git-badge-${relPath}`} /> } : {})}
       />
-      {canExpand && (
+      {isDir && (
         <Collapse in={expanded} unmountOnExit>
           {childrenError ? (
             <Typography
@@ -230,28 +211,17 @@ function TreeNode({
             </Typography>
           ) : (
             <List disablePadding>
-              {matchedProject && renderProjectInstructionRow
-                ? renderProjectInstructionRow(matchedProject, depth + 1)
-                : null}
-              {matchedProject && renderProjectLaunchConfigsRow
-                ? renderProjectLaunchConfigsRow(matchedProject, depth + 1)
-                : null}
               {(children ?? []).map((child) => (
                 <TreeNode
                   key={child.name}
                   entry={child}
-                  relPath={listingPath ? `${listingPath}/${child.name}` : child.name}
+                  relPath={`${relPath}/${child.name}`}
                   depth={depth + 1}
                   onSelectFile={onSelectFile}
-                  onUseAsProject={onUseAsProject}
                   onOpenRowMenu={onOpenRowMenu}
-                  onError={onError}
-                  {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
-                  {...(projects !== undefined ? { projects } : {})}
-                  {...(onOpenProject !== undefined ? { onOpenProject } : {})}
-                  {...(effectiveProjectId ? { scopeProjectId: effectiveProjectId } : {})}
-                  {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
-                  {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
+                  isWorkspaceRoot={isWorkspaceRoot}
+                  decorations={decorations}
+                  git={git}
                 />
               ))}
             </List>
@@ -264,21 +234,14 @@ function TreeNode({
 
 export function FolderTree({
   onSelectFile,
-  onUseAsProject,
+  onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
-  instructionRow,
-  pinnedRows,
-  workspaceRootPath,
-  projects,
-  onOpenProject,
-  scopeProjectId,
-  renderProjectInstructionRow,
-  renderProjectLaunchConfigsRow,
+  onOpenTerminalHere,
+  isWorkspaceRoot = () => false,
+  git,
 }: FolderTreeProps): React.ReactElement {
-  const { data: rootEntries, isError } = useDirListing('', {
-    ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
-  });
+  const { data: rootEntries, isError } = useDirListing('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<RowMenuTarget>();
   const rowMenuTarget = rowMenu.state?.target;
@@ -286,22 +249,41 @@ export function FolderTree({
   const [openWithTarget, setOpenWithTarget] = useState<OpenWithTarget | null>(null);
   const revealPath = useRevealPath();
   const openInBrowser = useOpenInBrowser();
+  const resolveAbsolutePath = useResolveAbsolutePath();
+  const decorations = git?.decorations ?? EMPTY_GIT_DECORATIONS;
 
-  const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({
-    relPath: target.relPath,
-    kind: target.kind,
-    ...(target.projectId ? { projectId: target.projectId } : {}),
-  });
+  const asOpenWithTarget = (target: RowMenuTarget): OpenWithTarget => ({ relPath: target.relPath, kind: target.kind });
 
   const closeRowAndSubmenu = (): void => {
     setOpenWithAnchor(null);
     rowMenu.closeMenu();
   };
 
-  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
+  const gitActionsFor = (target: RowMenuTarget): RowContextMenuAction[] => {
+    const change = git && target.kind === 'file' ? decorations.byPath.get(target.relPath) : undefined;
+    if (!git || !change) return [];
+    const { path } = change.file;
+    const both = change.staged && change.unstaged;
+    return [
+      ...(change.staged
+        ? [{ key: 'git-open-diff-staged', label: both ? 'Abrir diff (staged)' : 'Abrir diff', glyph: FileDiff, onSelect: () => git.onOpenDiff({ path, source: { kind: 'index' } }) }]
+        : []),
+      ...(change.unstaged
+        ? [{ key: 'git-open-diff-worktree', label: both ? 'Abrir diff (alterações)' : 'Abrir diff', glyph: FileDiff, onSelect: () => git.onOpenDiff({ path, source: { kind: 'worktree' } }) }]
+        : []),
+      ...(change.unstaged ? [{ key: 'git-stage', label: 'Stage', glyph: Plus, onSelect: () => git.onStage([path]) }] : []),
+      ...(change.staged ? [{ key: 'git-unstage', label: 'Unstage', glyph: Minus, onSelect: () => git.onUnstage([path]) }] : []),
+      ...(change.unstaged ? [{ key: 'git-discard', label: 'Descartar…', glyph: Undo2, onSelect: () => git.onDiscard([change.file]) }] : []),
+    ];
+  };
+
+  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget?.removed
+    ? gitActionsFor(rowMenuTarget)
+    : rowMenuTarget
     ? [
+        ...gitActionsFor(rowMenuTarget),
         ...(rowMenuTarget.kind === 'file'
-          ? [{ key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreviewFile?.(rowMenuTarget.relPath, rowMenuTarget.projectId) }]
+          ? [{ key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreviewFile?.(rowMenuTarget.relPath) }]
           : []),
         {
           key: 'open-with',
@@ -339,7 +321,32 @@ export function FolderTree({
               .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
           },
         },
-        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath, rowMenuTarget.projectId) },
+        ...(onOpenTerminalHere
+          ? [
+              {
+                key: 'open-terminal-here',
+                label: 'Abrir terminal aqui',
+                glyph: TerminalSquare,
+                onSelect: () => onOpenTerminalHere(rowMenuTarget.kind === 'dir' ? rowMenuTarget.relPath : parentDir(rowMenuTarget.relPath)),
+              },
+            ]
+          : []),
+        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath) },
+        ...(rowMenuTarget.kind === 'dir'
+          ? [
+              {
+                key: 'open-as-workspace',
+                label: 'Abrir como workspace',
+                glyph: FolderInput,
+                onSelect: () => {
+                  resolveAbsolutePath
+                    .mutateAsync(rowMenuTarget.relPath)
+                    .then(onOpenAsWorkspace)
+                    .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+                },
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -359,8 +366,6 @@ export function FolderTree({
   return (
     <>
       <List disablePadding data-testid="folder-tree">
-        {instructionRow}
-        {pinnedRows}
         {(rootEntries ?? []).map((entry) => (
           <TreeNode
             key={entry.name}
@@ -368,17 +373,36 @@ export function FolderTree({
             relPath={entry.name}
             depth={0}
             onSelectFile={onSelectFile}
-            onUseAsProject={onUseAsProject}
             onOpenRowMenu={rowMenu.openMenu}
-            onError={(message) => setToast({ variant: 'error', message })}
-            {...(workspaceRootPath !== undefined ? { workspaceRootPath } : {})}
-            {...(projects !== undefined ? { projects } : {})}
-            {...(onOpenProject !== undefined ? { onOpenProject } : {})}
-            {...(scopeProjectId ? { scopeProjectId } : {})}
-            {...(renderProjectInstructionRow !== undefined ? { renderProjectInstructionRow } : {})}
-            {...(renderProjectLaunchConfigsRow !== undefined ? { renderProjectLaunchConfigsRow } : {})}
+            isWorkspaceRoot={isWorkspaceRoot}
+            decorations={decorations}
+            git={git}
           />
         ))}
+        {decorations.deleted.length > 0 && (
+          <>
+            <Typography variant="caption" color="text.secondary" data-testid="git-removed-header" sx={{ display: 'block', px: 1.5, pt: 1, pb: 0.25 }}>
+              Removidos
+            </Typography>
+            {decorations.deleted.map((file) => {
+              const change = decorations.byPath.get(file.path);
+              return (
+                <TreeRow
+                  key={file.path}
+                  testId={`git-removed-${file.path}`}
+                  pl={1.5}
+                  chevron="spacer"
+                  glyph={FileIcon}
+                  muted
+                  primary={<Box component="span" sx={{ color: change?.color ?? 'error.main' }}>{file.path}</Box>}
+                  badge={<GitBadge letters={change?.letters ?? 'D'} color={change?.color ?? 'error.main'} testId={`git-badge-${file.path}`} />}
+                  onClick={() => git?.onOpenDiff({ path: file.path, source: { kind: change?.unstaged === false ? 'index' : 'worktree' } })}
+                  onContextMenu={(e) => rowMenu.openMenu(e, { relPath: file.path, kind: 'file', removed: true })}
+                />
+              );
+            })}
+          </>
+        )}
       </List>
       <RowContextMenu state={rowMenu.state} onClose={closeRowAndSubmenu} actions={rowMenuActions} />
       <OpenWithMenu

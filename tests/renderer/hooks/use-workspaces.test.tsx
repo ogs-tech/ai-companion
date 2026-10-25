@@ -9,13 +9,15 @@ import {
   useCreateWorkspace,
   useSwitchWorkspace,
   useDeleteWorkspace,
+  useOpenWorkspace,
+  useGoHome,
 } from '../../../src/renderer/hooks/use-workspaces.js';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 );
 
-const workspace = (id = 'w1') => ({ id, name: 'Acme', rootPath: '/repos/acme', isDefault: false, createdAt: '' });
+const workspace = (id = 'w1') => ({ id, name: 'Acme', rootPath: '/repos/acme', createdAt: '' });
 
 beforeEach(() => {
   queryClient.clear();
@@ -74,12 +76,37 @@ describe('use-workspaces', () => {
     await waitFor(() => expect(activeResult.current.data?.id).toBe('w1'));
   });
 
-  it('useDeleteWorkspace calls workspace.delete and invalidates the list', async () => {
+  it('useDeleteWorkspace calls workspace.delete and invalidates every cached query (deleting the open one goes home)', async () => {
     const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useDeleteWorkspace(), { wrapper });
     await result.current.mutateAsync('w1');
     expect(spy).toHaveBeenCalledWith('workspace.delete', { id: 'w1' });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['workspace', 'list'] });
+    expect(invalidateSpy).toHaveBeenCalledWith();
+  });
+
+  it('useOpenWorkspace calls workspace.open with the folder path and invalidates every cached query', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(workspace('w2'));
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useOpenWorkspace(), { wrapper });
+    await result.current.mutateAsync('/repos/acme');
+    expect(spy).toHaveBeenCalledWith('workspace.open', { path: '/repos/acme' });
+    expect(invalidateSpy).toHaveBeenCalledWith();
+  });
+
+  it('useGoHome calls workspace.goHome and invalidates every cached query', async () => {
+    const spy = vi.spyOn(ipc, 'callIpc').mockResolvedValue(undefined);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useGoHome(), { wrapper });
+    await result.current.mutateAsync();
+    expect(spy).toHaveBeenCalledWith('workspace.goHome', {});
+    expect(invalidateSpy).toHaveBeenCalledWith();
+  });
+
+  it('useActiveWorkspace yields null at Início', async () => {
+    vi.spyOn(ipc, 'callIpc').mockResolvedValue(null);
+    const { result } = renderHook(() => useActiveWorkspace(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
   });
 });

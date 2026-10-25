@@ -20,14 +20,21 @@ describe('FileBrowserService', () => {
     const port = fakePort();
     const service = new FileBrowserService(port, ROOT);
     await service.listDir('');
-    expect(port.listDir).toHaveBeenCalledWith(ROOT);
+    expect(port.listDir).toHaveBeenCalledWith(ROOT, { showHidden: false });
+  });
+
+  it('listDir forwards showHidden to the port', async () => {
+    const port = fakePort();
+    const service = new FileBrowserService(port, ROOT);
+    await service.listDir('', true);
+    expect(port.listDir).toHaveBeenCalledWith(ROOT, { showHidden: true });
   });
 
   it('listDir("sub/dir") joins onto the root', async () => {
     const port = fakePort();
     const service = new FileBrowserService(port, ROOT);
     await service.listDir('sub/dir');
-    expect(port.listDir).toHaveBeenCalledWith('/repos/acme/sub/dir');
+    expect(port.listDir).toHaveBeenCalledWith('/repos/acme/sub/dir', { showHidden: false });
   });
 
   it('readFile delegates the resolved absolute path', async () => {
@@ -79,7 +86,7 @@ describe('FileBrowserService', () => {
     });
     const service = new FileBrowserService(port, ROOT);
     await service.listDir('does-not-exist-yet');
-    expect(port.listDir).toHaveBeenCalledWith('/repos/acme/does-not-exist-yet');
+    expect(port.listDir).toHaveBeenCalledWith('/repos/acme/does-not-exist-yet', { showHidden: false });
   });
 
   it('resolveAbsolutePath returns the same guarded path without calling listDir/readFile', async () => {
@@ -88,5 +95,29 @@ describe('FileBrowserService', () => {
     expect(await service.resolveAbsolutePath('sub')).toBe('/repos/acme/sub');
     expect(port.listDir).not.toHaveBeenCalled();
     expect(port.readFile).not.toHaveBeenCalled();
+  });
+
+  describe('listFolders', () => {
+    const tree: Record<string, Array<{ name: string; kind: 'file' | 'dir' }>> = {
+      '/repos/acme': [{ name: 'apps', kind: 'dir' }, { name: 'node_modules', kind: 'dir' }, { name: 'README.md', kind: 'file' }],
+      '/repos/acme/apps': [{ name: 'console', kind: 'dir' }, { name: 'index.ts', kind: 'file' }],
+      '/repos/acme/apps/console': [{ name: 'src', kind: 'dir' }],
+    };
+    const listing = fakePort({ listDir: vi.fn(async (p: string) => tree[p] ?? []) });
+
+    it('lists folders breadth-first as root-relative paths, skipping files and node_modules', async () => {
+      const folders = await new FileBrowserService(listing, ROOT).listFolders();
+      expect(folders).toEqual(['apps', 'apps/console', 'apps/console/src']);
+    });
+
+    it('tolerates a folder that cannot be listed', async () => {
+      const flaky = fakePort({
+        listDir: vi.fn(async (p: string) => {
+          if (p === '/repos/acme/apps') throw new Error('EACCES');
+          return tree[p] ?? [];
+        }),
+      });
+      expect(await new FileBrowserService(flaky, ROOT).listFolders()).toEqual(['apps']);
+    });
   });
 });

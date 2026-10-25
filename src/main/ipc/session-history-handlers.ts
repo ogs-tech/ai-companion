@@ -8,15 +8,13 @@ import { DomainError } from '../domain/errors.js';
 function asHistoryScope(value: unknown, field: string): HistoryScope {
   const obj = asObject(value, field);
   if (obj['kind'] === 'all') return { kind: 'all' };
+  if (obj['kind'] === 'personal') return { kind: 'personal' };
   if (obj['kind'] === 'workspace') {
     return { kind: 'workspace', workspaceId: asString(obj['workspaceId'], `${field}.workspaceId`) };
   }
-  if (obj['kind'] === 'project') {
-    return { kind: 'project', projectId: asString(obj['projectId'], `${field}.projectId`) };
-  }
   throw new DomainError(
     'validation',
-    `Invalid '${field}': expected {kind:'project',projectId} | {kind:'workspace',workspaceId} | {kind:'all'}`,
+    `Invalid '${field}': expected {kind:'workspace',workspaceId} | {kind:'personal'} | {kind:'all'}`,
   );
 }
 

@@ -1,23 +1,22 @@
 import { pathToFileURL } from 'node:url';
 import type { IpcHandlers } from './dispatcher.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
-import type { ProjectService } from '../application/services/project-service.js';
-import type { FileBrowserPort } from '../application/ports/file-browser-port.js';
 import type { DialogPort } from '../application/ports/dialog-port.js';
 import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-port.js';
-import { FileBrowserService } from '../application/services/file-browser-service.js';
+import type { FileBrowserService } from '../application/services/file-browser-service.js';
+import type { WorkspaceService } from '../application/services/workspace-service.js';
 import { DomainError } from '../domain/errors.js';
+import { requireFileBrowser } from './workspace-handlers.js';
 import type { OpenWithKind } from '../../shared/open-with.js';
 import { asObject, asRawString, asString } from './_validators.js';
 
 export interface OpenWithHandlerDeps {
   openWithService: OpenWithService;
-  /** Browser rooted at the active workspace — used when no `projectId` is given. */
-  workspaceBrowser: FileBrowserService;
-  projectService: ProjectService;
-  fileBrowserPort: FileBrowserPort;
+  /** Browser rooted at the open workspace — `null` at Início. */
+  workspaceBrowser: FileBrowserService | null;
   dialogPort: DialogPort;
   embeddedBrowser: EmbeddedBrowserPort;
+  workspaceService: Pick<WorkspaceService, 'get'>;
 }
 
 function asKind(value: unknown): OpenWithKind {
@@ -31,29 +30,17 @@ function asKind(value: unknown): OpenWithKind {
  * Opening a file elsewhere — another program, the Finder, the app's own
  * embedded browser — is the one place that hands an arbitrary path off, so it
  * is deliberately the renderer-facing methods that never see an absolute
- * path: they take the same workspace- or project-relative path the rest of
- * the file browser uses, and every one of them resolves it through
+ * path: they take the same workspace-relative path the rest of the file
+ * browser uses, and every one of them resolves it through
  * `FileBrowserService`, whose `resolveSafe` rejects `..`, absolute paths and
  * symlinks pointing outside the root.
- *
- * Unlike `workspace.*`/`project.*`, which duplicate each file method per
- * scope, this namespace takes an optional `projectId` and picks the root
- * itself — six methods instead of twelve, with the same guarantee.
  */
 export function buildOpenWithHandlers(deps: OpenWithHandlerDeps): IpcHandlers {
-  const { openWithService, workspaceBrowser, projectService, fileBrowserPort, dialogPort, embeddedBrowser } = deps;
+  const { openWithService, workspaceBrowser, dialogPort, embeddedBrowser, workspaceService } = deps;
 
-  const resolvePath = async (raw: Record<string, unknown>): Promise<string> => {
-    // Empty means the root itself — a Project folder browsed in place from the
-    // workspace tree is its own root, and is a legitimate thing to open.
-    const path = asRawString(raw['path'], 'path');
-    const projectId = raw['projectId'];
-    if (typeof projectId !== 'string' || projectId.length === 0) {
-      return workspaceBrowser.resolveAbsolutePath(path);
-    }
-    const project = await projectService.get(projectId);
-    return new FileBrowserService(fileBrowserPort, project.path).resolveAbsolutePath(path);
-  };
+  // Empty means the workspace root itself — a legitimate thing to open.
+  const resolvePath = (raw: Record<string, unknown>): Promise<string> =>
+    requireFileBrowser(workspaceBrowser).resolveAbsolutePath(asRawString(raw['path'], 'path'));
 
   return {
     'openWith.suggest': async (params) => {
@@ -94,6 +81,15 @@ export function buildOpenWithHandlers(deps: OpenWithHandlerDeps): IpcHandlers {
     'openWith.reveal': async (params) => {
       const raw = asObject(params, 'openWith.reveal');
       await openWithService.reveal(await resolvePath(raw));
+    },
+
+    // By id, not by path: the root comes from the registry, so this still never
+    // reveals an arbitrary renderer-supplied path. Works at Início, where
+    // Início's workspace rows have no open workspace to be relative to.
+    'openWith.revealWorkspace': async (params) => {
+      const raw = asObject(params, 'openWith.revealWorkspace');
+      const { rootPath } = await workspaceService.get(asString(raw['id'], 'id'));
+      await openWithService.reveal(rootPath);
     },
 
     'openWith.openInBrowser': async (params) => {

@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import type { Adapter, AdapterDestination } from '../../application/ports/adapter.js';
 import type { Entity, Instruction } from '../../../shared/entity.js';
 import type { WorkspaceService } from '../../application/services/workspace-service.js';
-import type { ProjectService } from '../../application/services/project-service.js';
 import { resolveScopePath } from '../../application/resolve-scope-path.js';
 import { DomainError } from '../../domain/errors.js';
 import { renderAgentsFile } from '../../application/entity/agents-file.js';
@@ -20,7 +19,6 @@ import {
 export interface CursorAdapterDeps {
   homedir: string;
   workspaceService: Pick<WorkspaceService, 'get'>;
-  projectService: Pick<ProjectService, 'get'>;
 }
 
 /**
@@ -32,12 +30,12 @@ export interface CursorAdapterDeps {
  *   startup and applies rules with `alwaysApply: true` to every conversation,
  *   which is the closest analogue to Claude's home-level CLAUDE.md today —
  *   native `~/.cursor/rules/*.mdc` support is not stable as of this writing).
- * - Project/workspace Instruction → `<resolved scope path>/AGENTS.md` (write, marker-owned).
+ * - Workspace Instruction → `<resolved scope path>/AGENTS.md` (write, marker-owned).
  */
 export class CursorAdapter implements Adapter {
   readonly adapterId = 'cursor';
   private readonly homedir: string;
-  private readonly scopeDeps: Pick<CursorAdapterDeps, 'workspaceService' | 'projectService'>;
+  private readonly scopeDeps: Pick<CursorAdapterDeps, 'workspaceService'>;
 
   constructor(deps: CursorAdapterDeps) {
     if (deps.homedir === undefined || deps.homedir === null || deps.homedir === '') {
@@ -46,7 +44,7 @@ export class CursorAdapter implements Adapter {
       });
     }
     this.homedir = deps.homedir;
-    this.scopeDeps = { workspaceService: deps.workspaceService, projectService: deps.projectService };
+    this.scopeDeps = { workspaceService: deps.workspaceService };
   }
 
   async resolveEntityDestinations(args: { entity: Entity }): Promise<AdapterDestination[]> {

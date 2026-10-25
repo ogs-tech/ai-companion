@@ -18,6 +18,22 @@ describe('classifyGitError', () => {
     expect(classifyGitError(stderr, '/r').kind).toBe(kind);
   });
 
+  it.each([
+    ['fatal: unable to access \'https://x/y.git/\': Could not resolve host: x', 'GitNetworkError'],
+    ['ssh: connect to host github.com port 22: Connection timed out', 'GitNetworkError'],
+    ["fatal: unable to access 'https://x/y.git/': The requested URL returned error: 403", 'GitAuthError'],
+    [' ! [rejected]        main -> main (fetch first)', 'GitPushRejectedError'],
+    [' ! [rejected]        main -> main (non-fast-forward)', 'GitPushRejectedError'],
+    ['fatal: Not possible to fast-forward, aborting.', 'GitNonFastForwardError'],
+  ])('%s → %s', (stderr, name) => {
+    expect(classifyGitError(stderr, '/r').name).toBe(name);
+  });
+
+  it('tags a rejected push so the UI can offer pull-and-retry', () => {
+    const err = classifyGitError(' ! [rejected] main -> main (fetch first)', '/r');
+    expect(err.details?.['reason']).toBe('push_rejected');
+  });
+
   it('carries the files git lists under a dirty-tree refusal', () => {
     const stderr = [
       'error: Your local changes to the following files would be overwritten by checkout:',

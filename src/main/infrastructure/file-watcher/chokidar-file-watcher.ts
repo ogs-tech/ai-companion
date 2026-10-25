@@ -15,6 +15,8 @@ export class ChokidarFileWatcher implements FileWatcherPort {
       // `ignoreInitial: false` scan would fire "add" for every entity file
       // already on disk at startup, causing a needless full-workspace re-sync.
       ignoreInitial: true,
+      // `fs.watch` on a unix socket (the link-routing socket under `~/.ai-companion/run/`) fails with UNKNOWN.
+      ignored: (_path, stats) => stats?.isSocket() === true,
       awaitWriteFinish: {
         stabilityThreshold: this.options.stabilityThresholdMs ?? 300,
         pollInterval: 100,
@@ -24,6 +26,8 @@ export class ChokidarFileWatcher implements FileWatcherPort {
     // the single-arg shape the port promises, rather than leaking stats through.
     watcher.on('add', (path) => onChange(path));
     watcher.on('change', (path) => onChange(path));
+    // Without a listener an unwatchable path surfaces as an unhandled rejection that takes the main process down.
+    watcher.on('error', (error) => console.error('[file-watcher]', error));
     return { close: () => watcher.close() };
   }
 }

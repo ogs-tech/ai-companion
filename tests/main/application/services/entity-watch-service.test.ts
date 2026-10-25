@@ -26,7 +26,7 @@ function fakeWatcher(): { watcher: FileWatcherPort; trigger: (path: string) => v
 describe('EntityWatchService', () => {
   it('start() watches dataDir itself (filtering happens in the change handler, not the watch call)', () => {
     const { watcher } = fakeWatcher();
-    const service = new EntityWatchService(dataDir, { get: vi.fn() }, { syncEntity: vi.fn() }, watcher);
+    const service = new EntityWatchService([dataDir], { get: vi.fn() }, { syncEntity: vi.fn() }, watcher);
     service.start();
     expect(watcher.watch).toHaveBeenCalledWith([dataDir], expect.any(Function));
   });
@@ -35,7 +35,7 @@ describe('EntityWatchService', () => {
     const { watcher, trigger } = fakeWatcher();
     const get = vi.fn(async () => skill);
     const syncEntity = vi.fn(async () => []);
-    const service = new EntityWatchService(dataDir, { get }, { syncEntity }, watcher);
+    const service = new EntityWatchService([dataDir], { get }, { syncEntity }, watcher);
     const listener = vi.fn();
     service.onEntityChanged(listener);
     service.start();
@@ -52,7 +52,7 @@ describe('EntityWatchService', () => {
     const { watcher, trigger } = fakeWatcher();
     const get = vi.fn(async () => skill);
     const syncEntity = vi.fn(async () => []);
-    const service = new EntityWatchService(dataDir, { get }, { syncEntity }, watcher);
+    const service = new EntityWatchService([dataDir], { get }, { syncEntity }, watcher);
     service.start();
 
     trigger(join(dataDir, 'settings.json'));
@@ -66,7 +66,7 @@ describe('EntityWatchService', () => {
     const { watcher, trigger } = fakeWatcher();
     const get = vi.fn(async () => { throw new Error('boom'); });
     const syncEntity = vi.fn(async () => []);
-    const service = new EntityWatchService(dataDir, { get }, { syncEntity }, watcher);
+    const service = new EntityWatchService([dataDir], { get }, { syncEntity }, watcher);
     const listener = vi.fn();
     service.onEntityChanged(listener);
     service.start();
@@ -80,7 +80,7 @@ describe('EntityWatchService', () => {
 
   it('stop() closes the underlying watcher handle', async () => {
     const { watcher, close } = fakeWatcher();
-    const service = new EntityWatchService(dataDir, { get: vi.fn() }, { syncEntity: vi.fn() }, watcher);
+    const service = new EntityWatchService([dataDir], { get: vi.fn() }, { syncEntity: vi.fn() }, watcher);
     service.start();
     await service.stop();
     expect(close).toHaveBeenCalled();

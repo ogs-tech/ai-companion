@@ -18,6 +18,27 @@ describe('FsLaunchConfigReader', () => {
     ]);
   });
 
+  it('accepts runtimeExecutable/runtimeArgs configs and entries without a program', async () => {
+    const reader = new FsLaunchConfigReader();
+    const result = await reader.read(project('runtime-executable-project'));
+    if ('error' in result) throw new Error(`expected configs, got error: ${result.error}`);
+    expect(result.configs).toEqual([
+      {
+        name: 'CMS: develop',
+        type: 'node',
+        request: 'launch',
+        runtimeExecutable: 'pnpm',
+        runtimeArgs: ['--filter', 'cms', 'develop'],
+        args: [],
+        cwd: '${workspaceFolder}',
+        env: { NODE_ENV: 'production' },
+        supported: true,
+      },
+      { name: 'Web (chrome)', type: 'chrome', request: 'launch', args: [], supported: false },
+      { name: 'Neither', type: 'node', request: 'launch', args: [], supported: false },
+    ]);
+  });
+
   it('reports a malformed launch.json as an explicit error rather than guessing', async () => {
     const reader = new FsLaunchConfigReader();
     const result = await reader.read(project('malformed-project'));
