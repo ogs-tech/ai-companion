@@ -1,6 +1,6 @@
 ---
 title: Use the Git panel
-description: Review diffs, stage, discard and commit changes in a workspace or Project repository without leaving the app.
+description: Review diffs, stage, discard and commit changes in a workspace's repository without leaving the app.
 ---
 
 # Use the Git panel
@@ -8,13 +8,15 @@ description: Review diffs, stage, discard and commit changes in a workspace or P
 A focused Git client for the active workspace's repository. It covers the review-and-commit loop. It has no branches, history, push or pull — use your usual
 Git tool for those. Method-level details: [IPC contract → `git`](../reference/ipc-contract.md#git).
 
-**Prerequisite:** `git` on your `PATH`. Available in non-default workspaces only.
+**Prerequisite:** `git` on your `PATH`. Available inside a workspace only, not at Início.
 
 ## Open it
 
 There is no separate Git view: the Explorer panel (left) shows the file tree with git status on it.
 Above the tree, a toolbar holds the branch chip (name, ↑ahead ↓behind), `N staged` / `N changes` chips, **Stage all**, **Unstage all**, **Commit…** and the
 refresh button. **Ver alterações** on the overview just expands the Explorer if it is collapsed.
+
+![The Explorer's Git toolbar with staged changes](../assets/screenshots/use-the-git-panel/03-toolbar-staged.png)
 
 The workspace root must itself be the repository root. For a folder that really has no repository, the
 toolbar shows a ⎇ icon whose popover offers **Inicializar** (`git init`), and a dismissible card at the
@@ -27,10 +29,14 @@ A changed file shows a status letter and colour: `M` modified, `A` added, `D` de
 (`M·M`). A folder that contains changes gets a dot, even when collapsed. Deleted files are not on disk, so
 they appear in a **Removidos** section at the end of the tree.
 
+![Right-click a changed file for Abrir diff](../assets/screenshots/use-the-git-panel/01-file-menu.png)
+
 Click a file to open it. Right-click it for **Abrir diff** (a file with both kinds of edits offers
 **Abrir diff (staged)** and **Abrir diff (alterações)**): unstaged shows index → working tree (untracked
 files appear fully added), staged shows HEAD → index. Binary files and very large diffs (over 1 MB or
 20,000 lines) are not rendered.
+
+![A diff opened in its own tab](../assets/screenshots/use-the-git-panel/02-diff.png)
 
 Repositories with more than 5,000 changed files show only the first 5,000 and say so.
 
@@ -49,6 +55,8 @@ Hover a row (or focus it with the keyboard) to get inline buttons: **+** stage, 
 1. Click **Commit…** in the toolbar and type the message in **Mensagem do commit**.
 2. Optionally tick **Amend** to rewrite the last commit instead (a message is still required; nothing needs to be staged).
 3. Press **⌘↵** or click **Commit**. The popover closes when the commit succeeds.
+
+![The commit popover](../assets/screenshots/use-the-git-panel/04-commit-popover.png)
 
 ### Generate the message with AI
 

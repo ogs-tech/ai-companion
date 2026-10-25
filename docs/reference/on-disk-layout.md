@@ -51,6 +51,7 @@ open.
 | `instructions/default.md` | `FsEntityRepository` | The personal instruction (Global only). Frontmatter-free: the file *is* the body. |
 | `instructions/project/<slug>/INSTRUCTION.md` | `FsEntityRepository` | A workspace instruction body (frontmatter-free; workspace data dirs only — `project/` is a legacy dir name). |
 | `instructions/project/<slug>/meta.json` | `FsEntityRepository` | Its sidecar: description, version, timestamps, `scope: 'workspace'`, `scopeId`. |
+| `open-editors.json` | `OpenEditorsService` | The Workbench tabs that were open in this data dir — references only (`PersistedTab`), rebuilt from disk on reload. A workspace's own file while it is open, Global's at Início. Hand-editable; malformed tabs are dropped on read. |
 | `attachments/` | `SessionService` | Images pasted into a session terminal, staged so the CLI can read them by path — in the open workspace's data dir, or Global's at Início. |
 
 Global's data dir and the open workspace's are watched recursively (`EntityWatchService`): editing an

@@ -1,11 +1,11 @@
 ---
 title: Run launch configurations
-description: Start and stop a Project's VS Code Node launch configurations from the app and watch their output.
+description: Start and stop a workspace's VS Code Node launch configurations from the app and watch their output.
 ---
 
 # Run launch configurations
 
-The app reads each registered Project's `.vscode/launch.json` and can run its Node configurations as
+The app reads the open workspace's `.vscode/launch.json` and can run its Node configurations as
 [terminals](../reference/ipc-contract.md#terminal) — handy for starting a dev server next to a `claude` session. It is a launcher, not a
 debugger: no breakpoints, no attach. The file is never modified. Contract:
 [IPC contract → `launchConfig`](../reference/ipc-contract.md#launchconfig).
@@ -34,13 +34,13 @@ disabled, with a tooltip saying why. For a runnable one the app executes:
 node <program> <args…>
 ```
 
-- `cwd` defaults to the Project folder.
+- `cwd` defaults to the workspace folder.
 - `env` is passed through, on top of the app's environment.
-- `${workspaceFolder}` in `program`, `args` and `cwd` becomes the **Project's** folder. It is the only
+- `${workspaceFolder}` in `program`, `args` and `cwd` becomes the **workspace** folder. It is the only
   VS Code variable resolved; anything else (`${file}`, `${env:…}`, `preLaunchTask`, `runtimeExecutable`,
   `runtimeArgs`) is ignored.
 - To edit the file, use **Editar launch.json** at the end of the **＋ ▾** menu.
 
 `launch.json` may contain comments and trailing commas, as in VS Code. If it cannot be parsed, or an entry
-is malformed, the row shows the error instead of the configurations. A Project with no `launch.json` simply
+is malformed, the row shows the error instead of the configurations. A workspace with no `launch.json` simply
 shows no row.

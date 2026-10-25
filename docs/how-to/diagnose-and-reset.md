@@ -7,8 +7,10 @@ description: Read the Diagnóstico screen, fix broken links, MCP auth and plugin
 
 ## Check overall health
 
-The chip in the top bar summarizes the latest health report: **sincronizado**, **atenção** or **erro**.
-Click it, or open the **Diagnóstico** tab, for the details. When a new error appears, the app also sends a
+The chip at the left of the status bar (bottom of the window) summarizes the latest health report: **sincronizado**, **atenção** or **erro**.
+Click it, or open **Diagnóstico** in Início's left panel, for the details.
+
+![Diagnóstico on Início](../assets/screenshots/diagnose-and-reset/01-diagnostico.png) When a new error appears, the app also sends a
 macOS notification.
 
 **Diagnóstico** groups checks by category; each failing check has a title, a detail line and, when there
@@ -27,7 +29,7 @@ Symlink and generated-file checks cover the **active workspace's** entities only
 ## Recover a file the app overwrote
 
 Whenever a sync replaces an existing file, the previous content is copied first to
-`<data dir>/_backups/<timestamp>/<original path>` (`~/.ai-companion/_backups/…` in the Global workspace),
+`<data dir>/_backups/<timestamp>/<original path>` (`~/.ai-companion/_backups/…` for personal entities),
 and the **Sync report** shown after the save names the exact path. Copy what you need back by hand —
 for example, into the body of the instruction that replaced it. Backups are never deleted automatically.
 

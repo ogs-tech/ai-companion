@@ -56,20 +56,38 @@ ai-companion-dev
 There is no setup wizard. On first launch the app:
 
 1. Creates its data dir, `~/.ai-companion/` (renaming a legacy `~/.superset-ai-app/` if one exists).
-2. Registers the **Global** workspace, rooted at your home folder.
-3. Writes default settings: Claude Code sync **on**, Cursor sync **off**.
-4. Registers the official plugin marketplace.
+2. Writes default settings: Claude Code sync **on**, Cursor sync **off**.
+3. Registers the official plugin marketplace.
 
-It then opens on the **Início** tab, showing the Global workspace.
+It then opens on **Início** — the Global context. Início is not a workspace: it shows your personal
+customizations, health and recent workspaces, and has no file tree or Git.
 
-## 4. Verify
+![Início on first launch](../assets/screenshots/getting-started/01-home.png)
+
+## 4. Open a folder
+
+Click **Abrir pasta…** (or press **⌘O**) and pick a project folder. It becomes a **workspace**: the app
+creates `<folder>/.ai-companion/` inside it and switches to it.
+
+![The Abrir pasta… button](../assets/screenshots/getting-started/02-open-folder.png)
+
+You now see the folder's file tree with Git status on the left, the workspace overview in the middle and
+your sessions and customizations on the right.
+
+![A freshly opened workspace](../assets/screenshots/getting-started/03-workspace-opened.png)
+
+## 5. Verify
 
 You're ready when:
 
-- The TopNav shows **🏠 Início**; the left panel lists **Workspaces** (with **+** to open a folder) and
-  **App**, and the right panel starts with **Global** and an **Instruction** group.
+- The context switcher in the TopNav shows the folder's name, and the **Visão geral** tab lists **Git**,
+  **Sessões** and **Instruction do workspace** cards.
 - **Settings** (gear icon) → **Adapters** shows Claude switched on.
-- `ls ~/.ai-companion` lists `skills/`, `agents/`, `_backups/`, `settings.json` and `workspaces.json`.
+
+  ![Settings → Adapters](../assets/screenshots/settings/01-settings.png)
+
+- `ls ~/.ai-companion` lists `settings.json` and `workspaces.json`; skills and agents appear under
+  `skills/` and `agents/` once you create a personal one.
 
 ## What's next
 

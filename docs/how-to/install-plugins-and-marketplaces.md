@@ -13,14 +13,18 @@ contributes shows up in the Customizations lists with its plugin badge, read-onl
 
 ## Fastest path: the Starter Pack
 
-1. Open the **Starter Pack** tab.
+1. On Início, open **Starter Pack** in the left panel.
+
+   ![The Starter Pack screen](../assets/screenshots/starter-pack/01-starter-pack.png)
 2. Browse the groups (**Core dev workflow**, **Claude Code setup**, **Integrations**, **Language
    servers**, **Output styles**, **Build for Claude**) or use **Buscar plugins…**.
 3. Click **Instalar** on each plugin you want. Installed ones show **Instalado**.
 
 ## Install from a marketplace
 
-1. Open the **Marketplaces** tab. The official marketplace is pre-registered (badge **official**).
+1. On Início, open **Marketplaces** in the left panel. The official marketplace is pre-registered (badge **official**).
+
+   ![The Marketplaces screen](../assets/screenshots/install-plugins-and-marketplaces/01-marketplaces.png)
 2. To add another one, click **Importar via URL** and enter `owner/repo` or a full Git URL. The
    repository must contain a `marketplace.json`.
 3. Open the marketplace, pick a plugin and click **Instalar**. A preview lists what it will add (skills,

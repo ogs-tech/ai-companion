@@ -21,7 +21,7 @@ If any target had to be overwritten, a **Sync report** lists each one with its b
 
 Other workspaces' entities are synced the next time each one is saved while its workspace is active.
 
-> Cursor and Claude Code both claim `<folder>/AGENTS.md` for workspace/Project instructions, and with
+> Cursor and Claude Code both claim `<folder>/AGENTS.md` for workspace instructions, and with
 > both enabled they overwrite each other on every sync. See
 > [Adapter targets → Known issues](../reference/adapter-targets.md#known-issues).
 

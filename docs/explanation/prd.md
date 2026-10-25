@@ -108,11 +108,12 @@ not symmetric, and which harnesses have which today.
 
 ### Organization
 
-- **Workspaces** and **Projects** as registries: one active workspace at a time,
-  each with its own data directory and its own set of projects.
+- **Workspaces** as a registry of opened folders: one active workspace at a time,
+  each with its own data directory (`<folder>/.ai-companion/`), plus **Início** — the
+  Global context for personal customizations, which is not a workspace.
 - A file browser over the workspace's real files, with preview for text and
   spreadsheets.
-- **Git** — a git client per Project: working tree, branches, sync, history,
+- **Git** — a git client per workspace: working tree, branches, sync, history,
   conflicts — over the user's own git install and credentials. Delivered in
   phases ([spec](../superpowers/specs/2026-10-06-git-management-design.md));
   the working tree (review, stage, discard, commit) ships first.
@@ -157,8 +158,11 @@ not symmetric, and which harnesses have which today.
 
 ## Changelog
 
+- **2026-10-25** — Organization now describes the folder-as-workspace model: **Project** is gone,
+  a workspace is any opened folder, and **Início** is the Global context rather than a workspace.
+  No scope change — the text caught up with the model shipped in PR #20.
 - **2026-10-06** — Reversed the "Git history in the UI" non-goal and added a
-  **Git** bullet under Organization. Sessions change files inside Projects;
+  **Git** bullet under Organization. Sessions change files inside workspaces;
   reviewing, staging and committing that work is part of the loop the app
   already owns, and leaving for a terminal to do it broke that loop.
 - **2026-09-17** — Repositioned from "customization manager for Claude Code" to

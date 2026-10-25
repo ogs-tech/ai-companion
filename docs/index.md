@@ -37,9 +37,9 @@ This project follows the [Diátaxis](https://diataxis.fr/) framework. Each quadr
 
 Using the app:
 
-- [Manage workspaces and projects](how-to/manage-workspaces-and-projects.md)
+- [Manage workspaces](how-to/manage-workspaces.md)
 - [Create skills, slash-commands and agents](how-to/create-skills-and-agents.md)
-- [Write instructions](how-to/write-instructions.md) — personal, per-workspace, per-Project; reply language.
+- [Write instructions](how-to/write-instructions.md) — personal, per-workspace; reply language.
 - [Configure MCP servers and hooks](how-to/configure-mcp-servers-and-hooks.md)
 - [Install plugins and marketplaces](how-to/install-plugins-and-marketplaces.md) — Starter Pack,
   marketplaces, Git URLs, publishing.
@@ -56,6 +56,7 @@ Contributing:
 - [Add an IPC method](how-to/add-an-ipc-method.md)
 - [Add a harness adapter](how-to/add-a-harness-adapter.md)
 - [Add an entity kind](how-to/add-an-entity-kind.md)
+- [Regenerate the doc screenshots](how-to/regenerate-doc-screenshots.md)
 
 ### Reference — look it up
 

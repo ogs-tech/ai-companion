@@ -165,6 +165,22 @@ Backs the file tree's right-click "Abrir com" submenu and its "Abrir no navegado
 
 Application discovery is macOS-only: `MacAppLauncher` asks Launch Services through `osascript -l JavaScript`, which ships with every macOS install and so needs no Xcode, no compiled helper and no extra dependency. The target path is passed as `argv`, never interpolated into the script — filenames are attacker-influenced whenever the workspace is. Every failure mode (timeout, unparseable output, an unregistered type) degrades to an empty candidate list rather than throwing. On other platforms `SystemDefaultAppLauncher` returns no candidates, so the submenu shows only "abrir com o aplicativo padrão"; `openWith.open` there rejects with `validation`.
 
+### `openEditors`
+
+Remembers which Workbench tabs were open, per data dir, so a reload reopens them. Stores references only
+(`PersistedTab`, `src/shared/open-editors.ts`) — files and entities are re-read from disk on restore, so a
+restored tab is never stale. Unsaved "new" entities and entity-body previews are not persisted; browser tabs
+recover from their own main-process store.
+
+| Method | Params | Result |
+|---|---|---|
+| `openEditors.get` | none | `OpenEditorsState` (`{ tabs: PersistedTab[]; activeTabId: string \| null }`) |
+| `openEditors.save` | `OpenEditorsState` (raw — the service validates it) | `void` |
+
+`openEditors.get` reads `open-editors.json` from the data dir of the **active context**: the open workspace's, or
+Global's at Início. A missing or corrupt file is "nothing was open", never an error. `openEditors.save` drops every
+malformed or duplicate-id tab itself before writing, because the file is hand-editable and nothing in it is trusted.
+
 ### `skill`
 
 | Method | Params | Result |

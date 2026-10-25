@@ -19,6 +19,7 @@
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
+    "docs:screenshots": "npm run build && playwright test -c scripts/docs-screenshots/playwright.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "format": "prettier --write ."

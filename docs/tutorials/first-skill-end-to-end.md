@@ -112,6 +112,6 @@ The link is gone, and so is `~/.ai-companion/skills/tldr`. Your sessions remain 
 
 - [Create skills, slash-commands and agents](../how-to/create-skills-and-agents.md) — scopes, renames,
   slash-commands.
-- [Manage workspaces and projects](../how-to/manage-workspaces-and-projects.md) — give a repository its own
+- [Manage workspaces](../how-to/manage-workspaces.md) — give a repository its own
   customizations.
 - [Write instructions](../how-to/write-instructions.md) — the always-loaded `CLAUDE.md` / `AGENTS.md`.

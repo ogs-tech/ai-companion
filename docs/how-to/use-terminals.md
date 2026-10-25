@@ -19,6 +19,10 @@ available at Início (no workspace, no folder). Contract: [IPC contract → `ter
 
 A shell is your login shell (`$SHELL`), named after it (`zsh`).
 
+![The ＋ ▾ menu in Terminais](../assets/screenshots/use-terminals/02-menu.png)
+
+![A terminal opened at the workspace root](../assets/screenshots/use-terminals/03-terminal-open.png)
+
 ## Tabs are views, not processes
 
 Closing a tab does **not** stop anything. The terminal keeps running and its output keeps being buffered

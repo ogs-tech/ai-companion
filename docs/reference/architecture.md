@@ -194,8 +194,8 @@ queue, so overlapping requests can't interleave. The rebuilt graph holds the `Sc
 (Global's `FsEntityRepository`, built once at boot and shared by every graph, plus the open workspace's),
 `SymlinkManager`, `FileMaterializer`, `AdapterManager`, `EntityService`, `SkillService`, `AgentService`,
 `InstructionService`, `SessionService`, `SessionHistoryService`, `HealthService`,
-`WorkspaceTeardownService`, `EntityWatchService`, `LaunchConfigService`/`TerminalService` and
-`GitService`. It is rebuilt on going home too: at Início it still serves Global's entities, sessions, health
+`WorkspaceTeardownService`, `EntityWatchService`, `LaunchConfigService`/`TerminalService`,
+`OpenEditorsService` and `GitService`. It is rebuilt on going home too: at Início it still serves Global's entities, sessions, health
 and adapters, while git and `terminal.*` fail `validation`, `launchConfig.list` returns `null`, and the file browser
 (`workspace.listDir`/`readFile`/`writeFile`/`resolvePath`, `openWith.*`) fails `validation`.
 
