@@ -51,8 +51,12 @@ export function buildWorkspaceHandlers(
     },
     'workspace.listDir': async (params) => {
       const raw = asObject(params, 'workspace.listDir');
-      return requireFileBrowser(fileBrowserService).listDir(typeof raw['path'] === 'string' ? raw['path'] : '');
+      return requireFileBrowser(fileBrowserService).listDir(
+        typeof raw['path'] === 'string' ? raw['path'] : '',
+        raw['showHidden'] === true,
+      );
     },
+    'workspace.listFolders': async () => requireFileBrowser(fileBrowserService).listFolders(),
     'workspace.readFile': async (params) => {
       const raw = asObject(params, 'workspace.readFile');
       return requireFileBrowser(fileBrowserService).readFile(asString(raw['path'], 'path'));

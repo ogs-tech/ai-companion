@@ -50,6 +50,7 @@ function renderPanel(isHome = false) {
       isHome={isHome}
       gitPolling
       appAreaRows={<div data-testid="app-rows" />}
+      homeNav={{ workspacesActive: false, onOpenWorkspaces: vi.fn() }}
       onSelectFile={onSelectFile}
       onOpenAsWorkspace={vi.fn()}
       onPreviewFile={vi.fn()}

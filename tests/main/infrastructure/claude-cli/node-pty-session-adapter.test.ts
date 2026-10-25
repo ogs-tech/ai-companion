@@ -181,4 +181,20 @@ describe('NodePtySessionAdapter', () => {
       );
     });
   });
+
+  it('spawns with the env from buildSessionEnv', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-env.sh'), () => ({ ...process.env, AI_COMPANION_LINK_SOCKET: '/tmp/x.sock' }));
+    const chunks: string[] = [];
+    adapter.onData((_id, chunk) => chunks.push(chunk));
+    adapter.onExit(() => undefined);
+    await adapter.spawn('sess-env', process.cwd(), {
+      cols: 80,
+      rows: 24,
+      conversation: { mode: 'start', claudeSessionId: 'c-env' },
+    });
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('SOCKET=/tmp/x.sock');
+      expect(chunks.join('')).toContain(`HOME=${process.env['HOME']}`);
+    });
+  });
 });

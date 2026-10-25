@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
+import { getShowHiddenFiles, setShowHiddenFiles, subscribeShowHiddenFiles } from '../lib/show-hidden-files-store.js';
 import type { FileBrowserEntry, FilePreview } from '../../shared/file-browser.js';
 
 /**
@@ -17,11 +18,19 @@ const DISK_BACKED_QUERY_OPTIONS = {
   refetchOnWindowFocus: true,
 } as const;
 
+/** Whether the Explorer lists dot-entries (`.env`, `.claude`, …); `.git` and `.DS_Store` stay hidden regardless. */
+export function useShowHiddenFiles(): boolean {
+  return useSyncExternalStore(subscribeShowHiddenFiles, getShowHiddenFiles);
+}
+
+export { setShowHiddenFiles };
+
 export function useDirListing(path: string, options: { enabled?: boolean } = {}) {
   const { enabled = true } = options;
+  const showHidden = useShowHiddenFiles();
   return useQuery<FileBrowserEntry[]>({
-    queryKey: ['workspace', 'listDir', path] as const,
-    queryFn: () => callIpc<FileBrowserEntry[]>('workspace.listDir', { path }),
+    queryKey: ['workspace', 'listDir', path, showHidden] as const,
+    queryFn: () => callIpc<FileBrowserEntry[]>('workspace.listDir', { path, showHidden }),
     enabled,
     ...DISK_BACKED_QUERY_OPTIONS,
   });

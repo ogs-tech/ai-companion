@@ -118,7 +118,7 @@ describe('WorkspaceOverview', () => {
         onNewSession={vi.fn()}
         onOpenSession={vi.fn()}
         onOpenInstruction={vi.fn()}
-        onOpenProcess={vi.fn()}
+        onOpenTerminal={vi.fn()}
         onError={vi.fn()}
         {...props}
       />,
@@ -182,10 +182,10 @@ describe('WorkspaceOverview', () => {
     expect(onOpenInstruction).toHaveBeenCalledWith(expect.objectContaining({ scopes: ['workspace'], scopeId: 'w1' }), true);
   });
 
-  it('runs a supported launch config and opens its process', async () => {
+  it('runs a supported launch config and opens its terminal', async () => {
     const user = userEvent.setup();
-    const onOpenProcess = vi.fn();
-    const process = { processId: 'p1', workspaceId: 'w1', configName: 'dev', status: 'running' };
+    const onOpenTerminal = vi.fn();
+    const terminal = { terminalId: 'p1', workspaceId: 'w1', kind: 'launch', name: 'dev', relCwd: '', status: 'running', exitCode: null, generation: 0 };
     answer({
       'launchConfig.list': {
         workspaceId: 'w1',
@@ -194,11 +194,11 @@ describe('WorkspaceOverview', () => {
           { name: 'web', type: 'chrome', request: 'launch', program: '', args: [], supported: false },
         ],
       },
-      'launchConfig.run': process,
+      'launchConfig.run': terminal,
     });
-    renderWorkspace({ onOpenProcess });
+    renderWorkspace({ onOpenTerminal });
     await user.click(await screen.findByTestId('overview-launch-run-dev'));
-    await waitFor(() => expect(onOpenProcess).toHaveBeenCalledWith(process));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledWith(terminal));
     expect(screen.queryByTestId('overview-launch-run-web')).not.toBeInTheDocument();
   });
 

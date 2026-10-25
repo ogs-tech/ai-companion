@@ -92,6 +92,16 @@ describe('NodeFileBrowserAdapter.listDir', () => {
     expect(entries.find((e) => e.name === 'alpha')?.kind).toBe('dir');
   });
 
+  it('lists dot-entries with showHidden, but never .git or .DS_Store', async () => {
+    await mkdir(join(dir, '.claude'));
+    await mkdir(join(dir, '.git'));
+    await writeFile(join(dir, '.env'), 'x');
+    await writeFile(join(dir, '.DS_Store'), 'x');
+    await writeFile(join(dir, 'a.txt'), 'a');
+    const entries = await adapter.listDir(dir, { showHidden: true });
+    expect(entries.map((e) => e.name)).toEqual(['.claude', '.env', 'a.txt']);
+  });
+
   it('includes size for files', async () => {
     await writeFile(join(dir, 'a.txt'), 'hello');
     const entries = await adapter.listDir(dir);

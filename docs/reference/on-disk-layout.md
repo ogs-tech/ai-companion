@@ -33,6 +33,8 @@ Only ever read from `~/.ai-companion/`, whichever workspace is open.
 | `mcp-disabled.json` | `McpDisabledStash` | Inline MCP server definitions parked while disabled (restored on enable). |
 | `_backups/<timestamp>/…` | `SymlinkManager`, `FileMaterializer` | Copies of whatever a sync overwrote — always here, whichever workspace is open. Never pruned automatically. |
 | `_backups/migration-v2-<timestamp>/` | `WorkspaceModelMigration` | Pre-migration copies of the project-era files (absolute paths preserved beneath it) plus `log.json`. Written once, by the boot migration. |
+| `bin/open` | `UnixSocketLinkRouter` | Shell shim, rewritten (mode `0755`) on every start. Prepended to a session PTY's `PATH` and set as its `$BROWSER`, so a URL the `claude` CLI opens reaches the app instead of the default browser. Non-`http(s)` or flagged invocations pass straight to `/usr/bin/open`. |
+| `run/link.sock` | `UnixSocketLinkRouter` | Unix socket (mode `0600`, dir `0700`) the shim writes URLs to; removed on quit. Falls back to `$TMPDIR/ai-companion-<uid>/` when the path would exceed macOS's socket-path limit. |
 | `dev.lock` | dev launcher | Present only while `npm run dev` runs. |
 
 ## Entity files (every data dir)

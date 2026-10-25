@@ -14,13 +14,16 @@ declare global {
         onExit(sessionId: string, listener: (exitCode: number) => void): () => void;
         onAnyExit(listener: (sessionId: string, exitCode: number) => void): () => void;
       };
+      externalLink: {
+        onOpen(listener: (url: string) => void): () => void;
+      };
       entity: {
         onChanged(listener: (event: EntityChangedEvent) => void): () => void;
       };
-      launchConfig: {
-        onOutput(processId: string, listener: (stream: 'stdout' | 'stderr', chunk: string) => void): () => void;
-        onExit(processId: string, listener: (exitCode: number | null, signal: string | null) => void): () => void;
-        onAnyExit(listener: (processId: string, exitCode: number | null, signal: string | null) => void): () => void;
+      terminal: {
+        onOutput(terminalId: string, listener: (chunk: string) => void): () => void;
+        onExit(terminalId: string, listener: (exitCode: number | null, signal: string | null) => void): () => void;
+        onAnyExit(listener: (terminalId: string, exitCode: number | null, signal: string | null) => void): () => void;
       };
     };
   }

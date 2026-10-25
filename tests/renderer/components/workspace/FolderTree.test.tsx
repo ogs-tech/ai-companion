@@ -13,7 +13,7 @@ interface RenderTreeOptions {
   onOpenAsWorkspace?: (absolutePath: string) => void;
   onPreviewFile?: (relPath: string) => void;
   onNewAction?: (relPath: string) => void;
-  pinnedRows?: React.ReactNode;
+  onOpenTerminalHere?: (relDir: string) => void;
   isWorkspaceRoot?: (relPath: string) => boolean;
 }
 
@@ -26,7 +26,7 @@ const renderTree = (opts: RenderTreeOptions = {}) =>
           onOpenAsWorkspace={opts.onOpenAsWorkspace ?? vi.fn()}
           {...(opts.onPreviewFile ? { onPreviewFile: opts.onPreviewFile } : {})}
           {...(opts.onNewAction ? { onNewAction: opts.onNewAction } : {})}
-          {...(opts.pinnedRows !== undefined ? { pinnedRows: opts.pinnedRows } : {})}
+          {...(opts.onOpenTerminalHere ? { onOpenTerminalHere: opts.onOpenTerminalHere } : {})}
           {...(opts.isWorkspaceRoot ? { isWorkspaceRoot: opts.isWorkspaceRoot } : {})}
         />
       </ThemeProvider>
@@ -52,11 +52,39 @@ beforeEach(() => {
 });
 
 describe('FolderTree', () => {
-  it('renders the pinnedRows slot above the folders/files', async () => {
-    listing({ '': [{ name: 'src', kind: 'dir' }] });
-    renderTree({ pinnedRows: <div data-testid="pinned-rows-slot">Launch Configurations</div> });
-    expect(await screen.findByTestId('pinned-rows-slot')).toBeInTheDocument();
-    expect(await screen.findByText('src')).toBeInTheDocument();
+  describe('context menu — Abrir terminal aqui', () => {
+    it('opens a terminal in the folder that was right-clicked', async () => {
+      const user = userEvent.setup();
+      const onOpenTerminalHere = vi.fn();
+      listing({ '': [{ name: 'apps', kind: 'dir' }] });
+      renderTree({ onOpenTerminalHere });
+      fireEvent.contextMenu(await screen.findByText('apps'));
+      await user.click(await screen.findByText('Abrir terminal aqui'));
+      expect(onOpenTerminalHere).toHaveBeenCalledWith('apps');
+    });
+
+    it('on a file, opens the containing folder — the root for a top-level file', async () => {
+      const user = userEvent.setup();
+      const onOpenTerminalHere = vi.fn();
+      listing({ '': [{ name: 'apps', kind: 'dir' }, { name: 'README.md', kind: 'file' }], apps: [{ name: 'main.ts', kind: 'file' }] });
+      renderTree({ onOpenTerminalHere });
+      fireEvent.contextMenu(await screen.findByText('README.md'));
+      await user.click(await screen.findByText('Abrir terminal aqui'));
+      expect(onOpenTerminalHere).toHaveBeenLastCalledWith('');
+
+      await user.click(await screen.findByText('apps'));
+      fireEvent.contextMenu(await screen.findByText('main.ts'));
+      await user.click(await screen.findByText('Abrir terminal aqui'));
+      expect(onOpenTerminalHere).toHaveBeenLastCalledWith('apps');
+    });
+
+    it('is not offered without a handler', async () => {
+      listing({ '': [{ name: 'apps', kind: 'dir' }] });
+      renderTree();
+      fireEvent.contextMenu(await screen.findByText('apps'));
+      await screen.findByText('New Action');
+      expect(screen.queryByText('Abrir terminal aqui')).not.toBeInTheDocument();
+    });
   });
 
   it('lists both root folders and root files of the workspace', async () => {
@@ -77,7 +105,7 @@ describe('FolderTree', () => {
     await user.click(await screen.findByText('apps'));
     await user.click(await screen.findByText('web'));
     expect(await screen.findByText('index.ts')).toBeInTheDocument();
-    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'apps/web' });
+    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'apps/web', showHidden: false });
   });
 
   it("calls onSelectFile with a nested file's workspace-relative path", async () => {

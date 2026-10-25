@@ -348,7 +348,7 @@ describe('SessionsTreeGroup', () => {
       render({ onSeeAll });
 
       const link = await screen.findByTestId('sessions-see-all');
-      expect(link).toHaveTextContent('Ver todas as 41');
+      expect(link).toHaveTextContent('Ver as 41 sessões');
       await userEvent.click(link);
 
       expect(onSeeAll).toHaveBeenCalled();

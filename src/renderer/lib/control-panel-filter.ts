@@ -21,3 +21,11 @@ export function useReportCount(count: number, onCount: ((count: number) => void)
     latest.current?.(count);
   }, [count]);
 }
+
+/** Which origin the Control Panel list shows: the user's own items, plugin-provided ones, or both. */
+export type OriginSegment = 'all' | 'mine' | 'plugins';
+
+/** `fromPlugin` is true for a plugin-provided (read-only) item; everything else counts as the user's own. */
+export function matchesOrigin(segment: OriginSegment, fromPlugin: boolean): boolean {
+  return segment === 'all' || (segment === 'plugins') === fromPlugin;
+}

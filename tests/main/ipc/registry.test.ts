@@ -27,7 +27,8 @@ import type { OpenWithService } from '../../../src/main/application/services/ope
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
 import type { Settings } from '../../../src/shared/settings.js';
 import type { LaunchConfigService } from '../../../src/main/application/services/launch-config-service.js';
-import type { LaunchProcessService } from '../../../src/main/application/services/launch-process-service.js';
+import type { TerminalService } from '../../../src/main/application/services/terminal-service.js';
+import type { OpenEditorsService } from '../../../src/main/application/services/open-editors-service.js';
 
 const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
   adapters: {
@@ -63,7 +64,8 @@ interface Deps {
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   launchConfigService: LaunchConfigService;
-  launchProcessService: LaunchProcessService;
+  terminalService: TerminalService;
+  openEditorsService: OpenEditorsService;
   appQuit: () => void;
   settingsRepoSpy: {
     load: ReturnType<typeof vi.fn>;
@@ -125,7 +127,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     restore: vi.fn().mockResolvedValue(undefined),
   } as unknown as WorkspaceTeardownService;
   const launchConfigService = null as unknown as LaunchConfigService;
-  const launchProcessService = null as unknown as LaunchProcessService;
+  const terminalService = null as unknown as TerminalService;
+  const openEditorsService = null as unknown as OpenEditorsService;
   const credentialStore: CredentialStorePort = {
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue(undefined),
@@ -158,7 +161,8 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     notificationPort,
     workspaceTeardownService,
     launchConfigService,
-    launchProcessService,
+    terminalService,
+    openEditorsService,
     appQuit: () => undefined,
     settingsRepoSpy,
     dialogSpy,

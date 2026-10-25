@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Alert, Box, Typography } from '@mui/material';
 import { FolderTree } from './FolderTree.js';
-import { WorkspaceManagementList } from './WorkspaceManagementList.js';
+import { HomeNavList } from './HomeNavList.js';
 import { ExplorerToolbar } from './ExplorerToolbar.js';
 import { DiscardConfirmDialog } from './git/DiscardConfirmDialog.js';
 import { GitErrorAlert } from './git/GitErrorAlert.js';
@@ -16,7 +16,7 @@ import { useWorkspaces } from '../../hooks/use-workspaces.js';
 interface ExplorerPanelContentProps {
   /** `null` at Início; `undefined` while loading. */
   activeWorkspace: Workspace | null | undefined;
-  /** True at Início (no workspace open) — shows the Workspaces/App sections instead of a file tree. */
+  /** True at Início (no workspace open) — shows the navigation menu instead of a file tree. */
   isHome: boolean;
   /** Git status polls only while the panel is on screen. */
   gitPolling: boolean;
@@ -24,24 +24,30 @@ interface ExplorerPanelContentProps {
   toolbarActions?: React.ReactNode;
   /** Início only: Starter Pack/Marketplaces/Diagnóstico's own rows. */
   appAreaRows: React.ReactNode;
+  /** Início only: whether the menu's Workspaces row is the tab on screen, and how to open it. */
+  homeNav: Pick<React.ComponentProps<typeof HomeNavList>, 'workspacesActive' | 'onOpenWorkspaces'>;
   onSelectFile: (relPath: string) => void;
   onOpenAsWorkspace: (absolutePath: string) => void;
   onPreviewFile: (relPath: string) => void;
   onNewAction: (relPath: string) => void;
-  /** Content pinned above the folders/files — e.g. the workspace's Launch Configurations group. */
-  pinnedRows?: React.ReactNode;
+  /** The Editores abertos section, pinned at the top of the panel (also at Início). */
+  openEditorsSection?: React.ReactNode;
+  /** The Terminais section, pinned at the bottom of the panel under the file tree. */
+  terminalsSection?: React.ReactNode;
+  /** Right-click a folder/file → "Abrir terminal aqui". */
+  onOpenTerminalHere?: (relDir: string) => void;
   onOpenGitDiff: (args: { path: string; source: GitDiffSource }) => void;
 }
 
 /**
- * The left panel — "where": at Início, the Workspaces and App sections; in a
+ * The left panel — "where": at Início, the navigation menu; in a
  * workspace, the git toolbar over one file tree decorated with git status.
  * The context itself (name, path, switch, remove) lives in the TopNav's
  * context switcher.
  */
 export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.ReactElement {
   const { data: workspaces } = useWorkspaces();
-  const { activeWorkspace, isHome, appAreaRows, onOpenAsWorkspace } = props;
+  const { activeWorkspace, isHome, appAreaRows, homeNav, onOpenAsWorkspace } = props;
   const root = activeWorkspace?.rootPath;
   // Registered roots are stored as real paths; a sub-folder matches when its
   // path under this root is one of them.
@@ -50,9 +56,12 @@ export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.Re
 
   if (isHome) {
     return (
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <WorkspaceManagementList appAreaRows={appAreaRows} />
-      </Box>
+      <>
+        {props.openEditorsSection}
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <HomeNavList {...homeNav} appAreaRows={appAreaRows} />
+        </Box>
+      </>
     );
   }
 
@@ -68,7 +77,9 @@ function WorkspaceExplorer({
   onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
-  pinnedRows,
+  openEditorsSection,
+  terminalsSection,
+  onOpenTerminalHere,
   onOpenGitDiff,
   isWorkspaceRoot,
 }: ExplorerPanelContentProps & { isWorkspaceRoot: (relPath: string) => boolean }): React.ReactElement {
@@ -80,6 +91,7 @@ function WorkspaceExplorer({
 
   return (
     <>
+      {openEditorsSection}
       <ExplorerToolbar
         status={{ isPending: status.isPending, error: status.error, data }}
         actions={actions}
@@ -98,7 +110,7 @@ function WorkspaceExplorer({
           onPreviewFile={onPreviewFile}
           onNewAction={onNewAction}
           isWorkspaceRoot={isWorkspaceRoot}
-          {...(pinnedRows !== undefined ? { pinnedRows } : {})}
+          {...(onOpenTerminalHere !== undefined ? { onOpenTerminalHere } : {})}
           {...(repo
             ? {
                 git: {
@@ -121,6 +133,7 @@ function WorkspaceExplorer({
           <GitInitCard workspaceId={activeWorkspace.id} busy={actions.busy} onInit={actions.init} />
         )}
       </Box>
+      {terminalsSection}
       <DiscardConfirmDialog files={actions.pendingDiscard} onCancel={actions.cancelDiscard} onConfirm={actions.confirmDiscard} />
     </>
   );

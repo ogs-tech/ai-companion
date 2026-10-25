@@ -37,13 +37,13 @@ Handlers are grouped per namespace in `src/main/ipc/<namespace>-handlers.ts`, ea
 ```ts
 export function buildLaunchConfigHandlers(
   configService: LaunchConfigService,
-  processService: LaunchProcessService,
+  terminalService: TerminalService,
 ): IpcHandlers {
   return {
     'launchConfig.list': async () => configService.list(),
     'launchConfig.run': async (params) => {
       const raw = asObject(params, 'launchConfig.run');
-      return processService.run(asString(raw['configName'], 'configName'));
+      return terminalService.runLaunch(asString(raw['configName'], 'configName'));
     },
   };
 }

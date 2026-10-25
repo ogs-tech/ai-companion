@@ -56,7 +56,7 @@ describe('<Main> — shell navigation', () => {
 
     // Wait for the Default-branch landmark first — until `workspace.getActive`
     // resolves, the screen briefly renders the non-default (FolderTree) shape.
-    await screen.findByTestId('workspace-management-list');
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('control-panel-chip-skill'));
 
     expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
@@ -67,8 +67,8 @@ describe('<Main> — shell navigation', () => {
     render(<Main onOpenSettings={() => undefined} />);
 
     // Same landmark wait as above — the pinned area rows only exist once the
-    // Default-branch (WorkspaceManagementList) shape has settled.
-    await screen.findByTestId('workspace-management-list');
+    // Default-branch (HomeNavList) shape has settled.
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('explorer-area-starter-pack'));
 
     expect(await screen.findByTestId('starter-pack-screen')).toBeInTheDocument();

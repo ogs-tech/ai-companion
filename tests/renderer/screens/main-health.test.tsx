@@ -58,7 +58,7 @@ describe('<Main> — sync status + diagnostics', () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-management-list');
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('status-pill-sync'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('<Main> — sync status + diagnostics', () => {
     setupRoute('ok');
     renderWithShell(<Main onOpenSettings={() => undefined} />);
 
-    await screen.findByTestId('workspace-management-list');
+    await screen.findByTestId('home-nav-list');
     await userEvent.click(screen.getByTestId('explorer-area-diagnostico'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();

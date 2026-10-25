@@ -26,7 +26,7 @@ import { OctokitClient } from '../../../src/main/infrastructure/github/octokit-c
 import { FakeCredentialStorePort } from '../../../src/main/application/services/__fixtures__/fake-credential-store-port.js';
 import { FsLaunchConfigReader } from '../../../src/main/infrastructure/launch-config/fs-launch-config-reader.js';
 import { FakeRepoGitPort } from '../../../src/main/application/services/__fixtures__/fake-repo-git-port.js';
-import { FakeLaunchProcessPort } from '../../../src/main/application/services/__fixtures__/fake-launch-process-port.js';
+import { FakeTerminalPort } from '../../../src/main/application/services/__fixtures__/fake-terminal-port.js';
 import type { WorkspaceScopedSharedDeps } from '../../../src/main/application/workspace-scoped-services.js';
 import type { FileWatcherPort } from '../../../src/main/application/ports/file-watcher-port.js';
 import { FsEntityRepository } from '../../../src/main/infrastructure/entity/fs-entity-repository.js';
@@ -133,7 +133,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(homedir, '.claude', 'projects')),
     fileWatcherPort: noopFileWatcherPort,
     launchConfigReaderPort: new FsLaunchConfigReader(),
-    launchProcessPort: new FakeLaunchProcessPort(),
+    terminalPort: new FakeTerminalPort(),
     repoGitPort: new FakeRepoGitPort(),
     conventionSourcePort: { list: async () => [], read: async () => null },
     commitMessageGeneratorFor: () => ({ generate: async () => 'msg' }),

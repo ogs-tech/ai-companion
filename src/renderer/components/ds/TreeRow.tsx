@@ -90,7 +90,11 @@ export function TreeRow({
         borderRadius: `${theme.ogs.radius.xs}px`,
         opacity: muted ? 0.65 : 1,
         position: 'relative',
-        '&:hover .tree-row-actions, &:focus-within .tree-row-actions': { opacity: 1 },
+        '&:hover .tree-row-actions, &:focus-within .tree-row-actions, .tree-row-actions:has([aria-expanded="true"])': { opacity: 1 },
+        // Hover actions take the origin text's place instead of squeezing the name.
+        ...(actions && actionsVisibility === 'hover'
+          ? { '&:hover .tree-row-origin, &:focus-within .tree-row-origin': { display: 'none' } }
+          : {}),
         // `rail` is too close to `paper` in dark mode to read as a fill there.
         '&.Mui-selected, &.Mui-selected:hover': {
           bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.secondary.main, 0.16) : theme.ogs.surfaces.rail,

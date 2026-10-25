@@ -6,14 +6,41 @@ function withSep(p: string): string {
   return p.endsWith(sep) ? p : `${p}${sep}`;
 }
 
+const LIST_FOLDERS_MAX_DEPTH = 4;
+const LIST_FOLDERS_MAX = 1000;
+
 export class FileBrowserService {
   constructor(
     private readonly port: FileBrowserPort,
     private readonly rootPath: string,
   ) {}
 
-  async listDir(relPath: string): Promise<FileBrowserEntry[]> {
-    return this.port.listDir(await this.resolveSafe(relPath));
+  async listDir(relPath: string, showHidden = false): Promise<FileBrowserEntry[]> {
+    return this.port.listDir(await this.resolveSafe(relPath), { showHidden });
+  }
+
+  /**
+   * Every non-hidden folder under the root as a root-relative path, breadth-first
+   * so the shallow ones survive the cap — the folder picker's candidate list.
+   */
+  async listFolders(): Promise<string[]> {
+    const folders: string[] = [];
+    let level = [''];
+    for (let depth = 0; depth < LIST_FOLDERS_MAX_DEPTH && level.length > 0; depth++) {
+      const next: string[] = [];
+      for (const relPath of level) {
+        const entries = await this.listDir(relPath).catch(() => []);
+        for (const entry of entries) {
+          if (entry.kind !== 'dir' || entry.name === 'node_modules') continue;
+          const child = relPath === '' ? entry.name : `${relPath}/${entry.name}`;
+          folders.push(child);
+          next.push(child);
+          if (folders.length >= LIST_FOLDERS_MAX) return folders;
+        }
+      }
+      level = next;
+    }
+    return folders;
   }
 
   async readFile(relPath: string): Promise<FilePreview> {

@@ -1,16 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildLaunchConfigHandlers } from '../../../src/main/ipc/launch-config-handlers.js';
 import type { LaunchConfigService } from '../../../src/main/application/services/launch-config-service.js';
-import type { LaunchProcessService } from '../../../src/main/application/services/launch-process-service.js';
+import type { TerminalService } from '../../../src/main/application/services/terminal-service.js';
 
 const setup = () => {
   const configService = { list: vi.fn().mockResolvedValue(null) } as unknown as LaunchConfigService;
-  const processService = {
-    run: vi.fn().mockResolvedValue({ processId: 'x', workspaceId: 'ws-1', configName: 'Run', status: 'running', exitCode: null }),
-    kill: vi.fn(),
-    status: vi.fn().mockReturnValue(undefined),
-  } as unknown as LaunchProcessService;
-  return { configService, processService, handlers: buildLaunchConfigHandlers(configService, processService) };
+  const terminalService = {
+    runLaunch: vi.fn().mockResolvedValue({ terminalId: 'x', workspaceId: 'ws-1', kind: 'launch', name: 'Run', relCwd: '', status: 'running', exitCode: null, generation: 0 }),
+  } as unknown as TerminalService;
+  return { configService, terminalService, handlers: buildLaunchConfigHandlers(configService, terminalService) };
 };
 
 describe('launch-config-handlers', () => {
@@ -20,10 +18,10 @@ describe('launch-config-handlers', () => {
     expect(configService.list).toHaveBeenCalled();
   });
 
-  it('launchConfig.run validates params and delegates to LaunchProcessService.run', async () => {
-    const { handlers, processService } = setup();
+  it('launchConfig.run validates params and spawns a terminal through TerminalService', async () => {
+    const { handlers, terminalService } = setup();
     await handlers['launchConfig.run']!({ configName: 'Run' });
-    expect(processService.run).toHaveBeenCalledWith('Run');
+    expect(terminalService.runLaunch).toHaveBeenCalledWith('Run');
   });
 
   it('launchConfig.run rejects missing params', async () => {
@@ -32,15 +30,9 @@ describe('launch-config-handlers', () => {
     await expect(handlers['launchConfig.run']!({ configName: '' })).rejects.toMatchObject({ kind: 'validation' });
   });
 
-  it('launchConfig.kill validates params and delegates to LaunchProcessService.kill', async () => {
-    const { handlers, processService } = setup();
-    await handlers['launchConfig.kill']!({ processId: 'x' });
-    expect(processService.kill).toHaveBeenCalledWith('x');
-  });
-
-  it('launchConfig.status returns null for an unknown processId', async () => {
+  it('no longer exposes kill/status — those are terminal.* now', () => {
     const { handlers } = setup();
-    const result = await handlers['launchConfig.status']!({ processId: 'nope' });
-    expect(result).toBeNull();
+    expect(handlers['launchConfig.kill']).toBeUndefined();
+    expect(handlers['launchConfig.status']).toBeUndefined();
   });
 });

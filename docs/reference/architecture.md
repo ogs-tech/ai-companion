@@ -116,6 +116,8 @@ On the renderer side, `SessionPanel` (`src/renderer/components/SessionPanel.tsx`
 
 `SessionsTreeGroup` (`src/renderer/components/workspace/SessionsTreeGroup.tsx`, backed by `useSessions()` in `src/renderer/hooks/use-sessions.ts`) is a third, read-oriented entry point: a `TreeGroup` node listing every session `session.list` returns, across all three anchor kinds (`entity`, `workspace`, `personal`), with a "Mostrar sessões finalizadas" toggle filtering by `status` and a row click calling `focusSession` for that session's `anchor`/`label` — it never spawns anything itself, only browses and resumes. Because there's no push channel for "a session was spawned," `SessionPanel` invalidates `useSessions()`'s query (`sessionsQueryKey`) itself right after a successful `session.spawn`; `useSessions()` separately subscribes to the unfiltered `window.api.session.onAnyExit` listener so a session that dies in the background (its panel not focused) still drops out of the running count without user action.
 
+**External link routing:** `LinkRoutingPort` (`src/main/application/ports/link-routing-port.ts`) + `UnixSocketLinkRouter` (`src/main/infrastructure/link-routing/`) catch URLs the `claude` CLI opens through the OS opener, which never passes through xterm. `wireIpc()` starts the router (best-effort — a failure is logged and sessions spawn with the plain env) and passes `NodePtySessionAdapter` a `buildSessionEnv` that merges `shimEnv()` into `process.env`: `AI_COMPANION_LINK_SOCKET`, `BROWSER=<shim>` and `PATH=<~/.ai-companion/bin>:…`. Which of `$BROWSER` or a direct `open` call the CLI uses is unverified, so both hooks are set; the shim forwards only a bare `http(s)` URL and execs `/usr/bin/open` for everything else or on a dead socket. Accepted URLs travel main→renderer on the `external-link:open` push channel (`src/shared/external-link.ts`, `window.api.externalLink.onOpen`), consumed once in `AppShell` → `openManualTab`; with no window, main falls back to `ShellPort.openExternal`. The socket is app-global — the tab is not attributed to the originating session. Terminal processes are not covered.
+
 **Native module caveat:** `node-pty` must be rebuilt against Electron's own Node ABI to run inside the app — wired into `predev`/`prebuild` as `npm run rebuild:native` (`electron-rebuild -f -w node-pty` via `@electron/rebuild`), not `postinstall` (see `package.json`). That rebuilt binary can't be loaded from plain-Node `vitest`, so `npm install` and `npm test` always see the binary built against the host Node ABI instead. Running `npm run dev` or `npm run build` leaves the binary rebuilt for Electron's ABI; run `npm install` (or `npm rebuild node-pty`) to restore the host build before running `npm test` again. Separately, `postinstall` runs `chmod +x node_modules/node-pty/prebuilds/*/spawn-helper` (harmlessly no-op on platforms without that file, via `2>/dev/null || true`): `npm install` sometimes resets the prebuilt helper binary's execute bit, which breaks `posix_spawnp` on macOS at spawn time.
 
 ## Session history bounded context
@@ -185,16 +187,16 @@ is gone; see "Migration" below.)
 `WorkspaceActivation` built in `src/main/index.ts` (interface in `src/main/ipc/workspace-handlers.ts`). Its
 `activate(select)` runs the registry selection **first**, so a rejected `workspace.open` (not a folder, the
 home dir) leaves the open workspace and its sessions alone; only then does it kill the outgoing graph's
-sessions and launch processes, destroy embedded-browser tabs, stop the entity watcher and rebuild the graph
+sessions and terminals, destroy embedded-browser tabs, stop the entity watcher and rebuild the graph
 with `buildWorkspaceScopedServices(active, shared)` (`src/main/application/workspace-scoped-services.ts`),
 where `active` is `{ workspace, dataDir }` or `null` at Início. Activations are serialized through a task
 queue, so overlapping requests can't interleave. The rebuilt graph holds the `ScopedEntityRepository`
 (Global's `FsEntityRepository`, built once at boot and shared by every graph, plus the open workspace's),
 `SymlinkManager`, `FileMaterializer`, `AdapterManager`, `EntityService`, `SkillService`, `AgentService`,
 `InstructionService`, `SessionService`, `SessionHistoryService`, `HealthService`,
-`WorkspaceTeardownService`, `EntityWatchService`, `LaunchConfigService`/`LaunchProcessService` and
+`WorkspaceTeardownService`, `EntityWatchService`, `LaunchConfigService`/`TerminalService` and
 `GitService`. It is rebuilt on going home too: at Início it still serves Global's entities, sessions, health
-and adapters, while git fails `validation`, `launchConfig.list` returns `null`, and the file browser
+and adapters, while git and `terminal.*` fail `validation`, `launchConfig.list` returns `null`, and the file browser
 (`workspace.listDir`/`readFile`/`writeFile`/`resolvePath`, `openWith.*`) fails `validation`.
 
 Plugins, marketplaces, hooks, MCP config and adapter on/off settings are built once at boot, not per graph.
@@ -329,7 +331,7 @@ Same shell in both contexts; the content changes, the positions don't:
 | Region | Role | Início | Workspace |
 |---|---|---|---|
 | TopNav | context switcher (`ContextSwitcher`) | `🏠 Início ▾` | `📁 <name> ▾` (root path in the tooltip) |
-| Left panel (`ExplorerPanelContent`) | **where** | Workspaces + App sections (`WorkspaceManagementList`) | File tree decorated with git status, plus a git toolbar |
+| Left panel (`ExplorerPanelContent`) | **where** | Flat menu (`HomeNavList`): Início, Workspaces + 3 recents, then Starter Pack / Marketplaces / Diagnóstico | File tree decorated with git status, plus a git toolbar |
 | Workbench (`WorkbenchCanvas`) | **work** | pinned Visão geral (`HomeOverview`) + tabs | pinned Visão geral (`WorkspaceOverview`) + tabs |
 | Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Sessões + Workspace customizations, with "Do Global" |
 
@@ -351,7 +353,7 @@ global ⌘O (`AppShell`), Início's Recentes card and the left panel's workspace
 own state through `lib/workspace-shell-store.ts` — the screen registers `focusOverview`/`togglePanel` while
 mounted and publishes both panels' collapse state, which the TopNav's `PanelLeft`/`PanelRight` toggles read.
 
-`WorkspaceManagementList` rows have no always-visible destructive action: right-click offers Abrir, Revelar
+The Workspaces page (`WorkspacesScreen`, a Workbench area tab like Starter Pack) rows have no always-visible destructive action: right-click offers Abrir, Revelar
 no Finder (`openWith.revealWorkspace`, by id — Início has no open workspace to resolve a relative path
 against) and Remover…, behind `WorkspaceRemoveConfirmDialog`. The switcher's "Remover este workspace…" uses
 the same dialog. The backend's `workspace.delete` goes home first when the target is the open workspace, so
@@ -417,8 +419,7 @@ the chip's type; a Skill/Agent/Instruction menu on Tudo; MCP/plugin import on In
 name + description. Each flat group reports its row count (`useReportCount`) so the list can derive its empty
 state and auto-expand "Do Global" on a search hit. Chip and search text are local state; the list is keyed by
 scope, so they reset on workspace switch. Sections: at Início (`isHome`) one editable **Global** section; in a
-workspace, **Neste workspace** (editable) then **Do Global** (collapsed, read-only; see below). `FolderTree`'s `pinnedRows` slot now carries only the open
-workspace's **Launch Configurations** group (`LaunchConfigsTreeGroup`), pinned once at the top of the tree. Each group fetches its own data
+workspace, **Neste workspace** (editable) then **Do Global** (collapsed, read-only; see below). The Explorer ends in a **Terminais** section (`TerminalsSection`) under the file tree — the one list of everything running in the workspace; its ＋▾ menu starts a shell at the root, in a folder (`FolderPickerDialog`) or a launch configuration, and a folder row's context menu offers "Abrir terminal aqui". Each group fetches its own data
 (`skill.list`/`agent.list`/`hook.list`/`mcp.list`/`plugin.list`) and opens the same
 `CustomizationEditor`/`CustomizationViewDrawer`/`McpEditorDialog`/`PluginDetail` (in a `DetailDrawer`) the
 old standalone screens used — only the surrounding chrome (a dense tree row instead of a full-page

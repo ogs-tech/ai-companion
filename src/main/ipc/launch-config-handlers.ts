@@ -1,25 +1,18 @@
 import type { IpcHandlers } from './dispatcher.js';
 import type { LaunchConfigService } from '../application/services/launch-config-service.js';
-import type { LaunchProcessService } from '../application/services/launch-process-service.js';
+import type { TerminalService } from '../application/services/terminal-service.js';
 import { asObject, asString } from './_validators.js';
 
 export function buildLaunchConfigHandlers(
   configService: LaunchConfigService,
-  processService: LaunchProcessService,
+  terminalService: TerminalService,
 ): IpcHandlers {
   return {
     'launchConfig.list': async () => configService.list(),
+    // A launch is a terminal that runs the configuration's command; stop/status are the `terminal.*` methods.
     'launchConfig.run': async (params) => {
       const raw = asObject(params, 'launchConfig.run');
-      return processService.run(asString(raw['configName'], 'configName'));
-    },
-    'launchConfig.kill': async (params) => {
-      const raw = asObject(params, 'launchConfig.kill');
-      processService.kill(asString(raw['processId'], 'processId'));
-    },
-    'launchConfig.status': async (params) => {
-      const raw = asObject(params, 'launchConfig.status');
-      return processService.status(asString(raw['processId'], 'processId')) ?? null;
+      return terminalService.runLaunch(asString(raw['configName'], 'configName'));
     },
   };
 }

@@ -62,18 +62,18 @@ describe('InstructionTreeRow session badge', () => {
 });
 
 describe('InstructionTreeRow labels', () => {
-  it('labels the personal row plainly "INSTRUCTIONS"', () => {
+  it('labels the personal row plainly "instructions"', () => {
     renderWithShell(
       <InstructionTreeRow kind="personal" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('INSTRUCTIONS');
+    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('instructions');
   });
 
-  it('labels the workspace row plainly "INSTRUCTIONS"', () => {
+  it('labels the workspace row plainly "instructions"', () => {
     renderWithShell(
       <InstructionTreeRow kind="workspace" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('INSTRUCTIONS');
+    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('instructions');
   });
 
   it('overrides the default data-testid when a testId is supplied', () => {

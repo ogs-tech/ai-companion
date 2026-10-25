@@ -36,9 +36,10 @@ import { CursorAdapter } from '../infrastructure/adapters/cursor-adapter.js';
 import { EntityWatchService } from './services/entity-watch-service.js';
 import type { FileWatcherPort } from './ports/file-watcher-port.js';
 import { LaunchConfigService } from './services/launch-config-service.js';
-import { LaunchProcessService } from './services/launch-process-service.js';
+import { TerminalService } from './services/terminal-service.js';
+import { OpenEditorsService } from './services/open-editors-service.js';
 import type { LaunchConfigReaderPort } from './ports/launch-config-reader-port.js';
-import type { LaunchProcessPort } from './ports/launch-process-port.js';
+import type { TerminalPort } from './ports/terminal-port.js';
 import type { RepoGitPort } from './ports/repo-git-port.js';
 import { GitService } from './services/git-service.js';
 import type { ConventionSourcePort } from './ports/convention-source-port.js';
@@ -62,7 +63,7 @@ export interface WorkspaceScopedSharedDeps {
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
   launchConfigReaderPort: LaunchConfigReaderPort;
-  launchProcessPort: LaunchProcessPort;
+  terminalPort: TerminalPort;
   repoGitPort: RepoGitPort;
   conventionSourcePort: ConventionSourcePort;
   commitMessageGeneratorFor: (root: string) => CommitMessageGeneratorPort;
@@ -83,7 +84,8 @@ export interface WorkspaceScopedServices {
   workspaceTeardownService: WorkspaceTeardownService;
   entityWatchService: EntityWatchService;
   launchConfigService: LaunchConfigService;
-  launchProcessService: LaunchProcessService;
+  terminalService: TerminalService;
+  openEditorsService: OpenEditorsService;
   gitService: GitService;
   commitMessageService: CommitMessageService;
 }
@@ -98,7 +100,7 @@ export interface ActiveWorkspaceScope {
  * Everything that depends on which workspace is open, rebuilt on every
  * activation — including going home (`active === null`), where the graph still
  * serves Global's entities, sessions and health but every workspace-only use
- * case (git, launch configs) fails `validation`.
+ * case (git, launch configs, terminals) fails `validation`.
  */
 export function buildWorkspaceScopedServices(
   active: ActiveWorkspaceScope | null,
@@ -108,7 +110,7 @@ export function buildWorkspaceScopedServices(
     clock, nodeFsAdapter, settingsService, homedir, workspaceService, globalEntities,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
     claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
-    launchConfigReaderPort, launchProcessPort, repoGitPort,
+    launchConfigReaderPort, terminalPort, repoGitPort,
     conventionSourcePort, commitMessageGeneratorFor,
   } = shared;
 
@@ -193,7 +195,8 @@ export function buildWorkspaceScopedServices(
   );
 
   const launchConfigService = new LaunchConfigService(activeWorkspace, launchConfigReaderPort);
-  const launchProcessService = new LaunchProcessService(launchConfigService, launchProcessPort);
+  const terminalService = new TerminalService(activeWorkspace, launchConfigService, terminalPort);
+  const openEditorsService = new OpenEditorsService(nodeFsAdapter, dataDir);
   // Its per-root mutation queues are dropped with the old graph on a switch.
   const gitService = new GitService(repoGitPort, { activeWorkspace });
   const commitMessageService = new CommitMessageService(
@@ -206,7 +209,7 @@ export function buildWorkspaceScopedServices(
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
     skillService, agentService, instructionService, sessionService, sessionHistoryService,
-    healthService, workspaceTeardownService, entityWatchService, launchConfigService, launchProcessService,
+    healthService, workspaceTeardownService, entityWatchService, launchConfigService, terminalService, openEditorsService,
     gitService, commitMessageService,
   };
 }

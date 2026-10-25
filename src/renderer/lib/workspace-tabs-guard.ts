@@ -1,7 +1,7 @@
 // A tiny module-scoped registry, not a React Context — `AppShell` (the
 // top-nav "Início" button) sits ABOVE `WorkspaceScreen` in the tree and has
 // no prop path down to its locally-owned dirty-tab state, so it can't be
-// threaded like `WorkspaceManagementList`'s `beforeSwitch` prop is. Only one
+// threaded like `HomeNavList`'s `beforeSwitch` prop is. Only one
 // screen in the app ever has unsaved Workbench tabs, so a single registered
 // guard (rather than a full Context provider wrapping the whole shell) is
 // proportionate.

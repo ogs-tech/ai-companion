@@ -3,8 +3,18 @@ import { Box, IconButton, Tooltip } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import {
-  Eye, File as FileIcon, Folder, GitCompare, Globe, House, NotebookPen,
-  History, Play, RefreshCw, SquareTerminal, type LucideIcon,
+  Eye,
+  File as FileIcon,
+  Folder,
+  GitCompare,
+  Globe,
+  House,
+  NotebookPen,
+  History,
+  RefreshCw,
+  EyeOff,
+  SquareTerminal,
+  type LucideIcon,
 } from 'lucide-react';
 import { Icon } from '../../components/ds/Icon.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
@@ -18,13 +28,14 @@ import { ControlPanelContent } from '../../components/workspace/ControlPanelCont
 import { SessionHistoryTab } from '../history/SessionHistoryTab.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
 import { WorkbenchCanvas, type WorkbenchTab } from '../../components/workspace/WorkbenchCanvas.js';
-import { EditorPanel, type EditorHiddenField, type PreviewSource } from '../../components/workspace/EditorPanel.js';
+import { EditorPanel, type EditorHiddenField } from '../../components/workspace/EditorPanel.js';
 import { SessionPanel } from '../../components/SessionPanel.js';
-import { LaunchConfigsTreeGroup } from '../../components/workspace/LaunchConfigsTreeGroup.js';
-import { LaunchProcessPanel } from '../../components/workspace/LaunchProcessPanel.js';
+import { TerminalsSection } from '../../components/workspace/TerminalsSection.js';
+import { TerminalPanel } from '../../components/workspace/TerminalPanel.js';
 import { BrowserPane } from '../../components/BrowserPane.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR, NAV_AREAS, type AreaDef } from '../../components/shell/nav.js';
 import { TreeRow } from '../../components/ds/TreeRow.js';
+import { WorkspacesScreen } from '../workspaces/WorkspacesScreen.js';
 import { StarterPackScreen } from '../starter-pack/StarterPackScreen.js';
 import { MarketplaceList } from '../marketplaces/MarketplaceList.js';
 import { HealthScreen } from '../health/HealthScreen.js';
@@ -50,25 +61,49 @@ import { entityBody } from '../../lib/entity-body.js';
 import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
-import { useLaunchProcesses } from '../../hooks/use-launch-process.js';
+import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
-import { useRefreshFiles } from '../../hooks/use-file-browser.js';
+import {
+  setShowHiddenFiles,
+  useRefreshFiles,
+  useShowHiddenFiles,
+} from '../../hooks/use-file-browser.js';
 import { useHealthReport } from '../../hooks/use-health-report.js';
 import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
-import type { LaunchProcessSnapshot } from '../../../shared/launch-config.js';
+import type { TerminalSnapshot } from '../../../shared/terminal.js';
 import { callIpc } from '../../lib/ipc.js';
+import type { OpenEditorsState } from '../../../shared/open-editors.js';
+import { OpenEditorsSection } from '../../components/workspace/OpenEditorsSection.js';
+import { restoreTabs, toPersisted, type EntityKind, type OpenTab, type RestoreContext } from './open-tabs.js';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Reads what still exists, to check a saved tab against. Anything unreachable (no terminals at Início) counts as gone. */
+async function loadRestoreContext(): Promise<RestoreContext> {
+  const settled = async <T,>(call: Promise<T>, fallback: T): Promise<T> => call.catch(() => fallback);
+  const [skills, agents, instructions, terminals, sessions] = await Promise.all([
+    settled(callIpc<Skill[]>('skill.list', { scope: 'personal' }), []),
+    settled(callIpc<Agent[]>('agent.list', { scope: 'personal' }), []),
+    settled(callIpc<Instruction[]>('instruction.list', {}), []),
+    settled(callIpc<TerminalSnapshot[]>('terminal.list'), []),
+    settled(callIpc<SessionSnapshot[]>('session.list'), []),
+  ]);
+  const entities = [...skills, ...agents, ...instructions];
+  return {
+    entitiesByUrn: new Map(entities.map((e) => [e.urn, e])),
+    terminalIds: new Set(terminals.map((t) => t.terminalId)),
+    sessionIds: new Set(sessions.map((s) => s.sessionId)),
+    fileExists: (relPath) => callIpc('workspace.readFile', { path: relPath }).then(() => true, () => false),
+  };
+}
+
 const PERSONAL_HIDDEN: ReadonlySet<EditorHiddenField> = new Set(['name', 'scope', 'description', 'version']);
 const SCOPED_HIDDEN: ReadonlySet<EditorHiddenField> = new Set(['scope']);
-
-type EntityKind = 'skill' | 'agent';
 
 /**
  * The pinned "Visão geral" tab — always first, never closed, never part of
@@ -76,19 +111,6 @@ type EntityKind = 'skill' | 'agent';
  * overview survives them all by construction.
  */
 const OVERVIEW_TAB_ID = 'overview';
-
-type OpenTab =
-  | { id: string; kind: 'file'; relPath: string; dirty?: boolean }
-  // `inherited`: a Global entity opened read-only from a workspace's "Do Global" section.
-  | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean; inherited?: boolean }
-  | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean; inherited?: boolean }
-  | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
-  | { id: string; kind: 'launch-process'; processId: string; label: string }
-  | { id: string; kind: 'preview'; label: string; source: PreviewSource }
-  | { id: string; kind: 'history' }
-  | { id: string; kind: 'browser'; tabId: string }
-  | { id: string; kind: 'git-diff'; path: string; source: GitDiffSource }
-  | { id: string; kind: WorkspaceAreaTab };
 
 /** Tabs that can hold unsaved work, and so need a discard guard before closing. */
 function isDirty(tab: OpenTab): boolean {
@@ -105,7 +127,12 @@ function isAreaTabDef(a: AreaDef): a is AreaDef & { area: WorkspaceAreaTab } {
 }
 
 function isAreaTab(tab: OpenTab): tab is Extract<OpenTab, { kind: WorkspaceAreaTab }> {
-  return tab.kind === 'starter-pack' || tab.kind === 'marketplaces' || tab.kind === 'diagnostico';
+  return (
+    tab.kind === 'workspaces' ||
+    tab.kind === 'starter-pack' ||
+    tab.kind === 'marketplaces' ||
+    tab.kind === 'diagnostico'
+  );
 }
 
 export function WorkspaceScreen(): React.ReactElement {
@@ -118,7 +145,8 @@ export function WorkspaceScreen(): React.ReactElement {
   const invalidateCustomization = useInvalidateCustomization();
   const invalidateInstructions = useInvalidateInstructions();
   const { data: sessions } = useSessions();
-  const launchProcesses = useLaunchProcesses();
+  const { data: terminals } = useTerminals(activeWorkspace != null);
+  const createTerminal = useCreateTerminal();
   const { data: healthReport } = useHealthReport('personal');
   const queryClient = useQueryClient();
   useEntityChangeInvalidation();
@@ -152,6 +180,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const [controlPanelCollapsed, setControlPanelCollapsed] = useState(false);
 
   const refreshFiles = useRefreshFiles();
+  const showHidden = useShowHiddenFiles();
 
   const openFileTab = (relPath: string): void => {
     const id = `file:${relPath}`;
@@ -213,15 +242,30 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(id);
   };
 
-  const openLaunchProcessTab = (process: LaunchProcessSnapshot): void => {
-    const id = `launch-process:${process.processId}`;
-    setOpenTabs((prev) =>
-      prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'launch-process', processId: process.processId, label: process.configName }],
-    );
+  // Closing the tab only hides the view — the terminal itself lives in the main process until stopped and removed.
+  const openTerminalTab = (terminal: Pick<TerminalSnapshot, 'terminalId'>): void => {
+    const id = `terminal:${terminal.terminalId}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'terminal', terminalId: terminal.terminalId }]));
     setActiveTabId(id);
   };
 
   const onEditLaunchJson = (): void => openFileTab('.vscode/launch.json');
+
+  const openTerminalIn = (relCwd: string): void =>
+    createTerminal.mutate({ ...(relCwd !== '' ? { relCwd } : {}) }, { onSuccess: openTerminalTab, onError: showError });
+
+  // Ctrl+`: a shell at the workspace root.
+  useEffect(() => {
+    if (!activeWorkspace) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') {
+        e.preventDefault();
+        openTerminalIn('');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   // A rendered, read-only view of a file's Markdown — reached via the tree's
   // right-click "Preview" menu, never via the normal click-to-open path.
@@ -308,6 +352,64 @@ export function WorkspaceScreen(): React.ReactElement {
   const setTabDirty = (id: string, dirty: boolean): void =>
     setOpenTabs((prev) => prev.map((t) => (t.id === id && t.kind !== 'session' && t.kind !== 'preview' ? { ...t, dirty } : t)));
 
+  // Restores the tabs this workspace (or Início) had open before a reload, then
+  // keeps them saved. `hydratedKey` gates saving: until the saved list has
+  // been read back for the current workspace, an empty `openTabs` must not
+  // overwrite it.
+  const workspaceKey = activeWorkspace === undefined ? undefined : (activeWorkspace?.id ?? 'home');
+  const [hydratedKey, setHydratedKey] = useState<string | undefined>(undefined);
+  // `resetTabs` empties the list on its way out of a workspace; that must not
+  // be saved over the workspace being left.
+  const skipSaveRef = useRef(false);
+
+  useEffect(() => {
+    if (workspaceKey === undefined) return;
+    let cancelled = false;
+    skipSaveRef.current = false;
+    void (async () => {
+      try {
+        const saved = await callIpc<OpenEditorsState>('openEditors.get');
+        const savedTabs = Array.isArray(saved?.tabs) ? saved.tabs : [];
+        const restored = await restoreTabs(savedTabs, await loadRestoreContext());
+        if (cancelled) return;
+        // Tabs opened while this was loading (a browser tab recovered from main) stay.
+        setOpenTabs((prev) => [...restored, ...prev.filter((t) => !restored.some((r) => r.id === t.id))]);
+        if (saved?.activeTabId && restored.some((t) => t.id === saved.activeTabId)) {
+          setActiveTabId((cur) => (cur === OVERVIEW_TAB_ID ? saved.activeTabId! : cur));
+        }
+      } catch (err) {
+        console.warn('Could not restore the open editors', err);
+      }
+      if (!cancelled) setHydratedKey(workspaceKey);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceKey]);
+
+  useEffect(() => {
+    if (workspaceKey === undefined || hydratedKey !== workspaceKey) return;
+    if (skipSaveRef.current) {
+      if (openTabs.length === 0) return;
+      skipSaveRef.current = false;
+    }
+    const timer = setTimeout(() => {
+      callIpc('openEditors.save', { tabs: toPersisted(openTabs), activeTabId }).catch((err: unknown) =>
+        console.warn('Could not save the open editors', err),
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [openTabs, activeTabId, workspaceKey, hydratedKey]);
+
+  // Closes every tab at once, behind the same discard guard as closing one.
+  const closeAllTabs = (): void => {
+    const dirtyCount = openTabs.filter(isDirty).length;
+    if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return;
+    for (const tab of openTabs) if (tab.kind === 'browser') void closeBrowserTab(tab.tabId);
+    setOpenTabs([]);
+    setActiveTabId(OVERVIEW_TAB_ID);
+  };
+
   const closeTab = (id: string): void => {
     const target = openTabs.find((t) => t.id === id);
     if (target && isDirty(target) && !window.confirm('Descartar alterações não salvas?')) return;
@@ -324,6 +426,10 @@ export function WorkspaceScreen(): React.ReactElement {
   const resetTabs = (): boolean => {
     const dirtyCount = openTabs.filter(isDirty).length;
     if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return false;
+    // Leaving the workspace ends its terminals (main does it on activation); exited ones don't count.
+    const runningCount = (terminals ?? []).filter((t) => t.status === 'running').length;
+    if (runningCount > 0 && !window.confirm(`${runningCount} terminal(is) em execução serão encerrados ao trocar. Encerrar e trocar?`)) return false;
+    skipSaveRef.current = true;
     setOpenTabs([]);
     setActiveTabId(OVERVIEW_TAB_ID);
     return true;
@@ -614,7 +720,7 @@ export function WorkspaceScreen(): React.ReactElement {
           onNewSession={handleNewSession}
           onOpenSession={openSessionTab}
           onOpenInstruction={openInstructionTab}
-          onOpenProcess={openLaunchProcessTab}
+          onOpenTerminal={openTerminalTab}
           onError={(message) => setToast({ variant: 'error', message })}
         />
       ) : (
@@ -684,7 +790,15 @@ export function WorkspaceScreen(): React.ReactElement {
     if (isAreaTab(tab)) {
       const areaDef = NAV_AREAS.find((a) => a.area === tab.kind);
       const areaScreen =
-        tab.kind === 'starter-pack' ? <StarterPackScreen /> : tab.kind === 'marketplaces' ? <MarketplaceList /> : <HealthScreen />;
+        tab.kind === 'workspaces' ? (
+          <WorkspacesScreen />
+        ) : tab.kind === 'starter-pack' ? (
+          <StarterPackScreen />
+        ) : tab.kind === 'marketplaces' ? (
+          <MarketplaceList />
+        ) : (
+          <HealthScreen />
+        );
       return {
         id: tab.id,
         glyph: areaDef?.glyph ?? Eye,
@@ -731,16 +845,20 @@ export function WorkspaceScreen(): React.ReactElement {
         render: (hidden) => <SessionPanel anchor={tab.anchor} sessionId={tab.sessionId} visible={!hidden} />,
       };
     }
-    if (tab.kind === 'launch-process') {
-      const running = launchProcesses.some((p) => p.processId === tab.processId && p.status === 'running');
+    if (tab.kind === 'terminal') {
+      const terminal = terminals?.find((t) => t.terminalId === tab.terminalId);
+      const dot = terminal?.status === 'exited' && terminal.exitCode === 0 ? '○' : '●';
       return {
         id: tab.id,
-        glyph: Play,
-        label: tab.label,
-        closeLabel: running ? 'Minimizar' : 'Fechar',
+        glyph: SquareTerminal,
+        label: terminal ? `${dot} ${terminal.name} · ${terminal.relCwd === '' ? 'raiz' : terminal.relCwd}` : 'terminal',
+        // The process outlives the tab either way; the label says so.
+        closeLabel: 'Fechar aba',
         dense: true,
         onClose: () => closeTab(tab.id),
-        render: (hidden) => <LaunchProcessPanel processId={tab.processId} visible={!hidden} />,
+        render: (hidden) => (
+          <TerminalPanel key={`${tab.terminalId}:${terminal?.generation ?? 0}`} terminalId={tab.terminalId} visible={!hidden} />
+        ),
       };
     }
     const isPersonal = tab.kind === 'instruction' && isPersonalInstruction(tab.entity);
@@ -797,52 +915,88 @@ export function WorkspaceScreen(): React.ReactElement {
   });
 
   // Starter Pack/Marketplaces/Diagnóstico are app-level destinations, not
-  // scoped to any one workspace — their entry rows live under Início's "App"
-  // section (see WorkspaceManagementList); the tabs open in whichever
-  // context is current.
+  // scoped to any one workspace — their entry rows sit below the divider in
+  // Início's menu (see HomeNavList); the tabs open in whichever context is
+  // current. Workspaces is the menu's own row, so it is left out here.
   const appAreaRows = (
     <>
-      {NAV_AREAS.filter(isAreaTabDef).map((a) => {
-        const active = activeTabId === a.area;
-        const showSeverity = a.area === 'diagnostico' && healthReport && healthReport.worst !== 'ok';
-        return (
-          <TreeRow
-            key={a.area}
-            testId={`explorer-area-${a.area}`}
-            pl={1.5}
-            glyph={a.glyph}
-            primary={a.label}
-            onClick={() => openAreaTab(a.area)}
-            {...(active ? { accentColor: 'info.main' } : {})}
-            badge={
-              showSeverity && healthReport ? (
-                <Box
-                  data-testid="explorer-area-diagnostico-severity"
-                  sx={(theme) => ({
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    bgcolor: healthReport.worst === 'error' ? theme.palette.error.main : theme.palette.warning.main,
-                  })}
-                />
-              ) : undefined
-            }
-          />
-        );
-      })}
+      {NAV_AREAS.filter(isAreaTabDef)
+        .filter((a) => a.area !== 'workspaces')
+        .map((a) => {
+          const active = activeTabId === a.area;
+          const showSeverity =
+            a.area === 'diagnostico' && healthReport && healthReport.worst !== 'ok';
+          return (
+            <TreeRow
+              key={a.area}
+              testId={`explorer-area-${a.area}`}
+              pl={1.5}
+              glyph={a.glyph}
+              primary={a.label}
+              onClick={() => openAreaTab(a.area)}
+              {...(active ? { accentColor: 'info.main' } : {})}
+              badge={
+                showSeverity && healthReport ? (
+                  <Box
+                    data-testid="explorer-area-diagnostico-severity"
+                    sx={(theme) => ({
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      bgcolor:
+                        healthReport.worst === 'error'
+                          ? theme.palette.error.main
+                          : theme.palette.warning.main,
+                    })}
+                  />
+                ) : undefined
+              }
+            />
+          );
+        })}
     </>
   );
 
-  const pinnedRows = activeWorkspace ? (
-    <LaunchConfigsTreeGroup workspace={activeWorkspace} onOpenProcess={openLaunchProcessTab} onEditLaunchJson={onEditLaunchJson} />
+  const openTerminalIds = new Set(openTabs.flatMap((t) => (t.kind === 'terminal' ? [t.terminalId] : [])));
+  const terminalsSection = activeWorkspace ? (
+    <TerminalsSection
+      openTerminalIds={openTerminalIds}
+      onOpen={openTerminalTab}
+      onRemoved={(terminalId) => closeTab(`terminal:${terminalId}`)}
+      onEditLaunchJson={onEditLaunchJson}
+      onError={(message) => setToast({ variant: 'error', message })}
+    />
   ) : undefined;
 
+  const openEditorsSection = (
+    <OpenEditorsSection tabs={canvasTabs} activeTabId={activeTabId} onSelect={setActiveTabId} onCloseAll={closeAllTabs} />
+  );
+
+  const hiddenLabel = showHidden ? 'Ocultar arquivos ocultos' : 'Mostrar arquivos ocultos';
   const explorerToolbarActions = (
-    <Tooltip title="Reler do disco">
-      <IconButton size="small" data-testid="workspace-refresh-files" aria-label="Reler do disco" onClick={() => void refreshFiles()}>
-        <Icon glyph={RefreshCw} size={14} />
-      </IconButton>
-    </Tooltip>
+    <>
+      <Tooltip title={hiddenLabel}>
+        <IconButton
+          size="small"
+          data-testid="workspace-toggle-hidden-files"
+          aria-label={hiddenLabel}
+          aria-pressed={showHidden}
+          onClick={() => setShowHiddenFiles(!showHidden)}
+        >
+          <Icon glyph={showHidden ? Eye : EyeOff} size={14} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Reler do disco">
+        <IconButton
+          size="small"
+          data-testid="workspace-refresh-files"
+          aria-label="Reler do disco"
+          onClick={() => void refreshFiles()}
+        >
+          <Icon glyph={RefreshCw} size={14} />
+        </IconButton>
+      </Tooltip>
+    </>
   );
 
   return (
@@ -871,11 +1025,17 @@ export function WorkspaceScreen(): React.ReactElement {
               gitPolling={!explorerCollapsed}
               toolbarActions={explorerToolbarActions}
               appAreaRows={appAreaRows}
+              homeNav={{
+                workspacesActive: activeTabId === 'workspaces',
+                onOpenWorkspaces: () => openAreaTab('workspaces'),
+              }}
               onSelectFile={openFileTab}
               onOpenAsWorkspace={(absolutePath) => void handleOpenAsWorkspace(absolutePath)}
               onPreviewFile={openFilePreviewTab}
               onNewAction={newActionForFile}
-              {...(pinnedRows !== undefined ? { pinnedRows } : {})}
+              openEditorsSection={openEditorsSection}
+              {...(terminalsSection !== undefined ? { terminalsSection } : {})}
+              onOpenTerminalHere={openTerminalIn}
               onOpenGitDiff={openGitDiffTab}
             />
           </SidePanel>
@@ -898,7 +1058,9 @@ export function WorkspaceScreen(): React.ReactElement {
           >
             <ControlPanelContent
               isHome={isHome}
-              {...(activeWorkspace ? { workspaceName: activeWorkspace.name, seedWorkspaceInstruction: () => seedWorkspaceInstruction(activeWorkspace) } : {})}
+              {...(activeWorkspace
+                ? { seedWorkspaceInstruction: () => seedWorkspaceInstruction(activeWorkspace) }
+                : {})}
               {...(entityLocalScope ? { localScope: entityLocalScope } : {})}
               {...(mcpMatchPath ? { mcpMatchPath } : {})}
               onEditEntity={openEntityTab}

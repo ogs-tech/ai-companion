@@ -48,7 +48,8 @@ describe('HooksTreeGroup', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderWithShell(<HooksTreeGroup showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-hook'));
-    await user.click(await screen.findByTestId('tree-hook-delete-h1'));
+    await user.click(await screen.findByTestId('tree-hook-menu-h1'));
+    await user.click(await screen.findByTestId('row-context-menu-delete'));
     expect(confirmSpy).toHaveBeenCalled();
     await waitFor(() => expect(call).toHaveBeenCalledWith('hook.delete', { id: 'h1', scope: 'personal' }));
     confirmSpy.mockRestore();

@@ -9,12 +9,11 @@ import type { WorkspaceService } from './workspace-service.js';
 import type { Workspace } from '../../../shared/workspace.js';
 import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
+import { appendToScrollback, DEFAULT_MAX_SCROLLBACK_CHARS } from '../scrollback-buffer.js';
 import { DomainError, ioError } from '../../domain/errors.js';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-/** Scrollback kept per anchor so a reattaching SessionPanel can replay what it missed — in memory only, capped, never persisted to disk. */
-const DEFAULT_MAX_BUFFER_CHARS = 200_000;
 const ATTACHMENTS_DIR = 'attachments';
 /** Rejects base64 obviously too long to decode within the byte limit, before paying for the `Buffer.from` allocation at all. */
 const MAX_ATTACHMENT_BASE64_CHARS = Math.ceil((MAX_SESSION_ATTACHMENT_BYTES * 4) / 3) + 4;
@@ -79,7 +78,7 @@ export class SessionService {
     private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'>,
     options?: { maxBufferChars?: number },
   ) {
-    this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_BUFFER_CHARS;
+    this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
     this.claudeSession.onData((sessionId, chunk) => {
       this.appendToBuffer(sessionId, chunk);
       for (const listener of this.outputListeners) listener(sessionId, chunk);
@@ -97,19 +96,7 @@ export class SessionService {
 
   private appendToBuffer(sessionId: string, chunk: string): void {
     const buf = this.outputBuffers.get(sessionId) ?? [];
-    buf.push(chunk);
-    let total = buf.reduce((n, c) => n + c.length, 0);
-    while (total > this.maxBufferChars) {
-      const head = buf[0]!;
-      const excess = total - this.maxBufferChars;
-      if (head.length <= excess) {
-        buf.shift();
-        total -= head.length;
-      } else {
-        buf[0] = head.slice(excess);
-        total -= excess;
-      }
-    }
+    appendToScrollback(buf, chunk, this.maxBufferChars);
     this.outputBuffers.set(sessionId, buf);
   }
 

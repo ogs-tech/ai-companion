@@ -6,13 +6,14 @@ import {
   type SessionOutputEvent,
   type SessionExitEvent,
 } from '../shared/session.js';
+import { EXTERNAL_LINK_CHANNEL, type ExternalLinkEvent } from '../shared/external-link.js';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedEvent } from '../shared/entity.js';
 import {
-  LAUNCH_PROCESS_OUTPUT_CHANNEL,
-  LAUNCH_PROCESS_EXIT_CHANNEL,
-  type LaunchProcessOutputEvent,
-  type LaunchProcessExitEvent,
-} from '../shared/launch-config.js';
+  TERMINAL_OUTPUT_CHANNEL,
+  TERMINAL_EXIT_CHANNEL,
+  type TerminalOutputEvent,
+  type TerminalExitEvent,
+} from '../shared/terminal.js';
 
 const api = {
   call: <T>(method: string, params: unknown): Promise<IpcResult<T>> =>
@@ -42,6 +43,14 @@ const api = {
       return () => ipcRenderer.removeListener(SESSION_EXIT_CHANNEL, wrapped);
     },
   },
+  externalLink: {
+    /** URLs the session's CLI opened through the OS opener, routed here by main instead of the default browser. */
+    onOpen: (listener: (url: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: ExternalLinkEvent): void => listener(payload.url);
+      ipcRenderer.on(EXTERNAL_LINK_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(EXTERNAL_LINK_CHANNEL, wrapped);
+    },
+  },
   entity: {
     /** Unfiltered — the renderer doesn't know ahead of time which urn a watcher-detected external edit touched. */
     onChanged: (listener: (event: EntityChangedEvent) => void): (() => void) => {
@@ -50,26 +59,26 @@ const api = {
       return () => ipcRenderer.removeListener(ENTITY_CHANGED_CHANNEL, wrapped);
     },
   },
-  launchConfig: {
-    onOutput: (processId: string, listener: (stream: 'stdout' | 'stderr', chunk: string) => void): (() => void) => {
-      const wrapped = (_event: IpcRendererEvent, payload: LaunchProcessOutputEvent): void => {
-        if (payload.processId === processId) listener(payload.stream, payload.chunk);
+  terminal: {
+    onOutput: (terminalId: string, listener: (chunk: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: TerminalOutputEvent): void => {
+        if (payload.terminalId === terminalId) listener(payload.chunk);
       };
-      ipcRenderer.on(LAUNCH_PROCESS_OUTPUT_CHANNEL, wrapped);
-      return () => ipcRenderer.removeListener(LAUNCH_PROCESS_OUTPUT_CHANNEL, wrapped);
+      ipcRenderer.on(TERMINAL_OUTPUT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(TERMINAL_OUTPUT_CHANNEL, wrapped);
     },
-    onExit: (processId: string, listener: (exitCode: number | null, signal: string | null) => void): (() => void) => {
-      const wrapped = (_event: IpcRendererEvent, payload: LaunchProcessExitEvent): void => {
-        if (payload.processId === processId) listener(payload.exitCode, payload.signal);
+    onExit: (terminalId: string, listener: (exitCode: number | null, signal: string | null) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: TerminalExitEvent): void => {
+        if (payload.terminalId === terminalId) listener(payload.exitCode, payload.signal);
       };
-      ipcRenderer.on(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
-      return () => ipcRenderer.removeListener(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
+      ipcRenderer.on(TERMINAL_EXIT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(TERMINAL_EXIT_CHANNEL, wrapped);
     },
-    /** Unfiltered — for the renderer-side launch-process store, which doesn't know every live processId up front. */
-    onAnyExit: (listener: (processId: string, exitCode: number | null, signal: string | null) => void): (() => void) => {
-      const wrapped = (_event: IpcRendererEvent, payload: LaunchProcessExitEvent): void => listener(payload.processId, payload.exitCode, payload.signal);
-      ipcRenderer.on(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
-      return () => ipcRenderer.removeListener(LAUNCH_PROCESS_EXIT_CHANNEL, wrapped);
+    /** Unfiltered — for the renderer-side terminal list, which doesn't know every live terminalId up front. */
+    onAnyExit: (listener: (terminalId: string, exitCode: number | null, signal: string | null) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: TerminalExitEvent): void => listener(payload.terminalId, payload.exitCode, payload.signal);
+      ipcRenderer.on(TERMINAL_EXIT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(TERMINAL_EXIT_CHANNEL, wrapped);
     },
   },
 };

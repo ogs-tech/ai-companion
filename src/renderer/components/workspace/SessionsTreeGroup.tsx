@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Box, Divider, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Square, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
+import { ContainerFooter, FooterLink } from '../ds/ContainerChrome.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { SessionRow } from './SessionRow.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
@@ -253,39 +254,24 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
       </Stack>
       </Box>
 
-      <Divider />
-      <Stack
-        direction="row"
-        data-testid="sessions-footer"
-        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 0.75, gap: 1, flexShrink: 0 }}
-      >
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            component="div"
+      <ContainerFooter testId="sessions-footer">
+        <Typography component="span" sx={{ fontSize: 'inherit', color: 'inherit' }}>
+          <Box
+            component="span"
             data-testid="sessions-total"
-            sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.8125rem', color: 'text.primary' })}
+            sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontWeight: 500, color: 'text.primary', fontVariantNumeric: 'tabular-nums' })}
           >
             {stats.data ? formatCostUsd(stats.data.totalCostUsd) : '—'}
-          </Typography>
-          <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary' }}>
-            estimado
-            {stats.data && stats.data.unpricedCount > 0 ? ` · ${stats.data.unpricedCount} sem preço` : ''}
-          </Typography>
-        </Box>
+          </Box>{' '}
+          estimado
+          {stats.data && stats.data.unpricedCount > 0 ? `, ${stats.data.unpricedCount} sem preço` : ''}
+        </Typography>
         {onSeeAll && stats.data && (
-          <Box
-            component="button"
-            type="button"
-            data-testid="sessions-see-all"
-            onClick={onSeeAll}
-            sx={{ border: 0, bgcolor: 'transparent', p: 0, cursor: 'pointer', font: 'inherit', flexShrink: 0 }}
-          >
-            <Typography sx={{ fontSize: '0.6875rem', color: 'primary.main' }}>
-              Ver todas as {stats.data.sessionCount}
-            </Typography>
-          </Box>
+          <FooterLink testId="sessions-see-all" onClick={onSeeAll}>
+            {stats.data.sessionCount === 1 ? 'Ver a sessão' : `Ver as ${stats.data.sessionCount} sessões`}
+          </FooterLink>
         )}
-      </Stack>
+      </ContainerFooter>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );
@@ -297,7 +283,7 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
  * appears once.
  */
 /** Global (Início) lists its own sessions only — never one anchored to a workspace. */
-function liveInScope(live: readonly SessionSnapshot[], scope: HistoryScope): readonly SessionSnapshot[] {
+export function liveInScope(live: readonly SessionSnapshot[], scope: HistoryScope): readonly SessionSnapshot[] {
   return scope.kind === 'personal' ? live.filter((s) => s.anchor.kind !== 'workspace') : live;
 }
 

@@ -59,9 +59,9 @@ import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-p
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
 import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
-import { LAUNCH_PROCESS_OUTPUT_CHANNEL, LAUNCH_PROCESS_EXIT_CHANNEL } from '../shared/launch-config.js';
+import { TERMINAL_OUTPUT_CHANNEL, TERMINAL_EXIT_CHANNEL } from '../shared/terminal.js';
 import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
-import { NodeChildProcessAdapter } from './infrastructure/launch-process/node-child-process-adapter.js';
+import { NodePtyTerminalAdapter } from './infrastructure/terminal/node-pty-terminal-adapter.js';
 import { ChokidarFileWatcher } from './infrastructure/file-watcher/chokidar-file-watcher.js';
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
@@ -71,6 +71,8 @@ import { FsMcpConfigStore } from './infrastructure/mcp/fs-mcp-config-store.js';
 import { PluginMcpReader } from './infrastructure/mcp/plugin-mcp-reader.js';
 import { McpService } from './application/services/mcp-service.js';
 import { McpDisabledStash } from './infrastructure/mcp/mcp-disabled-stash.js';
+import { UnixSocketLinkRouter } from './infrastructure/link-routing/unix-socket-link-router.js';
+import { EXTERNAL_LINK_CHANNEL } from '../shared/external-link.js';
 import { ElectronShell } from './infrastructure/shell/electron-shell.js';
 import { ElectronNotificationAdapter } from './infrastructure/notification/electron-notification-adapter.js';
 import { buildHandlers } from './ipc/registry.js';
@@ -172,6 +174,21 @@ async function wireIpc(): Promise<void> {
 
   const workspaceBootstrap = new WorkspaceBootstrapService(new FsWorkspaceBootstrap());
   await workspaceBootstrap.create(workspacePath);
+
+  const shellPort = new ElectronShell();
+  const linkRouter = new UnixSocketLinkRouter({ baseDir: workspacePath });
+  // A URL the session's CLI opened itself: show it in the embedded browser,
+  // or — with no window to show it in — fall back to the default browser.
+  linkRouter.onUrl((url) => {
+    if (mainWindow !== null && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(EXTERNAL_LINK_CHANNEL, { url });
+    } else {
+      void shellPort.openExternal(url).catch((error: unknown) => console.error('[link-routing] openExternal failed', error));
+    }
+  });
+  // Best-effort: without the socket, sessions spawn with the plain env and links keep going to the default browser.
+  await linkRouter.start().catch((error: unknown) => console.error('[link-routing] disabled:', error));
+  app.on('before-quit', () => void linkRouter.stop());
 
   const clock = new SystemClock();
   const workspaceRegistry = new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json'));
@@ -337,7 +354,7 @@ async function wireIpc(): Promise<void> {
     // repoPath in a follow-up iteration. For now, only personal + plugin MCPs.
     linkedRepoPaths: async () => [],
     disabledStash: mcpDisabledStash,
-    shell: new ElectronShell(),
+    shell: shellPort,
   });
 
   const embeddedBrowserAdapter = new EmbeddedBrowserAdapter({
@@ -361,14 +378,14 @@ async function wireIpc(): Promise<void> {
     pluginService,
     claudeRuntimeReader,
     claudeSettingsFile,
-    claudeSessionPort: new NodePtySessionAdapter(),
+    claudeSessionPort: new NodePtySessionAdapter('claude', () => ({ ...process.env, ...linkRouter.shimEnv() })),
     embeddedBrowserPort: embeddedBrowserAdapter,
     // The CLI's own transcript directory — resolved here, like every other
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
     fileWatcherPort: new ChokidarFileWatcher(),
     launchConfigReaderPort: new FsLaunchConfigReader(),
-    launchProcessPort: new NodeChildProcessAdapter(),
+    terminalPort: new NodePtyTerminalAdapter(),
     repoGitPort: new SimpleGitRepoClient(),
     conventionSourcePort: new FsConventionSource(),
     commitMessageGeneratorFor: (cwd: string) => new ClaudeCliCommitMessageGenerator({ cwd }),
@@ -417,15 +434,15 @@ async function wireIpc(): Promise<void> {
   };
   attachSessionBridges(workspaceScoped);
 
-  const attachLaunchProcessBridges = (services: WorkspaceScopedServices): void => {
-    services.launchProcessService.onOutput((event) => {
-      mainWindow?.webContents.send(LAUNCH_PROCESS_OUTPUT_CHANNEL, event);
+  const attachTerminalBridges = (services: WorkspaceScopedServices): void => {
+    services.terminalService.onOutput((event) => {
+      mainWindow?.webContents.send(TERMINAL_OUTPUT_CHANNEL, event);
     });
-    services.launchProcessService.onExit((event) => {
-      mainWindow?.webContents.send(LAUNCH_PROCESS_EXIT_CHANNEL, event);
+    services.terminalService.onExit((event) => {
+      mainWindow?.webContents.send(TERMINAL_EXIT_CHANNEL, event);
     });
   };
-  attachLaunchProcessBridges(workspaceScoped);
+  attachTerminalBridges(workspaceScoped);
 
   const attachEntityWatch = (services: WorkspaceScopedServices): void => {
     services.entityWatchService.onEntityChanged((event) => {
@@ -437,7 +454,7 @@ async function wireIpc(): Promise<void> {
 
   app.on('before-quit', () => {
     workspaceScoped.sessionService.killAll();
-    workspaceScoped.launchProcessService.killAll();
+    workspaceScoped.terminalService.killAll();
     void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
   });
@@ -476,7 +493,8 @@ async function wireIpc(): Promise<void> {
     notificationPort,
     workspaceTeardownService: workspaceScoped.workspaceTeardownService,
     launchConfigService: workspaceScoped.launchConfigService,
-    launchProcessService: workspaceScoped.launchProcessService,
+    terminalService: workspaceScoped.terminalService,
+    openEditorsService: workspaceScoped.openEditorsService,
     appQuit: () => app.quit(),
   });
 
@@ -502,14 +520,14 @@ async function wireIpc(): Promise<void> {
     return switchQueue(async () => {
       const target = await select();
       workspaceScoped.sessionService.killAll();
-      workspaceScoped.launchProcessService.killAll();
+      workspaceScoped.terminalService.killAll();
       await embeddedBrowserAdapter.destroyAll();
       await workspaceScoped.entityWatchService.stop();
       activeWorkspace = target;
       workspaceScoped = buildWorkspaceScopedServices(await scopeFor(target), sharedDeps);
       fileBrowserService = fileBrowserFor(target);
       attachSessionBridges(workspaceScoped);
-      attachLaunchProcessBridges(workspaceScoped);
+      attachTerminalBridges(workspaceScoped);
       attachEntityWatch(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));
       return target;

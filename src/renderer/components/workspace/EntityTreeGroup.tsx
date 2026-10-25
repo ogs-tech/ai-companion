@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Box, Stack, Tooltip } from '@mui/material';
+import { Stack } from '@mui/material';
 import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
-import { Icon } from '../ds/Icon.js';
-import { PluginOriginBadge } from '../PluginOriginBadge.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
+import { OriginMeta } from './OriginMeta.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
+import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { useCustomizationList, useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import { matchesQuery, useReportCount } from '../../lib/control-panel-filter.js';
+import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import type { Agent, Entity, Skill } from '../../../shared/entity.js';
@@ -36,6 +36,8 @@ interface EntityTreeGroupProps {
   flat?: boolean;
   /** Keeps only entities whose name or description contains this text. */
   query?: string;
+  /** Keeps only the user's own or only plugin-provided items. Defaults to both. */
+  origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
@@ -59,7 +61,7 @@ export function seedNewEntity(kind: 'skill' | 'agent', localScope: LocalScope | 
   return localScope ? ({ ...blank, scopes: [localScope.scope], scopeId: localScope.scopeId } as Skill | Agent) : blank;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', onCount, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', origin = 'all', onCount, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
@@ -74,11 +76,15 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
           ? []
           : [{ key: 'properties', label: 'Properties', glyph: Settings2, onSelect: () => onProperties?.(kind, rowMenuTarget) }]),
         { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(kind, rowMenuTarget) },
+        ...(!inherited && rowMenuTarget.source.kind === 'workspace'
+          ? [{ key: 'delete', label: 'Excluir', glyph: Trash2, danger: true, onSelect: () => void handleDelete(rowMenuTarget) }]
+          : []),
       ]
     : [];
 
   const visible = items
     .filter((item) => (inherited ? !isLocal(item, localScope) : isLocal(item, localScope)))
+    .filter((item) => matchesOrigin(origin, item.source.kind === 'plugin'))
     .filter((item) => matchesQuery(query, item.name, item.description))
     .sort((a, b) => a.name.localeCompare(b.name));
   const groupTestId = inherited ? `inherited-${kind}` : kind;
@@ -125,41 +131,15 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
               badge={
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                   <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
-                  {item.source.kind === 'plugin' ? (
-                    <PluginOriginBadge pluginId={item.source.pluginId} provenance={item.source.provenance} />
-                  ) : undefined}
+                  <OriginMeta
+                    {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})}
+                    inherited={inherited}
+                  />
                 </Stack>
               }
-              // Row click already opens this same item in the editor tab (view
-              // mode when read-only, edit mode otherwise) — a separate "Editar"
-              // action here would just duplicate it, so only Excluir survives
-              // as a hover action.
-              actions={
-                !inherited && item.source.kind === 'workspace' ? (
-                  <Tooltip title="Excluir">
-                    <Box
-                      component="span"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Excluir ${item.name}`}
-                      data-testid={`tree-${kind}-delete-${item.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDelete(item);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter' && e.key !== ' ') return;
-                        if (e.key === ' ') e.preventDefault();
-                        e.stopPropagation();
-                        void handleDelete(item);
-                      }}
-                      sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                    >
-                      <Icon glyph={Trash2} size={14} />
-                    </Box>
-                  </Tooltip>
-                ) : undefined
-              }
+              // Row click already opens this item in the editor tab; the "⋯"
+              // menu carries everything else (preview, properties, delete).
+              actions={<RowMenuButton testId={`tree-${kind}-menu-${item.name}`} label={`Ações de ${item.name}`} onOpen={(e) => rowMenu.openMenu(e, item as Skill | Agent)} />}
             />
           );
         })}

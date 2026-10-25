@@ -35,6 +35,10 @@ typed (not sent) as your first message.
 - The tab header shows the state: **Iniciando**, running, **Parada** (exited) or **Erro** — with
   **Tentar novamente** to respawn.
 
+A link the CLI opens on its own (`/login`, an MCP sign-in) appears as a tab in the embedded browser, not
+in your default browser. It only applies to sessions started by the app; if the app's link channel is
+unavailable, the link opens in the default browser as usual.
+
 ## Give the session a browser
 
 Click the session's globe button (**Ativar navegador da sessão**). The session gets a browser embedded in

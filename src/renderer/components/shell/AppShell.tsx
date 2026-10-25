@@ -4,6 +4,7 @@ import { TopNav } from './TopNav.js';
 import { AppFooter } from './AppFooter.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Toast, type ToastMessage } from '../Toast.js';
+import { openManualTab } from '../../lib/browser-tabs-store.js';
 import { useContextNavigation } from '../../hooks/use-context-navigation.js';
 
 interface AppShellProps {
@@ -16,6 +17,16 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const { openFolder } = useContextNavigation();
+
+  // Links the session's CLI opened itself (`/login`, MCP OAuth) arrive from main.
+  // Same http(s)-only rule as terminal links; main already filtered, this is defense in depth.
+  useEffect(
+    () =>
+      window.api.externalLink.onOpen((url) => {
+        if (/^https?:\/\//i.test(url)) void openManualTab(url);
+      }),
+    [],
+  );
 
   // Re-registered every render so ⌘O always calls the current `openFolder`
   // (it closes over the active workspace).

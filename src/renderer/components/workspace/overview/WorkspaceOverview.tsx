@@ -7,12 +7,11 @@ import { useGitInit, useGitStatus } from '../../../hooks/use-git.js';
 import { useSessions } from '../../../hooks/use-sessions.js';
 import { useSessionHistoryStats } from '../../../hooks/use-session-history.js';
 import { useWorkspaceInstruction } from '../../../hooks/use-instructions.js';
-import { useLaunchConfigs } from '../../../hooks/use-launch-configs.js';
-import { useRunLaunchConfig } from '../../../hooks/use-launch-process.js';
+import { useLaunchConfigs, useRunLaunchConfig } from '../../../hooks/use-launch-configs.js';
 import { seedWorkspaceInstruction } from '../../../lib/instruction-seed.js';
 import { formatCostUsd, formatWhen } from '../../../lib/format-session-history.js';
 import type { Instruction } from '../../../../shared/entity.js';
-import type { LaunchProcessSnapshot } from '../../../../shared/launch-config.js';
+import type { TerminalSnapshot } from '../../../../shared/terminal.js';
 import type { SessionSnapshot } from '../../../../shared/session.js';
 import type { Workspace } from '../../../../shared/workspace.js';
 
@@ -25,7 +24,7 @@ interface WorkspaceOverviewProps {
   onNewSession: () => void;
   onOpenSession: (session: SessionSnapshot) => void;
   onOpenInstruction: (entity: Instruction, isCreate: boolean) => void;
-  onOpenProcess: (process: LaunchProcessSnapshot) => void;
+  onOpenTerminal: (terminal: TerminalSnapshot) => void;
   onError: (message: string) => void;
 }
 
@@ -45,7 +44,7 @@ export function WorkspaceOverview({
   onNewSession,
   onOpenSession,
   onOpenInstruction,
-  onOpenProcess,
+  onOpenTerminal,
   onError,
 }: WorkspaceOverviewProps): React.ReactElement {
   const { data: git } = useGitStatus({ visible });
@@ -165,7 +164,7 @@ export function WorkspaceOverview({
                       onClick={() =>
                         runConfig.mutate(
                           { configName: config.name },
-                          { onSuccess: (process) => onOpenProcess(process), onError: (err) => onError(errorMessage(err)) },
+                          { onSuccess: (terminal) => onOpenTerminal(terminal), onError: (err) => onError(errorMessage(err)) },
                         )
                       }
                     >

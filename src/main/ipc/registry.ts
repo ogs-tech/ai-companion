@@ -34,10 +34,13 @@ import { buildMcpHandlers } from './mcp-handlers.js';
 import { buildOpenWithHandlers } from './open-with-handlers.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
 import { buildLaunchConfigHandlers } from './launch-config-handlers.js';
+import { buildTerminalHandlers } from './terminal-handlers.js';
+import { buildOpenEditorsHandlers } from './open-editors-handlers.js';
+import type { OpenEditorsService } from '../application/services/open-editors-service.js';
 import { buildGitHandlers } from './git-handlers.js';
 import type { CommitMessageService } from '../application/services/commit-message-service.js';
 import type { LaunchConfigService } from '../application/services/launch-config-service.js';
-import type { LaunchProcessService } from '../application/services/launch-process-service.js';
+import type { TerminalService } from '../application/services/terminal-service.js';
 import type { McpService } from '../application/services/mcp-service.js';
 import type { NotificationPort } from '../application/ports/notification-port.js';
 import type { WorkspaceTeardownService } from '../application/services/workspace-teardown.js';
@@ -70,7 +73,8 @@ export interface IpcDeps {
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
   launchConfigService: LaunchConfigService;
-  launchProcessService: LaunchProcessService;
+  terminalService: TerminalService;
+  openEditorsService: OpenEditorsService;
   appQuit: () => void;
 }
 
@@ -114,7 +118,8 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     notificationPort,
     workspaceTeardownService,
     launchConfigService,
-    launchProcessService,
+    terminalService,
+    openEditorsService,
     appQuit,
   } = deps;
 
@@ -234,7 +239,9 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       embeddedBrowser: embeddedBrowserPort,
       workspaceService,
     }),
-    ...buildLaunchConfigHandlers(launchConfigService, launchProcessService),
+    ...buildLaunchConfigHandlers(launchConfigService, terminalService),
+    ...buildTerminalHandlers(terminalService),
+    ...buildOpenEditorsHandlers(openEditorsService),
     ...buildGitHandlers(gitService, commitMessageService),
   };
 }

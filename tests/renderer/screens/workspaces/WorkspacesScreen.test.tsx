@@ -4,11 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { queryClient } from '../../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { registerUnsavedTabsGuard } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
-import { WorkspaceManagementList } from '../../../../src/renderer/components/workspace/WorkspaceManagementList.js';
+import { WorkspacesScreen } from '../../../../src/renderer/screens/workspaces/WorkspacesScreen.js';
 import { renderWithQuery } from '../../test-utils.js';
 
-const renderList = (appAreaRows?: React.ReactNode) =>
-  renderWithQuery(<WorkspaceManagementList {...(appAreaRows !== undefined ? { appAreaRows } : {})} />, { client: queryClient });
+const renderList = () => renderWithQuery(<WorkspacesScreen />, { client: queryClient });
 
 const workspaces = [
   { id: 'w2', name: 'Bravo', rootPath: '/repos/bravo', createdAt: '' },
@@ -37,19 +36,13 @@ afterEach(() => {
   registerUnsavedTabsGuard(null);
 });
 
-describe('WorkspaceManagementList', () => {
-  it('lists the workspaces alphabetically under a "Workspaces" section', async () => {
+describe('WorkspacesScreen', () => {
+  it('lists the workspaces alphabetically under a "Workspaces" title', async () => {
     renderList();
     expect(await screen.findByTestId('workspace-list-row-w1')).toHaveTextContent('Acme');
-    expect(screen.getByText('Workspaces')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Workspaces' })).toBeInTheDocument();
     const rows = screen.getAllByTestId(/^workspace-list-row-/);
     expect(rows.map((r) => r.textContent)).toEqual(['Acme', 'Bravo']);
-  });
-
-  it('renders the app rows under an "App" section', async () => {
-    renderList(<div data-testid="app-rows-slot">Diagnóstico</div>);
-    expect(await screen.findByTestId('app-rows-slot')).toBeInTheDocument();
-    expect(screen.getByText('App')).toBeInTheDocument();
   });
 
   it('has no always-visible delete action on a row', async () => {
@@ -107,7 +100,7 @@ describe('WorkspaceManagementList', () => {
         'workspace.open': { id: 'w3', name: 'charlie', rootPath: '/repos/charlie', createdAt: '' },
       });
       renderList();
-      await user.click(await screen.findByTestId('workspace-list-open-folder'));
+      await user.click(await screen.findByTestId('workspaces-open-folder'));
       await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.open', { path: '/repos/charlie' }));
     });
 
@@ -115,7 +108,7 @@ describe('WorkspaceManagementList', () => {
       const user = userEvent.setup();
       mockIpc({ 'dialog.selectFolder': { canceled: true } });
       renderList();
-      await user.click(await screen.findByTestId('workspace-list-open-folder'));
+      await user.click(await screen.findByTestId('workspaces-open-folder'));
       await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('dialog.selectFolder', {}));
       expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.open', expect.anything());
     });
@@ -124,15 +117,14 @@ describe('WorkspaceManagementList', () => {
       const user = userEvent.setup();
       mockIpc({ 'dialog.selectFolder': { canceled: false, path: '/home/u' }, 'workspace.open': new Error('home dir') });
       renderList();
-      await user.click(await screen.findByTestId('workspace-list-open-folder'));
+      await user.click(await screen.findByTestId('workspaces-open-folder'));
       expect(await screen.findByTestId('toast')).toHaveTextContent('home dir');
     });
 
-    it('is the empty state\'s action when there are no workspaces', async () => {
+    it('shows the empty state when there are no workspaces', async () => {
       mockIpc({ 'workspace.list': [] });
       renderList();
-      expect(await screen.findByTestId('empty-state-workspace-management-empty')).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-list-empty-open-folder')).toBeInTheDocument();
+      expect(await screen.findByTestId('empty-state-workspaces-empty')).toBeInTheDocument();
     });
   });
 });

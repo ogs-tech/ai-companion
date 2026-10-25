@@ -19,7 +19,7 @@ describe('use-file-browser', () => {
     vi.spyOn(ipc, 'callIpc').mockResolvedValue([{ name: 'a.txt', kind: 'file' }]);
     const { result } = renderHook(() => useDirListing('sub'), { wrapper });
     await waitFor(() => expect(result.current.data).toEqual([{ name: 'a.txt', kind: 'file' }]));
-    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'sub' });
+    expect(ipc.callIpc).toHaveBeenCalledWith('workspace.listDir', { path: 'sub', showHidden: false });
   });
 
   it('useDirListing does not fetch when enabled:false', () => {

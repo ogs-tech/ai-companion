@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Collapse, IconButton, List, Tooltip, Typography } from '@mui/material';
-import { Eye, ExternalLink, FileDiff, Folder, File as FileIcon, FolderInput, FolderRoot, FolderSearch, FolderX, Globe, Minus, Plus, SquareTerminal, Undo2 } from 'lucide-react';
+import { Eye, ExternalLink, FileDiff, Folder, File as FileIcon, FolderInput, FolderRoot, FolderSearch, FolderX, Globe, Minus, Plus, SquareTerminal, TerminalSquare, Undo2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { EmptyState } from '../ds/EmptyState.js';
 import { TreeRow } from '../ds/TreeRow.js';
@@ -31,6 +31,12 @@ export interface FolderTreeGit {
   onDiscard: (files: GitFileChange[]) => void;
 }
 
+/** The folder containing a root-relative path; `''` for a top-level entry. */
+function parentDir(relPath: string): string {
+  const slash = relPath.lastIndexOf('/');
+  return slash === -1 ? '' : relPath.slice(0, slash);
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -44,8 +50,8 @@ interface FolderTreeProps {
   onPreviewFile?: (relPath: string) => void;
   /** Right-click on a file OR folder row → "New Action" — opens a brand-new session with a draft first message referencing it. */
   onNewAction?: (relPath: string) => void;
-  /** Pinned nodes rendered above the folders/files, e.g. the workspace's Launch Configurations group. */
-  pinnedRows?: React.ReactNode;
+  /** Right-click → "Abrir terminal aqui": a shell in that folder (a file's containing folder; `''` is the root). */
+  onOpenTerminalHere?: (relDir: string) => void;
   /** Whether a folder (by its root-relative path) is itself a registered workspace's root — gets a small badge. */
   isWorkspaceRoot?: (relPath: string) => boolean;
   git?: FolderTreeGit;
@@ -231,7 +237,7 @@ export function FolderTree({
   onOpenAsWorkspace,
   onPreviewFile,
   onNewAction,
-  pinnedRows,
+  onOpenTerminalHere,
   isWorkspaceRoot = () => false,
   git,
 }: FolderTreeProps): React.ReactElement {
@@ -315,6 +321,16 @@ export function FolderTree({
               .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
           },
         },
+        ...(onOpenTerminalHere
+          ? [
+              {
+                key: 'open-terminal-here',
+                label: 'Abrir terminal aqui',
+                glyph: TerminalSquare,
+                onSelect: () => onOpenTerminalHere(rowMenuTarget.kind === 'dir' ? rowMenuTarget.relPath : parentDir(rowMenuTarget.relPath)),
+              },
+            ]
+          : []),
         { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath) },
         ...(rowMenuTarget.kind === 'dir'
           ? [
@@ -350,7 +366,6 @@ export function FolderTree({
   return (
     <>
       <List disablePadding data-testid="folder-tree">
-        {pinnedRows}
         {(rootEntries ?? []).map((entry) => (
           <TreeNode
             key={entry.name}
