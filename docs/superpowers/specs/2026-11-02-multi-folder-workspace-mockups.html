@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workspace múltiplo: telas e fluxos</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --canvas:#0F1828; --paper:#16223A; --rail:#1B2944; --tx:#F2EEE5; --mu:#9AA0A8; --line:rgba(242,238,229,.12);
+          --azul:#5B79E0; --verde:#3FB97A; --ambar:#E5B547; --erro:#E2675A; --new:rgba(229,181,71,.14);
+          --sans:"Space Grotesk",-apple-system,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 16px 56px; background:#0A111D; color:var(--tx); font:13px/1.45 var(--sans); }
+  .wrap { max-width:1180px; margin:0 auto; }
+  h1 { font-size:22px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em; }
+  h2 { font-size:16px; font-weight:600; margin:36px 0 4px; }
+  .lead, .cap { color:var(--mu); max-width:72ch; margin:0 0 12px; }
+  .cap b { color:var(--ambar); font-weight:500; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+  .card { background:var(--canvas); border:1px solid var(--line); border-radius:14px; padding:14px; }
+  .card h3 { margin:0 0 10px; font-size:13px; font-weight:500; color:var(--mu); }
+  .pop { background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 12px 32px rgba(0,0,0,.45); }
+  .it { padding:7px 10px; border-radius:8px; display:flex; gap:8px; align-items:center; }
+  .it.hl { background:var(--new); outline:1px solid var(--ambar); }
+  .sub { color:var(--mu); padding:6px 10px 2px; font-size:12px; }
+  hr { border:0; border-top:1px solid var(--line); margin:6px 0; }
+  .r { margin-left:auto; color:var(--mu); font-size:12px; }
+  .dlg { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .dlg h4 { margin:0 0 4px; font-size:16px; font-weight:600; }
+  .dlg p { color:var(--mu); margin:0 0 12px; }
+  .field { border:1px solid var(--line); background:var(--canvas); border-radius:8px; padding:8px 10px; margin-bottom:12px; font-family:var(--mono); font-size:12.5px; }
+  .btns { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+  .btn { padding:6px 14px; border-radius:8px; border:1px solid var(--line); }
+  .btn.pri { background:var(--tx); color:var(--canvas); border-color:var(--tx); font-weight:500; }
+  .err { border:1px solid var(--erro); background:rgba(226,103,90,.1); color:var(--tx); border-radius:10px; padding:10px 12px; }
+  .err b { color:var(--erro); font-weight:600; }
+  .check { display:flex; gap:10px; align-items:flex-start; padding:10px; border:1px solid var(--line); border-radius:10px; margin-bottom:12px; }
+  .box { width:16px; height:16px; border:1.5px solid var(--mu); border-radius:4px; flex:none; margin-top:2px; }
+  .radio { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; }
+  .radio.on { border-color:var(--tx); background:rgba(255,255,255,.05); }
+  .rd { width:14px; height:14px; border-radius:50%; border:1.5px solid var(--mu); flex:none; }
+  .on .rd { border-color:var(--tx); background:radial-gradient(var(--tx) 45%, transparent 50%); }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; display:inline-block; }
+  .ws{background:var(--tx)} .fe{background:var(--azul)} .be{background:var(--verde)}
+  /* full app */
+  .app { background:var(--canvas); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .top { display:flex; align-items:center; gap:14px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .switch { display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:8px; background:var(--paper); border:1px solid var(--line); }
+  .stack i { width:9px; height:9px; border-radius:50%; margin-right:-3px; border:1.5px solid var(--paper); display:inline-block; }
+  .cols { display:grid; grid-template-columns:320px 1fr 300px; min-height:520px; }
+  .col { padding:10px; border-right:1px solid var(--line); min-width:0; }
+  .col:last-child { border-right:0; }
+  .col h5 { font-size:12px; font-weight:500; color:var(--mu); margin:0 0 8px; }
+  .row { display:flex; align-items:center; gap:7px; padding:4px 8px; border-radius:7px; white-space:nowrap; }
+  .car { color:var(--mu); font-size:10px; width:10px; }
+  .g { font-weight:600; } .mu { color:var(--mu); } .mono { font-family:var(--mono); font-size:12px; }
+  .i1{padding-left:8px}.i2{padding-left:24px}.i3{padding-left:40px}.i4{padding-left:56px}
+  .chip { font-family:var(--mono); font-size:11px; padding:1px 8px; border-radius:999px; border:1px solid var(--line); color:var(--mu); }
+  .tb { display:flex; gap:8px; align-items:center; color:var(--azul); font-size:12px; margin-left:auto; }
+  .badge { border:1px solid var(--ambar); color:var(--ambar); border-radius:999px; padding:0 8px; font-size:11px; }
+  .new { background:var(--new); border-radius:8px; outline:1px dashed var(--ambar); outline-offset:-1px; }
+  .tab { display:inline-flex; gap:6px; align-items:center; padding:3px 10px; border-radius:8px; background:var(--paper); margin-right:4px; font-size:12px; }
+  .pill { padding:2px 10px; border-radius:999px; border:1px solid var(--line); font-size:12px; color:var(--mu); display:inline-block; }
+  .pill.on { background:var(--tx); color:var(--canvas); border-color:var(--tx); }
+  @media (max-width:900px) { .cols { grid-template-columns:1fr; } .col { border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Workspace com várias pastas: telas e fluxos</h1>
+  <p class="lead">Exemplo: workspace "Loja" com as pastas frontend e backend. <b style="color:var(--ambar);font-weight:500">Amarelo</b> marca o que é novo ou muda em relação ao app de hoje.</p>
+
+  <h2>1. Criar e crescer o workspace</h2>
+  <p class="cap">Duas ações no menu do workspace. O nome nasce da primeira pasta; ao adicionar outra, o app pede para renomear.</p>
+  <div class="grid">
+    <div class="card"><h3>Menu do workspace</h3>
+      <div class="pop">
+        <div class="it mu">⌂ &nbsp;Início</div>
+        <div class="sub">Recentes</div>
+        <div class="it">▢ &nbsp;console</div>
+        <div class="it">▣ &nbsp;Loja <span class="r">2 pastas</span></div>
+        <hr>
+        <div class="it">Abrir pasta… <span class="r">⌘O</span></div>
+        <div class="it hl">Criar workspace… <span class="r">novo</span></div>
+        <div class="it hl">Adicionar pasta ao workspace… <span class="r">novo</span></div>
+        <div class="it" style="color:var(--erro)">Remover este workspace…</div>
+      </div>
+    </div>
+    <div class="card"><h3>Depois de adicionar a 2ª pasta: renomear</h3>
+      <div class="dlg">
+        <h4>Renomear o workspace</h4>
+        <p>Ele agora tem 2 pastas: loja-frontend e loja-backend.</p>
+        <div class="field">loja-frontend</div>
+        <div class="btns"><span class="btn">Manter nome</span><span class="btn pri">Renomear</span></div>
+      </div>
+    </div>
+    <div class="card"><h3>Pasta que já pertence a outro workspace</h3>
+      <div class="err"><b>Não foi possível adicionar a pasta.</b><br>
+        "loja-backend" já faz parte do workspace "API interna". Remova-a de lá antes de adicioná-la aqui.</div>
+      <div class="btns"><span class="btn">Entendi</span></div>
+    </div>
+  </div>
+
+  <h2>2. Tela principal</h2>
+  <p class="cap">O layout é o de hoje. Muda: uma raiz por pasta na esquerda e a árvore origem › tipo › item na direita. Um ponto colorido identifica a pasta em todo lugar.</p>
+  <div class="app">
+    <div class="top"><b>AI Companion</b>
+      <span class="switch">Loja <span class="stack"><i class="fe"></i><i class="be"></i></span> ▾</span><span class="mu">2 pastas</span></div>
+    <div class="cols">
+      <div class="col">
+        <h5>Editores abertos</h5>
+        <div class="row"><span class="dot fe"></span>skill-y <span class="r">frontend › skills</span></div>
+        <div class="new" style="padding:4px 0 8px;margin-top:10px">
+          <div class="row i1 g"><span class="car">▾</span><span class="dot fe"></span>frontend <span class="chip">main</span><span class="tb"><span class="badge">2</span>Commit…</span></div>
+          <div class="row i2"><span class="car">▸</span>src</div><div class="row i2"><span class="car">▸</span>public</div><div class="row i2 mono">package.json</div>
+          <div class="row i1 g" style="margin-top:6px"><span class="car">▾</span><span class="dot be"></span>backend <span class="chip">feat/api</span><span class="tb"><span class="badge">1</span>Commit…</span></div>
+          <div class="row i2"><span class="car">▸</span>app</div><div class="row i2"><span class="car">▸</span>config</div><div class="row i2 mono">Gemfile</div>
+        </div>
+        <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:8px">
+          <h5>Terminais <span class="r" style="float:right">＋ ▾</span></h5>
+          <span class="tab"><span class="dot fe"></span>frontend · zsh</span><span class="tab"><span class="dot be"></span>backend · zsh</span>
+          <div class="pop" style="margin-top:8px;width:240px">
+            <div class="it hl"><span class="dot fe"></span>frontend <span class="r">pasta ativa</span></div>
+            <div class="it hl"><span class="dot be"></span>backend</div>
+            <div class="it hl"><span class="dot ws"></span>Raiz do workspace</div>
+          </div>
+        </div>
+      </div>
+      <div class="col"><div class="mono mu">frontend › Skills › skill-y</div>
+        <p class="mu" style="padding:24px">O editor não muda. O caminho no topo diz de qual pasta o item vem.</p></div>
+      <div class="col">
+        <h5>Customizações</h5>
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"><span class="pill on">Tudo</span><span class="pill">Skills</span><span class="pill">Agents</span><span class="pill">Integrações</span></div>
+        <div class="row g"><span class="car">▾</span>Neste workspace <span class="r">3</span></div>
+        <div class="new" style="padding:4px 0">
+          <div class="row i2 g"><span class="car">▾</span><span class="dot ws"></span>Workspace <span class="r">compartilhado</span></div>
+          <div class="row i3 mu"><span class="car">▾</span>Skills <span class="r">1</span></div><div class="row i4 mono">skill-x</div>
+          <div class="row i2 g" style="margin-top:6px"><span class="car">▾</span><span class="dot fe"></span>frontend</div>
+          <div class="row i3 mu"><span class="car">▾</span>Skills <span class="r">1</span></div><div class="row i4 mono">skill-y</div>
+          <div class="row i2 g" style="margin-top:6px"><span class="car">▸</span><span class="dot be"></span>backend <span class="r">0</span></div>
+        </div>
+        <div class="row g" style="margin-top:6px"><span class="car">▸</span>🔒 Do Início <span class="r">87</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>3. Iniciar uma sessão</h2>
+  <p class="cap">Você marca quais pastas a sessão enxerga: uma, várias ou todas. "Todas as pastas" é um atalho que marca tudo.</p>
+  <div class="grid">
+    <div class="card"><h3>Uma pasta</h3>
+      <div class="dlg">
+        <h4>Nova sessão</h4>
+        <p>Quais pastas a sessão enxerga?</p>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px"><span class="box"></span><b>Todas as pastas</b><span class="r">3</span></div>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><span class="dot fe"></span>frontend <span class="r">pasta ativa</span></div>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px"><span class="box"></span><span class="dot be"></span>backend</div>
+        <div class="check" style="margin-bottom:12px;padding:7px 10px"><span class="box"></span><span class="dot" style="background:#E5B547"></span>docs</div>
+        <div class="mu" style="margin-bottom:8px">A sessão abre em frontend.</div>
+        <div class="btns"><span class="btn">Cancelar</span><span class="btn pri">Iniciar sessão</span></div>
+      </div>
+    </div>
+    <div class="card"><h3>Duas ou mais pastas</h3>
+      <div class="dlg">
+        <h4>Nova sessão</h4>
+        <p>Quais pastas a sessão enxerga?</p>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px"><span class="box"></span><b>Todas as pastas</b><span class="r">3</span></div>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><span class="dot fe"></span>frontend</div>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><span class="dot be"></span>backend</div>
+        <div class="check" style="margin-bottom:12px;padding:7px 10px"><span class="box"></span><span class="dot" style="background:#E5B547"></span>docs</div>
+        <div class="mu" style="margin-bottom:8px">A sessão enxerga frontend e backend no mesmo nível. Carrega também as skills e instruções compartilhadas do workspace.</div>
+        <div class="btns"><span class="btn">Cancelar</span><span class="btn pri">Iniciar sessão</span></div>
+      </div>
+    </div>
+    <div class="card"><h3>Todas as pastas</h3>
+      <div class="dlg">
+        <h4>Nova sessão</h4>
+        <p>Quais pastas a sessão enxerga?</p>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><b>Todas as pastas</b><span class="r">3</span></div>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><span class="dot fe"></span>frontend</div>
+        <div class="check" style="margin-bottom:6px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><span class="dot be"></span>backend</div>
+        <div class="check" style="margin-bottom:12px;padding:7px 10px;border-color:var(--tx)"><span class="box" style="background:var(--tx);border-color:var(--tx)"></span><span class="dot" style="background:#E5B547"></span>docs</div>
+        <div class="mu" style="margin-bottom:8px">A sessão enxerga as 3 pastas no mesmo nível. Pastas adicionadas depois não entram nessa sessão.</div>
+        <div class="btns"><span class="btn">Cancelar</span><span class="btn pri">Iniciar sessão</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

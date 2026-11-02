@@ -7,10 +7,11 @@ import type { TerminalSnapshot } from '../../shared/terminal.js';
 export const launchConfigsQueryKey = ['launchConfigs'] as const;
 
 /** The open workspace's own launch.json configs — `null` at Início. */
-export function useLaunchConfigs(enabled = true): UseQueryResult<WorkspaceLaunchConfigs | null> {
+export function useLaunchConfigs(enabled = true, folder?: string): UseQueryResult<WorkspaceLaunchConfigs | null> {
   return useQuery<WorkspaceLaunchConfigs | null>({
-    queryKey: launchConfigsQueryKey,
-    queryFn: async () => (await callIpc<WorkspaceLaunchConfigs | null>('launchConfig.list')) ?? null,
+    queryKey: folder === undefined ? launchConfigsQueryKey : [...launchConfigsQueryKey, folder],
+    queryFn: async () =>
+      (await callIpc<WorkspaceLaunchConfigs | null>('launchConfig.list', folder === undefined ? undefined : { folder })) ?? null,
     enabled,
   });
 }
@@ -19,7 +20,7 @@ export function useLaunchConfigs(enabled = true): UseQueryResult<WorkspaceLaunch
 export function useRunLaunchConfig() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { configName: string }) => callIpc<TerminalSnapshot>('launchConfig.run', args),
+    mutationFn: (args: { configName: string; folder?: string }) => callIpc<TerminalSnapshot>('launchConfig.run', args),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: terminalsQueryKey }),
   });
 }

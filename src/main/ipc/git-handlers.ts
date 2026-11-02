@@ -23,58 +23,66 @@ function asDiffSource(value: unknown): GitDiffSource {
   );
 }
 
+/** The optional `folder` selecting which of the workspace's repositories a call targets. */
+function folderOf(params: unknown, method: string): string | undefined {
+  if (params === undefined || params === null) return undefined;
+  const raw = asObject(params, method);
+  return raw['folder'] === undefined ? undefined : asString(raw['folder'], 'folder');
+}
+
 export function buildGitHandlers(service: GitService, commitMessages: CommitMessageService): IpcHandlers {
   return {
     'git.status': async (params) => {
       optParams(params, 'git.status');
-      return service.status();
+      return service.status(folderOf(params, 'git.status'));
     },
     'git.diff': async (params) => {
       const raw = asObject(params, 'git.diff');
-      return service.diff(asString(raw['path'], 'path'), asDiffSource(raw['source']));
+      return service.diff(asString(raw['path'], 'path'), asDiffSource(raw['source']), folderOf(raw, 'git.diff'));
     },
     'git.stage': async (params) => {
       const raw = asObject(params, 'git.stage');
-      return service.stage(asStringArray(raw['paths'], 'paths'));
+      return service.stage(asStringArray(raw['paths'], 'paths'), folderOf(raw, 'git.stage'));
     },
     'git.unstage': async (params) => {
       const raw = asObject(params, 'git.unstage');
-      return service.unstage(asStringArray(raw['paths'], 'paths'));
+      return service.unstage(asStringArray(raw['paths'], 'paths'), folderOf(raw, 'git.unstage'));
     },
     'git.discard': async (params) => {
       const raw = asObject(params, 'git.discard');
-      return service.discard(asStringArray(raw['paths'], 'paths'));
+      return service.discard(asStringArray(raw['paths'], 'paths'), folderOf(raw, 'git.discard'));
     },
     'git.commit': async (params) => {
       const raw = asObject(params, 'git.commit');
       return service.commit(
         asRawString(raw['message'], 'message'),
         raw['amend'] === undefined ? false : asBoolean(raw['amend'], 'amend'),
+        folderOf(raw, 'git.commit'),
       );
     },
     'git.generateCommitMessage': async (params) => {
       optParams(params, 'git.generateCommitMessage');
-      return commitMessages.generate();
+      return commitMessages.generate(undefined, folderOf(params, 'git.generateCommitMessage'));
     },
     'git.push': async (params) => {
       optParams(params, 'git.push');
-      return service.push();
+      return service.push(folderOf(params, 'git.push'));
     },
     'git.pull': async (params) => {
       optParams(params, 'git.pull');
-      return service.pull();
+      return service.pull(folderOf(params, 'git.pull'));
     },
     'git.fetch': async (params) => {
       optParams(params, 'git.fetch');
-      return service.fetch();
+      return service.fetch(folderOf(params, 'git.fetch'));
     },
     'git.sync': async (params) => {
       optParams(params, 'git.sync');
-      return service.sync();
+      return service.sync(folderOf(params, 'git.sync'));
     },
     'git.init': async (params) => {
       optParams(params, 'git.init');
-      return service.init();
+      return service.init(folderOf(params, 'git.init'));
     },
   };
 }

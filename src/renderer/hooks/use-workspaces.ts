@@ -72,3 +72,29 @@ export function useDeleteWorkspace() {
     onSuccess: refreshEverything,
   });
 }
+
+/**
+ * Adding or removing a folder rebuilds the open workspace's service graph in
+ * main (entity stores, git and file browser are per-folder), so every query is
+ * stale afterwards — same as an activation.
+ */
+export function useAddWorkspaceFolder() {
+  return useMutation({
+    mutationFn: (input: { id: string; path: string }) => callIpc<Workspace>('workspace.addFolder', input),
+    onSuccess: refreshEverything,
+  });
+}
+
+export function useRemoveWorkspaceFolder() {
+  return useMutation({
+    mutationFn: (input: { id: string; path: string }) => callIpc<Workspace>('workspace.removeFolder', input),
+    onSuccess: refreshEverything,
+  });
+}
+
+export function useRenameWorkspace() {
+  return useMutation({
+    mutationFn: (input: { id: string; name: string }) => callIpc<Workspace>('workspace.rename', input),
+    onSuccess: refreshEverything,
+  });
+}

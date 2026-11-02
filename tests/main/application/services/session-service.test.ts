@@ -31,7 +31,7 @@ const workspaceInstruction = (name = 'acme', scopeId = 'ws-1'): Instruction => (
   source: WORKSPACE_SOURCE, content: '# notes\n',
 });
 
-const setup = (options?: { maxBufferChars?: number }) => {
+const setup = (options?: { maxBufferChars?: number; extraFolders?: string[] }) => {
   const repo = new InMemoryEntityRepository();
   const adapterManager = {
     syncEntity: vi.fn().mockResolvedValue([]),
@@ -41,12 +41,21 @@ const setup = (options?: { maxBufferChars?: number }) => {
   const claudeSession = new FakeClaudeSessionPort();
   const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
-    workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) },
-    activeWorkspace: { id: 'ws-1', name: 'W', rootPath: '/repos/ws', createdAt: '' },
+    workspaceService: {
+      get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '', ...(options?.extraFolders ? { extraFolders: options.extraFolders } : {}) }),
+    },
+    activeWorkspace: { id: 'ws-1', name: 'W', rootPath: '/repos/ws', createdAt: '', ...(options?.extraFolders ? { extraFolders: options.extraFolders } : {}) },
     homedir: '/home/u',
   };
-  const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
-  const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, fs, options);
+  const fs = {
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    lstat: vi.fn().mockResolvedValue({ kind: 'none' }),
+    readlink: vi.fn().mockResolvedValue(''),
+    symlink: vi.fn().mockResolvedValue(undefined),
+  };
+  const { extraFolders: _extra, ...serviceOptions } = options ?? {};
+  const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, fs, serviceOptions);
   return { service, base, claudeSession, embeddedBrowser, fs };
 };
 
@@ -793,5 +802,35 @@ describe('SessionService.stageAttachment', () => {
     const { service } = setup();
 
     await expect(service.stageAttachment('x.png', 'not-base64!!!')).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  describe('multi-folder workspace anchor', () => {
+    const multi = () => setup({ extraFolders: ['/repos/api'] });
+
+    it('one ticked folder is the working directory itself', async () => {
+      const { service, fs } = multi();
+      const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/api'] });
+      expect(session.cwd).toBe('/repos/api');
+      expect(fs.symlink).not.toHaveBeenCalled();
+    });
+
+    it('defaults to the primary folder when none is named', async () => {
+      const { service } = multi();
+      expect((await service.spawn({ kind: 'workspace', workspaceId: 'ws-1' })).cwd).toBe('/repos/ws');
+    });
+
+    it('two or more ticked folders run from a helper dir under the workspace home, linking only those', async () => {
+      const { service, fs } = multi();
+      const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/ws', '/repos/api'] });
+      expect(session.cwd).toMatch(/^\/home\/u\/\.ai-companion\/workspaces\/ws-1\/sessions\/[0-9a-f]{10}$/);
+      const targets = fs.symlink.mock.calls.map((call: unknown[]) => (call[0] as { target: string }).target).sort();
+      expect(targets).toEqual(['/home/u/.ai-companion/workspaces/ws-1/.claude', '/repos/api', '/repos/ws']);
+    });
+
+    it('refuses a folder that does not belong to the workspace', async () => {
+      const { service } = multi();
+      await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/elsewhere'] })).rejects.toMatchObject({ kind: 'validation' });
+      await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: [] })).rejects.toMatchObject({ kind: 'validation' });
+    });
   });
 });

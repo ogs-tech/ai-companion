@@ -1,3 +1,5 @@
+import { workspaceFolders } from '../../../shared/workspace.js';
+import { workspaceHomePath } from '../../../shared/brand-paths.js';
 import { sep } from 'node:path';
 import type {
   HistoryFilters,
@@ -192,9 +194,10 @@ export class SessionHistoryService {
     if (scope.kind === 'all') return () => true;
     // Exact match: everything below the home dir belongs to some folder, not to Global.
     if (scope.kind === 'personal') return (cwd) => cwd === this.scopeDeps.homedir;
-    const { rootPath } = await this.scopeDeps.workspaceService.get(scope.workspaceId);
-    const prefix = rootPath.endsWith(sep) ? rootPath : rootPath + sep;
-    return (cwd) => cwd === rootPath || cwd.startsWith(prefix);
+    // Every folder of the workspace, plus its own directory (where multi-folder sessions run).
+    const workspace = await this.scopeDeps.workspaceService.get(scope.workspaceId);
+    const roots = [...workspaceFolders(workspace), workspaceHomePath(this.scopeDeps.homedir, workspace.id)];
+    return (cwd) => roots.some((root) => cwd === root || cwd.startsWith(root.endsWith(sep) ? root : root + sep));
   }
 }
 

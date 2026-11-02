@@ -3,6 +3,7 @@ import { Tooltip } from '@mui/material';
 import { Trash2, Webhook } from 'lucide-react';
 import { OriginMeta } from './OriginMeta.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
+import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { RowMenuButton } from './RowMenuButton.js';
 import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
@@ -24,10 +25,12 @@ interface HooksTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Takes part in a cross-type origin view — see `OriginView`. */
+  view?: OriginView;
 }
 
 /** Hooks are personal-only (no `scopeId`) — inside a project workspace they only show once "Mostrar entidades globais" is on, since none of them are local to begin with. */
-export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, query = '', origin = 'all', onCount }: HooksTreeGroupProps): React.ReactElement {
+export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, query = '', origin = 'all', onCount, view }: HooksTreeGroupProps): React.ReactElement {
   const { data } = useHooks();
   const del = useDeleteHook();
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -36,7 +39,8 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
   const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
     ? [{ key: 'delete', label: 'Excluir', glyph: Trash2, danger: true, onSelect: () => handleDelete(rowMenuTarget.id, describeHookHandler(rowMenuTarget.handler)) }]
     : [];
-  const items = (isProjectContext && !showGlobal ? [] : (data ?? [])).filter((h) => matchesOrigin(origin, h.source.kind === 'plugin') && matchesQuery(query, describeHookHandler(h.handler)));
+  const items = (isProjectContext && !showGlobal ? [] : (data ?? [])).filter((h) => matchesOrigin(origin, h.source.kind === 'plugin') && matchesQuery(query, describeHookHandler(h.handler), h.event))
+    .sort((a, b) => hookRowLabel(a).localeCompare(hookRowLabel(b)));
   useReportCount(items.length, onCount);
 
   const handleDelete = (hookId: string, label: string): void => {
@@ -51,27 +55,35 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
   return (
     <>
       <TreeGroup testId="hook" glyph={Webhook} label="Hooks" count={items.length} flat={flat}>
-        {items.map((item) => (
-          <TreeGroupRow
-            key={item.id}
-            testId={`tree-hook-${item.id}`}
-            glyph={Webhook}
-            mono
-            accentColor={ENTITY_ACCENT_COLOR.hook}
-            primary={<Tooltip title={describeHookHandler(item.handler)}><span>{hookRowLabel(item)}</span></Tooltip>}
-            badge={
-              <OriginMeta
-                {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})}
-                inherited={isProjectContext === true}
-              />
-            }
-            actions={
-              item.source.kind === 'workspace' ? (
-                <RowMenuButton testId={`tree-hook-menu-${item.id}`} label="Ações do hook" onOpen={(e) => rowMenu.openMenu(e, item)} />
-              ) : undefined
-            }
-          />
-        ))}
+        <OriginGroups
+          glyph={Webhook}
+          items={items}
+          storageScope={`${isProjectContext ? 'ws' : 'home'}:hook`}
+          testId="hook"
+          forceOpen={query.trim() !== ''}
+          depth={flat ? 0 : 1}
+          plainDepth={0}
+          {...(view ? { view } : {})}
+          renderRow={(item, depth) => (
+            <TreeGroupRow
+              key={item.id}
+              testId={`tree-hook-${item.id}`}
+              glyph={Webhook}
+              mono
+              depth={depth}
+              accentColor={ENTITY_ACCENT_COLOR.hook}
+              primary={<Tooltip title={describeHookHandler(item.handler)}><span>{hookRowLabel(item)}</span></Tooltip>}
+              badge={
+                <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
+              }
+              actions={
+                item.source.kind === 'workspace' ? (
+                  <RowMenuButton testId={`tree-hook-menu-${item.id}`} label="Ações do hook" onOpen={(e) => rowMenu.openMenu(e, item)} />
+                ) : undefined
+              }
+            />
+          )}
+        />
       </TreeGroup>
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

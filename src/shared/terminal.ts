@@ -9,7 +9,9 @@ export interface TerminalSnapshot {
   kind: TerminalKind;
   /** Shell name (`zsh`) for a shell terminal, the configuration name for a launch terminal. */
   name: string;
-  /** Working directory relative to the workspace root; `''` is the root itself. */
+  /** The workspace folder the terminal was opened in (absolute) — `relCwd` is relative to it. */
+  folder: string;
+  /** Working directory relative to `folder`; `''` is the folder itself. */
   relCwd: string;
   status: TerminalStatus;
   exitCode: number | null;
@@ -40,3 +42,6 @@ export interface TerminalExitEvent {
 export const TERMINAL_OUTPUT_CHANNEL = 'terminal:output' as const;
 /** Push channel main→renderer fired when a terminal's process exits. */
 export const TERMINAL_EXIT_CHANNEL = 'terminal:exit' as const;
+
+/** `terminal.create`'s `folder` for "the workspace's own directory" (multi-folder workspaces), instead of one of its folders. */
+export const WORKSPACE_ROOT_FOLDER = '@workspace' as const;

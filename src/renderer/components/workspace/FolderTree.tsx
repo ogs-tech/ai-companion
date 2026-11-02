@@ -54,6 +54,8 @@ interface FolderTreeProps {
   onOpenTerminalHere?: (relDir: string) => void;
   /** Whether a folder (by its root-relative path) is itself a registered workspace's root — gets a small badge. */
   isWorkspaceRoot?: (relPath: string) => boolean;
+  /** Multi-folder workspaces: each top-level row is a folder (by alias) and gets its colour dot. */
+  rootColors?: Record<string, string>;
   git?: FolderTreeGit;
 }
 
@@ -66,6 +68,7 @@ interface TreeNodeProps {
   isWorkspaceRoot: (relPath: string) => boolean;
   decorations: GitDecorations;
   git: FolderTreeGit | undefined;
+  rootColor?: string;
 }
 
 function GitBadge({ letters, color, testId }: { letters: string; color: string; testId: string }): React.ReactElement {
@@ -138,6 +141,17 @@ function rowGitActions(
   ];
 }
 
+/** A multi-folder root row leads with its folder's colour dot. */
+function withRootDot(label: React.ReactNode, color: string | undefined, name: string): React.ReactNode {
+  if (color === undefined) return label;
+  return (
+    <>
+      <Box component="span" data-testid={`folder-dot-${name}`} sx={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', bgcolor: color, mr: 0.75 }} />
+      {label}
+    </>
+  );
+}
+
 function TreeNode({
   entry,
   relPath,
@@ -147,6 +161,7 @@ function TreeNode({
   isWorkspaceRoot,
   decorations,
   git,
+  rootColor,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
   const isDir = entry.kind === 'dir';
@@ -160,7 +175,7 @@ function TreeNode({
         pl={1.5 + depth * 2}
         chevron={isDir ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
         glyph={isDir ? Folder : FileIcon}
-        primary={change ? <Box component="span" sx={{ color: change.color }}>{entry.name}</Box> : entry.name}
+        primary={withRootDot(change ? <Box component="span" sx={{ color: change.color }}>{entry.name}</Box> : entry.name, rootColor, entry.name)}
         onClick={() => {
           if (isDir) setExpanded((v) => !v);
           else onSelectFile(relPath);
@@ -239,6 +254,7 @@ export function FolderTree({
   onNewAction,
   onOpenTerminalHere,
   isWorkspaceRoot = () => false,
+  rootColors,
   git,
 }: FolderTreeProps): React.ReactElement {
   const { data: rootEntries, isError } = useDirListing('');
@@ -377,6 +393,7 @@ export function FolderTree({
             isWorkspaceRoot={isWorkspaceRoot}
             decorations={decorations}
             git={git}
+            {...(rootColors?.[entry.name] !== undefined ? { rootColor: rootColors[entry.name] as string } : {})}
           />
         ))}
         {decorations.deleted.length > 0 && (

@@ -246,6 +246,9 @@ const fakeActivation = () => ({
   open: vi.fn<WorkspaceActivation['open']>().mockResolvedValue(ACME),
   goHome: vi.fn<WorkspaceActivation['goHome']>().mockResolvedValue(undefined),
   delete: vi.fn<WorkspaceActivation['delete']>().mockResolvedValue(undefined),
+  addFolder: vi.fn<WorkspaceActivation['addFolder']>().mockResolvedValue(ACME),
+  removeFolder: vi.fn<WorkspaceActivation['removeFolder']>().mockResolvedValue(ACME),
+  rename: vi.fn<WorkspaceActivation['rename']>().mockResolvedValue(ACME),
 });
 
 const setupFileBrowserService = () =>
@@ -319,6 +322,17 @@ describe('workspace-handlers', () => {
     const h = buildWorkspaceHandlers(setupWorkspaceService(), activation, setupFileBrowserService());
     await h['workspace.delete']!({ id: 'w1' });
     expect(activation.delete).toHaveBeenCalledWith('w1');
+  });
+
+  it('workspace.addFolder / removeFolder / rename go through the activation', async () => {
+    const activation = fakeActivation();
+    const h = buildWorkspaceHandlers(setupWorkspaceService(), activation, setupFileBrowserService());
+    await h['workspace.addFolder']!({ id: 'w1', path: '/repos/b' });
+    await h['workspace.removeFolder']!({ id: 'w1', path: '/repos/b' });
+    await h['workspace.rename']!({ id: 'w1', name: 'Platform' });
+    expect(activation.addFolder).toHaveBeenCalledWith('w1', '/repos/b');
+    expect(activation.removeFolder).toHaveBeenCalledWith('w1', '/repos/b');
+    expect(activation.rename).toHaveBeenCalledWith('w1', 'Platform');
   });
 
   it('file methods fail validation at Início (no workspace open, no file browser)', async () => {

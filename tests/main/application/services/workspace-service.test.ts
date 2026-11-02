@@ -18,6 +18,7 @@ const DIRECTORIES: Record<string, string> = {
   '/links/acme': '/repos/acme',
   '/repos/acme/packages/api': '/repos/acme/packages/api',
   '/repos/bravo': '/repos/bravo',
+  '/repos/charlie': '/repos/charlie',
 };
 
 const setup = () => {
@@ -182,5 +183,86 @@ describe('WorkspaceService', () => {
   it('delete rejects an unknown id with not_found', async () => {
     const { service } = setup();
     await expect(service.delete('nope')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  describe('multi-folder', () => {
+    it('adds a folder, keeping the primary root and bootstrapping the new folder', async () => {
+      const { service, bootstrap } = setup();
+      const ws = await service.open('/repos/acme');
+      const updated = await service.addFolder(ws.id, '/repos/bravo');
+      expect(updated.rootPath).toBe('/repos/acme');
+      expect(updated.extraFolders).toEqual(['/repos/bravo']);
+      expect(bootstrap.create).toHaveBeenCalledWith('/repos/bravo/.ai-companion');
+      expect((await service.get(ws.id)).extraFolders).toEqual(['/repos/bravo']);
+    });
+
+    it('refuses a folder owned by another workspace, naming it', async () => {
+      const { service } = setup();
+      const acme = await service.open('/repos/acme');
+      const bravo = await service.open('/repos/bravo');
+      await expect(service.addFolder(bravo.id, '/repos/acme')).rejects.toMatchObject({
+        kind: 'validation',
+        details: expect.objectContaining({ reason: 'folder-in-other-workspace', workspaceName: 'acme', workspaceId: acme.id }),
+      });
+    });
+
+    it('refuses a folder already in the same workspace', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      await expect(service.addFolder(ws.id, '/links/acme')).rejects.toMatchObject({
+        details: expect.objectContaining({ reason: 'already-in-workspace' }),
+      });
+    });
+
+    it('opening an added folder opens its workspace instead of creating another', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      await service.addFolder(ws.id, '/repos/bravo');
+      await service.goHome();
+      expect((await service.open('/repos/bravo')).id).toBe(ws.id);
+      expect(await service.list()).toHaveLength(1);
+    });
+
+    it('create refuses a folder that is an added folder of another workspace', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      await service.addFolder(ws.id, '/repos/bravo');
+      await expect(service.create({ name: 'x', rootPath: '/repos/bravo' })).rejects.toMatchObject({ kind: 'validation' });
+    });
+
+    it('removes an added folder without touching the primary', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      await service.addFolder(ws.id, '/repos/bravo');
+      const updated = await service.removeFolder(ws.id, '/repos/bravo');
+      expect(updated.rootPath).toBe('/repos/acme');
+      expect(updated.extraFolders).toBeUndefined();
+    });
+
+    it('promotes the next folder when the primary is removed', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      await service.addFolder(ws.id, '/repos/bravo');
+      await service.addFolder(ws.id, '/repos/charlie');
+      const updated = await service.removeFolder(ws.id, '/repos/acme');
+      expect(updated.rootPath).toBe('/repos/bravo');
+      expect(updated.extraFolders).toEqual(['/repos/charlie']);
+    });
+
+    it('refuses to remove the last folder or a folder it does not hold', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      await expect(service.removeFolder(ws.id, '/repos/acme')).rejects.toMatchObject({
+        details: expect.objectContaining({ reason: 'last-folder' }),
+      });
+      await expect(service.removeFolder(ws.id, '/repos/bravo')).rejects.toMatchObject({ kind: 'not_found' });
+    });
+
+    it('renames, trimming, and rejects an empty name', async () => {
+      const { service } = setup();
+      const ws = await service.open('/repos/acme');
+      expect((await service.rename(ws.id, '  Platform ')).name).toBe('Platform');
+      await expect(service.rename(ws.id, '   ')).rejects.toMatchObject({ kind: 'validation' });
+    });
   });
 });

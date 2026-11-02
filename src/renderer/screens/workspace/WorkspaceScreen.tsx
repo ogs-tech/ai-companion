@@ -20,6 +20,7 @@ import { Icon } from '../../components/ds/Icon.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
+import type { ExplorerView } from '../../components/workspace/ExplorerRail.js';
 import { HomeOverview } from '../../components/workspace/overview/HomeOverview.js';
 import { WorkspaceOverview } from '../../components/workspace/overview/WorkspaceOverview.js';
 import { DiffView } from '../../components/workspace/git/DiffView.js';
@@ -62,6 +63,8 @@ import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } f
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
+import { NewSessionDialog } from '../../components/workspace/NewSessionDialog.js';
+import { useFolderRouting } from '../../hooks/use-folder-routing.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
 import {
   setShowHiddenFiles,
@@ -147,6 +150,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const { data: sessions } = useSessions();
   const { data: terminals } = useTerminals(activeWorkspace != null);
   const createTerminal = useCreateTerminal();
+  const folderRouting = useFolderRouting();
   const { data: healthReport } = useHealthReport('personal');
   const queryClient = useQueryClient();
   useEntityChangeInvalidation();
@@ -173,6 +177,7 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const explorerPanelRef = usePanelRef();
   const [explorerCollapsed, setExplorerCollapsed] = useState(false);
+  const [explorerView, setExplorerView] = useState<ExplorerView>('files');
   // Both side panels now share one collapse mechanism (resizable, collapses
   // to 0px) via SidePanel — the Control Panel used to be a fixed-width aside
   // with its own 40px icon-strip collapse mode; that's retired.
@@ -251,8 +256,13 @@ export function WorkspaceScreen(): React.ReactElement {
 
   const onEditLaunchJson = (): void => openFileTab('.vscode/launch.json');
 
-  const openTerminalIn = (relCwd: string): void =>
-    createTerminal.mutate({ ...(relCwd !== '' ? { relCwd } : {}) }, { onSuccess: openTerminalTab, onError: showError });
+  const openTerminalIn = (relPath: string): void => {
+    const { folder, rel } = folderRouting.split(relPath);
+    createTerminal.mutate(
+      { ...(rel !== '' ? { relCwd: rel } : {}), ...(folder !== undefined ? { folder } : {}) },
+      { onSuccess: openTerminalTab, onError: showError },
+    );
+  };
 
   // Ctrl+`: a shell at the workspace root.
   useEffect(() => {
@@ -569,7 +579,13 @@ export function WorkspaceScreen(): React.ReactElement {
   // resolution IPC round trip needed, unlike entities (see below).
   const newActionForFile = (relPath: string): void => {
     if (!activeWorkspace) return;
-    startNewActionSession({ kind: 'workspace', workspaceId: activeWorkspace.id }, relPath);
+    // Multi-folder: the session sees only the file's folder, so the draft path is relative to it.
+    const { folder, rel } = folderRouting.split(relPath);
+    if (folder === undefined) {
+      startNewActionSession({ kind: 'workspace', workspaceId: activeWorkspace.id }, relPath);
+      return;
+    }
+    startNewActionSession({ kind: 'workspace', workspaceId: activeWorkspace.id, folders: [folder] }, rel === '' ? '.' : rel);
   };
 
   const newActionForEntity = (kind: EntityKind, entity: Skill | Agent): void =>
@@ -624,16 +640,22 @@ export function WorkspaceScreen(): React.ReactElement {
 
   // The "+" in the Sessões panel header: always a fresh session (coexisting
   // with any already open for the same anchor) wherever the user currently is.
-  const handleNewSession = (): void => {
+  const spawnSession = (anchor: SessionAnchor): void => {
     void (async () => {
       try {
-        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor: currentAnchor });
+        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor });
         openSessionTab(session);
         void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
       } catch (err) {
         setToast({ variant: 'error', message: errorMessage(err) });
       }
     })();
+  };
+  // A multi-folder workspace asks which folders the session sees; otherwise it starts right away.
+  const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const handleNewSession = (): void => {
+    if (activeWorkspace && folderRouting.multi) setNewSessionOpen(true);
+    else spawnSession(currentAnchor);
   };
 
   // The imperative collapse()/expand() calls drive the real (pixel-measured)
@@ -673,6 +695,12 @@ export function WorkspaceScreen(): React.ReactElement {
     }
   };
 
+  // The rail's Início button: same discard guard as any context switch.
+  const goHome = (): void => {
+    if (!resetTabs()) return;
+    goHomeMutation.mutate(undefined, { onError: showError });
+  };
+
   const focusOverviewTab = (): void => setActiveTabId(OVERVIEW_TAB_ID);
 
   // The TopNav (switcher, panel toggles) and ⌘K live above this screen.
@@ -700,8 +728,9 @@ export function WorkspaceScreen(): React.ReactElement {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // "Ver alterações": expands the Explorer if it is collapsed — its tree carries the git state.
+  // "Ver alterações": opens the Explorer's Git view, expanding the panel if it is collapsed.
   const showGitView = (): void => {
+    setExplorerView('git');
     if (explorerCollapsed) toggleExplorerPanel();
   };
 
@@ -965,6 +994,7 @@ export function WorkspaceScreen(): React.ReactElement {
       onRemoved={(terminalId) => closeTab(`terminal:${terminalId}`)}
       onEditLaunchJson={onEditLaunchJson}
       onError={(message) => setToast({ variant: 'error', message })}
+      fill
     />
   ) : undefined;
 
@@ -1037,6 +1067,10 @@ export function WorkspaceScreen(): React.ReactElement {
               {...(terminalsSection !== undefined ? { terminalsSection } : {})}
               onOpenTerminalHere={openTerminalIn}
               onOpenGitDiff={openGitDiffTab}
+              onGoHome={goHome}
+              view={explorerView}
+              onViewChange={setExplorerView}
+              onCollapse={toggleExplorerPanel}
             />
           </SidePanel>
           <ResizeHandle />
@@ -1082,6 +1116,18 @@ export function WorkspaceScreen(): React.ReactElement {
         </Group>
       </Box>
 
+      {activeWorkspace && folderRouting.multi && (
+        <NewSessionDialog
+          open={newSessionOpen}
+          folders={folderRouting.folders}
+          aliases={folderRouting.aliases}
+          onCancel={() => setNewSessionOpen(false)}
+          onStart={(folders) => {
+            setNewSessionOpen(false);
+            spawnSession({ kind: 'workspace', workspaceId: activeWorkspace.id, folders });
+          }}
+        />
+      )}
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );

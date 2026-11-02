@@ -142,3 +142,50 @@ export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContext
     />
   );
 }
+
+interface TreeSubGroupProps {
+  testId: string;
+  glyph: LucideIcon;
+  label: string;
+  count: number;
+  /** Indent level of the header row — see `TreeGroup`'s `depth`. */
+  depth: number;
+  expanded: boolean;
+  onToggle: () => void;
+  /** Leads the label with a colour dot — a multi-folder workspace's folder identity. */
+  accent?: string;
+  children: React.ReactNode;
+}
+
+/**
+ * A collapsible sub-heading inside a `TreeGroup` — e.g. one plugin's skills.
+ * Controlled (`expanded`/`onToggle`) so the parent can persist the choice and
+ * force it open while a search is active.
+ */
+export function TreeSubGroup({ testId, glyph, label, count, depth, expanded, onToggle, accent, children }: TreeSubGroupProps): React.ReactElement {
+  return (
+    <>
+      <TreeRow
+        testId={`tree-subgroup-${testId}`}
+        pl={1.5 + depth * 2}
+        chevron={expanded ? 'expanded' : 'collapsed'}
+        glyph={glyph}
+        primary={
+          accent === undefined ? (
+            label
+          ) : (
+            <>
+              <Box component="span" data-testid={`origin-dot-${label}`} sx={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', bgcolor: accent, mr: 0.75 }} />
+              {label}
+            </>
+          )
+        }
+        onClick={onToggle}
+        badge={<Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>}
+      />
+      <Collapse in={expanded} unmountOnExit>
+        <List disablePadding>{children}</List>
+      </Collapse>
+    </>
+  );
+}

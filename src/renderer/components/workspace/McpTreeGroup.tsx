@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Box, Tooltip } from '@mui/material';
+import { Box, Tooltip, Typography } from '@mui/material';
 import { KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
 import { OriginMeta } from './OriginMeta.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
+import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { RowMenuButton } from './RowMenuButton.js';
 import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
@@ -30,6 +31,14 @@ function HealthDot({ server }: { server: McpServer }): React.ReactElement | null
   );
 }
 
+const MCP_SCOPE_LABEL: Record<McpServer['scope'], string> = {
+  global: 'usuário',
+  'project-local': 'projeto (local)',
+  'project-shared': 'projeto',
+  plugin: 'plugin',
+  detected: 'detectado',
+};
+
 function isLocal(server: McpServer, matchPath: string | undefined): boolean {
   if (matchPath === undefined) return true;
   return (server.scope === 'project-local' || server.scope === 'project-shared') && server.repoPath === matchPath;
@@ -53,9 +62,11 @@ interface McpTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Takes part in a cross-type origin view — see `OriginView`. */
+  view?: OriginView;
 }
 
-export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat = false, query = '', origin = 'all', onCount }: McpTreeGroupProps): React.ReactElement {
+export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat = false, query = '', origin = 'all', onCount, view }: McpTreeGroupProps): React.ReactElement {
   const { data } = useMcpList();
   const del = useDeleteMcp();
   const setEnabled = useSetMcpEnabled();
@@ -90,6 +101,9 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
     .filter((s) => matchesQuery(query, s.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   useReportCount(visible.length, onCount);
+  // Two servers with the same name differ only by where they are configured — say so on those rows.
+  const nameCounts = new Map<string, number>();
+  for (const s of visible) if (s.source.kind !== 'plugin') nameCounts.set(s.name, (nameCounts.get(s.name) ?? 0) + 1);
 
   return (
     <>
@@ -102,33 +116,49 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
         onCreate={() => setEditor({ mode: 'create' })}
         createLabel="Novo servidor MCP"
       >
-        {visible.map((server) => {
-          const global = !isLocal(server, matchPath);
-          const isDisabled = server.source.kind === 'workspace' && !server.enabled;
-          return (
-            <TreeGroupRow
-              key={server.id}
-              testId={`tree-mcp-${server.id}`}
-              glyph={Plug}
-              mono
-              accentColor={ENTITY_ACCENT_COLOR.mcp}
-              muted={isDisabled || global}
-              primary={server.name}
-              onContextMenu={(e) => rowMenu.openMenu(e, server)}
-              badge={
-                <>
-                  <HealthDot server={server} />
-                  <OriginMeta {...(server.source.kind === 'plugin' ? { pluginId: server.source.pluginId } : {})} inherited={global} />
-                </>
-              }
-              actions={
-                rowMenuActionsFor(server) ? (
-                  <RowMenuButton testId={`tree-mcp-menu-${server.id}`} label={`Ações de ${server.name}`} onOpen={(e) => rowMenu.openMenu(e, server)} />
-                ) : undefined
-              }
-            />
-          );
-        })}
+        <OriginGroups
+          glyph={Plug}
+          items={visible}
+          storageScope={`${matchPath ?? 'home'}:mcp`}
+          testId="mcp"
+          forceOpen={query.trim() !== ''}
+          depth={flat ? 0 : 1}
+          plainDepth={0}
+          {...(view ? { view } : {})}
+          renderRow={(server, depth) => {
+            const global = !isLocal(server, matchPath);
+            const isDisabled = server.source.kind === 'workspace' && !server.enabled;
+            return (
+              <TreeGroupRow
+                key={server.id}
+                testId={`tree-mcp-${server.id}`}
+                glyph={Plug}
+                mono
+                depth={depth}
+                accentColor={ENTITY_ACCENT_COLOR.mcp}
+                muted={isDisabled || global}
+                primary={server.name}
+                onContextMenu={(e) => rowMenu.openMenu(e, server)}
+                badge={
+                  <>
+                    {server.source.kind !== 'plugin' && (nameCounts.get(server.name) ?? 0) > 1 && (
+                      <Typography component="span" data-testid={`tree-mcp-scope-${server.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+                        {MCP_SCOPE_LABEL[server.scope]}
+                      </Typography>
+                    )}
+                    <HealthDot server={server} />
+                    <OriginMeta {...(server.source.kind === 'plugin' ? { pluginId: server.source.pluginId } : {})} />
+                  </>
+                }
+                actions={
+                  rowMenuActionsFor(server) ? (
+                    <RowMenuButton testId={`tree-mcp-menu-${server.id}`} label={`Ações de ${server.name}`} onOpen={(e) => rowMenu.openMenu(e, server)} />
+                  ) : undefined
+                }
+              />
+            );
+          }}
+        />
       </TreeGroup>
 
       {editor !== null && (

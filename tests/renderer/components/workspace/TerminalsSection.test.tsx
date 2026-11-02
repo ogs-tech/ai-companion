@@ -6,7 +6,7 @@ import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js'
 import type { TerminalSnapshot } from '../../../../src/shared/terminal.js';
 
 const term = (over: Partial<TerminalSnapshot>): TerminalSnapshot => ({
-  terminalId: 't1', workspaceId: 'w1', kind: 'shell', name: 'zsh', relCwd: '', status: 'running', exitCode: null, generation: 0, ...over,
+  terminalId: 't1', workspaceId: 'w1', folder: '/repos/acme', kind: 'shell', name: 'zsh', relCwd: '', status: 'running', exitCode: null, generation: 0, ...over,
 });
 
 let call: CallSpy;

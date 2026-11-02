@@ -85,7 +85,7 @@ export class EntityService {
     const removeReport: SyncResult[] = [];
     if (previous !== undefined && (isRename || previous.scopes[0] !== saved.scopes[0])) {
       removeReport.push(...(await this.adapterManager.removeEntity({ entity: previous })));
-      await this.repository.storeFor(previous.scopes[0]).repository.delete(previous.urn);
+      await this.repository.storeFor(previous.scopes[0], previous.folder).repository.delete(previous.urn);
     }
 
     const syncReport = await this.adapterManager.syncEntity({ entity: saved });

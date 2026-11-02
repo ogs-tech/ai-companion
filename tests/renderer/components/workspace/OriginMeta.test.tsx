@@ -8,12 +8,7 @@ describe('OriginMeta', () => {
     expect(screen.getByTestId('origin-meta-superpowers@claude-plugins-official')).toHaveTextContent(/^superpowers$/);
   });
 
-  it('labels an inherited Global item "global"', () => {
-    render(<OriginMeta inherited />);
-    expect(screen.getByTestId('origin-meta-global')).toHaveTextContent('global');
-  });
-
-  it('renders nothing for the user\'s own in-scope item', () => {
+  it('renders nothing for the user\'s own item', () => {
     const { container } = render(<OriginMeta />);
     expect(container).toBeEmptyDOMElement();
   });

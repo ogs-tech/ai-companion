@@ -1,5 +1,6 @@
 import type { RepoGitPort } from '../ports/repo-git-port.js';
 import type { Workspace } from '../../../shared/workspace.js';
+import { resolveFolder } from '../resolve-folder.js';
 import { createTaskQueue, type TaskQueue } from '../task-queue.js';
 import { DomainError } from '../../domain/errors.js';
 import { GitConflictError, NotARepositoryError } from '../../domain/git-errors.js';
@@ -16,7 +17,7 @@ import { syncActionFor } from '../../../shared/git.js';
 
 export interface GitServiceDeps {
   /** The workspace this graph was built for — `null` at Início, where every call fails `validation`. */
-  activeWorkspace: Pick<Workspace, 'rootPath'> | null;
+  activeWorkspace: Pick<Workspace, 'rootPath' | 'extraFolders'> | null;
 }
 
 /**
@@ -31,37 +32,37 @@ export class GitService {
     private readonly deps: GitServiceDeps,
   ) {}
 
-  async status(): Promise<GitStatus> {
-    return this.port.status(this.resolveRoot());
+  async status(folder?: string): Promise<GitStatus> {
+    return this.port.status(this.resolveRoot(folder));
   }
 
-  async diff(path: string, source: GitDiffSource): Promise<GitFileDiff> {
+  async diff(path: string, source: GitDiffSource, folder?: string): Promise<GitFileDiff> {
     assertRepoPath(path);
     if (source.kind === 'commit') {
       throw new DomainError('validation', "Diff source 'commit' is not supported yet");
     }
-    const root = await this.resolveRepo();
+    const root = await this.resolveRepo(folder);
     return this.port.diff(root, path, source.kind);
   }
 
-  async stage(paths: string[]): Promise<void> {
+  async stage(paths: string[], folder?: string): Promise<void> {
     assertRepoPaths(paths);
-    await this.mutate((root) => this.port.stage(root, paths));
+    await this.mutate(folder, (root) => this.port.stage(root, paths));
   }
 
-  async unstage(paths: string[]): Promise<void> {
+  async unstage(paths: string[], folder?: string): Promise<void> {
     assertRepoPaths(paths);
-    await this.mutate((root) => this.port.unstage(root, paths));
+    await this.mutate(folder, (root) => this.port.unstage(root, paths));
   }
 
-  async discard(paths: string[]): Promise<void> {
+  async discard(paths: string[], folder?: string): Promise<void> {
     assertRepoPaths(paths);
-    await this.mutate((root) => this.port.discard(root, paths));
+    await this.mutate(folder, (root) => this.port.discard(root, paths));
   }
 
-  async commit(message: string, amend: boolean): Promise<GitCommitResult> {
+  async commit(message: string, amend: boolean, folder?: string): Promise<GitCommitResult> {
     if (message.trim().length === 0) throw new DomainError('validation', 'Commit message is empty');
-    return this.mutate(async (root) => {
+    return this.mutate(folder, async (root) => {
       if (!amend) {
         const status = await this.port.status(root);
         const staged = status.isRepo && status.files.some(isStaged);
@@ -72,22 +73,22 @@ export class GitService {
   }
 
   /** Pushes the branch; publishes it (`--set-upstream`) when it has no upstream yet. */
-  async push(): Promise<void> {
-    await this.mutate(async (root) => {
+  async push(folder?: string): Promise<void> {
+    await this.mutate(folder, async (root) => {
       const head = await this.syncableHead(root);
       await this.port.push(root, { setUpstream: head.upstream === undefined });
     });
   }
 
-  async pull(): Promise<void> {
-    await this.mutate(async (root) => {
+  async pull(folder?: string): Promise<void> {
+    await this.mutate(folder, async (root) => {
       await this.requireUpstream(await this.syncableHead(root));
       await this.port.pull(root);
     });
   }
 
-  async fetch(): Promise<void> {
-    await this.mutate(async (root) => {
+  async fetch(folder?: string): Promise<void> {
+    await this.mutate(folder, async (root) => {
       await this.syncableHead(root);
       await this.port.fetch(root);
     });
@@ -98,8 +99,8 @@ export class GitService {
    * state. Diverged branches pull `--ff-only` first and never create a merge;
    * a failure names the half (pull or push) that failed.
    */
-  async sync(): Promise<GitSyncResult> {
-    return this.mutate(async (root) => {
+  async sync(folder?: string): Promise<GitSyncResult> {
+    return this.mutate(folder, async (root) => {
       const status = await this.port.status(root);
       const action = syncActionFor(status);
       if (action === 'none') throw new DomainError('validation', unsyncableReason(status));
@@ -125,8 +126,8 @@ export class GitService {
     });
   }
 
-  async init(): Promise<void> {
-    const root = this.resolveRoot();
+  async init(folder?: string): Promise<void> {
+    const root = this.resolveRoot(folder);
     await this.queueFor(root)(async () => {
       if (await this.port.isRepo(root)) {
         throw new GitConflictError(`Already a git repository: ${root}`);
@@ -135,8 +136,8 @@ export class GitService {
     });
   }
 
-  private async mutate<T>(task: (root: string) => Promise<T>): Promise<T> {
-    const root = await this.resolveRepo();
+  private async mutate<T>(folder: string | undefined, task: (root: string) => Promise<T>): Promise<T> {
+    const root = await this.resolveRepo(folder);
     return this.queueFor(root)(() => task(root));
   }
 
@@ -167,16 +168,16 @@ export class GitService {
   }
 
   /** Like {@link resolveRoot}, but the target must be a repository (`not_found` otherwise). */
-  private async resolveRepo(): Promise<string> {
-    const root = this.resolveRoot();
+  private async resolveRepo(folder?: string): Promise<string> {
+    const root = this.resolveRoot(folder);
     if (!(await this.port.isRepo(root))) throw new NotARepositoryError(root);
     return root;
   }
 
-  private resolveRoot(): string {
+  private resolveRoot(folder?: string): string {
     const workspace = this.deps.activeWorkspace;
     if (workspace === null) throw new DomainError('validation', 'No workspace is open — git needs one');
-    return workspace.rootPath;
+    return resolveFolder(workspace, folder);
   }
 }
 

@@ -120,4 +120,44 @@ describe('FileBrowserService', () => {
       expect(await new FileBrowserService(flaky, ROOT).listFolders()).toEqual(['apps']);
     });
   });
+
+  describe('multi-folder (virtual root)', () => {
+    const FOLDERS = ['/repos/web', '/repos/api', '/other/web'];
+    const multi = (port = fakePort()) => ({ port, service: new FileBrowserService(port, FOLDERS[0] as string, FOLDERS) });
+
+    it('lists one directory per folder at the root, named by alias', async () => {
+      const { service } = multi();
+      expect(await service.listDir('')).toEqual([
+        { name: 'web', kind: 'dir' },
+        { name: 'api', kind: 'dir' },
+        { name: 'web-2', kind: 'dir' },
+      ]);
+    });
+
+    it('routes the first path segment to its folder', async () => {
+      const { port, service } = multi();
+      await service.listDir('api/src');
+      await service.readFile('web-2/a.txt');
+      expect(port.listDir).toHaveBeenCalledWith('/repos/api/src', { showHidden: false });
+      expect(port.readFile).toHaveBeenCalledWith('/other/web/a.txt');
+    });
+
+    it('resolves absolute paths and prefixes folder listings', async () => {
+      const { service } = multi(fakePort({ listDir: vi.fn().mockResolvedValue([{ name: 'sub', kind: 'dir' }]) }));
+      expect(await service.resolveAbsolutePath('api/x.ts')).toBe('/repos/api/x.ts');
+      expect(await service.listFolders()).toContain('api/sub');
+      expect(await service.listFolders()).toContain('api');
+    });
+
+    it('rejects an unknown folder alias and still blocks escapes', async () => {
+      const { service } = multi();
+      await expect(service.listDir('nope')).rejects.toMatchObject({ kind: 'not_found' });
+      await expect(service.listDir('api/../web')).rejects.toBeInstanceOf(DomainError);
+    });
+
+    it('forFolder refuses a folder outside the workspace', () => {
+      const { service } = multi();
+      expect(() => service.forFolder('/elsewhere')).toThrow(/not a folder/);
+    });
+  });
 });

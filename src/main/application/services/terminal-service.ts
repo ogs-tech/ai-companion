@@ -8,6 +8,8 @@ import type {
   TerminalSnapshotWithOutput,
 } from '../../../shared/terminal.js';
 import type { Workspace } from '../../../shared/workspace.js';
+import { WORKSPACE_ROOT_FOLDER } from '../../../shared/terminal.js';
+import { resolveFolder } from '../resolve-folder.js';
 import type { TerminalPort, TerminalSpawnOptions } from '../ports/terminal-port.js';
 import type { LaunchConfigService } from './launch-config-service.js';
 import { appendToScrollback, DEFAULT_MAX_SCROLLBACK_CHARS } from '../scrollback-buffer.js';
@@ -38,14 +40,17 @@ export class TerminalService {
   private readonly exitListeners: TerminalExitListener[] = [];
   private readonly maxBufferChars: number;
   private readonly shell: string;
+  /** A multi-folder workspace's own directory under Global — the "raiz do workspace" a shell may also open in. */
+  private readonly workspaceHome: string | undefined;
 
   constructor(
     /** `null` at Início — terminals need a working directory. */
-    private readonly activeWorkspace: Pick<Workspace, 'id' | 'rootPath'> | null,
+    private readonly activeWorkspace: Pick<Workspace, 'id' | 'rootPath' | 'extraFolders'> | null,
     private readonly launchConfigService: Pick<LaunchConfigService, 'getConfig'>,
     private readonly port: TerminalPort,
-    options?: { maxBufferChars?: number; shell?: string },
+    options?: { maxBufferChars?: number; shell?: string; workspaceHome?: string },
   ) {
+    this.workspaceHome = options?.workspaceHome;
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
     this.shell = options?.shell ?? process.env['SHELL'] ?? (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash');
     this.port.onData((terminalId, chunk) => {
@@ -64,7 +69,14 @@ export class TerminalService {
     });
   }
 
-  private requireWorkspace(): Pick<Workspace, 'id' | 'rootPath'> {
+  private requireWorkspaceHome(): string {
+    if (this.workspaceHome === undefined) {
+      throw new DomainError('validation', 'Only a multi-folder workspace has its own directory', { reason: 'no-workspace-home' });
+    }
+    return this.workspaceHome;
+  }
+
+  private requireWorkspace(): Pick<Workspace, 'id' | 'rootPath' | 'extraFolders'> {
     if (this.activeWorkspace === null) throw new DomainError('validation', 'No workspace is open — terminals need one');
     return this.activeWorkspace;
   }
@@ -81,6 +93,7 @@ export class TerminalService {
 
   private async start(
     workspaceId: string,
+    folder: string,
     kind: TerminalKind,
     name: string,
     relCwd: string,
@@ -88,7 +101,7 @@ export class TerminalService {
   ): Promise<TerminalSnapshot> {
     const terminalId = randomUUID();
     const snapshot: TerminalSnapshot = {
-      terminalId, workspaceId, kind, name, relCwd, status: 'running', exitCode: null, generation: 0,
+      terminalId, workspaceId, folder, kind, name, relCwd, status: 'running', exitCode: null, generation: 0,
     };
     const entry: TerminalEntry = { snapshot, spawn, buffer: [] };
     this.terminals.set(terminalId, entry);
@@ -105,21 +118,22 @@ export class TerminalService {
   }
 
   /** An interactive login shell in `relCwd` (workspace-relative; the root when omitted). */
-  async createShell(relCwd = ''): Promise<TerminalSnapshot> {
+  async createShell(relCwd = '', folder?: string): Promise<TerminalSnapshot> {
     const workspace = this.requireWorkspace();
-    const { absolute, relative } = this.resolveCwd(workspace.rootPath, relCwd);
+    const root = folder === WORKSPACE_ROOT_FOLDER ? this.requireWorkspaceHome() : resolveFolder(workspace, folder);
+    const { absolute, relative } = this.resolveCwd(root, relCwd);
     const args = process.platform === 'win32' ? [] : ['-l'];
-    return this.start(workspace.id, 'shell', path.basename(this.shell), relative, {
+    return this.start(workspace.id, root, 'shell', path.basename(this.shell), relative, {
       command: this.shell, args, cwd: absolute,
     });
   }
 
   /** A terminal running a `launch.json` configuration's resolved command directly (no shell, so exit codes stay accurate). Two runs of one configuration are two terminals. */
-  async runLaunch(configName: string): Promise<TerminalSnapshot> {
-    const { config, workspaceId, rootPath } = await this.launchConfigService.getConfig(configName);
+  async runLaunch(configName: string, folder?: string): Promise<TerminalSnapshot> {
+    const { config, workspaceId, rootPath } = await this.launchConfigService.getConfig(configName, folder);
     const resolved = resolveLaunchCommand(config, rootPath);
     const relative = path.relative(rootPath, resolved.cwd).split(path.sep).join('/');
-    return this.start(workspaceId, 'launch', configName, relative, {
+    return this.start(workspaceId, rootPath, 'launch', configName, relative, {
       command: resolved.command,
       args: resolved.args,
       cwd: resolved.cwd,

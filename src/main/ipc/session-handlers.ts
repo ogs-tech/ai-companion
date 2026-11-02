@@ -1,7 +1,7 @@
 import type { IpcHandlers } from './dispatcher.js';
 import type { SessionService } from '../application/services/session-service.js';
 import type { SessionAnchor } from '../../shared/session.js';
-import { asObject, asString } from './_validators.js';
+import { asObject, asString, asStringArray } from './_validators.js';
 import { DomainError } from '../domain/errors.js';
 
 function asRawString(value: unknown, field: string): string {
@@ -22,7 +22,10 @@ function asSessionAnchor(value: unknown, field: string): SessionAnchor {
   const obj = asObject(value, field);
   if (obj['kind'] === 'entity') return { kind: 'entity', urn: asString(obj['urn'], `${field}.urn`) };
   if (obj['kind'] === 'workspace') {
-    return { kind: 'workspace', workspaceId: asString(obj['workspaceId'], `${field}.workspaceId`) };
+    const workspaceId = asString(obj['workspaceId'], `${field}.workspaceId`);
+    return obj['folders'] === undefined
+      ? { kind: 'workspace', workspaceId }
+      : { kind: 'workspace', workspaceId, folders: asStringArray(obj['folders'], `${field}.folders`) };
   }
   if (obj['kind'] === 'personal') return { kind: 'personal' };
   throw new DomainError(

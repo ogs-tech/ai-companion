@@ -30,3 +30,12 @@ const INDEX_MARKER_FILE = 'index.md';
 export function workspaceIndexMarkerPath(dataDir: string): string {
   return `${dataDir}/${INDEX_MARKER_FILE}`;
 }
+
+/**
+ * A workspace's own directory under Global's data dir: the home of its shared
+ * customizations (materialized into its `.claude/`) and of the helper
+ * directories multi-folder sessions run from. Never inside the user's folders.
+ */
+export function workspaceHomePath(home: string, workspaceId: string): string {
+  return `${workspacePath(home)}/workspaces/${workspaceId}`;
+}

@@ -13,7 +13,7 @@ export interface ClaudeAdapterDeps {
 export class ClaudeAdapter implements Adapter {
   readonly adapterId = 'claude';
   private readonly homedir: string;
-  private readonly scopeDeps: Pick<ClaudeAdapterDeps, 'workspaceService'>;
+  private readonly scopeDeps: Pick<ClaudeAdapterDeps, 'workspaceService' | 'homedir'>;
 
   constructor(deps: ClaudeAdapterDeps) {
     if (deps.homedir === undefined || deps.homedir === null || deps.homedir === '') {
@@ -24,7 +24,7 @@ export class ClaudeAdapter implements Adapter {
       );
     }
     this.homedir = deps.homedir;
-    this.scopeDeps = { workspaceService: deps.workspaceService };
+    this.scopeDeps = { workspaceService: deps.workspaceService, homedir: deps.homedir };
   }
 
   async resolveEntityDestinations(args: { entity: Entity }): Promise<AdapterDestination[]> {

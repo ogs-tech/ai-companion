@@ -55,7 +55,8 @@ describe('EntityTreeGroup', () => {
       renderInherited();
       await user.click(await screen.findByTestId('tree-group-inherited-skill'));
       expect(await screen.findByTestId('tree-inherited-skill-personal-skill')).toBeInTheDocument();
-      expect(screen.getByTestId('tree-inherited-skill-plugin-skill')).toBeInTheDocument();
+      await user.click(screen.getByTestId('tree-subgroup-inherited-skill-acme'));
+      expect(await screen.findByTestId('tree-inherited-skill-plugin-skill')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-inherited-skill-workspace-skill')).not.toBeInTheDocument();
     });
 
@@ -84,6 +85,7 @@ describe('EntityTreeGroup', () => {
     await user.click(await screen.findByTestId('tree-group-skill'));
     expect(await screen.findByTestId('tree-skill-workspace-skill')).toBeInTheDocument();
     expect(await screen.findByTestId('tree-skill-personal-skill')).toBeInTheDocument();
+    await user.click(await screen.findByTestId('tree-subgroup-skill-acme'));
     expect(await screen.findByTestId('tree-skill-plugin-skill')).toBeInTheDocument();
   });
 
@@ -156,6 +158,7 @@ describe('EntityTreeGroup', () => {
     const onEdit = vi.fn();
     renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={onEdit} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
+    await user.click(await screen.findByTestId('tree-subgroup-skill-acme'));
     await screen.findByTestId('tree-skill-plugin-skill');
     expect(screen.queryByTestId('tree-skill-delete-plugin-skill')).not.toBeInTheDocument();
     await user.click(screen.getByTestId('tree-skill-plugin-skill'));
@@ -172,5 +175,51 @@ describe('EntityTreeGroup', () => {
     const item = await screen.findByTestId('row-context-menu-new-action');
     fireEvent.click(item);
     expect(onNewAction).toHaveBeenCalledWith('skill', expect.objectContaining({ name: 'personal-skill' }));
+  });
+
+  describe('grouping by origin', () => {
+    const mine = skill({ name: 'my-skill' });
+    const acmeA = skill({ name: 'acme-a', source: { kind: 'plugin', pluginId: 'acme@market', provenance: 'workspace-managed' } });
+    const acmeB = skill({ name: 'acme-b', source: { kind: 'plugin', pluginId: 'acme@market', provenance: 'workspace-managed' } });
+    const zeta = skill({ name: 'zeta-a', source: { kind: 'plugin', pluginId: 'zeta@market', provenance: 'workspace-managed' } });
+
+    beforeEach(() => {
+      localStorage.clear();
+      call.mockImplementation(async (method: string) => (method === 'skill.list' ? ok([zeta, acmeB, mine, acmeA]) : ok(undefined)));
+    });
+
+    it('opens "Meus" and keeps each plugin collapsed, with counts', async () => {
+      const user = userEvent.setup();
+      renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={vi.fn()} />);
+      await user.click(await screen.findByTestId('tree-group-skill'));
+      expect(await screen.findByTestId('tree-skill-my-skill')).toBeInTheDocument();
+      expect(within(screen.getByTestId('tree-subgroup-skill-acme@market')).getByText('2')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-skill-acme-a')).not.toBeInTheDocument();
+      const headers = screen.getAllByTestId(/^tree-subgroup-skill-/).map((el) => el.getAttribute('data-testid'));
+      expect(headers).toEqual(['tree-subgroup-skill-mine', 'tree-subgroup-skill-acme@market', 'tree-subgroup-skill-zeta@market']);
+    });
+
+    it('expands a plugin on click and remembers it across remounts', async () => {
+      const user = userEvent.setup();
+      const first = renderWithShell(<EntityTreeGroup kind="skill" label="Skills" flat onEdit={vi.fn()} />);
+      await user.click(await screen.findByTestId('tree-subgroup-skill-acme@market'));
+      expect(await screen.findByTestId('tree-skill-acme-a')).toBeInTheDocument();
+      first.unmount();
+      renderWithShell(<EntityTreeGroup kind="skill" label="Skills" flat onEdit={vi.fn()} />);
+      expect(await screen.findByTestId('tree-skill-acme-a')).toBeInTheDocument();
+    });
+
+    it('force-opens plugin groups while searching', async () => {
+      renderWithShell(<EntityTreeGroup kind="skill" label="Skills" flat query="zeta" onEdit={vi.fn()} />);
+      expect(await screen.findByTestId('tree-skill-zeta-a')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-subgroup-skill-acme@market')).not.toBeInTheDocument();
+    });
+
+    it('stays a plain list when there are no plugin items', async () => {
+      call.mockImplementation(async (method: string) => (method === 'skill.list' ? ok([mine]) : ok(undefined)));
+      renderWithShell(<EntityTreeGroup kind="skill" label="Skills" flat onEdit={vi.fn()} />);
+      expect(await screen.findByTestId('tree-skill-my-skill')).toBeInTheDocument();
+      expect(screen.queryByTestId(/^tree-subgroup-/)).not.toBeInTheDocument();
+    });
   });
 });

@@ -35,6 +35,13 @@ export interface Entity {
   description: string;
   scopes: Scope[];
   scopeId?: string;
+  /**
+   * Multi-folder workspaces only: the workspace folder (absolute path) a
+   * `workspace`-scoped entity lives in. Absent = the workspace's shared set (or
+   * any entity of a single-folder workspace). Derived from where the file is
+   * stored, never written to disk.
+   */
+  folder?: string;
   metadata: EntityMetadata;
   source: EntitySource;
   ext?: Record<string, unknown>;

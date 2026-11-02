@@ -7,6 +7,10 @@ import type { ClaudeConversationTarget, ClaudeSessionPort } from '../ports/claud
 import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { Workspace } from '../../../shared/workspace.js';
+import { workspaceFolders } from '../../../shared/workspace.js';
+import { workspaceHomePath } from '../../../shared/brand-paths.js';
+import { prepareMultiFolderCwd } from '../session-folders.js';
+import type { FileSystemPort } from '../ports/filesystem-port.js';
 import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
 import { appendToScrollback, DEFAULT_MAX_SCROLLBACK_CHARS } from '../scrollback-buffer.js';
@@ -75,7 +79,8 @@ export class SessionService {
       activeWorkspace: Workspace | null;
       homedir: string;
     },
-    private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'>,
+    private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'> &
+      Pick<FileSystemPort, 'lstat' | 'readlink' | 'symlink'>,
     options?: { maxBufferChars?: number },
   ) {
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
@@ -422,7 +427,14 @@ export class SessionService {
   private async resolveAnchor(anchor: SessionAnchor): Promise<{ cwd: string; label: string }> {
     if (anchor.kind === 'workspace') {
       const workspace = await this.scopeDeps.workspaceService.get(anchor.workspaceId);
-      return { cwd: workspace.rootPath, label: workspace.name };
+      const known = workspaceFolders(workspace);
+      const picked = anchor.folders ?? [workspace.rootPath];
+      if (picked.length === 0 || picked.some((f) => !known.includes(f))) {
+        throw new DomainError('validation', 'A session needs at least one folder of the workspace', { reason: 'unknown-folder' });
+      }
+      if (picked.length === 1) return { cwd: picked[0] as string, label: workspace.name };
+      const home = workspaceHomePath(this.scopeDeps.homedir, workspace.id);
+      return { cwd: await prepareMultiFolderCwd(this.fs, home, picked), label: workspace.name };
     }
     if (anchor.kind === 'personal') {
       return { cwd: this.scopeDeps.homedir, label: 'Início' };
@@ -434,7 +446,8 @@ export class SessionService {
 
   private anchorForCwd(cwd: string): SessionAnchor {
     const workspace = this.scopeDeps.activeWorkspace;
-    if (workspace !== null && (cwd === workspace.rootPath || cwd.startsWith(workspace.rootPath + sep))) {
+    const roots = workspace === null ? [] : [...workspaceFolders(workspace), workspaceHomePath(this.scopeDeps.homedir, workspace.id)];
+    if (workspace !== null && roots.some((root) => cwd === root || cwd.startsWith(root + sep))) {
       return { kind: 'workspace', workspaceId: workspace.id };
     }
     return { kind: 'personal' };

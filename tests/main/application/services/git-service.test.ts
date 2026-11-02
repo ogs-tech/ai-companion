@@ -232,4 +232,36 @@ describe('GitService', () => {
       expect(ops()).toEqual(['pull', 'push']);
     });
   });
+
+  describe('multi-folder', () => {
+    const workspace = { rootPath: '/ws', extraFolders: ['/ws2'] };
+    const multi = () => {
+      const port = new FakeRepoGitPort();
+      port.repos.add('/ws');
+      port.repos.add('/ws2');
+      return { port, service: new GitService(port, { activeWorkspace: workspace }) };
+    };
+
+    it('targets the named folder, and the primary when none is named', async () => {
+      const { port, service } = multi();
+      await service.status('/ws2');
+      await service.status();
+      expect(port.calls).toEqual([
+        { op: 'status', root: '/ws2' },
+        { op: 'status', root: '/ws' },
+      ]);
+    });
+
+    it('refuses a folder that is not part of the workspace', async () => {
+      const { service } = multi();
+      await expect(service.status('/elsewhere')).rejects.toMatchObject({ kind: 'validation' });
+      await expect(service.stage(['a.ts'], '/elsewhere')).rejects.toMatchObject({ kind: 'validation' });
+    });
+
+    it('stages in the folder it was asked for', async () => {
+      const { port, service } = multi();
+      await service.stage(['a.ts'], '/ws2');
+      expect(port.calls.some((c) => c.op === 'stage' && c.root === '/ws2')).toBe(true);
+    });
+  });
 });

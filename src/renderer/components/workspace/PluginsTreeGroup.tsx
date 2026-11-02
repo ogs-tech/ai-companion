@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Box, Menu, MenuItem, Tooltip } from '@mui/material';
 import { AlertTriangle, Puzzle } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { OriginMeta } from './OriginMeta.js';
 import { DetailDrawer } from '../DetailDrawer.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { RowMenuButton } from './RowMenuButton.js';
@@ -27,12 +26,16 @@ interface PluginsTreeGroupProps {
   onlyGlobal?: boolean;
   /** Rows only, no group header — see `TreeGroup`'s `flat`. */
   flat?: boolean;
+  /** Row indent level — see `TreeGroup`'s `depth`. */
+  depth?: number;
   /** Keeps only plugins whose id contains this text. */
   query?: string;
   /** Owned plugins count as the user's own; imported ones as plugin-provided. Defaults to both. */
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Renders nothing and only reports the count, so it keeps flowing while the rows' group is collapsed or hidden. */
+  countOnly?: boolean;
 }
 
 type RowMenu = { anchorEl: HTMLElement; item: PluginListItemIpc };
@@ -46,7 +49,7 @@ function errorMessage(err: unknown): string {
   return err instanceof IpcCallError ? err.message : String(err);
 }
 
-export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = false, flat = false, query = '', origin = 'all', onCount }: PluginsTreeGroupProps): React.ReactElement {
+export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = false, flat = false, depth = 0, query = '', origin = 'all', onCount, countOnly = false }: PluginsTreeGroupProps): React.ReactElement {
   const qc = useQueryClient();
   const personal = usePluginList('personal');
   const project = usePluginList('project', Boolean(isProjectContext));
@@ -74,6 +77,8 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
   useReportCount(visible.length, onCount);
   const importScope: PluginScope = isProjectContext ? 'project' : 'personal';
 
+  if (countOnly) return <></>;
+
   const closeRowMenu = (): void => setRowMenu(null);
 
   const handleRemove = (item: PluginListItemIpc): void => {
@@ -100,6 +105,7 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
               key={item.id}
               testId={`tree-plugin-${item.id}`}
               glyph={Puzzle}
+              depth={depth}
               mono
               accentColor={ENTITY_ACCENT_COLOR.plugin}
               muted={!item.enabled || global}
@@ -118,7 +124,6 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
                       </Box>
                     </Tooltip>
                   )}
-                  {global && <OriginMeta inherited />}
                 </>
               }
               actions={

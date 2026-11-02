@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExplorerPanelContent } from '../../../../src/renderer/components/workspace/ExplorerPanelContent.js';
 import { fail, mockApi, ok, renderWithQuery, type CallSpy } from '../../test-utils.js';
@@ -41,9 +41,11 @@ function route(overrides: Partial<Record<string, unknown>> = {}): void {
   });
 }
 
-function renderPanel(isHome = false) {
+function renderPanel(isHome = false, view: 'files' | 'git' | 'terminals' = 'files') {
   const onOpenGitDiff = vi.fn();
   const onSelectFile = vi.fn();
+  const onGoHome = vi.fn();
+  const onCollapse = vi.fn();
   renderWithQuery(
     <ExplorerPanelContent
       activeWorkspace={isHome ? null : workspace}
@@ -56,9 +58,13 @@ function renderPanel(isHome = false) {
       onPreviewFile={vi.fn()}
       onNewAction={vi.fn()}
       onOpenGitDiff={onOpenGitDiff}
+      onGoHome={onGoHome}
+      onCollapse={onCollapse}
+      terminalsSection={<div data-testid="terminals-body" />}
     />,
   );
-  return { onOpenGitDiff, onSelectFile };
+  if (view !== 'files') fireEvent.click(screen.getByTestId(`explorer-view-${view}`));
+  return { onOpenGitDiff, onSelectFile, onGoHome, onCollapse };
 }
 
 beforeEach(() => {
@@ -68,15 +74,54 @@ beforeEach(() => {
 });
 
 describe('ExplorerPanelContent', () => {
-  it('has no Arquivos | Git toggle in a workspace and never queries git at Início', async () => {
+  it('never queries git at Início, where only the Início rail button is active', async () => {
     renderPanel(true);
     expect(await screen.findByTestId('app-rows')).toBeInTheDocument();
-    expect(screen.queryByTestId('explorer-view-git')).not.toBeInTheDocument();
     expect(call).not.toHaveBeenCalledWith('git.status', expect.anything());
+    expect(screen.getByTestId('explorer-view-home')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('explorer-view-files')).toBeDisabled();
+    expect(screen.getByTestId('explorer-view-git')).toBeDisabled();
+    expect(screen.getByTestId('explorer-view-terminals')).toBeDisabled();
+  });
 
-    renderPanel();
+  it('starts on Arquivos, switches views from the rail, and keeps git out of the file view', async () => {
+    const { onGoHome, onCollapse } = renderPanel();
+    expect(await screen.findByText('b.md')).toBeInTheDocument();
+    expect(screen.getByTestId('explorer-view-files')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('explorer-toolbar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('terminals-body')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('explorer-view-git'));
     expect(await screen.findByTestId('git-head')).toBeInTheDocument();
-    expect(screen.queryByTestId('explorer-view-files')).not.toBeInTheDocument();
+    expect(screen.queryByText('b.md')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('explorer-view-terminals'));
+    expect(await screen.findByTestId('terminals-body')).toBeInTheDocument();
+    expect(screen.queryByTestId('explorer-toolbar')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('explorer-view-home'));
+    expect(onGoHome).toHaveBeenCalledTimes(1);
+    expect(onCollapse).not.toHaveBeenCalled();
+  });
+
+  it('collapses the panel when the active rail icon is clicked again', async () => {
+    const { onCollapse } = renderPanel(false, 'git');
+    await screen.findByTestId('git-head');
+    await userEvent.click(screen.getByTestId('explorer-view-git'));
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+  });
+
+  it('badges Git with the changed files and dims it outside a repository', async () => {
+    route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified'), file('b.md', 'unmodified', 'modified')])) });
+    renderPanel();
+    await waitFor(() => expect(screen.getByTestId('explorer-view-git-count')).toHaveTextContent('2'));
+  });
+
+  it('keeps the Git icon clickable without a repository so it can offer git init', async () => {
+    route({ 'git.status': ok({ isRepo: false }) });
+    renderPanel();
+    await screen.findByText('b.md');
+    expect(screen.getByTestId('explorer-view-git')).not.toBeDisabled();
   });
 
   it('decorates files and parent folders, and opens the file on click', async () => {
@@ -137,22 +182,25 @@ describe('ExplorerPanelContent', () => {
 
   it('warns about an in-progress operation and notes truncation', async () => {
     route({ 'git.status': ok(repo([file('b.md', 'modified', 'modified', true)], { state: 'merging', truncated: true })) });
-    renderPanel();
+    renderPanel(false, 'git');
     expect(await screen.findByTestId('git-state-banner')).toHaveTextContent('merging');
     expect(screen.getByTestId('git-truncated')).toHaveTextContent('1 arquivos');
+    expect(await screen.findByTestId('git-change-changes-b.md')).toHaveTextContent('!');
+    await userEvent.click(screen.getByTestId('explorer-view-files'));
     expect(await screen.findByTestId('git-badge-b.md')).toHaveTextContent('!');
   });
 
   it('explains a missing git binary in the toolbar and keeps the tree', async () => {
     route({ 'git.status': fail('io', 'GitNotFound') });
-    renderPanel();
+    renderPanel(false, 'git');
     expect(await screen.findByTestId('git-not-found')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('explorer-view-files'));
     expect(await screen.findByText('b.md')).toBeInTheDocument();
   });
 
   it('offers git init when the folder is not a repo', async () => {
     route({ 'git.status': ok({ isRepo: false }) });
-    renderPanel();
+    renderPanel(false, 'git');
 
     expect(await screen.findByTestId('git-init-card')).toBeInTheDocument();
     await userEvent.click(screen.getByTestId('git-init-trigger'));
@@ -164,7 +212,7 @@ describe('ExplorerPanelContent', () => {
 describe('ExplorerToolbar', () => {
   it('shows ahead/behind and disables Stage all without worktree changes', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified')], { head: { name: 'feat/x', oid: 'abc', ahead: 2, behind: 1 } })) });
-    renderPanel();
+    renderPanel(false, 'git');
 
     const chip = await screen.findByTestId('git-head');
     expect(chip).toHaveTextContent('feat/x');
@@ -174,14 +222,14 @@ describe('ExplorerToolbar', () => {
 
   it('stages all worktree changes', async () => {
     route({ 'git.status': ok(repo([file('b.md', 'unmodified', 'modified'), file('c.md', 'untracked', 'untracked')])) });
-    renderPanel();
+    renderPanel(false, 'git');
     await userEvent.click(await screen.findByTestId('git-stage-all'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('git.stage', { paths: ['b.md', 'c.md'] }));
   });
 
   it('opens the commit popover and closes it once the commit succeeds', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified')])), 'git.commit': ok({ sha: 'x' }) });
-    renderPanel();
+    renderPanel(false, 'git');
 
     await userEvent.click(await screen.findByTestId('git-commit-open'));
     await userEvent.type(screen.getByTestId('git-commit-message'), 'fix: thing');
@@ -196,7 +244,7 @@ describe('ExplorerToolbar', () => {
       'git.status': ok(repo([file('a.ts', 'added', 'unmodified')])),
       'git.commit': { ok: false, error: { kind: 'io', message: 'hook failed', details: { stderr: 'eslint: 3 errors' } } },
     });
-    renderPanel();
+    renderPanel(false, 'git');
 
     await userEvent.click(await screen.findByTestId('git-commit-open'));
     await userEvent.type(screen.getByTestId('git-commit-message'), 'msg');
@@ -213,13 +261,13 @@ describe('ExplorerToolbar', () => {
 describe('Explorer status actions', () => {
   it('shows staged/changes chips and hides a chip whose count is 0', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified'), file('b.md', 'unmodified', 'modified'), file('c.md', 'untracked', 'untracked')])) });
-    renderPanel();
+    renderPanel(false, 'git');
     expect(await screen.findByTestId('git-chip-staged')).toHaveTextContent('1 staged');
     expect(screen.getByTestId('git-chip-changes')).toHaveTextContent('2 changes');
   });
 
   it('omits the chips and disables Unstage all on a clean tree', async () => {
-    renderPanel();
+    renderPanel(false, 'git');
     await screen.findByTestId('git-head');
     expect(screen.queryByTestId('git-chip-staged')).not.toBeInTheDocument();
     expect(screen.queryByTestId('git-chip-changes')).not.toBeInTheDocument();
@@ -228,7 +276,7 @@ describe('Explorer status actions', () => {
 
   it('unstages every staged file from the toolbar', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified'), file('b.md', 'modified', 'modified')])) });
-    renderPanel();
+    renderPanel(false, 'git');
     await userEvent.click(await screen.findByTestId('git-unstage-all'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('git.unstage', { paths: ['a.ts', 'b.md'] }));
   });
@@ -241,7 +289,7 @@ describe('Explorer status actions', () => {
   ])('file row %s offers the right inline actions', async (_name, change, present, absent) => {
     route({ 'git.status': ok(repo([change])) });
     renderPanel();
-    await screen.findByTestId('git-head');
+    await screen.findByTestId(`git-badge-b.md`);
     for (const key of present) expect(await screen.findByTestId(`git-row-${key}-b.md`)).toBeInTheDocument();
     for (const key of absent) expect(screen.queryByTestId(`git-row-${key}-b.md`)).not.toBeInTheDocument();
   });
@@ -288,7 +336,7 @@ describe('AI commit message', () => {
 
   it('fills the editable field without committing, then offers Regerar', async () => {
     route({ 'git.status': ok(staged()), 'git.generateCommitMessage': ok({ message: 'feat: add a' }) });
-    renderPanel();
+    renderPanel(false, 'git');
     await openPopover();
 
     await userEvent.click(screen.getByTestId('git-generate-btn'));
@@ -309,7 +357,7 @@ describe('AI commit message', () => {
       }
       return base(method, params);
     });
-    renderPanel();
+    renderPanel(false, 'git');
     await openPopover();
     await userEvent.type(screen.getByTestId('git-commit-message'), 'draft');
     await userEvent.clear(screen.getByTestId('git-commit-message'));
@@ -324,7 +372,7 @@ describe('AI commit message', () => {
 
   it('asks before replacing existing text, and cancel keeps it', async () => {
     route({ 'git.status': ok(staged()), 'git.generateCommitMessage': ok({ message: 'feat: new' }) });
-    renderPanel();
+    renderPanel(false, 'git');
     await openPopover();
     await userEvent.type(screen.getByTestId('git-commit-message'), 'mine');
 
@@ -344,7 +392,7 @@ describe('AI commit message', () => {
       'git.status': ok(staged()),
       'git.generateCommitMessage': { ok: false, error: { kind: 'not_found', message: 'Command not found: claude' } },
     });
-    renderPanel();
+    renderPanel(false, 'git');
     await openPopover();
     await userEvent.click(screen.getByTestId('git-generate-btn'));
 
@@ -355,7 +403,7 @@ describe('AI commit message', () => {
 
   it('disables Gerar with a hint when nothing is staged', async () => {
     route({ 'git.status': ok(repo([file('b.md', 'unmodified', 'modified')])) });
-    renderPanel();
+    renderPanel(false, 'git');
     await openPopover();
     expect(screen.getByTestId('git-generate-btn')).toBeDisabled();
     expect(screen.getByTestId('git-generate-hint')).toHaveTextContent('Faça stage');
@@ -363,7 +411,7 @@ describe('AI commit message', () => {
 
   it('disables Gerar while Amend is ticked', async () => {
     route({ 'git.status': ok(staged()) });
-    renderPanel();
+    renderPanel(false, 'git');
     await openPopover();
     expect(screen.getByTestId('git-generate-btn')).toBeEnabled();
     await userEvent.click(screen.getByTestId('git-commit-amend'));
@@ -387,34 +435,34 @@ describe('Git sync button', () => {
     [{}, 'Fetch'],
   ])('labels %j as "%s"', async (head, label) => {
     withHead(head);
-    renderPanel();
+    renderPanel(false, 'git');
     expect(await screen.findByTestId('git-sync-button')).toHaveTextContent(label);
   });
 
   it('hides the button on an unborn branch and disables it mid-merge', async () => {
     withHead({ oid: null });
-    renderPanel();
+    renderPanel(false, 'git');
     await screen.findByTestId('git-head');
     expect(screen.queryByTestId('git-sync')).not.toBeInTheDocument();
   });
 
   it('disables sync while a merge is in progress', async () => {
     withHead({ ahead: 1 }, { state: 'merging' });
-    renderPanel();
+    renderPanel(false, 'git');
     expect(await screen.findByTestId('git-sync-menu')).toBeDisabled();
     expect(screen.queryByTestId('git-sync-button')).not.toBeInTheDocument();
   });
 
   it('runs git.sync on click', async () => {
     withHead({ ahead: 1 });
-    renderPanel();
+    renderPanel(false, 'git');
     await userEvent.click(await screen.findByTestId('git-sync-button'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('git.sync', {}));
   });
 
   it('runs the individual ops from the ⋯ menu', async () => {
     withHead({ ahead: 1 });
-    renderPanel();
+    renderPanel(false, 'git');
     await userEvent.click(await screen.findByTestId('git-sync-menu'));
     await userEvent.click(screen.getByTestId('git-sync-fetch'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('git.fetch', {}));
@@ -425,7 +473,7 @@ describe('Git sync button', () => {
 
   it('disables Pull in the menu without an upstream', async () => {
     withHead({ untracked: true });
-    renderPanel();
+    renderPanel(false, 'git');
     await userEvent.click(await screen.findByTestId('git-sync-menu'));
     expect(screen.getByTestId('git-sync-pull')).toHaveAttribute('aria-disabled', 'true');
   });
@@ -436,12 +484,48 @@ describe('Git sync button', () => {
       'git.status': ok(repo([], { head: { name: 'main', oid: 'abc', upstream: 'origin/main', ahead: 1, behind: 0 } })),
       'git.sync': { ok: false, error: { kind: 'conflict', message: 'Push rejeitado', details: { reason: 'push_rejected', stderr: '! [rejected]' } } },
     });
-    renderPanel();
+    renderPanel(false, 'git');
     await userEvent.click(await screen.findByTestId('git-sync-button'));
     const alert = await screen.findByTestId('git-error');
     expect(alert).toHaveTextContent('Push rejeitado');
 
     await userEvent.click(within(alert).getByTestId('git-error-pull-retry'));
     await waitFor(() => expect(call.mock.calls.filter(([m]) => m === 'git.sync')).toHaveLength(2));
+  });
+});
+
+describe('Git view — grouped changes', () => {
+  it('lists Staged and Alterações, a file edited on both sides in both, and opens the matching diff', async () => {
+    route({
+      'git.status': ok(repo([file('a.ts', 'added', 'unmodified'), file('b.md', 'modified', 'modified'), file('c.md', 'untracked', 'untracked')])),
+    });
+    const { onOpenGitDiff } = renderPanel(false, 'git');
+
+    expect(await screen.findByTestId('git-group-staged')).toHaveTextContent('2');
+    expect(screen.getByTestId('git-group-changes')).toHaveTextContent('2');
+
+    await userEvent.click(screen.getByTestId('git-change-staged-b.md'));
+    expect(onOpenGitDiff).toHaveBeenLastCalledWith({ path: 'b.md', source: { kind: 'index' } });
+    await userEvent.click(screen.getByTestId('git-change-changes-b.md'));
+    expect(onOpenGitDiff).toHaveBeenLastCalledWith({ path: 'b.md', source: { kind: 'worktree' } });
+  });
+
+  it('stages, unstages and asks to discard from a row without opening its diff', async () => {
+    route({ 'git.status': ok(repo([file('b.md', 'modified', 'modified')])) });
+    const { onOpenGitDiff } = renderPanel(false, 'git');
+
+    await userEvent.click(await screen.findByTestId('git-change-changes-b.md-stage'));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('git.stage', { paths: ['b.md'] }));
+    await userEvent.click(screen.getByTestId('git-change-staged-b.md-unstage'));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('git.unstage', { paths: ['b.md'] }));
+    await userEvent.click(screen.getByTestId('git-change-changes-b.md-discard'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(call).not.toHaveBeenCalledWith('git.discard', expect.anything());
+    expect(onOpenGitDiff).not.toHaveBeenCalled();
+  });
+
+  it('says so when the tree is clean', async () => {
+    renderPanel(false, 'git');
+    expect(await screen.findByTestId('git-clean')).toHaveTextContent('Nenhuma alteração');
   });
 });

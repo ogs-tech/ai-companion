@@ -8,11 +8,20 @@ export type SessionStatus = 'running' | 'exited';
  */
 export const MAX_SESSION_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
-/** `personal` runs in the home dir (Global/Início); `workspace` in that workspace's root. */
+/** `personal` runs in the home dir (Global/Início); `workspace` in the folder(s) it was started with. */
 export type SessionAnchor =
   | { kind: 'entity'; urn: string }
   | { kind: 'personal' }
-  | { kind: 'workspace'; workspaceId: string };
+  | {
+      kind: 'workspace';
+      workspaceId: string;
+      /**
+       * The workspace folders this session sees; absent = the primary folder.
+       * One folder: it is the cwd. Two or more: a helper directory linking to
+       * exactly these folders. Folders left out are completely outside the session.
+       */
+      folders?: string[];
+    };
 
 export function sessionAnchorKey(anchor: SessionAnchor): string {
   if (anchor.kind === 'entity') return `entity:${anchor.urn}`;

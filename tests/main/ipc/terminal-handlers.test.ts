@@ -21,8 +21,8 @@ describe('terminal-handlers', () => {
     const { handlers, service } = setup();
     await handlers['terminal.create']!(undefined);
     await handlers['terminal.create']!({ relCwd: 'apps/console' });
-    expect(service.createShell).toHaveBeenNthCalledWith(1, '');
-    expect(service.createShell).toHaveBeenNthCalledWith(2, 'apps/console');
+    expect(service.createShell).toHaveBeenNthCalledWith(1, '', undefined);
+    expect(service.createShell).toHaveBeenNthCalledWith(2, 'apps/console', undefined);
   });
 
   it('terminal.write accepts an empty-looking payload but requires a terminalId', async () => {

@@ -16,6 +16,10 @@ export interface WorkspaceActivation {
   goHome(): Promise<void>;
   /** Goes home first when `id` is the open workspace. */
   delete(id: string): Promise<void>;
+  /** Folder/name edits; the open workspace's graph is rebuilt only when its primary folder changed. */
+  addFolder(id: string, path: string): Promise<Workspace>;
+  removeFolder(id: string, path: string): Promise<Workspace>;
+  rename(id: string, name: string): Promise<Workspace>;
 }
 
 /** The open workspace's file browser — `null` at Início, which has no file tree. */
@@ -48,6 +52,18 @@ export function buildWorkspaceHandlers(
     'workspace.delete': async (params) => {
       const raw = asObject(params, 'workspace.delete');
       return activation.delete(asString(raw['id'], 'id'));
+    },
+    'workspace.addFolder': async (params) => {
+      const raw = asObject(params, 'workspace.addFolder');
+      return activation.addFolder(asString(raw['id'], 'id'), asString(raw['path'], 'path'));
+    },
+    'workspace.removeFolder': async (params) => {
+      const raw = asObject(params, 'workspace.removeFolder');
+      return activation.removeFolder(asString(raw['id'], 'id'), asString(raw['path'], 'path'));
+    },
+    'workspace.rename': async (params) => {
+      const raw = asObject(params, 'workspace.rename');
+      return activation.rename(asString(raw['id'], 'id'), asString(raw['name'], 'name'));
     },
     'workspace.listDir': async (params) => {
       const raw = asObject(params, 'workspace.listDir');

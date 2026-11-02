@@ -6,8 +6,9 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
 import { brand } from '../shared/brand.js';
-import { devLockPath, workspacePath as workspaceDataDir } from '../shared/brand-paths.js';
+import { devLockPath, workspaceHomePath, workspacePath as workspaceDataDir } from '../shared/brand-paths.js';
 import type { Workspace } from '../shared/workspace.js';
+import { workspaceFolders } from '../shared/workspace.js';
 import { SettingsService } from './application/services/settings-service.js';
 import { WorkspaceBootstrapService } from './application/services/workspace-bootstrap.js';
 import { WorkspaceService } from './application/services/workspace-service.js';
@@ -219,7 +220,13 @@ async function wireIpc(): Promise<void> {
     if (workspace === null) return null;
     const dataDir = workspaceDataDir(workspace.rootPath);
     await workspaceBootstrap.create(dataDir);
-    return { workspace, dataDir };
+    const folders = workspaceFolders(workspace);
+    if (folders.length === 1) return { workspace, dataDir };
+    // Several folders: each keeps its own data dir; the workspace's shared set lives under Global.
+    for (const folder of folders.slice(1)) await workspaceBootstrap.create(workspaceDataDir(folder));
+    const sharedDataDir = join(workspaceHomePath(home, workspace.id), 'data');
+    await workspaceBootstrap.create(sharedDataDir);
+    return { workspace, dataDir, sharedDataDir };
   };
   let activeWorkspace = await workspaceService.getActive();
 
@@ -400,7 +407,7 @@ async function wireIpc(): Promise<void> {
 
   const fileBrowserPort = new NodeFileBrowserAdapter([new NumbersConverterAdapter()]);
   const fileBrowserFor = (workspace: Workspace | null): FileBrowserService | null =>
-    workspace === null ? null : new FileBrowserService(fileBrowserPort, workspace.rootPath);
+    workspace === null ? null : new FileBrowserService(fileBrowserPort, workspace.rootPath, workspaceFolders(workspace));
   let fileBrowserService = fileBrowserFor(activeWorkspace);
 
   /**
@@ -541,7 +548,25 @@ async function wireIpc(): Promise<void> {
     });
   };
 
+  /**
+   * Applies a folder/name edit. Services hold a snapshot of the open
+   * workspace, so a rename only refreshes it; a change of folders rebuilds the
+   * graph (entity stores, git, file browser and watchers are per-folder), which
+   * ends the live sessions and terminals — the same as switching workspaces.
+   */
+  const edited = async (id: string, edit: () => Promise<Workspace>, rebuild: boolean): Promise<Workspace> => {
+    const wasActive = activeWorkspace?.id === id;
+    const updated = await edit();
+    if (!wasActive) return updated;
+    if (rebuild) return activate(async () => updated);
+    activeWorkspace = updated;
+    return updated;
+  };
+
   const workspaceActivation: WorkspaceActivation = {
+    addFolder: (id, path) => edited(id, () => workspaceService.addFolder(id, path), true),
+    removeFolder: (id, path) => edited(id, () => workspaceService.removeFolder(id, path), true),
+    rename: (id, name) => edited(id, () => workspaceService.rename(id, name), false),
     switchTo: (id) => activate(() => workspaceService.switchTo(id)),
     open: (path) => activate(() => workspaceService.open(path)),
     goHome,

@@ -13,7 +13,9 @@ import {
   useTerminals,
 } from '../../hooks/use-terminals.js';
 import { IpcCallError } from '../../lib/ipc.js';
-import type { TerminalSnapshot } from '../../../shared/terminal.js';
+import { useFolderRouting } from '../../hooks/use-folder-routing.js';
+import { folderColor } from '../../lib/folder-identity.js';
+import { WORKSPACE_ROOT_FOLDER, type TerminalSnapshot } from '../../../shared/terminal.js';
 
 interface TerminalsSectionProps {
   /** Terminals that currently have a canvas tab; the rest are marked `sem aba`. */
@@ -24,6 +26,8 @@ interface TerminalsSectionProps {
   onRemoved: (terminalId: string) => void;
   onEditLaunchJson: () => void;
   onError: (message: string) => void;
+  /** Fills the Terminais view instead of sitting as a bounded section under the tree. */
+  fill?: boolean;
 }
 
 function errorMessage(err: unknown): string {
@@ -67,8 +71,9 @@ function RowAction({ label, testId, glyph, onClick }: { label: string; testId: s
  * launched configuration is a terminal row here, with the stop/restart/remove
  * actions. Closing a tab never stops anything — this is where that happens.
  */
-export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLaunchJson, onError }: TerminalsSectionProps): React.ReactElement {
+export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLaunchJson, onError, fill = false }: TerminalsSectionProps): React.ReactElement {
   const { data: terminals = [] } = useTerminals();
+  const routing = useFolderRouting();
   const { data: launch } = useLaunchConfigs();
   const createTerminal = useCreateTerminal();
   const runConfig = useRunLaunchConfig();
@@ -81,11 +86,17 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
 
   const fail = (err: unknown): void => onError(errorMessage(err));
   const closeMenu = (): void => setMenuAnchor(null);
-  const openShell = (relCwd: string): void =>
-    createTerminal.mutate({ ...(relCwd !== '' ? { relCwd } : {}) }, { onSuccess: (terminal) => onOpen(terminal), onError: fail });
+  // In a multi-folder workspace the picker's paths start with a folder alias; `folder` set explicitly wins (drop-list entries).
+  const openShell = (relPath: string, folderOverride?: string): void => {
+    const { folder, rel } = folderOverride === undefined ? routing.split(relPath) : { folder: folderOverride, rel: relPath };
+    createTerminal.mutate(
+      { ...(rel !== '' ? { relCwd: rel } : {}), ...(folder !== undefined ? { folder } : {}) },
+      { onSuccess: (terminal) => onOpen(terminal), onError: fail },
+    );
+  };
 
   return (
-    <Box data-testid="terminals-section" sx={{ borderTop: 1, borderColor: 'divider', flexShrink: 0, maxHeight: '45%', display: 'flex', flexDirection: 'column' }}>
+    <Box data-testid="terminals-section" sx={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : { borderTop: 1, borderColor: 'divider', flexShrink: 0, maxHeight: '45%', display: 'flex', flexDirection: 'column' }}>
       <Box
         data-testid="terminals-header"
         onClick={() => setExpanded((v) => !v)}
@@ -144,7 +155,14 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
               />
               <Typography component="span" sx={{ fontSize: '0.8rem', fontFamily: (t) => t.ogs.fonts.mono }} noWrap>{terminal.name}</Typography>
               <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', flex: 1, minWidth: 0 }} noWrap>
-                {terminal.relCwd === '' ? 'raiz' : terminal.relCwd}
+                {routing.multi && routing.aliases[terminal.folder] !== undefined && (
+                  <Box
+                    component="span"
+                    data-testid={`terminal-folder-dot-${terminal.terminalId}`}
+                    sx={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', mr: 0.5, bgcolor: folderColor(routing.folders, terminal.folder) }}
+                  />
+                )}
+                {routing.multi ? `${routing.aliases[terminal.folder] ?? 'raiz do workspace'}${terminal.relCwd === '' ? '' : `/${terminal.relCwd}`}` : terminal.relCwd === '' ? 'raiz' : terminal.relCwd}
               </Typography>
               {terminal.kind === 'launch' && <Typography component="span" sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>launch</Typography>}
               {!openTerminalIds.has(terminal.terminalId) && (
@@ -188,7 +206,21 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
         </Box>
       )}
       <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeMenu}>
-        <MenuItem data-testid="terminals-menu-root" onClick={() => { closeMenu(); openShell(''); }}>Novo terminal na raiz</MenuItem>
+        {routing.multi ? (
+          [
+            ...routing.folders.map((folder) => (
+              <MenuItem key={folder} data-testid={`terminals-menu-folder-${routing.aliases[folder]}`} onClick={() => { closeMenu(); openShell('', folder); }}>
+                <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', mr: 1, bgcolor: folderColor(routing.folders, folder) }} />
+                Novo terminal em {routing.aliases[folder]}
+              </MenuItem>
+            )),
+            <MenuItem key="__ws" data-testid="terminals-menu-workspace-root" onClick={() => { closeMenu(); openShell('', WORKSPACE_ROOT_FOLDER); }}>
+              Novo terminal na raiz do workspace
+            </MenuItem>,
+          ]
+        ) : (
+          <MenuItem data-testid="terminals-menu-root" onClick={() => { closeMenu(); openShell(''); }}>Novo terminal na raiz</MenuItem>
+        )}
         <MenuItem data-testid="terminals-menu-pick" onClick={() => { closeMenu(); setPickerOpen(true); }}>Novo terminal em…</MenuItem>
         {(launch?.configs ?? []).map((config) => {
           const reason = `Tipo '${config.type}'/request '${config.request}' não suportado — só node/launch pode ser executado`;
@@ -199,7 +231,7 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
               data-testid={`terminals-menu-launch-${config.name}`}
               onClick={() => {
                 closeMenu();
-                runConfig.mutate({ configName: config.name }, { onSuccess: (terminal) => onOpen(terminal), onError: fail });
+                runConfig.mutate({ configName: config.name, ...(routing.multi ? { folder: routing.folders[0] as string } : {}) }, { onSuccess: (terminal) => onOpen(terminal), onError: fail });
               }}
             >
               <Icon glyph={Play} size={13} />

@@ -1,13 +1,22 @@
 import { useState } from 'react';
 import { ButtonBase, Divider, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, House, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderMinus, FolderOpen, FolderPlus, House, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
+import { RenameWorkspaceDialog } from './RenameWorkspaceDialog.js';
 import { WorkspaceRemoveConfirmDialog } from './WorkspaceRemoveConfirmDialog.js';
 import { recentWorkspaces, useContextNavigation } from '../../hooks/use-context-navigation.js';
-import { useDeleteWorkspace, useWorkspaces } from '../../hooks/use-workspaces.js';
+import {
+  useAddWorkspaceFolder,
+  useDeleteWorkspace,
+  useRemoveWorkspaceFolder,
+  useRenameWorkspace,
+  useWorkspaces,
+} from '../../hooks/use-workspaces.js';
+import { callIpc } from '../../lib/ipc.js';
+import { basename } from '../../lib/folder-identity.js';
 import { confirmDiscardUnsavedTabs } from '../../lib/workspace-tabs-guard.js';
-import type { Workspace } from '../../../shared/workspace.js';
+import { workspaceFolders, type Workspace } from '../../../shared/workspace.js';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -23,6 +32,11 @@ export function ContextSwitcher(): React.ReactElement {
   const { activeWorkspace, goHome, switchTo, openFolder } = useContextNavigation();
   const { data: workspaces } = useWorkspaces();
   const deleteWorkspace = useDeleteWorkspace();
+  const addFolder = useAddWorkspaceFolder();
+  const removeFolder = useRemoveWorkspaceFolder();
+  const renameWorkspace = useRenameWorkspace();
+  // Set right after the first extra folder lands: the old name described one folder.
+  const [renaming, setRenaming] = useState<{ workspace: Workspace; reason?: string } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [allAnchor, setAllAnchor] = useState<HTMLElement | null>(null);
   // Captured when the dialog opens, so a context change underneath can't retarget it.
@@ -57,11 +71,30 @@ export function ContextSwitcher(): React.ReactElement {
     }
   };
 
+  const handleAddFolder = async (): Promise<void> => {
+    if (!activeWorkspace) return;
+    const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
+    if (picked.canceled || !picked.path) return;
+    const wasSingle = workspaceFolders(activeWorkspace).length === 1;
+    const updated = await addFolder.mutateAsync({ id: activeWorkspace.id, path: picked.path });
+    if (wasSingle) {
+      setRenaming({
+        workspace: updated,
+        reason: 'Este workspace agora tem mais de uma pasta. O nome atual descrevia só a primeira — quer renomear?',
+      });
+    }
+  };
+
+  const handleRemoveFolder = async (workspace: Workspace, folder: string): Promise<void> => {
+    await removeFolder.mutateAsync({ id: workspace.id, path: folder });
+    setToast({ variant: 'success', message: `Pasta ${basename(folder)} removida do workspace (nada foi apagado do disco)` });
+  };
+
   const label = isHome ? 'Início' : (activeWorkspace?.name ?? '…');
 
   return (
     <>
-      <Tooltip title={isHome ? 'Global' : (activeWorkspace?.rootPath ?? '')}>
+      <Tooltip title={isHome ? 'Global' : (activeWorkspace ? workspaceFolders(activeWorkspace).join('\n') : '')}>
         <ButtonBase
           data-testid="context-switcher"
           aria-haspopup="menu"
@@ -110,9 +143,26 @@ export function ContextSwitcher(): React.ReactElement {
         <Divider />
         <MenuItem data-testid="context-switcher-open-folder" onClick={() => run(openFolder)}>
           <ListItemIcon><Icon glyph={FolderOpen} size={16} /></ListItemIcon>
-          <ListItemText>Abrir pasta…</ListItemText>
+          <ListItemText>Criar workspace…</ListItemText>
           <Typography variant="caption" sx={{ color: 'text.secondary', ml: 2 }}>⌘O</Typography>
         </MenuItem>
+        {activeWorkspace && (
+          <MenuItem data-testid="context-switcher-add-folder" onClick={() => run(handleAddFolder)}>
+            <ListItemIcon><Icon glyph={FolderPlus} size={16} /></ListItemIcon>
+            <ListItemText>Adicionar pasta ao workspace…</ListItemText>
+          </MenuItem>
+        )}
+        {activeWorkspace && workspaceFolders(activeWorkspace).length > 1 &&
+          workspaceFolders(activeWorkspace).map((folder) => (
+            <MenuItem
+              key={folder}
+              data-testid={`context-switcher-remove-folder-${basename(folder)}`}
+              onClick={() => run(() => handleRemoveFolder(activeWorkspace, folder))}
+            >
+              <ListItemIcon><Icon glyph={FolderMinus} size={16} /></ListItemIcon>
+              <ListItemText>Remover pasta «{basename(folder)}» do workspace</ListItemText>
+            </MenuItem>
+          ))}
         {activeWorkspace && (
           <MenuItem
             data-testid="context-switcher-remove"
@@ -153,6 +203,21 @@ export function ContextSwitcher(): React.ReactElement {
         workspaceName={pendingRemoval?.name ?? ''}
         onConfirm={() => void handleRemove()}
         onCancel={() => setPendingRemoval(null)}
+      />
+      <RenameWorkspaceDialog
+        open={renaming !== null}
+        currentName={renaming?.workspace.name ?? ''}
+        {...(renaming?.reason ? { reason: renaming.reason } : {})}
+        onCancel={() => setRenaming(null)}
+        onSubmit={(name) => {
+          const target = renaming?.workspace;
+          setRenaming(null);
+          if (target) {
+            renameWorkspace
+              .mutateAsync({ id: target.id, name })
+              .catch((err: unknown) => setToast({ variant: 'error', message: errorMessage(err) }));
+          }
+        }}
       />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </>

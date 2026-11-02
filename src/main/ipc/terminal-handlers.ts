@@ -14,7 +14,7 @@ export function buildTerminalHandlers(terminalService: TerminalService): IpcHand
   return {
     'terminal.create': async (params) => {
       const raw = optParams(params, 'terminal.create');
-      return terminalService.createShell(asOptString(raw['relCwd'], 'relCwd') ?? '');
+      return terminalService.createShell(asOptString(raw['relCwd'], 'relCwd') ?? '', asOptString(raw['folder'], 'folder'));
     },
     'terminal.write': async (params) => {
       const raw = asObject(params, 'terminal.write');

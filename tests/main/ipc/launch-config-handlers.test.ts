@@ -21,7 +21,7 @@ describe('launch-config-handlers', () => {
   it('launchConfig.run validates params and spawns a terminal through TerminalService', async () => {
     const { handlers, terminalService } = setup();
     await handlers['launchConfig.run']!({ configName: 'Run' });
-    expect(terminalService.runLaunch).toHaveBeenCalledWith('Run');
+    expect(terminalService.runLaunch).toHaveBeenCalledWith('Run', undefined);
   });
 
   it('launchConfig.run rejects missing params', async () => {

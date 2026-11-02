@@ -54,4 +54,25 @@ describe('HooksTreeGroup', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('hook.delete', { id: 'h1', scope: 'personal' }));
     confirmSpy.mockRestore();
   });
+
+  it('groups hooks by origin: own first and open, each plugin collapsed with its count', async () => {
+    const user = userEvent.setup();
+    call.mockImplementation(async (method: string) => {
+      if (method !== 'hook.list') return ok(undefined);
+      const fromPlugin = (id: string, pluginId: string) => ({
+        ...hook,
+        id,
+        event: 'SessionStart',
+        source: { kind: 'plugin' as const, pluginId },
+      });
+      return ok([fromPlugin('p1', 'learning@market'), fromPlugin('p2', 'explanatory@market'), hook]);
+    });
+    renderWithShell(<HooksTreeGroup showGlobal={false} />);
+    await user.click(await screen.findByTestId('tree-group-hook'));
+    expect(await screen.findByTestId('tree-hook-h1')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-hook-p1')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('tree-subgroup-hook-learning@market'));
+    expect(await screen.findByTestId('tree-hook-p1')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-hook-p2')).not.toBeInTheDocument();
+  });
 });

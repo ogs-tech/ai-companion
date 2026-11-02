@@ -15,6 +15,8 @@ export class ChokidarFileWatcher implements FileWatcherPort {
       // `ignoreInitial: false` scan would fire "add" for every entity file
       // already on disk at startup, causing a needless full-workspace re-sync.
       ignoreInitial: true,
+      // Multi-folder sessions place symlinks to the user's real repos under Global's data dir; following them would watch every file of `node_modules`/`.git` and exhaust file descriptors (EMFILE). Entity files are never symlinks here.
+      followSymlinks: false,
       // `fs.watch` on a unix socket (the link-routing socket under `~/.ai-companion/run/`) fails with UNKNOWN.
       ignored: (_path, stats) => stats?.isSocket() === true,
       awaitWriteFinish: {

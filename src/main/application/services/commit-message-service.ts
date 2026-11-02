@@ -1,6 +1,7 @@
 import type { RepoGitPort } from '../ports/repo-git-port.js';
 import type { ConventionSourcePort } from '../ports/convention-source-port.js';
 import type { CommitMessageGeneratorPort } from '../ports/commit-message-generator-port.js';
+import { resolveFolder } from '../resolve-folder.js';
 import type { Workspace } from '../../../shared/workspace.js';
 import type { GitGenerateCommitMessageResult } from '../../../shared/git.js';
 import { DomainError } from '../../domain/errors.js';
@@ -16,7 +17,7 @@ const COMMITLINT_CONFIG = /^(commitlint\.config\..+|\.commitlintrc(\..+)?)$/;
 
 export interface CommitMessageServiceDeps {
   /** `null` at Início, where the method fails `validation` like every `git.*`. */
-  activeWorkspace: Pick<Workspace, 'rootPath'> | null;
+  activeWorkspace: Pick<Workspace, 'rootPath' | 'extraFolders'> | null;
 }
 
 /** Builds the prompt from the staged diff and the project's convention, then asks the generator. */
@@ -29,10 +30,10 @@ export class CommitMessageService {
     private readonly deps: CommitMessageServiceDeps,
   ) {}
 
-  async generate(signal?: AbortSignal): Promise<GitGenerateCommitMessageResult> {
+  async generate(signal?: AbortSignal, folder?: string): Promise<GitGenerateCommitMessageResult> {
     const workspace = this.deps.activeWorkspace;
     if (workspace === null) throw new DomainError('validation', 'No workspace is open — git needs one');
-    const root = workspace.rootPath;
+    const root = resolveFolder(workspace, folder);
     if (!(await this.git.isRepo(root))) throw new NotARepositoryError(root);
 
     const stat = await this.git.stagedStat(root);

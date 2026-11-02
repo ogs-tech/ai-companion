@@ -190,7 +190,7 @@ describe('WorkspaceScreen', () => {
       expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('"Ver alterações" leaves the Explorer showing the git toolbar over the tree', async () => {
+    it('"Ver alterações" opens the Git view of the Explorer', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
@@ -203,7 +203,8 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       await user.click(await screen.findByTestId('overview-show-git'));
       expect(await screen.findByTestId('git-head')).toHaveTextContent('main');
-      expect(screen.getByTestId('folder-tree')).toBeInTheDocument();
+      expect(screen.getByTestId('explorer-view-git')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.queryByTestId('folder-tree')).not.toBeInTheDocument();
     });
   });
 
@@ -587,9 +588,12 @@ describe('WorkspaceScreen', () => {
       });
     }
 
-    it('shows the Terminais section under the file tree, and no Launch group inside the tree', async () => {
+    it('shows the Terminais section in its own view, and no Launch group inside the tree', async () => {
+      const user = userEvent.setup();
       mockIpc();
       renderScreen();
+      expect(screen.queryByTestId('terminals-section')).not.toBeInTheDocument();
+      await user.click(await screen.findByTestId('explorer-view-terminals'));
       expect(await screen.findByTestId('terminals-section')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-group-launch-configs-Acme')).not.toBeInTheDocument();
     });
@@ -598,6 +602,7 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       mockIpc({ 'terminal.create': shell });
       renderScreen();
+      await user.click(await screen.findByTestId('explorer-view-terminals'));
       await user.click(await screen.findByTestId('terminals-new-menu'));
       await user.click(await screen.findByTestId('terminals-menu-root'));
       expect(await screen.findByTestId('workbench-tab-terminal:t1')).toBeInTheDocument();
@@ -608,6 +613,7 @@ describe('WorkspaceScreen', () => {
       const user = userEvent.setup();
       mockIpc({ 'launchConfig.run': { ...shell, kind: 'launch', name: 'Run server' } });
       renderScreen();
+      await user.click(await screen.findByTestId('explorer-view-terminals'));
       await user.click(await screen.findByTestId('terminals-new-menu'));
       await user.click(await screen.findByTestId('terminals-menu-launch-Run server'));
       expect(await screen.findByTestId('workbench-tab-terminal:t1')).toBeInTheDocument();
@@ -627,6 +633,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
+      await user.click(await screen.findByTestId('explorer-view-terminals'));
       await user.click(await screen.findByTestId('terminals-new-menu'));
       await user.click(await screen.findByTestId('terminals-menu-root'));
       await user.click(await screen.findByTestId('workbench-tab-close-terminal:t1'));
@@ -647,6 +654,7 @@ describe('WorkspaceScreen', () => {
       };
       answerList([shell]);
       const view = renderScreen();
+      await userEvent.click(await screen.findByTestId('explorer-view-terminals'));
       await screen.findByTestId('terminal-row-t1');
       running.mockReturnValue(false);
       expect(confirmDiscardUnsavedTabs()).toBe(false);
@@ -659,6 +667,7 @@ describe('WorkspaceScreen', () => {
       running.mockClear();
       answerList([{ ...shell, status: 'exited', exitCode: 0 }]);
       renderScreen();
+      await userEvent.click(await screen.findByTestId('explorer-view-terminals'));
       await screen.findByTestId('terminal-exit-t1');
       expect(confirmDiscardUnsavedTabs()).toBe(true);
       expect(running).not.toHaveBeenCalled();
@@ -835,18 +844,17 @@ describe('WorkspaceScreen', () => {
       await screen.findByTestId('home-nav-list');
       expect(screen.queryByTestId('control-panel-kicker')).not.toBeInTheDocument();
       await user.click(screen.getByTestId('control-panel-origin'));
-      for (const id of ['mine', 'plugins', 'all']) {
+      for (const id of ['mine', 'plugins']) {
         expect(await screen.findByTestId(`control-panel-segment-${id}`)).toBeInTheDocument();
       }
       await user.keyboard('{Escape}');
-      for (const id of ['all', 'skill', 'agent', 'integrations']) {
-        expect(screen.getByTestId(`control-panel-chip-${id}`)).toBeInTheDocument();
-      }
+      expect(screen.queryByTestId('control-panel-chip-all')).not.toBeInTheDocument();
       expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
       expect(screen.getByTestId('workspace-sessions-panel')).toBeInTheDocument();
 
-      // Integrações (hooks, MCP, plugins) hides the instruction row.
-      await user.click(screen.getByTestId('control-panel-chip-integrations'));
+      // The "Plugins" origin hides the instruction row (instructions are never plugin-provided).
+      await user.click(screen.getByTestId('control-panel-origin'));
+      await user.click(await screen.findByTestId('control-panel-segment-plugins'));
       expect(screen.queryByTestId('personal-instruction-row')).not.toBeInTheDocument();
       expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
     });
@@ -869,6 +877,7 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('tree-skill-local')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-skill-global')).not.toBeInTheDocument();
 
+      await user.click(await screen.findByTestId('control-panel-section-global'));
       expect(await screen.findByTestId('tree-inherited-skill-global')).toBeVisible();
       await user.click(screen.getByTestId('tree-inherited-skill-global'));
 
@@ -1554,10 +1563,10 @@ describe('WorkspaceScreen', () => {
       expect(controlCard).not.toHaveTextContent('Control Panel');
     });
 
-    it('puts the "Reler do disco" refresh button on the Explorer toolbar', async () => {
+    it('puts the "Reler do disco" refresh button on the Arquivos header', async () => {
       renderScreen();
       const refresh = await screen.findByTestId('workspace-refresh-files');
-      expect(screen.getByTestId('explorer-toolbar')).toContainElement(refresh);
+      expect(screen.getByTestId('explorer-files-header')).toContainElement(refresh);
     });
 
     it('no longer carries the workspace name, path or a "⋮" menu — those live in the TopNav switcher', async () => {

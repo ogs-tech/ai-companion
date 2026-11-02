@@ -35,7 +35,7 @@ export interface CursorAdapterDeps {
 export class CursorAdapter implements Adapter {
   readonly adapterId = 'cursor';
   private readonly homedir: string;
-  private readonly scopeDeps: Pick<CursorAdapterDeps, 'workspaceService'>;
+  private readonly scopeDeps: Pick<CursorAdapterDeps, 'workspaceService' | 'homedir'>;
 
   constructor(deps: CursorAdapterDeps) {
     if (deps.homedir === undefined || deps.homedir === null || deps.homedir === '') {
@@ -44,7 +44,7 @@ export class CursorAdapter implements Adapter {
       });
     }
     this.homedir = deps.homedir;
-    this.scopeDeps = { workspaceService: deps.workspaceService };
+    this.scopeDeps = { workspaceService: deps.workspaceService, homedir: deps.homedir };
   }
 
   async resolveEntityDestinations(args: { entity: Entity }): Promise<AdapterDestination[]> {

@@ -387,6 +387,14 @@ Workbench tab (`EditorPanel`), with `scope` always hidden (personal also hides `
 — the singleton's identity is fixed and its sidecar isn't persisted). Elsewhere, `PropertiesForm`'s scope
 toggle for skills/agents is Personal/Workspace, with Workspace disabled at Início.
 
+## Multi-folder workspaces
+
+A workspace holds 1..N folders (`Workspace.rootPath` = the primary, `extraFolders` = the rest; one folder belongs to at most one workspace). A single-folder workspace is exactly what it always was — nothing migrates.
+
+- **Entities.** `Entity.folder` (set only in a multi-folder workspace, derived from where the file is stored, never persisted) says which folder a `workspace`-scoped entity lives in; absent means the workspace's **shared set**. `ScopedEntityRepository` then holds one store per folder (`<folder>/.ai-companion/`) plus the shared store at `~/.ai-companion/workspaces/<id>/data`; writes route by `entity.folder` (a save that lost its folder returns to where the entity already lives), reads see the union, and names stay unique across every store (urns have no folder in them). `resolveScopePath` materializes a folder entity into its folder, and the shared set into `~/.ai-companion/workspaces/<id>/` (its `.claude/`) — never inside the user's folders. Because of that, a one-folder session (cwd in that folder) does not load the shared set; a session with two or more folders runs from a helper directory that links to its folders **and** to that `.claude/`, so it does. Whether Claude Code loads skills from an `--add-dir` directory's `.claude/` was not verified, so the shared set is not passed as an extra directory.
+- **Per-folder services.** `GitService`, `CommitMessageService`, `LaunchConfigService` and `TerminalService` resolve their root through `resolveFolder(workspace, folder?)` (`src/main/application/resolve-folder.ts`); `FileBrowserService` becomes a virtual root over the folders. Adding or removing a folder rebuilds the service graph like a workspace switch (live sessions and terminals end); renaming does not.
+- **Gap.** Hooks, MCP and Plugins (project tier) still follow the primary folder only.
+
 ## Renderer structure
 
 ```

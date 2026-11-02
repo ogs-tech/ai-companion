@@ -97,7 +97,7 @@ describe('ContextSwitcher', () => {
     expect(within(submenu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Acme', 'Bravo', 'Charlie']);
   });
 
-  it('"Abrir pasta…" picks a folder, then opens it', async () => {
+  it('"Criar workspace…" picks a folder, then opens it', async () => {
     const user = userEvent.setup();
     setup(null, { 'dialog.selectFolder': { canceled: false, path: '/repos/delta' }, 'workspace.open': ACME });
     await openMenu(user, /Contexto: Início/);
@@ -105,7 +105,7 @@ describe('ContextSwitcher', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.open', { path: '/repos/delta' }));
   });
 
-  it('"Abrir pasta…" canceled is a no-op', async () => {
+  it('"Criar workspace…" canceled is a no-op', async () => {
     const user = userEvent.setup();
     setup(null, { 'dialog.selectFolder': { canceled: true } });
     await openMenu(user, /Contexto: Início/);
@@ -114,7 +114,7 @@ describe('ContextSwitcher', () => {
     expect(call).not.toHaveBeenCalledWith('workspace.open', expect.anything());
   });
 
-  it('"Abrir pasta…" shows the error toast when opening is rejected', async () => {
+  it('"Criar workspace…" shows the error toast when opening is rejected', async () => {
     const user = userEvent.setup();
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.list') return ok([]);
@@ -155,5 +155,67 @@ describe('ContextSwitcher', () => {
     await user.click(screen.getByTestId('context-switcher-home'));
     expect(focusOverview).toHaveBeenCalled();
     expect(call).not.toHaveBeenCalledWith('workspace.goHome', expect.anything());
+  });
+
+  describe('multiple folders', () => {
+    const MULTI: Workspace = { ...ACME, extraFolders: ['/repos/api'] };
+
+    it('adds a folder to the open workspace and asks to rename it right after the first addition', async () => {
+      const user = userEvent.setup();
+      setup(ACME, {
+        'dialog.selectFolder': { canceled: false, path: '/repos/api' },
+        'workspace.addFolder': MULTI,
+      });
+      const menu = await openMenu(user, /Contexto: Acme/);
+      await user.click(within(menu).getByTestId('context-switcher-add-folder'));
+
+      await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.addFolder', { id: 'w1', path: '/repos/api' }));
+      const input = await screen.findByTestId('rename-workspace-input');
+      expect(input).toHaveValue('Acme');
+
+      await user.clear(input);
+      await user.type(input, 'Platform');
+      await user.click(screen.getByTestId('rename-workspace-submit'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.rename', { id: 'w1', name: 'Platform' }));
+    });
+
+    it('does not offer the add-folder action at Início', async () => {
+      const user = userEvent.setup();
+      setup(null);
+      const menu = await openMenu(user, /Contexto: Início/);
+      expect(within(menu).queryByTestId('context-switcher-add-folder')).not.toBeInTheDocument();
+    });
+
+    it('lists a remove action per folder once there are several, and not before', async () => {
+      const user = userEvent.setup();
+      setup(MULTI, { 'workspace.removeFolder': ACME });
+      const menu = await openMenu(user, /Contexto: Acme/);
+      await user.click(within(menu).getByTestId('context-switcher-remove-folder-api'));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.removeFolder', { id: 'w1', path: '/repos/api' }));
+    });
+
+    it('shows no remove-folder action for a single-folder workspace', async () => {
+      const user = userEvent.setup();
+      setup(ACME);
+      const menu = await openMenu(user, /Contexto: Acme/);
+      expect(within(menu).queryByTestId('context-switcher-remove-folder-acme')).not.toBeInTheDocument();
+    });
+
+    it('surfaces the refusal naming the workspace that owns the folder', async () => {
+      const user = userEvent.setup();
+      call.mockImplementation(async (method: string) => {
+        if (method === 'workspace.list') return ok([ACME, BRAVO]);
+        if (method === 'workspace.getActive') return ok(ACME);
+        if (method === 'dialog.selectFolder') return ok({ canceled: false, path: '/repos/bravo' });
+        if (method === 'workspace.addFolder') {
+          return { ok: false, error: { kind: 'validation', message: '/repos/bravo already belongs to workspace "Bravo"' } };
+        }
+        return ok(undefined);
+      });
+      renderWithShell(<ContextSwitcher />);
+      const menu = await openMenu(user, /Contexto: Acme/);
+      await user.click(within(menu).getByTestId('context-switcher-add-folder'));
+      expect(await screen.findByText(/already belongs to workspace "Bravo"/)).toBeInTheDocument();
+    });
   });
 });

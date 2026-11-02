@@ -38,4 +38,25 @@ describe('resolveScopePath', () => {
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('internal');
   });
+
+  describe('multi-folder workspace', () => {
+    const ws = { id: 'ws-1', name: 'W', rootPath: '/r/web', extraFolders: ['/r/api'], createdAt: '' };
+    const deps = { workspaceService: { get: async () => ws }, homedir: '/home/u' };
+
+    it('resolves to the entity folder when it lives in one', async () => {
+      const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'ws-1', folder: '/r/api' };
+      expect(await resolveScopePath(entity, deps)).toBe('/r/api');
+    });
+
+    it('resolves a shared entity (no folder) to the workspace home under Global', async () => {
+      const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'ws-1' };
+      expect(await resolveScopePath(entity, deps)).toBe('/home/u/.ai-companion/workspaces/ws-1');
+    });
+
+    it('a single-folder workspace still resolves to its root', async () => {
+      const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'ws-1' };
+      const single = { workspaceService: { get: async () => ({ id: ws.id, name: ws.name, rootPath: ws.rootPath, createdAt: '' }) }, homedir: '/home/u' };
+      expect(await resolveScopePath(entity, single)).toBe('/r/web');
+    });
+  });
 });

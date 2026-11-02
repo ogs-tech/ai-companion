@@ -4,6 +4,7 @@ import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { OriginMeta } from './OriginMeta.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
+import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
@@ -17,6 +18,11 @@ import type { Agent, Entity, Skill } from '../../../shared/entity.js';
 interface LocalScope {
   scope: 'workspace';
   scopeId: string;
+  /**
+   * Multi-folder workspaces: which origin this list shows — a folder's absolute
+   * path, or `null` for the workspace's shared set. Omitted = every origin.
+   */
+  folder?: string | null;
 }
 
 interface EntityTreeGroupProps {
@@ -40,6 +46,8 @@ interface EntityTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Takes part in a cross-type origin view — see `OriginView`. */
+  view?: OriginView;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
   onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
   /** Right-click on a row → "Preview" — opens a read-only rendered-Markdown tab instead of the editing tab `onEdit` opens. */
@@ -52,16 +60,23 @@ interface EntityTreeGroupProps {
 
 function isLocal(entity: Entity, localScope: LocalScope | undefined): boolean {
   if (!localScope) return true;
+  if (localScope.folder !== undefined && entity.folder !== (localScope.folder ?? undefined)) return false;
   return entity.scopes[0] === localScope.scope && entity.scopeId === localScope.scopeId;
 }
 
 /** A blank entity of `kind`, pre-scoped to the open workspace when there is one. */
 export function seedNewEntity(kind: 'skill' | 'agent', localScope: LocalScope | undefined): Skill | Agent {
   const blank = blankCustomization(kind) as Skill | Agent;
-  return localScope ? ({ ...blank, scopes: [localScope.scope], scopeId: localScope.scopeId } as Skill | Agent) : blank;
+  if (!localScope) return blank;
+  return {
+    ...blank,
+    scopes: [localScope.scope],
+    scopeId: localScope.scopeId,
+    ...(typeof localScope.folder === 'string' ? { folder: localScope.folder } : {}),
+  } as Skill | Agent;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', origin = 'all', onCount, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', origin = 'all', onCount, view, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
@@ -104,6 +119,34 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
     }
   };
 
+  // Sub-group headers sit one level below the group header — except in `flat`
+  // mode, where there is no group header and they take its place.
+  const subDepth = flat ? depth : depth + 1;
+
+  const renderRow = (item: Entity, rowDepth: number): React.ReactElement => (
+    <TreeGroupRow
+      key={item.urn}
+      testId={`tree-${groupTestId}-${item.name}`}
+      glyph={ENTITY_GROUP_ICONS[kind]}
+      primary={item.name}
+      mono
+      depth={rowDepth}
+      muted={inherited}
+      accentColor={ENTITY_ACCENT_COLOR[kind]}
+      onClick={() => onEdit(kind, item as Skill | Agent, false)}
+      onContextMenu={(e) => rowMenu.openMenu(e, item as Skill | Agent)}
+      badge={
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
+          <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
+        </Stack>
+      }
+      // Row click already opens this item in the editor tab; the "⋯"
+      // menu carries everything else (preview, properties, delete).
+      actions={<RowMenuButton testId={`tree-${kind}-menu-${item.name}`} label={`Ações de ${item.name}`} onOpen={(e) => rowMenu.openMenu(e, item as Skill | Agent)} />}
+    />
+  );
+
   return (
     <>
       <TreeGroup
@@ -115,34 +158,17 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
         flat={flat}
         {...(inherited ? {} : { onCreate: startCreate, createLabel: `Novo ${kind === 'skill' ? 'skill' : 'agent'}` })}
       >
-        {visible.map((item) => {
-          return (
-            <TreeGroupRow
-              key={item.urn}
-              testId={`tree-${groupTestId}-${item.name}`}
-              glyph={ENTITY_GROUP_ICONS[kind]}
-              primary={item.name}
-              mono
-              depth={depth}
-              muted={inherited}
-              accentColor={ENTITY_ACCENT_COLOR[kind]}
-              onClick={() => onEdit(kind, item as Skill | Agent, false)}
-              onContextMenu={(e) => rowMenu.openMenu(e, item as Skill | Agent)}
-              badge={
-                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                  <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
-                  <OriginMeta
-                    {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})}
-                    inherited={inherited}
-                  />
-                </Stack>
-              }
-              // Row click already opens this item in the editor tab; the "⋯"
-              // menu carries everything else (preview, properties, delete).
-              actions={<RowMenuButton testId={`tree-${kind}-menu-${item.name}`} label={`Ações de ${item.name}`} onOpen={(e) => rowMenu.openMenu(e, item as Skill | Agent)} />}
-            />
-          );
-        })}
+        <OriginGroups
+          glyph={ENTITY_GROUP_ICONS[kind]}
+          items={visible as Array<Skill | Agent>}
+          storageScope={`${localScope?.scopeId ?? 'home'}:${groupTestId}`}
+          testId={groupTestId}
+          forceOpen={query.trim() !== ''}
+          depth={subDepth}
+          plainDepth={depth}
+          {...(view ? { view } : {})}
+          renderRow={renderRow}
+        />
       </TreeGroup>
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

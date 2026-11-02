@@ -39,7 +39,12 @@ export function toReport(err: unknown): ErrorReport {
  * state, so the toolbar, the tree's context menu and the error alert all
  * report through one place.
  */
-export function useGitActions() {
+export function useGitActions(defaultFolder?: string) {
+  /** A call may name its folder (the tree routes by path); otherwise the block's own folder applies. */
+  const at = (folder?: string): { folder?: string } => {
+    const f = folder ?? defaultFolder;
+    return f === undefined ? {} : { folder: f };
+  };
   const stage = useGitStage();
   const unstage = useGitUnstage();
   const discard = useGitDiscard();
@@ -52,6 +57,7 @@ export function useGitActions() {
   const sync = useGitSync();
   const [error, setError] = useState<ErrorReport | null>(null);
   const [pendingDiscard, setPendingDiscard] = useState<GitFileChange[] | null>(null);
+  const [pendingDiscardFolder, setPendingDiscardFolder] = useState<string | undefined>(undefined);
 
   const busy = stage.isPending || unstage.isPending || discard.isPending || commit.isPending || init.isPending || push.isPending || pull.isPending || fetch.isPending || sync.isPending;
   /** The remote operation in flight, for the sync button's progress label. */
@@ -72,23 +78,26 @@ export function useGitActions() {
     error,
     clearError: () => setError(null),
     pendingDiscard,
-    requestDiscard: setPendingDiscard,
+    requestDiscard: (files: GitFileChange[], folder?: string) => {
+      setPendingDiscardFolder(folder);
+      setPendingDiscard(files);
+    },
     cancelDiscard: () => setPendingDiscard(null),
     confirmDiscard: () => {
       const files = pendingDiscard ?? [];
       setPendingDiscard(null);
-      fireAndReport(discard.mutateAsync({ paths: files.map((f) => f.path) }));
+      fireAndReport(discard.mutateAsync({ paths: files.map((f) => f.path), ...at(pendingDiscardFolder) }));
     },
-    stage: (paths: string[]) => fireAndReport(stage.mutateAsync({ paths })),
-    unstage: (paths: string[]) => fireAndReport(unstage.mutateAsync({ paths })),
-    sync: () => fireAndReport(sync.mutateAsync({})),
-    push: () => fireAndReport(push.mutateAsync({})),
-    pull: () => fireAndReport(pull.mutateAsync({})),
-    fetch: () => fireAndReport(fetch.mutateAsync({})),
-    init: () => fireAndReport(init.mutateAsync({})),
+    stage: (paths: string[], folder?: string) => fireAndReport(stage.mutateAsync({ paths, ...at(folder) })),
+    unstage: (paths: string[], folder?: string) => fireAndReport(unstage.mutateAsync({ paths, ...at(folder) })),
+    sync: () => fireAndReport(sync.mutateAsync(at())),
+    push: () => fireAndReport(push.mutateAsync(at())),
+    pull: () => fireAndReport(pull.mutateAsync(at())),
+    fetch: () => fireAndReport(fetch.mutateAsync(at())),
+    init: () => fireAndReport(init.mutateAsync(at())),
     /** Errors are not routed to the shared alert: the commit box shows them next to the field. */
-    generateCommitMessage: () => generate.mutateAsync().then((r) => r.message),
-    commit: (message: string, amend: boolean) => run(commit.mutateAsync({ message, amend })).then(() => undefined),
+    generateCommitMessage: () => generate.mutateAsync(at()).then((r) => r.message),
+    commit: (message: string, amend: boolean) => run(commit.mutateAsync({ message, amend, ...at() })).then(() => undefined),
   };
 }
 

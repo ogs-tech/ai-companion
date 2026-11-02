@@ -56,7 +56,7 @@ export function ExplorerToolbar({ status, actions, trailing }: ExplorerToolbarPr
   return (
     <Box
       data-testid="explorer-toolbar"
-      sx={{ flexShrink: 0, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.5 }}
+      sx={{ flexShrink: 0, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}
     >
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>{left}</Box>
       {repo && (

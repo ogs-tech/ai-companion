@@ -41,6 +41,8 @@ import { OpenEditorsService } from './services/open-editors-service.js';
 import type { LaunchConfigReaderPort } from './ports/launch-config-reader-port.js';
 import type { TerminalPort } from './ports/terminal-port.js';
 import type { RepoGitPort } from './ports/repo-git-port.js';
+import { workspaceFolders } from '../../shared/workspace.js';
+import { projectWorkspacePath, workspaceHomePath } from '../../shared/brand-paths.js';
 import { GitService } from './services/git-service.js';
 import type { ConventionSourcePort } from './ports/convention-source-port.js';
 import type { CommitMessageGeneratorPort } from './ports/commit-message-generator-port.js';
@@ -94,6 +96,8 @@ export interface WorkspaceScopedServices {
 export interface ActiveWorkspaceScope {
   workspace: Workspace;
   dataDir: string;
+  /** Multi-folder workspaces only: the bootstrapped dir of the workspace's shared set, outside every folder. */
+  sharedDataDir?: string;
 }
 
 /**
@@ -134,6 +138,18 @@ export function buildWorkspaceScopedServices(
           repository: new FsEntityRepository(active.dataDir, 'workspace'),
           dataDir: active.dataDir,
           workspaceId: active.workspace.id,
+          ...(active.sharedDataDir === undefined
+            ? {}
+            : {
+                folders: workspaceFolders(active.workspace).map((folder) => {
+                  const dir = folder === active.workspace.rootPath ? active.dataDir : projectWorkspacePath(folder);
+                  return { folder, dataDir: dir, repository: new FsEntityRepository(dir, 'workspace') };
+                }),
+                shared: {
+                  dataDir: active.sharedDataDir,
+                  repository: new FsEntityRepository(active.sharedDataDir, 'workspace'),
+                },
+              }),
         },
   );
   const adapterManager = new AdapterManager({
@@ -188,14 +204,26 @@ export function buildWorkspaceScopedServices(
   );
 
   const entityWatchService = new EntityWatchService(
-    active === null ? [globalDataDir] : [globalDataDir, active.dataDir],
+    active === null
+      ? [globalDataDir]
+      : [
+          globalDataDir,
+          ...(active.sharedDataDir === undefined
+            ? [active.dataDir]
+            : [...workspaceFolders(active.workspace).map(projectWorkspacePath), active.sharedDataDir]),
+        ],
     entityRepository,
     adapterManager,
     fileWatcherPort,
   );
 
   const launchConfigService = new LaunchConfigService(activeWorkspace, launchConfigReaderPort);
-  const terminalService = new TerminalService(activeWorkspace, launchConfigService, terminalPort);
+  const terminalService = new TerminalService(
+    activeWorkspace,
+    launchConfigService,
+    terminalPort,
+    active?.sharedDataDir === undefined ? undefined : { workspaceHome: workspaceHomePath(homedir, active.workspace.id) },
+  );
   const openEditorsService = new OpenEditorsService(nodeFsAdapter, dataDir);
   // Its per-root mutation queues are dropped with the old graph on a switch.
   const gitService = new GitService(repoGitPort, { activeWorkspace });

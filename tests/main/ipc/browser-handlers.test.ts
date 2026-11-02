@@ -30,7 +30,13 @@ const setup = () => {
     activeWorkspace: null,
     homedir: '/home/u',
   };
-  const fs = { mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
+  const fs = {
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    lstat: vi.fn().mockResolvedValue({ kind: 'none' }),
+    readlink: vi.fn().mockResolvedValue(''),
+    symlink: vi.fn().mockResolvedValue(undefined),
+  };
   const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps, fs);
   const h = buildBrowserHandlers(service, embeddedBrowser);
   return { service, base, embeddedBrowser, h };

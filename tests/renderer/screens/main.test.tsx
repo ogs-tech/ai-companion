@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Main } from '../../../src/renderer/screens/Main.js';
 import {
@@ -27,7 +27,8 @@ const setupRoute = (overrides: Record<string, unknown> = {}) => {
     if (method === 'customization.list') return Promise.resolve(ok([]));
     if (method === 'skill.list') return Promise.resolve(ok([]));
     if (method === 'agent.list') return Promise.resolve(ok([]));
-    if (method === 'command.list') return Promise.resolve(ok([]));
+    if (method === 'hook.list') return Promise.resolve(ok([]));
+    if (method === 'mcp.list') return Promise.resolve(ok([]));    if (method === 'command.list') return Promise.resolve(ok([]));
     if (method === 'reference.list') return Promise.resolve(ok([]));
     if (method === 'plugin.list') return Promise.resolve(ok([]));
     if (method === 'marketplace.list') return Promise.resolve(ok([]));
@@ -57,7 +58,7 @@ describe('<Main> — shell navigation', () => {
     // Wait for the Default-branch landmark first — until `workspace.getActive`
     // resolves, the screen briefly renders the non-default (FolderTree) shape.
     await screen.findByTestId('home-nav-list');
-    await userEvent.click(screen.getByTestId('control-panel-chip-skill'));
+    fireEvent.change(screen.getByTestId('control-panel-search'), { target: { value: 'zzz-nothing' } });
 
     expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
   });

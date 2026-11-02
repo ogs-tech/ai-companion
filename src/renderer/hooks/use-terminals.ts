@@ -23,11 +23,11 @@ export function useTerminals(enabled = true): UseQueryResult<TerminalSnapshot[]>
   });
 }
 
-/** A new interactive shell in `relCwd` (the workspace root when omitted). */
+/** A new interactive shell in `relCwd` of `folder` (the primary folder's root when both are omitted). */
 export function useCreateTerminal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { relCwd?: string }) => callIpc<TerminalSnapshot>('terminal.create', args),
+    mutationFn: (args: { relCwd?: string; folder?: string }) => callIpc<TerminalSnapshot>('terminal.create', args),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: terminalsQueryKey }),
   });
 }

@@ -1,14 +1,21 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Chip, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, Plus, Search, X } from 'lucide-react';
+import { Box, Chip, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
+import type { LucideIcon } from 'lucide-react';
+import { Folder, ListFilter, Lock, Package, Plus, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, ContainerHeader, FooterLink } from '../ds/ContainerChrome.js';
 import { EntityTreeGroup, seedNewEntity } from './EntityTreeGroup.js';
 import { HooksTreeGroup } from './HooksTreeGroup.js';
 import { InstructionTreeRow } from './InstructionTreeRow.js';
 import { McpTreeGroup } from './McpTreeGroup.js';
+import { MINE_KEY, OriginSection, PersistedGroup, sortOriginKeys, type OriginView } from './OriginGroups.js';
+import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
+import { useFolderRouting } from '../../hooks/use-folder-routing.js';
+import { folderColor } from '../../lib/folder-identity.js';
+import { useCustomizationList } from '../../hooks/use-customization-list.js';
 import { PluginsTreeGroup } from './PluginsTreeGroup.js';
+import { ScopeSection } from './ScopeSection.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
 import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js';
 import { useInstructionsList, usePersonalInstruction } from '../../hooks/use-instructions.js';
@@ -24,29 +31,23 @@ interface LocalScope {
 }
 
 type EntityKind = 'skill' | 'agent';
-type ChipId = 'all' | 'skill' | 'agent' | 'integrations';
 type Section = 'local' | 'global';
 type RowType = 'instruction' | 'skill' | 'agent' | 'hook' | 'mcp' | 'plugin';
 
-const CHIPS: ReadonlyArray<{ id: ChipId; label: string }> = [
-  { id: 'all', label: 'Tudo' },
-  { id: 'skill', label: 'Skills' },
-  { id: 'agent', label: 'Agents' },
-  { id: 'integrations', label: 'Integrações' },
-];
-
-const SEGMENTS: ReadonlyArray<{ id: OriginSegment; label: string }> = [
+const SEGMENTS: ReadonlyArray<{ id: Exclude<OriginSegment, 'all'>; label: string }> = [
   { id: 'mine', label: 'Meus' },
   { id: 'plugins', label: 'Plugins' },
-  { id: 'all', label: 'Todos' },
 ];
 
-const TYPES_BY_CHIP: Record<ChipId, ReadonlyArray<RowType>> = {
-  all: ['instruction', 'skill', 'agent', 'hook', 'mcp', 'plugin'],
-  skill: ['skill'],
-  agent: ['agent'],
-  integrations: ['hook', 'mcp', 'plugin'],
-};
+/** The type groups inside a scope section: what "Meus" splits into. */
+const TYPE_GROUPS: ReadonlyArray<{ id: string; label: string; glyph: LucideIcon; types: ReadonlyArray<RowType> }> = [
+  { id: 'skill', label: 'Skills', glyph: ENTITY_GROUP_ICONS.skill, types: ['skill'] },
+  { id: 'agent', label: 'Agents', glyph: ENTITY_GROUP_ICONS.agent, types: ['agent'] },
+  { id: 'integrations', label: 'Integrações', glyph: ENTITY_GROUP_ICONS.mcp, types: ['hook', 'mcp', 'plugin'] },
+];
+
+/** Row types the list shows. Plugin rows live under "Integrações" / "Plugins" groups, not as a top-level type. */
+const TYPES: ReadonlyArray<RowType> = ['instruction', 'skill', 'agent', 'hook', 'mcp'];
 
 export interface CustomizationsListProps {
   /** True at Início (Global): a single editable section. False while a workspace is open — or still loading. */
@@ -72,14 +73,14 @@ export interface CustomizationsListProps {
 type NewTarget = EntityKind | 'instruction' | 'mcp' | 'plugin';
 
 /**
- * Every customization of the current scope as one searchable, filterable list,
+ * Every customization of the current scope as one searchable, searchable list,
  * with no group headers (the main header already names the scope): the scope's
  * own items first, then — inside a workspace — Global's, read-only and dimmed.
  * Each item appears exactly once; its type reads from the row's icon and accent
  * spine, its origin from the quiet text at the end of the row, and the
  * origin menu (Todos/Meus/Plugins) narrows it by origin.
  *
- * Chip and search text are local state: the parent keys this component by
+ * Search text and origin are local state: the parent keys this component by
  * scope so they reset on workspace switch.
  */
 export function CustomizationsList({
@@ -102,7 +103,6 @@ export function CustomizationsList({
   const { data: personalInstruction } = usePersonalInstruction();
   const { data: instructions } = useInstructionsList();
 
-  const [chip, setChip] = useState<ChipId>('all');
   const [query, setQuery] = useState('');
   const [segment, setSegment] = useState<OriginSegment>('all');
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -115,7 +115,7 @@ export function CustomizationsList({
     setCounts((prev) => (prev[key] === count ? prev : { ...prev, [key]: count }));
   }, []);
 
-  const types = TYPES_BY_CHIP[chip];
+  const types = TYPES;
   const showsType = (type: RowType): boolean => types.includes(type);
   // Instructions are always the user's own — a plugin never provides one.
   const showsInstructions = showsType('instruction') && matchesOrigin(segment, false);
@@ -146,7 +146,7 @@ export function CustomizationsList({
   const reported = types.every((type) => type === 'instruction' || `local:${type}` in counts);
   const isEmpty = reported && localCount + globalCount === 0;
   const searching = query.trim() !== '';
-  const filtered = searching || chip !== 'all' || segment !== 'all';
+  const filtered = searching || segment !== 'all';
   const total = localCount + globalCount;
   // The unfiltered total, remembered while no filter is on, so the header and the
   // footer's "12 de 105" keep naming the whole list while a filter narrows it.
@@ -155,7 +155,6 @@ export function CustomizationsList({
   const grandTotal = baseline ?? total;
   const clearFilters = (): void => {
     setQuery('');
-    setChip('all');
     setSegment('all');
   };
 
@@ -168,21 +167,14 @@ export function CustomizationsList({
     } else if (target === 'mcp') setMcpEditorOpen(true);
     else setPluginImportOpen(true);
   };
-  const menuTargets: ReadonlyArray<{ target: NewTarget; label: string }> =
-    chip === 'integrations'
-      ? [
-          { target: 'mcp', label: 'Servidor MCP' },
-          { target: 'plugin', label: 'Importar plugin' },
-        ]
-      : [
-          { target: 'skill', label: 'Skill' },
-          { target: 'agent', label: 'Agent' },
-          ...(instructionCreatable ? [{ target: 'instruction' as const, label: 'Instruction' }] : []),
-        ];
-  const handleNew = (e: React.MouseEvent<HTMLElement>): void => {
-    if (chip === 'skill' || chip === 'agent') create(chip);
-    else setNewMenuAnchor(e.currentTarget);
-  };
+  const menuTargets: ReadonlyArray<{ target: NewTarget; label: string }> = [
+    { target: 'skill', label: 'Skill' },
+    { target: 'agent', label: 'Agent' },
+    ...(instructionCreatable ? [{ target: 'instruction' as const, label: 'Instruction' }] : []),
+    { target: 'mcp', label: 'Servidor MCP' },
+    { target: 'plugin', label: 'Importar plugin' },
+  ];
+  const handleNew = (e: React.MouseEvent<HTMLElement>): void => setNewMenuAnchor(e.currentTarget);
 
   const entityHandlers = {
     onEdit: onEditEntity,
@@ -198,8 +190,213 @@ export function CustomizationsList({
   const scopeProp = localScope ? { localScope } : {};
   const counter = (section: Section, type: RowType) => ({ onCount: (n: number) => report(`${section}:${type}`, n) });
 
-  const localRows = (
-    <List disablePadding>
+  // Skills, agents, hooks and MCP share one origin axis: every type list first
+  // reports how many rows each origin has ("census"), then the sections below
+  // mount each origin's slice of every type under one "Meus" / plugin header.
+  const [buckets, setBuckets] = useState<Record<string, Record<string, number>>>({});
+  const reportBuckets = useCallback((key: string, counts: Record<string, number>): void => {
+    setBuckets((prev) => (JSON.stringify(prev[key]) === JSON.stringify(counts) ? prev : { ...prev, [key]: counts }));
+  }, []);
+  type ViewMode = { kind: 'census' } | { kind: 'bucket'; key: string; depth: number };
+  const viewProps = (section: Section, type: RowType, mode: ViewMode): { view: OriginView; onCount?: (n: number) => void } =>
+    mode.kind === 'census'
+      ? { view: { kind: 'census', onBuckets: (counts) => reportBuckets(`${section}:${type}`, counts) }, ...counter(section, type) }
+      : { view: mode };
+
+  const localTypes = (mode: ViewMode, only?: ReadonlyArray<RowType>): React.ReactNode => {
+    const on = (type: RowType): boolean => showsType(type) && (only === undefined || only.includes(type));
+    return (
+    <>
+      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" flat query={query} origin={segment} {...viewProps('local', 'skill', mode)} {...entityHandlers} {...scopeProp} />}
+      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" flat query={query} origin={segment} {...viewProps('local', 'agent', mode)} {...entityHandlers} {...scopeProp} />}
+      {on('hook') && <HooksTreeGroup flat query={query} origin={segment} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...viewProps('local', 'hook', mode)} />}
+      {on('mcp') && (
+        <McpTreeGroup flat query={query} origin={segment} showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('local', 'mcp', mode)} />
+      )}
+    </>
+    );
+  };
+  const globalTypes = (mode: ViewMode, only?: ReadonlyArray<RowType>): React.ReactNode => {
+    const on = (type: RowType): boolean => showsType(type) && (only === undefined || only.includes(type));
+    return (
+    <>
+      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" inherited flat query={query} origin={segment} {...viewProps('global', 'skill', mode)} {...inheritedHandlers} {...scopeProp} />}
+      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" inherited flat query={query} origin={segment} {...viewProps('global', 'agent', mode)} {...inheritedHandlers} {...scopeProp} />}
+      {on('hook') && <HooksTreeGroup flat query={query} origin={segment} isProjectContext showGlobal {...viewProps('global', 'hook', mode)} />}
+      {on('mcp') && (
+        <McpTreeGroup flat query={query} origin={segment} showGlobal onlyGlobal {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('global', 'mcp', mode)} />
+      )}
+    </>
+    );
+  };
+
+  // Inside a workspace the groups sit one level under their scope header.
+  const base = isHome ? 0 : 1;
+  const scopeKey = (section: Section): string => `scope-section:${localScope?.scopeId ?? 'home'}:${section}`;
+  const groupKey = (section: Section, suffix: string): string => `tree-subgroup:${localScope?.scopeId ?? 'home'}:${section}:${suffix}`;
+
+  const pluginRows = (section: Section, depth: number, census = false): React.ReactNode =>
+    showsType('plugin') && (
+      <PluginsTreeGroup
+        flat
+        depth={depth}
+        query={query}
+        origin={segment}
+        {...(section === 'local'
+          ? { showGlobal: false, ...(isHome ? {} : { isProjectContext: true }) }
+          : { isProjectContext: true, showGlobal: true, onlyGlobal: true })}
+        {...(census ? { countOnly: true, ...counter(section, 'plugin') } : {})}
+      />
+    );
+
+  // The user's own items split by type (Skills / Agents / Integrações); everything
+  // a plugin provides sits in one collapsed "Plugins" block, one group per plugin.
+  const originSections = (section: Section, typesFor: (mode: ViewMode, only?: ReadonlyArray<RowType>) => React.ReactNode): { census: React.ReactNode; body: React.ReactNode; mine: React.ReactNode; plugins: React.ReactNode } => {
+    const totals: Record<string, number> = {};
+    for (const type of types) {
+      for (const [key, n] of Object.entries(buckets[`${section}:${type}`] ?? {})) totals[key] = (totals[key] ?? 0) + n;
+    }
+    const pluginKeys = sortOriginKeys(Object.keys(totals).filter((key) => key !== MINE_KEY && (totals[key] ?? 0) > 0));
+    const pluginsTotal = pluginKeys.reduce((sum, key) => sum + (totals[key] ?? 0), 0);
+
+    const mineCount = (type: RowType): number => {
+      if (!showsType(type)) return 0;
+      return type === 'plugin' ? (counts[`${section}:plugin`] ?? 0) : (buckets[`${section}:${type}`]?.[MINE_KEY] ?? 0);
+    };
+    const visibleGroups = TYPE_GROUPS.filter((g) => g.types.some(showsType));
+    const groupBody = (g: (typeof TYPE_GROUPS)[number], depth: number): React.ReactNode => (
+      <>
+        {typesFor({ kind: 'bucket', key: MINE_KEY, depth }, g.types)}
+        {g.types.includes('plugin') && pluginRows(section, depth)}
+      </>
+    );
+    const mine = visibleGroups
+      .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + mineCount(type), 0) }))
+      .filter(({ count }) => count > 0)
+      .map(({ g, count }) => (
+        <PersistedGroup
+          key={g.id}
+          glyph={g.glyph}
+          label={g.label}
+          count={count}
+          storageKey={groupKey(section, `type:${g.id}`)}
+          testId={`type-${section}-${g.id}`}
+          forceOpen={searching}
+          depth={base}
+          defaultOpen
+        >
+          {groupBody(g, base + 1)}
+        </PersistedGroup>
+      ));
+    const plugins = pluginKeys.length > 0 && (
+      <PersistedGroup
+        glyph={Package}
+        label="Plugins"
+        count={pluginsTotal}
+        storageKey={groupKey(section, 'plugins')}
+        testId={`plugins-${section}`}
+        forceOpen={searching}
+        depth={base}
+        defaultOpen={false}
+      >
+        {pluginKeys.map((key) => (
+          <OriginSection
+            key={key}
+            originKey={key}
+            count={totals[key] ?? 0}
+            storageKey={groupKey(section, key)}
+            testId={`origin-${section}-${key}`}
+            forceOpen={searching}
+            depth={base + 1}
+          >
+            {visibleGroups
+              .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + (showsType(type) ? (buckets[`${section}:${type}`]?.[key] ?? 0) : 0), 0) }))
+              .filter(({ count }) => count > 0)
+              .map(({ g, count }) => (
+                <PersistedGroup
+                  key={g.id}
+                  glyph={g.glyph}
+                  label={g.label}
+                  count={count}
+                  storageKey={groupKey(section, `${key}:type:${g.id}`)}
+                  testId={`type-${section}-${key}-${g.id}`}
+                  forceOpen={searching}
+                  depth={base + 2}
+                  defaultOpen
+                >
+                  {typesFor({ kind: 'bucket', key, depth: base + 3 }, g.types)}
+                </PersistedGroup>
+              ))}
+          </OriginSection>
+        ))}
+      </PersistedGroup>
+    );
+    return {
+      mine,
+      plugins,
+      // Census instances render nothing; they stay outside every collapsible so counts keep flowing.
+      census: (
+        <>
+          {typesFor({ kind: 'census' })}
+          {pluginRows(section, 0, true)}
+        </>
+      ),
+      body: (
+        <>
+          {mine}
+          {plugins}
+        </>
+      ),
+    };
+  };
+  const localOrigins = originSections('local', localTypes);
+  const globalOrigins = originSections('global', globalTypes);
+
+  // Multi-folder workspace: "Neste workspace" splits by origin — the workspace's
+  // shared set, then one group per folder (origin › kind › item).
+  const routing = useFolderRouting();
+  const { data: skillList } = useCustomizationList('skill', 'skill.list');
+  const { data: agentList } = useCustomizationList('agent', 'agent.list');
+  const originCount = (folder: string | null): number =>
+    [...(skillList ?? []), ...(agentList ?? [])].filter(
+      (e) =>
+        e.source.kind !== 'plugin' &&
+        e.scopes[0] === 'workspace' &&
+        e.scopeId === localScope?.scopeId &&
+        e.folder === (folder ?? undefined) &&
+        matchesQuery(query, e.name, e.description),
+    ).length;
+  const originGroups = (): React.ReactNode => {
+    if (!localScope || !routing.multi) return null;
+    const origins: Array<{ folder: string | null; label: string; color: string }> = [
+      { folder: null, label: 'Workspace', color: folderColor(routing.folders, undefined) },
+      ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string, color: folderColor(routing.folders, folder) })),
+    ];
+    return origins.map(({ folder, label, color }) => {
+      const scoped = { ...localScope, folder };
+      return (
+        <PersistedGroup
+          key={folder ?? '__shared'}
+          glyph={Folder}
+          label={label}
+          accent={color}
+          count={originCount(folder)}
+          storageKey={groupKey('local', `folder:${folder ?? 'shared'}`)}
+          testId={`origin-folder-${label}`}
+          forceOpen={searching}
+          depth={base}
+          defaultOpen
+        >
+          {showsType('skill') && <EntityTreeGroup kind="skill" label="Skills" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
+          {showsType('agent') && <EntityTreeGroup kind="agent" label="Agents" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
+          {folder === routing.folders[0] && localTypes({ kind: 'bucket', key: MINE_KEY, depth: base + 1 }, ['hook', 'mcp'])}
+        </PersistedGroup>
+      );
+    });
+  };
+
+  const localBody = (
+    <>
       {homeInstructionRow && (
         <InstructionTreeRow
           kind="personal"
@@ -215,8 +412,9 @@ export function CustomizationsList({
           <InstructionTreeRow
             key={instruction.urn}
             kind="workspace"
-              label={instruction.name}
+            label={instruction.name}
             testId={`workspace-instruction-row-${instruction.name}`}
+            depth={base}
             instruction={instruction}
             seed={() => instruction}
             onOpen={onOpenInstruction}
@@ -225,39 +423,52 @@ export function CustomizationsList({
             onNewAction={onNewActionForInstruction}
           />
         ))}
-      {showsType('skill') && <EntityTreeGroup kind="skill" label="Skills" flat query={query} origin={segment} {...counter('local', 'skill')} {...entityHandlers} {...scopeProp} />}
-      {showsType('agent') && <EntityTreeGroup kind="agent" label="Agents" flat query={query} origin={segment} {...counter('local', 'agent')} {...entityHandlers} {...scopeProp} />}
-      {showsType('hook') && <HooksTreeGroup flat query={query} origin={segment} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...counter('local', 'hook')} />}
-      {showsType('mcp') && (
-        <McpTreeGroup flat query={query} origin={segment} showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...counter('local', 'mcp')} />
+      {routing.multi && localScope ? (
+        <>
+          {originGroups()}
+          {localOrigins.plugins}
+        </>
+      ) : (
+        localOrigins.body
       )}
-      {showsType('plugin') && <PluginsTreeGroup flat query={query} origin={segment} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...counter('local', 'plugin')} />}
-    </List>
+    </>
   );
 
-  const globalRows = (
-    <List disablePadding>
+  const globalBody = (
+    <>
       {inheritedInstructionRow && personalInstruction && (
         <InstructionTreeRow
           kind="personal"
           testId="inherited-instruction-row"
+          depth={base}
           instruction={personalInstruction}
           seed={() => personalInstruction}
           onOpen={(entity) => onOpenInherited(entity, 'instruction')}
           onPreview={onPreviewEntity}
         />
       )}
-      {showsType('skill') && (
-        <EntityTreeGroup kind="skill" label="Skills" inherited flat query={query} origin={segment} {...counter('global', 'skill')} {...inheritedHandlers} {...scopeProp} />
-      )}
-      {showsType('agent') && (
-        <EntityTreeGroup kind="agent" label="Agents" inherited flat query={query} origin={segment} {...counter('global', 'agent')} {...inheritedHandlers} {...scopeProp} />
-      )}
-      {showsType('hook') && <HooksTreeGroup flat query={query} origin={segment} isProjectContext showGlobal {...counter('global', 'hook')} />}
-      {showsType('mcp') && (
-        <McpTreeGroup flat query={query} origin={segment} showGlobal onlyGlobal {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...counter('global', 'mcp')} />
-      )}
-      {showsType('plugin') && <PluginsTreeGroup flat query={query} origin={segment} isProjectContext showGlobal onlyGlobal {...counter('global', 'plugin')} />}
+      {globalOrigins.body}
+    </>
+  );
+
+  // Both bodies stay mounted even when their section is hidden: the type lists
+  // report the counts that decide whether a section shows, so unmounting would
+  // freeze them at zero once a filter emptied the list.
+  const rows = isHome ? (
+    <List disablePadding>
+      {localOrigins.census}
+      {localBody}
+    </List>
+  ) : (
+    <List disablePadding>
+      {localOrigins.census}
+      {globalOrigins.census}
+      <ScopeSection section="local" glyph={Folder} label="Neste workspace" count={localCount} storageKey={scopeKey('local')} forceOpen={searching} defaultOpen hidden={isEmpty}>
+        {localBody}
+      </ScopeSection>
+      <ScopeSection section="global" glyph={Lock} label="Do Início" tooltip="Somente leitura aqui — edite no Início" count={globalCount} storageKey={scopeKey('global')} forceOpen={searching} defaultOpen={false} hidden={reported && globalCount === 0}>
+        {globalBody}
+      </ScopeSection>
     </List>
   );
 
@@ -299,41 +510,40 @@ export function CustomizationsList({
                 <Icon glyph={X} size={12} />
               </IconButton>
             )}
+            <Tooltip title="Filtrar por origem">
+              <IconButton
+                size="small"
+                aria-label="Filtrar por origem"
+                aria-haspopup="menu"
+                data-testid="control-panel-origin"
+                color={segment === 'all' ? 'default' : 'primary'}
+                onClick={(e) => setOriginAnchor(e.currentTarget)}
+                sx={{ p: 0.25 }}
+              >
+                <Icon glyph={ListFilter} size={13} />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Stack>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5, flexGrow: 1 }}>
-            {CHIPS.map(({ id, label }) => (
+            {segment !== 'all' && (
               <Chip
-                key={id}
                 size="small"
-                label={label}
-                data-testid={`control-panel-chip-${id}`}
-                color={chip === id ? 'primary' : 'default'}
-                variant={chip === id ? 'filled' : 'outlined'}
-                onClick={() => setChip(id)}
+                color="primary"
+                label={SEGMENTS.find((s) => s.id === segment)?.label}
+                data-testid="control-panel-origin-chip"
+                onDelete={() => setSegment('all')}
+                deleteIcon={<Icon glyph={X} size={11} />}
                 sx={{ height: 20, fontSize: '0.6875rem' }}
               />
-            ))}
+            )}
           </Stack>
-          <Button
-            size="small"
-            color={segment === 'all' ? 'inherit' : 'primary'}
-            aria-label="Origem"
-            aria-haspopup="menu"
-            data-testid="control-panel-origin"
-            endIcon={<Icon glyph={ChevronDown} size={12} />}
-            onClick={(e) => setOriginAnchor(e.currentTarget)}
-            sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.5, fontSize: '0.6875rem', textTransform: 'none' }}
-          >
-            {SEGMENTS.find((s) => s.id === segment)?.label}
-          </Button>
         </Stack>
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}>
-        {localRows}
-        {!isHome && globalRows}
+        {rows}
 
         {isEmpty && (
           <Typography variant="caption" color="text.secondary" data-testid="control-panel-empty" sx={{ display: 'block', px: 1.5, py: 1 }}>

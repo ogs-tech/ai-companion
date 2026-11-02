@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
@@ -50,6 +50,25 @@ describe('ChokidarFileWatcher', () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(onChange).not.toHaveBeenCalled();
     await rm(otherDir, { recursive: true, force: true });
+  });
+
+  it('does not follow a symlink out of a watched root into the folder it points at', async () => {
+    // Multi-folder sessions drop symlinks to the user's real repos under Global's data dir; following them would watch every file of `node_modules`/`.git` and exhaust file descriptors (EMFILE).
+    const repo = await mkdtemp(join(tmpdir(), 'sde-file-watcher-repo-'));
+    await symlink(repo, join(dir, 'linked-repo'));
+    const watcher = new ChokidarFileWatcher({ stabilityThresholdMs: 30 });
+    const onChange = vi.fn();
+    handle = watcher.watch([dir], onChange);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    await mkdir(join(repo, 'node_modules'), { recursive: true });
+    await writeFile(join(repo, 'node_modules', 'touched.md'), 'x\n', 'utf8');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // The link itself may be reported (harmless — it maps to no entity); nothing inside its target may be.
+    const reported = onChange.mock.calls.map(([path]) => String(path));
+    expect(reported.filter((path) => path.startsWith(join(dir, 'linked-repo') + '/'))).toEqual([]);
+    await rm(repo, { recursive: true, force: true });
   });
 
   it('skips a unix socket under a watched root instead of failing to watch it', async () => {
