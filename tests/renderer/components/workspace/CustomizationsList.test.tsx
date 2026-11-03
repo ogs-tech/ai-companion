@@ -86,28 +86,13 @@ describe('CustomizationsList', () => {
     expect(screen.queryByTestId('tree-inherited-skill-lint')).not.toBeInTheDocument();
   });
 
-  it('narrows by origin: Plugins hides the user\'s own items, Meus keeps them, and instructions never count as plugin-provided', async () => {
-    const user = userEvent.setup();
+  it('has no origin filter: the search is the only control, and Skills/Agents are always listed', async () => {
     renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
     await screen.findByTestId('tree-skill-deploy');
     expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
-
-    await user.click(screen.getByTestId('control-panel-origin'));
-    await user.click(await screen.findByTestId('control-panel-segment-plugins'));
-    expect(screen.queryByTestId('tree-skill-deploy')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('personal-instruction-row')).not.toBeInTheDocument();
-
-    // The active filter is a removable chip in the search row.
-    expect(screen.getByTestId('control-panel-origin-chip')).toHaveTextContent('Plugins');
-    await user.click(screen.getByTestId('control-panel-origin-chip').querySelector('.MuiChip-deleteIcon')!);
+    expect(screen.queryByTestId('control-panel-origin')).not.toBeInTheDocument();
     expect(screen.queryByTestId('control-panel-origin-chip')).not.toBeInTheDocument();
-    expect(screen.getByTestId('tree-skill-deploy')).toBeInTheDocument();
-
-    await user.click(screen.getByTestId('control-panel-origin'));
-    await user.click(await screen.findByTestId('control-panel-segment-mine'));
-    expect(screen.getByTestId('control-panel-origin-chip')).toHaveTextContent('Meus');
-    expect(screen.getByTestId('tree-skill-deploy')).toBeInTheDocument();
-    expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
+    expect(screen.getByTestId('tree-subgroup-type-local-agent')).toHaveTextContent('Agents');
   });
 
   it('keeps the Início section collapsed but counted, toggles it, and a search reopens it', async () => {
@@ -156,7 +141,7 @@ describe('CustomizationsList', () => {
     expect(await screen.findByTestId('tree-hook-h1')).toBeVisible();
     expect(screen.getByTestId('tree-subgroup-type-local-skill')).toHaveTextContent('Skills');
     expect(screen.getByTestId('tree-subgroup-type-local-integrations')).toHaveTextContent('Integrações');
-    expect(screen.queryByTestId('tree-subgroup-type-local-agent')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tree-subgroup-type-local-agent')).toHaveTextContent('Agents');
     expect(screen.getByTestId('tree-subgroup-plugins-local')).toHaveTextContent('Plugins');
     expect(screen.queryByTestId('tree-skill-scaffold')).not.toBeInTheDocument();
 

@@ -57,6 +57,7 @@ import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/session-runtime/node-pty-session-adapter.js';
 import { CURSOR_PROFILE } from './infrastructure/session-runtime/cli-profiles.js';
 import { CompositeTranscriptAdapter } from './infrastructure/session-runtime/composite-transcript-adapter.js';
+import { NodeSqliteCursorChatStore } from './infrastructure/session-runtime/node-sqlite-cursor-chat-store.js';
 import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-cursor-transcript-adapter.js';
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
@@ -399,7 +400,7 @@ async function wireIpc(): Promise<void> {
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new CompositeTranscriptAdapter({
       claude: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
-      cursor: new FsCursorTranscriptAdapter(join(home, '.cursor', 'chats')),
+      cursor: new FsCursorTranscriptAdapter(join(home, '.cursor', 'chats'), new NodeSqliteCursorChatStore()),
     }),
     fileWatcherPort: new ChokidarFileWatcher(),
     launchConfigReaderPort: new FsLaunchConfigReader(),

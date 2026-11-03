@@ -37,7 +37,7 @@ With Cursor enabled and the `cursor-agent` CLI installed (`~/.local/bin/cursor-a
 dialog with a **Claude / Cursor** selector (it always opens on Claude; the choice is per session). A Cursor
 session runs in the same terminal panel as a Claude one, shows the Cursor mark on its tab and row, and can be
 reopened from the sessions list. If the CLI is not found, Cursor appears disabled in the selector. Cursor
-sessions have no cost, tokens or model — the list shows "—". Sign in to Cursor inside the terminal if the CLI asks.
+sessions show an **estimated** cost and the real model: Cursor records no tokens, so they are reconstructed from the chat text (~4 characters per token, whole history re-sent every turn, no prompt-cache discount) and priced from the bundled table. A model with no published rate shows "—". Sign in to Cursor inside the terminal if the CLI asks.
 
 ## Disable a harness
 

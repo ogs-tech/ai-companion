@@ -12,6 +12,7 @@ import {
   useSessionHistory,
   useSessionHistoryStats,
 } from '../../hooks/use-session-history.js';
+import { defaultHistoryFilters } from '../../lib/history-period.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { closeSessionTab } from '../../lib/browser-tabs-store.js';
 import { formatCostUsd } from '../../lib/format-session-history.js';
@@ -53,10 +54,17 @@ interface MergedRow {
  * Ordered by time rather than by name. Alphabetical order survives three live
  * sessions and collapses at sixty-nine.
  */
-export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: SessionsTreeGroupProps): React.ReactElement {
+export function SessionsTreeGroup({
+  scope,
+  onOpen,
+  onRemoved,
+  onSeeAll,
+}: SessionsTreeGroupProps): React.ReactElement {
   const { data: liveSessions } = useSessions();
-  const history = useSessionHistory(scope);
-  const stats = useSessionHistoryStats(scope);
+  // Same default period as the Histórico tab this panel links to.
+  const filters = useMemo(() => defaultHistoryFilters(new Date()), []);
+  const history = useSessionHistory(scope, filters);
+  const stats = useSessionHistoryStats(scope, filters);
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
@@ -70,12 +78,9 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
     [liveSessions, historyEntries, scope],
   );
 
-  const sentinelRef = useInfiniteScrollSentinel(
-    () => {
-      if (history.hasNextPage && !history.isFetchingNextPage) void history.fetchNextPage();
-    },
-    history.hasNextPage === true,
-  );
+  const sentinelRef = useInfiniteScrollSentinel(() => {
+    if (history.hasNextPage && !history.isFetchingNextPage) void history.fetchNextPage();
+  }, history.hasNextPage === true);
 
   const invalidate = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
@@ -84,7 +89,10 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
   };
 
   const reportError = (err: unknown): void => {
-    setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
+    setToast({
+      variant: 'error',
+      message: err instanceof IpcCallError ? err.message : String(err),
+    });
   };
 
   const handleOpen = async (row: MergedRow): Promise<void> => {
@@ -96,7 +104,9 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
       // Either an exited session still in memory, or one that only exists as
       // a transcript — both reopen by resuming the conversation itself.
       const resumed = row.live
-        ? await callIpc<SessionSnapshotWithOutput>('session.resume', { sessionId: row.live.sessionId })
+        ? await callIpc<SessionSnapshotWithOutput>('session.resume', {
+            sessionId: row.live.sessionId,
+          })
         : await callIpc<SessionSnapshotWithOutput>('sessionHistory.resume', {
             conversationId: row.history!.conversationId,
           });
@@ -117,7 +127,10 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
   };
 
   const handleRemove = async (session: SessionSnapshot): Promise<void> => {
-    if (!window.confirm(`Apagar a sessão de ${session.label}? O histórico desta sessão será perdido.`)) return;
+    if (
+      !window.confirm(`Apagar a sessão de ${session.label}? O histórico desta sessão será perdido.`)
+    )
+      return;
     try {
       await callIpc('session.remove', { sessionId: session.sessionId });
       // `SessionService.remove` already tears the embedded browser down
@@ -135,15 +148,22 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
     return (
       <Box sx={{ px: 1.5, py: 1 }} data-testid="sessions-history-error">
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-          Não consegui ler o histórico. A pasta <code>~/.claude/projects</code> não respondeu. As sessões abertas agora
-          continuam funcionando.
+          Não consegui ler o histórico. A pasta <code>~/.claude/projects</code> não respondeu. As
+          sessões abertas agora continuam funcionando.
         </Typography>
         <Box
           component="button"
           type="button"
           data-testid="sessions-history-retry"
           onClick={() => void history.refetch()}
-          sx={{ mt: 0.75, border: 0, bgcolor: 'transparent', p: 0, cursor: 'pointer', font: 'inherit' }}
+          sx={{
+            mt: 0.75,
+            border: 0,
+            bgcolor: 'transparent',
+            p: 0,
+            cursor: 'pointer',
+            font: 'inherit',
+          }}
         >
           <Typography variant="caption" sx={{ color: 'primary.main' }}>
             Tentar de novo
@@ -161,8 +181,8 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
         data-testid="sessions-empty"
         sx={{ display: 'block', px: 1.5, py: 1 }}
       >
-        Nenhuma sessão ainda — abra uma com <strong>+</strong> e ela aparece aqui com o custo assim que a primeira
-        resposta chegar.
+        Nenhuma sessão ainda — abra uma com <strong>+</strong> e ela aparece aqui com o custo assim
+        que a primeira resposta chegar.
       </Typography>
     );
   }
@@ -176,83 +196,87 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
     // not a rare edge case.
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-      <Stack spacing={0.25} sx={{ px: 0.75, pb: 0.5 }}>
-        {rows.map((row) => (
-          <SessionRow
-            key={row.key}
-            testId={`tree-session-${row.key}`}
-            label={row.label}
-            harness={(row.live?.harness ?? row.history?.harness) ?? 'claude'}
-            status={row.status}
-            history={row.history}
-            onOpen={() => void handleOpen(row)}
-            actions={
-              row.live ? (
-                <>
-                  {row.live.status === 'running' && (
-                    <Tooltip title="Encerrar">
+        <Stack spacing={0.25} sx={{ px: 0.75, pb: 0.5 }}>
+          {rows.map((row) => (
+            <SessionRow
+              key={row.key}
+              testId={`tree-session-${row.key}`}
+              label={row.label}
+              harness={row.live?.harness ?? row.history?.harness ?? 'claude'}
+              status={row.status}
+              history={row.history}
+              onOpen={() => void handleOpen(row)}
+              actions={
+                row.live ? (
+                  <>
+                    {row.live.status === 'running' && (
+                      <Tooltip title="Encerrar">
+                        <Box
+                          component="span"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Encerrar ${row.label}`}
+                          data-testid={`tree-session-stop-${row.key}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleStop(row.live!);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return;
+                            if (e.key === ' ') e.preventDefault();
+                            e.stopPropagation();
+                            void handleStop(row.live!);
+                          }}
+                          sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                        >
+                          <Icon glyph={Square} size={13} />
+                        </Box>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Apagar">
                       <Box
                         component="span"
                         role="button"
                         tabIndex={0}
-                        aria-label={`Encerrar ${row.label}`}
-                        data-testid={`tree-session-stop-${row.key}`}
+                        aria-label={`Apagar ${row.label}`}
+                        data-testid={`tree-session-remove-${row.key}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleStop(row.live!);
+                          void handleRemove(row.live!);
                         }}
                         onKeyDown={(e) => {
                           if (e.key !== 'Enter' && e.key !== ' ') return;
                           if (e.key === ' ') e.preventDefault();
                           e.stopPropagation();
-                          void handleStop(row.live!);
+                          void handleRemove(row.live!);
                         }}
                         sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
                       >
-                        <Icon glyph={Square} size={13} />
+                        <Icon glyph={Trash2} size={13} />
                       </Box>
                     </Tooltip>
-                  )}
-                  <Tooltip title="Apagar">
-                    <Box
-                      component="span"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Apagar ${row.label}`}
-                      data-testid={`tree-session-remove-${row.key}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleRemove(row.live!);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter' && e.key !== ' ') return;
-                        if (e.key === ' ') e.preventDefault();
-                        e.stopPropagation();
-                        void handleRemove(row.live!);
-                      }}
-                      sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                    >
-                      <Icon glyph={Trash2} size={13} />
-                    </Box>
-                  </Tooltip>
-                </>
-              ) : null
-            }
-          />
-        ))}
+                  </>
+                ) : null
+              }
+            />
+          ))}
 
-        {/*
+          {/*
           Three skeletons occupying exactly the height the real rows will take,
           so nothing shifts when the page arrives. They do not pulse: this
           panel is read dozens of times a day and motion here becomes a tic.
         */}
-        {(history.isFetchingNextPage || history.isLoading) &&
-          [0, 1, 2].map((i) => (
-            <Box key={`skeleton-${i}`} data-testid="session-row-skeleton" sx={{ height: 40, px: 1.25, py: 0.75 }} />
-          ))}
+          {(history.isFetchingNextPage || history.isLoading) &&
+            [0, 1, 2].map((i) => (
+              <Box
+                key={`skeleton-${i}`}
+                data-testid="session-row-skeleton"
+                sx={{ height: 40, px: 1.25, py: 0.75 }}
+              />
+            ))}
 
-        <Box ref={sentinelRef} data-testid="sessions-scroll-sentinel" sx={{ height: 1 }} />
-      </Stack>
+          <Box ref={sentinelRef} data-testid="sessions-scroll-sentinel" sx={{ height: 1 }} />
+        </Stack>
       </Box>
 
       <ContainerFooter testId="sessions-footer">
@@ -260,16 +284,25 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
           <Box
             component="span"
             data-testid="sessions-total"
-            sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontWeight: 500, color: 'text.primary', fontVariantNumeric: 'tabular-nums' })}
+            sx={(theme) => ({
+              fontFamily: theme.ogs.fonts.mono,
+              fontWeight: 500,
+              color: 'text.primary',
+              fontVariantNumeric: 'tabular-nums',
+            })}
           >
             {stats.data ? formatCostUsd(stats.data.totalCostUsd) : '—'}
           </Box>{' '}
           estimado
-          {stats.data && stats.data.unpricedCount > 0 ? `, ${stats.data.unpricedCount} sem preço` : ''}
+          {stats.data && stats.data.unpricedCount > 0
+            ? `, ${stats.data.unpricedCount} sem preço`
+            : ''}
         </Typography>
         {onSeeAll && stats.data && (
           <FooterLink testId="sessions-see-all" onClick={onSeeAll}>
-            {stats.data.sessionCount === 1 ? 'Ver a sessão' : `Ver as ${stats.data.sessionCount} sessões`}
+            {stats.data.sessionCount === 1
+              ? 'Ver a sessão'
+              : `Ver as ${stats.data.sessionCount} sessões`}
           </FooterLink>
         )}
       </ContainerFooter>
@@ -284,11 +317,17 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
  * appears once.
  */
 /** Global (Início) lists its own sessions only — never one anchored to a workspace. */
-export function liveInScope(live: readonly SessionSnapshot[], scope: HistoryScope): readonly SessionSnapshot[] {
+export function liveInScope(
+  live: readonly SessionSnapshot[],
+  scope: HistoryScope,
+): readonly SessionSnapshot[] {
   return scope.kind === 'personal' ? live.filter((s) => s.anchor.kind !== 'workspace') : live;
 }
 
-function mergeRows(live: readonly SessionSnapshot[], history: readonly SessionHistoryEntry[]): MergedRow[] {
+function mergeRows(
+  live: readonly SessionSnapshot[],
+  history: readonly SessionHistoryEntry[],
+): MergedRow[] {
   const byConversation = new Map<string, SessionHistoryEntry>();
   for (const entry of history) byConversation.set(entry.conversationId, entry);
 

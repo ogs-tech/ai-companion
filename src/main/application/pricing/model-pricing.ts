@@ -28,6 +28,18 @@ export const BUNDLED_MODEL_RATES: Readonly<Record<string, ModelRate>> = {
   'claude-haiku-4-5': { input: 1, output: 5 },
   'claude-fable-5-1': { input: 10, output: 50 },
   'claude-fable-5': { input: 10, output: 50 },
+  // Cursor's own model: standard and Fast tiers (cursor.com pricing, as reported 2026-05).
+  // No separate cache-read rate is published, and Cursor sessions carry no cache tokens anyway.
+  'composer-2.5': { input: 0.5, output: 2.5 },
+  'composer-2.5-fast': { input: 3, output: 15 },
+  // xAI list price; Fast (Cursor/Grok Build only) is reported at ~2x. Prompts over 200K tokens cost
+  // more at xAI — not modelled, so a very long chat is under-estimated.
+  'grok-4.5': { input: 2, output: 6 },
+  'grok-4.5-fast': { input: 4, output: 12 },
+  'grok-4.6': { input: 2, output: 6 },
+  'grok-4.6-fast': { input: 4, output: 12 },
+  'grok-4.7': { input: 2, output: 6 },
+  'grok-4.7-fast': { input: 4, output: 12 },
 };
 
 /** A cache write costs more than a plain input token; a cache read costs a fraction of one. */

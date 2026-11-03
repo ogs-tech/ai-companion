@@ -13,6 +13,8 @@ export type HistoryScope = { kind: 'workspace'; workspaceId: string } | { kind: 
 export interface HistoryFilters {
   /** Model ids, as the transcripts spell them. Empty or absent means every model. */
   models?: string[];
+  /** Harness ids. Empty or absent means every harness. */
+  harnesses?: HarnessId[];
   /** ISO date (inclusive), matched against when the conversation last moved. */
   from?: string;
   /** ISO date (inclusive). */
@@ -85,6 +87,8 @@ export interface SessionHistoryStats {
   perDay: SessionHistoryDayTotal[];
   /** Every model appearing in scope, for the filter pills. */
   models: string[];
+  /** Every harness appearing in scope, for the filter pills. */
+  harnesses: HarnessId[];
 }
 
 export interface SessionHistoryQuery {

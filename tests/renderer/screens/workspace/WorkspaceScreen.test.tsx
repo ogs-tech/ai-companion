@@ -725,7 +725,7 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('workspaces-screen')).toBeInTheDocument();
     });
 
-    it('has no scope title on the right panel, and its Sessões list Global\'s own sessions only', async () => {
+    it('has no scope title on the right panel, and its Sessões list every session, matching the Histórico tab', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
         if (method === 'session.list') {
@@ -738,9 +738,9 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       expect(await screen.findByTestId('tree-session-personal')).toBeInTheDocument();
-      expect(screen.queryByTestId('tree-session-workspace:w9')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('tree-session-workspace:w9')).toBeInTheDocument();
       await waitFor(() =>
-        expect(ipc.callIpc).toHaveBeenCalledWith('sessionHistory.list', expect.objectContaining({ scope: { kind: 'personal' } })),
+        expect(ipc.callIpc).toHaveBeenCalledWith('sessionHistory.list', expect.objectContaining({ scope: { kind: 'all' } })),
       );
     });
 
@@ -832,8 +832,7 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Skills/Agents/Hooks/MCP/Plugins tree nodes', () => {
-    it('shows one editable list at Início, with the origin segments and type chips and no section titles', async () => {
-      const user = userEvent.setup();
+    it('shows one editable list at Início, with no origin filter and no section titles', async () => {
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return null;
         if (method === 'workspace.list') return [];
@@ -843,20 +842,10 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       await screen.findByTestId('home-nav-list');
       expect(screen.queryByTestId('control-panel-kicker')).not.toBeInTheDocument();
-      await user.click(screen.getByTestId('control-panel-origin'));
-      for (const id of ['mine', 'plugins']) {
-        expect(await screen.findByTestId(`control-panel-segment-${id}`)).toBeInTheDocument();
-      }
-      await user.keyboard('{Escape}');
+      expect(screen.queryByTestId('control-panel-origin')).not.toBeInTheDocument();
       expect(screen.queryByTestId('control-panel-chip-all')).not.toBeInTheDocument();
       expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
       expect(screen.getByTestId('workspace-sessions-panel')).toBeInTheDocument();
-
-      // The "Plugins" origin hides the instruction row (instructions are never plugin-provided).
-      await user.click(screen.getByTestId('control-panel-origin'));
-      await user.click(await screen.findByTestId('control-panel-segment-plugins'));
-      expect(screen.queryByTestId('personal-instruction-row')).not.toBeInTheDocument();
-      expect(await screen.findByTestId('control-panel-empty')).toBeInTheDocument();
     });
 
     it('inside a workspace, keeps Global entities out of Skills and lists them read-only after the workspace\'s own', async () => {

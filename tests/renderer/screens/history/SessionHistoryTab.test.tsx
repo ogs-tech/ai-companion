@@ -34,13 +34,17 @@ const STATS = {
     { date: '2026-09-11', costUsd: 21.8, sessionCount: 3 },
   ],
   models: ['claude-opus-5', 'claude-haiku-4-5'],
+  harnesses: ['claude', 'cursor'],
 };
 
 let call: CallSpy;
 let listParams: Record<string, unknown>[];
 let statsParams: Record<string, unknown>[];
 
-function route(entries: SessionHistoryEntry[] = [entry()], statsOverrides: Record<string, unknown> = {}): void {
+function route(
+  entries: SessionHistoryEntry[] = [entry()],
+  statsOverrides: Record<string, unknown> = {},
+): void {
   call.mockImplementation(async (method: string, params?: Record<string, unknown>) => {
     if (method === 'sessionHistory.list') {
       listParams.push(params ?? {});
@@ -63,7 +67,9 @@ beforeEach(() => {
 });
 
 const render = (props: Partial<React.ComponentProps<typeof SessionHistoryTab>> = {}) =>
-  renderWithShell(<SessionHistoryTab projectScope={PROJECT_SCOPE} onOpenSession={vi.fn()} {...props} />);
+  renderWithShell(
+    <SessionHistoryTab projectScope={PROJECT_SCOPE} onOpenSession={vi.fn()} {...props} />,
+  );
 
 describe('<SessionHistoryTab>', () => {
   describe('the headline number', () => {
@@ -106,12 +112,51 @@ describe('<SessionHistoryTab>', () => {
       await waitFor(() => expect(statsParams.at(-1)?.['scope']).toEqual({ kind: 'all' }));
     });
 
-    it('falls back to everything, with the project filter unavailable, when no project is in view', async () => {
+    it('hides the project filter when no project is in view', async () => {
       render({ projectScope: null });
 
       await waitFor(() => expect(statsParams[0]?.['scope']).toEqual({ kind: 'all' }));
-      // MUI renders a disabled Chip as an aria-disabled div, not a disabled button.
-      expect(screen.getByTestId('filter-project-only')).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByTestId('filter-project-only')).not.toBeInTheDocument();
+    });
+
+    it('hides the project filter at Início, where the scope is already everything', async () => {
+      render({ projectScope: { kind: 'all' } });
+
+      await waitFor(() => expect(statsParams[0]?.['scope']).toEqual({ kind: 'all' }));
+      expect(screen.queryByTestId('filter-project-only')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('the harness', () => {
+    it('narrows both the table and the chart to the chosen harness', async () => {
+      render();
+
+      await userEvent.click(await screen.findByTestId('filter-harness-cursor'));
+
+      await waitFor(() => expect(listParams.at(-1)?.['filters']).toMatchObject({ harnesses: ['cursor'] }));
+      expect(statsParams.at(-1)?.['filters']).toMatchObject({ harnesses: ['cursor'] });
+    });
+  });
+
+  describe('the period', () => {
+    it('opens on the last 30 days', async () => {
+      render();
+
+      await waitFor(() =>
+        expect(listParams[0]?.['filters']).toMatchObject({
+          from: expect.any(String),
+          to: expect.any(String),
+        }),
+      );
+      expect(screen.getByTestId('filter-period-30')).toHaveClass('MuiChip-filled');
+    });
+
+    it('drops the date bounds on Tudo', async () => {
+      render();
+
+      await userEvent.click(await screen.findByTestId('filter-period-all'));
+
+      await waitFor(() => expect(listParams.at(-1)?.['filters']).toBeUndefined());
     });
   });
 
@@ -203,7 +248,12 @@ describe('<SessionHistoryTab>', () => {
 
     it('sorts an unpriced session below every priced one instead of treating its blank as free', async () => {
       route([
-        entry({ conversationId: 'unknown', title: 'Sem preço', costUsd: null, costSource: 'unknown' }),
+        entry({
+          conversationId: 'unknown',
+          title: 'Sem preço',
+          costUsd: null,
+          costSource: 'unknown',
+        }),
         entry({ conversationId: 'cheap', title: 'Barata', costUsd: 0.01 }),
       ]);
 
@@ -228,7 +278,9 @@ describe('<SessionHistoryTab>', () => {
 
       await userEvent.click(await screen.findByText('Uma sessão'));
 
-      await waitFor(() => expect(call).toHaveBeenCalledWith('sessionHistory.resume', { conversationId: 'c1' }));
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('sessionHistory.resume', { conversationId: 'c1' }),
+      );
       await waitFor(() => expect(onOpenSession).toHaveBeenCalled());
     });
 

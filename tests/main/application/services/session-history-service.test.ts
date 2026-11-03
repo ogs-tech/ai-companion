@@ -446,7 +446,7 @@ describe('SessionHistoryService', () => {
 
       const stats = await service.stats({ scope: ALL });
 
-      expect(stats).toEqual({ totalCostUsd: 0, unpricedCount: 0, sessionCount: 0, perDay: [], models: [] });
+      expect(stats).toEqual({ totalCostUsd: 0, unpricedCount: 0, sessionCount: 0, perDay: [], models: [], harnesses: [] });
     });
   });
 
@@ -485,6 +485,16 @@ describe('SessionHistoryService', () => {
       const stats = await service.stats({ scope: ALL });
 
       expect(stats).toMatchObject({ totalCostUsd: 2, unpricedCount: 1, sessionCount: 2 });
+    });
+
+    it('narrows the list and the stats to the chosen harness, and lists the harnesses in scope', async () => {
+      const { service } = setup([cursorChat('chat-1'), transcript({ id: 'c1', reportedCostUsd: 2 })], withCursor);
+
+      const page = await service.list({ scope: ALL, filters: { harnesses: ['cursor'] } });
+      const stats = await service.stats({ scope: ALL });
+
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['chat-1']);
+      expect(stats.harnesses).toEqual(['claude', 'cursor']);
     });
 
     it('leaves a harness out of the history while it is switched off in Settings', async () => {

@@ -4,8 +4,9 @@ import { HARNESSES, type HarnessId } from '../../shared/harness.js';
 
 /**
  * The vendor marks, from simple-icons (CC0), as inline paths so they follow
- * the theme: Cursor's mark is a single ink shape and takes the current text
- * colour (readable in light and dark); Claude's keeps its brand orange.
+ * the theme: Cursor's mark is a single ink shape and takes the theme's primary
+ * text colour (`text.primary`, so it flips with light/dark and never inherits
+ * a colour from a filled chip); Claude's keeps its brand orange.
  * Check each vendor's brand guidelines before release.
  */
 const MARKS: Record<HarnessId, { path: string; color: string }> = {
@@ -15,7 +16,7 @@ const MARKS: Record<HarnessId, { path: string; color: string }> = {
   },
   cursor: {
     path: 'M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23',
-    color: 'currentColor',
+    color: 'text.primary',
   },
 };
 
@@ -26,7 +27,12 @@ export interface HarnessMarkProps extends Omit<SvgIconProps, 'children'> {
 }
 
 /** The harness's logo, named for assistive tech by the harness's display name. */
-export function HarnessMark({ harness, size = 13, sx, ...rest }: HarnessMarkProps): React.ReactElement {
+export function HarnessMark({
+  harness,
+  size = 13,
+  sx,
+  ...rest
+}: HarnessMarkProps): React.ReactElement {
   const mark = MARKS[harness];
   return (
     <SvgIcon
@@ -34,7 +40,10 @@ export function HarnessMark({ harness, size = 13, sx, ...rest }: HarnessMarkProp
       aria-label={HARNESSES[harness].displayName}
       viewBox="0 0 24 24"
       data-testid={`harness-mark-${harness}`}
-      sx={[{ width: size, height: size, color: mark.color, flexShrink: 0 }, ...(Array.isArray(sx) ? sx : [sx])]}
+      sx={[
+        { width: size, height: size, color: mark.color, flexShrink: 0 },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
       {...rest}
     >
       <path d={mark.path} />
@@ -47,7 +56,10 @@ const makeGlyph = (harness: HarnessId): LucideIcon =>
     <HarnessMark harness={harness} size={Number(size)} />
   )) as unknown as LucideIcon;
 
-const GLYPHS: Record<HarnessId, LucideIcon> = { claude: makeGlyph('claude'), cursor: makeGlyph('cursor') };
+const GLYPHS: Record<HarnessId, LucideIcon> = {
+  claude: makeGlyph('claude'),
+  cursor: makeGlyph('cursor'),
+};
 
 /** A lucide-shaped icon for a harness, for slots (tab strips) that take a glyph rather than an element. */
 export const harnessGlyph = (harness: HarnessId): LucideIcon => GLYPHS[harness];

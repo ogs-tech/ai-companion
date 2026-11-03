@@ -150,3 +150,14 @@ describe('primaryModel', () => {
     expect(primaryModel(usage({ models: [] }))).toBeNull();
   });
 });
+
+describe('Cursor model rates', () => {
+  it('prices the Fast tier separately from the standard one', () => {
+    expect(rateFor('composer-2.5')).toEqual({ input: 0.5, output: 2.5 });
+    expect(rateFor('composer-2.5-fast')).toEqual({ input: 3, output: 15 });
+    expect(rateFor('grok-4.7')).toEqual({ input: 2, output: 6 });
+    expect(rateFor('grok-4.5-fast')).toEqual({ input: 4, output: 12 });
+    expect(rateFor('grok-4.6')).toEqual({ input: 2, output: 6 });
+    expect(rateFor('grok-4.7-fast')).toEqual({ input: 4, output: 12 });
+  });
+});

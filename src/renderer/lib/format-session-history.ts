@@ -15,9 +15,12 @@ export function formatCostUsd(costUsd: number | null): string {
 
 /** Spells out what a cost figure actually is, for the row's title attribute. */
 export function describeCostSource(source: CostSource, harness: HarnessId = 'claude'): string {
-  if (source === 'unknown' && harness !== 'claude') return `${HARNESSES[harness].displayName} não registra custo nas sessões`;
   if (source === 'reported') return 'Custo informado pelo próprio claude';
-  if (source === 'estimated') return 'Custo estimado a partir dos tokens';
+  if (source === 'estimated') {
+    return harness === 'claude'
+      ? 'Custo estimado a partir dos tokens'
+      : `Custo estimado a partir do texto da conversa — ${HARNESSES[harness].displayName} não registra tokens, e o cálculo assume sem cache`;
+  }
   return 'Modelo sem preço publicado — não dá para estimar';
 }
 

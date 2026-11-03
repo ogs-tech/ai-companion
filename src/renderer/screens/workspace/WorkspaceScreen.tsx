@@ -619,10 +619,11 @@ export function WorkspaceScreen(): React.ReactElement {
     : isHome
       ? { kind: 'all' }
       : null;
-  // The right panel's Sessões lists the scope's own: Global's at Início.
+  // The right panel's Sessões lists the same set the Histórico tab opens by
+  // "Ver as N sessões": the workspace's own, or every conversation at Início.
   const sessionsScope: HistoryScope = activeWorkspace
     ? { kind: 'workspace', workspaceId: activeWorkspace.id }
-    : { kind: 'personal' };
+    : { kind: 'all' };
 
   // One fixed id, so "Ver todas" focuses the tab that is already open rather
   // than stacking a second copy of the same dashboard beside it.

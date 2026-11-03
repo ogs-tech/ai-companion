@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Box, Chip, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
-import { Folder, ListFilter, Lock, Package, Plus, Search, X } from 'lucide-react';
+import { Folder, Lock, Package, Plus, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, ContainerHeader, FooterLink } from '../ds/ContainerChrome.js';
 import { useDetected } from '../../hooks/use-detected.js';
@@ -22,7 +22,7 @@ import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js'
 import { useInstructionsList, usePersonalInstruction } from '../../hooks/use-instructions.js';
 import { pluginsQueryKey } from '../../hooks/use-plugins.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
-import { matchesOrigin, matchesQuery, type OriginSegment } from '../../lib/control-panel-filter.js';
+import { matchesQuery } from '../../lib/control-panel-filter.js';
 import { isWorkspaceInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 
@@ -35,15 +35,10 @@ type EntityKind = 'skill' | 'agent';
 type Section = 'local' | 'global';
 type RowType = 'instruction' | 'skill' | 'agent' | 'hook' | 'mcp' | 'plugin';
 
-const SEGMENTS: ReadonlyArray<{ id: Exclude<OriginSegment, 'all'>; label: string }> = [
-  { id: 'mine', label: 'Meus' },
-  { id: 'plugins', label: 'Plugins' },
-];
-
 /** The type groups inside a scope section: what "Meus" splits into. */
-const TYPE_GROUPS: ReadonlyArray<{ id: string; label: string; glyph: LucideIcon; types: ReadonlyArray<RowType> }> = [
-  { id: 'skill', label: 'Skills', glyph: ENTITY_GROUP_ICONS.skill, types: ['skill'] },
-  { id: 'agent', label: 'Agents', glyph: ENTITY_GROUP_ICONS.agent, types: ['agent'] },
+const TYPE_GROUPS: ReadonlyArray<{ id: string; label: string; glyph: LucideIcon; types: ReadonlyArray<RowType>; alwaysShown?: boolean }> = [
+  { id: 'skill', label: 'Skills', glyph: ENTITY_GROUP_ICONS.skill, types: ['skill'], alwaysShown: true },
+  { id: 'agent', label: 'Agents', glyph: ENTITY_GROUP_ICONS.agent, types: ['agent'], alwaysShown: true },
   { id: 'integrations', label: 'Integrações', glyph: ENTITY_GROUP_ICONS.mcp, types: ['hook', 'mcp', 'plugin'] },
 ];
 
@@ -79,9 +74,9 @@ type NewTarget = EntityKind | 'instruction' | 'mcp' | 'plugin';
  * own items first, then — inside a workspace — Global's, read-only and dimmed.
  * Each item appears exactly once; its type reads from the row's icon and accent
  * spine, its origin from the quiet text at the end of the row, and the
- * origin menu (Todos/Meus/Plugins) narrows it by origin.
+ * Skills and Agents are always listed (the user's own; a plugin's sit under Plugins).
  *
- * Search text and origin are local state: the parent keys this component by
+ * Search text is local state: the parent keys this component by
  * scope so they reset on workspace switch.
  */
 export function CustomizationsList({
@@ -105,9 +100,7 @@ export function CustomizationsList({
   const { data: instructions } = useInstructionsList();
 
   const [query, setQuery] = useState('');
-  const [segment, setSegment] = useState<OriginSegment>('all');
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [originAnchor, setOriginAnchor] = useState<HTMLElement | null>(null);
   const [newMenuAnchor, setNewMenuAnchor] = useState<HTMLElement | null>(null);
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [pluginImportOpen, setPluginImportOpen] = useState(false);
@@ -119,7 +112,7 @@ export function CustomizationsList({
   const types = TYPES;
   const showsType = (type: RowType): boolean => types.includes(type);
   // Instructions are always the user's own — a plugin never provides one.
-  const showsInstructions = showsType('instruction') && matchesOrigin(segment, false);
+  const showsInstructions = showsType('instruction');
 
   const workspaceInstructions = localScope
     ? (instructions ?? []).filter(
@@ -147,17 +140,14 @@ export function CustomizationsList({
   const reported = types.every((type) => type === 'instruction' || `local:${type}` in counts);
   const isEmpty = reported && localCount + globalCount === 0;
   const searching = query.trim() !== '';
-  const filtered = searching || segment !== 'all';
+  const filtered = searching;
   const total = localCount + globalCount;
   // The unfiltered total, remembered while no filter is on, so the header and the
   // footer's "12 de 105" keep naming the whole list while a filter narrows it.
   const [baseline, setBaseline] = useState<number | null>(null);
   if (reported && !filtered && baseline !== total) setBaseline(total);
   const grandTotal = baseline ?? total;
-  const clearFilters = (): void => {
-    setQuery('');
-    setSegment('all');
-  };
+  const clearFilters = (): void => setQuery('');
 
   const instructionCreatable = isHome ? !personalInstruction : seedWorkspaceInstruction !== undefined;
   const create = (target: NewTarget): void => {
@@ -208,11 +198,11 @@ export function CustomizationsList({
     const on = (type: RowType): boolean => showsType(type) && (only === undefined || only.includes(type));
     return (
     <>
-      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" flat query={query} origin={segment} {...viewProps('local', 'skill', mode)} {...entityHandlers} {...scopeProp} />}
-      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" flat query={query} origin={segment} {...viewProps('local', 'agent', mode)} {...entityHandlers} {...scopeProp} />}
-      {on('hook') && <HooksTreeGroup flat query={query} origin={segment} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...viewProps('local', 'hook', mode)} />}
+      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" flat query={query} {...viewProps('local', 'skill', mode)} {...entityHandlers} {...scopeProp} />}
+      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" flat query={query} {...viewProps('local', 'agent', mode)} {...entityHandlers} {...scopeProp} />}
+      {on('hook') && <HooksTreeGroup flat query={query} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...viewProps('local', 'hook', mode)} />}
       {on('mcp') && (
-        <McpTreeGroup flat query={query} origin={segment} showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('local', 'mcp', mode)} />
+        <McpTreeGroup flat query={query} showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('local', 'mcp', mode)} />
       )}
     </>
     );
@@ -221,11 +211,11 @@ export function CustomizationsList({
     const on = (type: RowType): boolean => showsType(type) && (only === undefined || only.includes(type));
     return (
     <>
-      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" inherited flat query={query} origin={segment} {...viewProps('global', 'skill', mode)} {...inheritedHandlers} {...scopeProp} />}
-      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" inherited flat query={query} origin={segment} {...viewProps('global', 'agent', mode)} {...inheritedHandlers} {...scopeProp} />}
-      {on('hook') && <HooksTreeGroup flat query={query} origin={segment} isProjectContext showGlobal {...viewProps('global', 'hook', mode)} />}
+      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" inherited flat query={query} {...viewProps('global', 'skill', mode)} {...inheritedHandlers} {...scopeProp} />}
+      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" inherited flat query={query} {...viewProps('global', 'agent', mode)} {...inheritedHandlers} {...scopeProp} />}
+      {on('hook') && <HooksTreeGroup flat query={query} isProjectContext showGlobal {...viewProps('global', 'hook', mode)} />}
       {on('mcp') && (
-        <McpTreeGroup flat query={query} origin={segment} showGlobal onlyGlobal {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('global', 'mcp', mode)} />
+        <McpTreeGroup flat query={query} showGlobal onlyGlobal {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('global', 'mcp', mode)} />
       )}
     </>
     );
@@ -242,7 +232,7 @@ export function CustomizationsList({
         flat
         depth={depth}
         query={query}
-        origin={segment}
+       
         {...(section === 'local'
           ? { showGlobal: false, ...(isHome ? {} : { isProjectContext: true }) }
           : { isProjectContext: true, showGlobal: true, onlyGlobal: true })}
@@ -273,7 +263,7 @@ export function CustomizationsList({
     );
     const mine = visibleGroups
       .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + mineCount(type), 0) }))
-      .filter(({ count }) => count > 0)
+      .filter(({ g, count }) => count > 0 || (g.alwaysShown === true && !searching))
       .map(({ g, count }) => (
         <PersistedGroup
           key={g.id}
@@ -468,7 +458,7 @@ export function CustomizationsList({
     <List disablePadding>
       {localOrigins.census}
       {globalOrigins.census}
-      <ScopeSection section="local" glyph={Folder} label="Neste workspace" count={localCount} storageKey={scopeKey('local')} forceOpen={searching} defaultOpen hidden={isEmpty}>
+      <ScopeSection section="local" glyph={Folder} label="Neste workspace" count={localCount} storageKey={scopeKey('local')} forceOpen={searching} defaultOpen hidden={isEmpty && searching}>
         {localBody}
       </ScopeSection>
       <ScopeSection section="global" glyph={Lock} label="Do Início" tooltip="Somente leitura aqui — edite no Início" count={globalCount} storageKey={scopeKey('global')} forceOpen={searching} defaultOpen={false} hidden={reported && globalCount === 0}>
@@ -515,44 +505,17 @@ export function CustomizationsList({
                 <Icon glyph={X} size={12} />
               </IconButton>
             )}
-            <Tooltip title="Filtrar por origem">
-              <IconButton
-                size="small"
-                aria-label="Filtrar por origem"
-                aria-haspopup="menu"
-                data-testid="control-panel-origin"
-                color={segment === 'all' ? 'default' : 'primary'}
-                onClick={(e) => setOriginAnchor(e.currentTarget)}
-                sx={{ p: 0.25 }}
-              >
-                <Icon glyph={ListFilter} size={13} />
-              </IconButton>
-            </Tooltip>
           </Box>
-        </Stack>
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5, flexGrow: 1 }}>
-            {segment !== 'all' && (
-              <Chip
-                size="small"
-                color="primary"
-                label={SEGMENTS.find((s) => s.id === segment)?.label}
-                data-testid="control-panel-origin-chip"
-                onDelete={() => setSegment('all')}
-                deleteIcon={<Icon glyph={X} size={11} />}
-                sx={{ height: 20, fontSize: '0.6875rem' }}
-              />
-            )}
-          </Stack>
         </Stack>
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}>
         {rows}
 
-        {isEmpty && (
+        {isEmpty && searching && (
           <Typography variant="caption" color="text.secondary" data-testid="control-panel-empty" sx={{ display: 'block', px: 1.5, py: 1 }}>
-            {searching ? `Nada encontrado para "${query.trim()}"` : 'Nada aqui ainda'}
+            Nada encontrado para "{query.trim()}"
+
           </Typography>
         )}
       </Box>
@@ -573,21 +536,6 @@ export function CustomizationsList({
         </ContainerFooter>
       )}
 
-      <Menu anchorEl={originAnchor} open={originAnchor !== null} onClose={() => setOriginAnchor(null)}>
-        {SEGMENTS.map(({ id, label }) => (
-          <MenuItem
-            key={id}
-            selected={segment === id}
-            data-testid={`control-panel-segment-${id}`}
-            onClick={() => {
-              setSegment(id);
-              setOriginAnchor(null);
-            }}
-          >
-            {label}
-          </MenuItem>
-        ))}
-      </Menu>
       <Menu anchorEl={newMenuAnchor} open={newMenuAnchor !== null} onClose={() => setNewMenuAnchor(null)}>
         {menuTargets.map(({ target, label }) => (
           <MenuItem key={target} data-testid={`control-panel-new-${target}`} onClick={() => create(target)}>

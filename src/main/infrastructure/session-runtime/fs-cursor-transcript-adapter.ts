@@ -1,5 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import type { CursorChatStorePort } from '../../application/ports/cursor-chat-store-port.js';
+import { estimateCursorUsage } from '../../application/pricing/cursor-usage-estimator.js';
 import type {
   SessionTranscriptPort,
   TranscriptRef,
@@ -45,12 +47,15 @@ function parseMeta(raw: string): CursorChatMeta | null {
  * `~/.cursor/chats/<hash>/<chatId>/meta.json`. Read-only, like the Claude
  * adapter.
  *
- * Only the metadata is read: Cursor's transcripts carry no usage, model or
- * cost, so there is nothing further to summarise. {@link readUsage} says so
- * (`unpriced`) instead of reporting zeros.
+ * Cursor records no usage. {@link readUsage} reconstructs it from the chat's
+ * messages via {@link estimateCursorUsage} (real model, estimated tokens), and
+ * says `unpriced` instead of reporting zeros when that is not possible.
  */
 export class FsCursorTranscriptAdapter implements SessionTranscriptPort {
-  constructor(private readonly chatsDir: string) {}
+  constructor(
+    private readonly chatsDir: string,
+    private readonly store: CursorChatStorePort,
+  ) {}
 
   async listRefs(): Promise<TranscriptRef[]> {
     let hashes: string[];
@@ -100,10 +105,11 @@ export class FsCursorTranscriptAdapter implements SessionTranscriptPort {
   async readUsage(ref: TranscriptRef): Promise<TranscriptUsage> {
     const meta = parseMeta(await readFile(ref.filePath, 'utf8'));
     const startedAt = meta ? new Date(meta.createdAtMs).toISOString() : ref.modifiedAt;
+    const models = estimateCursorUsage(await this.store.readMessages(dirname(ref.filePath)));
     return {
       title: meta?.title ?? null,
-      unpriced: true,
-      models: [],
+      ...(models.length === 0 ? { unpriced: true as const } : {}),
+      models,
       reportedCostUsd: null,
       startedAt,
       endedAt: ref.modifiedAt,

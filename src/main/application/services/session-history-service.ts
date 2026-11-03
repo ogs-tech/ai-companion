@@ -1,6 +1,7 @@
 import { workspaceFolders } from '../../../shared/workspace.js';
 import { workspaceHomePath } from '../../../shared/brand-paths.js';
 import { sep } from 'node:path';
+import type { HarnessId } from '../../../shared/harness.js';
 import type {
   HistoryFilters,
   HistoryScope,
@@ -91,8 +92,10 @@ export class SessionHistoryService {
     let unpricedCount = 0;
     const perDay = new Map<string, SessionHistoryDayTotal>();
     const models = new Set<string>();
+    const harnesses = new Set<HarnessId>();
 
     for (const { entry } of rows) {
+      harnesses.add(entry.harness);
       if (entry.model) models.add(entry.model);
       const day = localDay(entry.endedAt);
       const bucket = perDay.get(day) ?? { date: day, costUsd: 0, sessionCount: 0 };
@@ -112,6 +115,7 @@ export class SessionHistoryService {
       sessionCount: rows.length,
       perDay: [...perDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
       models: [...models].sort(),
+      harnesses: [...harnesses].sort(),
     };
   }
 
@@ -133,7 +137,9 @@ export class SessionHistoryService {
     // loop pays each file's read latency one after another, which is the
     // difference between an instant panel and one that visibly waits once a
     // workspace has a few hundred conversations.
-    const entries = await Promise.all(refs.map((ref) => this.usageFor(ref).then((usage) => toEntry(ref, usage, overrides))));
+    const entries = await Promise.all(
+      refs.map((ref) => this.usageFor(ref).then((usage) => toEntry(ref, usage, overrides))),
+    );
 
     const rows: HistoryRow[] = [];
     for (let i = 0; i < refs.length; i += 1) {
@@ -154,7 +160,8 @@ export class SessionHistoryService {
 
   private async usageFor(ref: TranscriptRef): Promise<TranscriptUsage> {
     const cached = this.usageCache.get(ref.filePath);
-    if (cached && cached.mtimeMs === ref.mtimeMs && cached.sizeBytes === ref.sizeBytes) return cached.usage;
+    if (cached && cached.mtimeMs === ref.mtimeMs && cached.sizeBytes === ref.sizeBytes)
+      return cached.usage;
 
     const versionKey = `${ref.filePath}|${ref.mtimeMs}|${ref.sizeBytes}`;
     const inFlight = this.usageReads.get(versionKey);
@@ -162,7 +169,11 @@ export class SessionHistoryService {
 
     const read = this.transcripts.readUsage(ref).then(
       (usage) => {
-        this.usageCache.set(ref.filePath, { mtimeMs: ref.mtimeMs, sizeBytes: ref.sizeBytes, usage });
+        this.usageCache.set(ref.filePath, {
+          mtimeMs: ref.mtimeMs,
+          sizeBytes: ref.sizeBytes,
+          usage,
+        });
         this.usageReads.delete(versionKey);
         return usage;
       },
@@ -187,7 +198,9 @@ export class SessionHistoryService {
   /** Conversations of the harnesses switched on in Settings — a disabled harness leaves the history, not just the new-session dialog. */
   private async enabledRefs(): Promise<TranscriptRef[]> {
     const settings = (await this.settingsService.load()) ?? this.settingsService.getDefaults();
-    return (await this.transcripts.listRefs()).filter((ref) => settings.adapters[ref.harness]?.enabled !== false);
+    return (await this.transcripts.listRefs()).filter(
+      (ref) => settings.adapters[ref.harness]?.enabled !== false,
+    );
   }
 
   private async rateOverrides(): Promise<Record<string, ModelRate> | undefined> {
@@ -202,8 +215,12 @@ export class SessionHistoryService {
     if (scope.kind === 'personal') return (cwd) => cwd === this.scopeDeps.homedir;
     // Every folder of the workspace, plus its own directory (where multi-folder sessions run).
     const workspace = await this.scopeDeps.workspaceService.get(scope.workspaceId);
-    const roots = [...workspaceFolders(workspace), workspaceHomePath(this.scopeDeps.homedir, workspace.id)];
-    return (cwd) => roots.some((root) => cwd === root || cwd.startsWith(root.endsWith(sep) ? root : root + sep));
+    const roots = [
+      ...workspaceFolders(workspace),
+      workspaceHomePath(this.scopeDeps.homedir, workspace.id),
+    ];
+    return (cwd) =>
+      roots.some((root) => cwd === root || cwd.startsWith(root.endsWith(sep) ? root : root + sep));
   }
 }
 
@@ -221,7 +238,8 @@ function toEntry(
     cwd: ref.cwd,
     model: primaryModel(usage),
     costUsd,
-    costSource: costUsd === null ? 'unknown' : usage.reportedCostUsd !== null ? 'reported' : 'estimated',
+    costSource:
+      costUsd === null ? 'unknown' : usage.reportedCostUsd !== null ? 'reported' : 'estimated',
     inputTokens: sumTokens(usage, 'inputTokens'),
     outputTokens: sumTokens(usage, 'outputTokens'),
     cacheCreationTokens: sumTokens(usage, 'cacheCreationTokens'),
@@ -245,6 +263,12 @@ function matches(entry: SessionHistoryEntry, filters?: HistoryFilters): boolean 
   if (filters.models && filters.models.length > 0) {
     if (!entry.model || !filters.models.includes(entry.model)) return false;
   }
+  if (
+    filters.harnesses &&
+    filters.harnesses.length > 0 &&
+    !filters.harnesses.includes(entry.harness)
+  )
+    return false;
   if (filters.from && localDay(entry.endedAt) < localDay(filters.from)) return false;
   if (filters.to && localDay(entry.endedAt) > localDay(filters.to)) return false;
   if (filters.search && filters.search.trim() !== '') {

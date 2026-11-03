@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CursorChatStorePort } from '../../../../src/main/application/ports/cursor-chat-store-port.js';
 import { FsCursorTranscriptAdapter } from '../../../../src/main/infrastructure/session-runtime/fs-cursor-transcript-adapter.js';
 
 let dir: string;
+
+const storeOf = (messages: string[] = []): CursorChatStorePort => ({ readMessages: async () => messages });
+const adapterOf = (messages: string[] = [], root: string = dir): FsCursorTranscriptAdapter =>
+  new FsCursorTranscriptAdapter(root, storeOf(messages));
 
 const chat = async (hash: string, id: string, meta: unknown | string): Promise<void> => {
   await mkdir(join(dir, hash, id), { recursive: true });
@@ -31,7 +36,7 @@ afterEach(async () => {
 describe('FsCursorTranscriptAdapter', () => {
   it('lists each chat as a cursor ref dated by its own updatedAtMs', async () => {
     await chat('h1', 'chat-a', meta());
-    const refs = await new FsCursorTranscriptAdapter(dir).listRefs();
+    const refs = await adapterOf().listRefs();
     expect(refs).toHaveLength(1);
     expect(refs[0]).toMatchObject({
       harness: 'cursor',
@@ -47,16 +52,16 @@ describe('FsCursorTranscriptAdapter', () => {
     await chat('h1', 'broken', '{ not json');
     await chat('h1', 'no-cwd', meta({ cwd: undefined }));
     await mkdir(join(dir, 'h1', 'no-meta'), { recursive: true });
-    expect(await new FsCursorTranscriptAdapter(dir).listRefs()).toEqual([]);
+    expect(await adapterOf().listRefs()).toEqual([]);
   });
 
   it('returns nothing when Cursor never ran on this machine', async () => {
-    expect(await new FsCursorTranscriptAdapter(join(dir, 'missing')).listRefs()).toEqual([]);
+    expect(await adapterOf([], join(dir, 'missing')).listRefs()).toEqual([]);
   });
 
   it('reports the title and dates, and says the chat is unpriced rather than free', async () => {
     await chat('h1', 'chat-a', meta());
-    const adapter = new FsCursorTranscriptAdapter(dir);
+    const adapter = adapterOf();
     const [ref] = await adapter.listRefs();
     const usage = await adapter.readUsage(ref!);
     expect(usage).toMatchObject({
@@ -68,5 +73,23 @@ describe('FsCursorTranscriptAdapter', () => {
       endedAt: new Date(5_000).toISOString(),
       durationMs: null,
     });
+  });
+
+  it('estimates usage from the chat messages when the store has a known model', async () => {
+    await chat('h1', 'chat-a', meta());
+    const messages = [
+      JSON.stringify({ role: 'user', content: 'a'.repeat(40) }),
+      JSON.stringify({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'b'.repeat(40), providerOptions: { cursor: { modelName: 'claude-opus-4-7-thinking-xhigh' } } }],
+      }),
+    ];
+    const adapter = adapterOf(messages);
+    const [ref] = await adapter.listRefs();
+    const usage = await adapter.readUsage(ref!);
+    expect(usage.unpriced).toBeUndefined();
+    expect(usage.models).toEqual([
+      { model: 'claude-opus-4-7', inputTokens: 10, outputTokens: 10, cacheCreationTokens: 0, cacheReadTokens: 0, reportedCostUsd: null },
+    ]);
   });
 });

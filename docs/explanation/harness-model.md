@@ -99,7 +99,7 @@ harness is not a second-class citizen — it is the normal case.
 | Harness | manage | run | Surface |
 |---|:---:|:---:|---|
 | **Claude Code** | ✅ | ✅ | `~/.claude/`, `<repo>/.claude/`, `~/AGENTS.md` · the `claude` CLI and its JSONL transcripts |
-| **Cursor** | ✅ (opt-in, off by default) | ✅ (same switch) | `~/.cursor/`, `<repo>/.cursor/`, a generated `AGENTS.md` per repo · the `cursor-agent` CLI and its chat metadata (`~/.cursor/chats/`) — no cost, token or model data |
+| **Cursor** | ✅ (opt-in, off by default) | ✅ (same switch) | `~/.cursor/`, `<repo>/.cursor/`, a generated `AGENTS.md` per repo · the `cursor-agent` CLI and its chat metadata (`~/.cursor/chats/`) — cost is estimated from the chat text in `store.db` (model is real, tokens are not recorded) |
 
 Source of truth: `HARNESSES` in `src/shared/harness.ts`. Default settings,
 settings validation and the Settings screen's toggles all derive from it, so
