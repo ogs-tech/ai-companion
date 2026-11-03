@@ -22,6 +22,12 @@ export interface SessionSpawnOptions {
   conversation: ConversationTarget;
   /** Absolute path to an ephemeral `--mcp-config` file (embedded-browser tool), additive to the user's own MCP servers. Omitted when the session's browser tool isn't enabled. */
   mcpConfigPath?: string;
+  /**
+   * Extra project roots the CLI should load project customizations from, for a
+   * session whose cwd is a helper directory that only *links* to the folders.
+   * Ignored by a CLI that has no such flag.
+   */
+  addDirs?: readonly string[];
 }
 
 export type SessionDataListener = (sessionId: string, chunk: string) => void;

@@ -70,10 +70,13 @@ export class NodePtySessionAdapter implements SessionRuntimePort {
     // Additive to whatever conversation args apply — appended once here so
     // both the primary attempt and the resume-fallback retry below carry it,
     // rather than each of `startArgs`/`resumeArgs` needing to know about it.
-    const withMcpConfig = (args: string[]): string[] =>
-      opts.mcpConfigPath && this.profile.supportsMcpConfig ? [...args, '--mcp-config', opts.mcpConfigPath] : args;
+    const withExtras = (args: string[]): string[] => [
+      ...args,
+      ...(opts.mcpConfigPath && this.profile.supportsMcpConfig ? ['--mcp-config', opts.mcpConfigPath] : []),
+      ...(this.profile.supportsAddDir ? (opts.addDirs ?? []).flatMap((dir) => ['--add-dir', dir]) : []),
+    ];
     if (mode === 'start') {
-      return this.spawnWithArgs(sessionId, cwd, opts, withMcpConfig(this.profile.startArgs(conversationId)), null);
+      return this.spawnWithArgs(sessionId, cwd, opts, withExtras(this.profile.startArgs(conversationId)), null);
     }
     // A resume that finds nothing to resume falls back to creating that same
     // conversation, rather than dead-ending as an immediately-'exited' session.
@@ -81,8 +84,8 @@ export class NodePtySessionAdapter implements SessionRuntimePort {
       sessionId,
       cwd,
       opts,
-      withMcpConfig(this.profile.resumeArgs(conversationId)),
-      this.profile.missingConversationMarker === null ? null : withMcpConfig(this.profile.startArgs(conversationId)),
+      withExtras(this.profile.resumeArgs(conversationId)),
+      this.profile.missingConversationMarker === null ? null : withExtras(this.profile.startArgs(conversationId)),
     );
   }
 

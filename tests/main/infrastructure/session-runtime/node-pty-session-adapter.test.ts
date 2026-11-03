@@ -219,6 +219,29 @@ describe('NodePtySessionAdapter', () => {
     adapter.write('sess-cursor', '\r');
   });
 
+  it('with the Cursor profile, adds one --add-dir per folder; a profile without the flag ignores addDirs', async () => {
+    const addDirs = ['/repos/web', '/repos/api'];
+    const cursor = new NodePtySessionAdapter(stub('stub-echo-args.sh'), () => process.env, CURSOR_PROFILE);
+    const claude = new NodePtySessionAdapter(stub('stub-echo-args.sh'));
+    const chunks: string[] = [];
+    for (const adapter of [cursor, claude]) {
+      adapter.onData((_sessionId, chunk) => chunks.push(chunk));
+      adapter.onExit(() => undefined);
+    }
+    await cursor.spawn('sess-add-dir-cursor', process.cwd(), { cols: 80, rows: 24, conversation: { mode: 'start', conversationId: 'chat-10' }, addDirs });
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('ARGV:--resume chat-10 --add-dir /repos/web --add-dir /repos/api');
+    });
+    chunks.length = 0;
+    await claude.spawn('sess-add-dir-claude', process.cwd(), { cols: 80, rows: 24, conversation: { mode: 'start', conversationId: 'c-11' }, addDirs });
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('ARGV:--session-id c-11');
+    });
+    expect(chunks.join('')).not.toContain('--add-dir');
+    cursor.write('sess-add-dir-cursor', '\r');
+    claude.write('sess-add-dir-claude', '\r');
+  });
+
   it('reports whether its binary can be found', async () => {
     expect(await new NodePtySessionAdapter(stub('stub-echo-args.sh')).isAvailable()).toBe(true);
     expect(await new NodePtySessionAdapter('/definitely/not/a/real/binary-xyz').isAvailable()).toBe(false);

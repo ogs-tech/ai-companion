@@ -62,6 +62,8 @@ export class SessionService {
    * `remove`, the only two calls that actually tear the view down.
    */
   private readonly browserMcpConfigPaths = new Map<string, string>();
+  /** Folders of a multi-folder session, kept so a respawn passes the same `--add-dir`s. */
+  private readonly sessionFolders = new Map<string, readonly string[]>();
   /**
    * `sessionId`s currently mid-restart via {@link setBrowserEnabled} — the old
    * PTY's real exit (fired asynchronously by the OS/`node-pty`, not
@@ -246,7 +248,9 @@ export class SessionService {
   }
 
   private async launch(sessionId: string, anchor: SessionAnchor, requested: HarnessId): Promise<SessionSnapshotWithOutput> {
-    const { cwd, label } = await this.resolveAnchor(anchor);
+    const { cwd, label, folders } = await this.resolveAnchor(anchor);
+    if (folders.length > 1) this.sessionFolders.set(sessionId, folders);
+    else this.sessionFolders.delete(sessionId);
     // Only an `entity` anchor can land here with a prior entry: its sessionId
     // is the anchor key, so reopening an exited one reuses the same slot.
     // `workspace`/`personal` arrive with a freshly minted sessionId every time.
@@ -296,6 +300,7 @@ export class SessionService {
 
   private async spawnPty(sessionId: string, harness: HarnessId, cwd: string, conversation: ConversationTarget): Promise<void> {
     const mcpConfigPath = this.browserMcpConfigPaths.get(sessionId);
+    const addDirs = this.sessionFolders.get(sessionId);
     const runtime = this.runtimeFor(harness);
     try {
       await runtime.spawn(sessionId, cwd, {
@@ -303,6 +308,7 @@ export class SessionService {
         rows: DEFAULT_ROWS,
         conversation,
         ...(mcpConfigPath ? { mcpConfigPath } : {}),
+        ...(addDirs ? { addDirs } : {}),
       });
     } catch (err) {
       throw ioError({
@@ -395,6 +401,7 @@ export class SessionService {
       this.browserMcpConfigPaths.delete(sessionId);
     }
     this.sessions.delete(sessionId);
+    this.sessionFolders.delete(sessionId);
     this.outputBuffers.delete(sessionId);
   }
 
@@ -480,7 +487,7 @@ export class SessionService {
     this.exitListeners.push(listener);
   }
 
-  private async resolveAnchor(anchor: SessionAnchor): Promise<{ cwd: string; label: string }> {
+  private async resolveAnchor(anchor: SessionAnchor): Promise<{ cwd: string; label: string; folders: readonly string[] }> {
     if (anchor.kind === 'workspace') {
       const workspace = await this.scopeDeps.workspaceService.get(anchor.workspaceId);
       const known = workspaceFolders(workspace);
@@ -488,16 +495,16 @@ export class SessionService {
       if (picked.length === 0 || picked.some((f) => !known.includes(f))) {
         throw new DomainError('validation', 'A session needs at least one folder of the workspace', { reason: 'unknown-folder' });
       }
-      if (picked.length === 1) return { cwd: picked[0] as string, label: workspace.name };
+      if (picked.length === 1) return { cwd: picked[0] as string, label: workspace.name, folders: picked };
       const home = workspaceHomePath(this.scopeDeps.homedir, workspace.id);
-      return { cwd: await prepareMultiFolderCwd(this.fs, home, picked), label: workspace.name };
+      return { cwd: await prepareMultiFolderCwd(this.fs, home, picked), label: workspace.name, folders: picked };
     }
     if (anchor.kind === 'personal') {
-      return { cwd: this.scopeDeps.homedir, label: 'Início' };
+      return { cwd: this.scopeDeps.homedir, label: 'Início', folders: [] };
     }
     const entity = await this.entityService.get(anchor.urn);
     const cwd = entity.scopes[0] !== 'personal' ? await resolveScopePath(entity, this.scopeDeps) : this.workspacePath;
-    return { cwd, label: entity.name };
+    return { cwd, label: entity.name, folders: [] };
   }
 
   private anchorForCwd(cwd: string): SessionAnchor {

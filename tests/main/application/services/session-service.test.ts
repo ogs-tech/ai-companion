@@ -830,6 +830,21 @@ describe('SessionService.stageAttachment', () => {
       expect(targets).toEqual(['/repos/api', '/repos/ws']);
     });
 
+    it('hands the ticked folders to the runtime as addDirs, and keeps them across a resume', async () => {
+      const { service, claudeSession } = multi();
+      const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/ws', '/repos/api'] });
+      expect(claudeSession.spawnCalls[0]?.opts.addDirs).toEqual(['/repos/ws', '/repos/api']);
+      service.kill(session.sessionId);
+      await service.resume(session.sessionId);
+      expect(claudeSession.spawnCalls[1]?.opts.addDirs).toEqual(['/repos/ws', '/repos/api']);
+    });
+
+    it('passes no addDirs when a single folder is the working directory', async () => {
+      const { service, claudeSession } = multi();
+      await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/api'] });
+      expect(claudeSession.spawnCalls[0]?.opts.addDirs).toBeUndefined();
+    });
+
     it('refuses a folder that does not belong to the workspace', async () => {
       const { service } = multi();
       await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/elsewhere'] })).rejects.toMatchObject({ kind: 'validation' });

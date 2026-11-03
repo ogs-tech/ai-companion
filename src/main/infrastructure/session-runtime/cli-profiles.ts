@@ -22,6 +22,12 @@ export interface CliProfile {
   missingConversationMarker: string | null;
   /** Whether the CLI accepts the embedded browser's `--mcp-config` file. */
   supportsMcpConfig: boolean;
+  /**
+   * Whether the CLI accepts `--add-dir <path>` and loads that directory's own
+   * project skills. Needed when its discovery cannot follow the symlinks of a
+   * multi-folder session's helper directory.
+   */
+  supportsAddDir: boolean;
 }
 
 /** `claude` accepts a caller-chosen UUID, so the transcript's name is known up front. */
@@ -33,12 +39,19 @@ export const CLAUDE_PROFILE: CliProfile = {
   // "No conversation found with session ID: <id>" and exits 1.
   missingConversationMarker: 'No conversation found',
   supportsMcpConfig: true,
+  // Claude loads each folder's `.claude/` through links the app assembles in the helper dir.
+  supportsAddDir: false,
 };
 
 /**
  * `cursor-agent` cannot be told which id to use, but `create-chat` mints one
  * and prints it; `--resume <id>` then opens that empty chat, so starting and
  * resuming are the same invocation.
+ *
+ * Its skill discovery ignores symlinked skill directories (verified: a real
+ * copy loads, a link to the same directory does not), so a multi-folder
+ * session's helper directory cannot expose the folders' `.cursor/skills`;
+ * `--add-dir` per folder does.
  */
 export const CURSOR_PROFILE: CliProfile = {
   newConversationId: ({ bin, cwd, env }) =>
@@ -57,4 +70,5 @@ export const CURSOR_PROFILE: CliProfile = {
   resumeArgs: (id) => ['--resume', id],
   missingConversationMarker: null,
   supportsMcpConfig: false,
+  supportsAddDir: true,
 };
