@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { basename, join, sep } from 'node:path';
+import type { HarnessId } from '../../../shared/harness.js';
+import { harnessSupports, HARNESSES } from '../../../shared/harness.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
 import { MAX_SESSION_ATTACHMENT_BYTES, sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
-import type { ClaudeConversationTarget, ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { ConversationTarget, SessionRuntimePort } from '../ports/session-runtime-port.js';
 import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { Workspace } from '../../../shared/workspace.js';
@@ -38,7 +40,7 @@ export type SessionStatusListener = (sessionId: string, status: SessionStatus, e
  * relaunches one specific, already-known `sessionId` (of any anchor kind)
  * without minting a new one.
  *
- * Orthogonal to all of that, every session also carries a `claudeSessionId`:
+ * Orthogonal to all of that, every session also carries a `conversationId`:
  * a UUID minted once, handed to the CLI, and never re-minted for that
  * session again — relaunching a session resumes its conversation instead of
  * starting a second one. That id is what ties a session to its transcript
@@ -70,7 +72,7 @@ export class SessionService {
 
   constructor(
     private readonly entityService: EntityService,
-    private readonly claudeSession: ClaudeSessionPort,
+    private readonly runtimes: Readonly<Partial<Record<HarnessId, SessionRuntimePort>>>,
     private readonly embeddedBrowser: EmbeddedBrowserPort,
     private readonly workspacePath: string,
     private readonly scopeDeps: {
@@ -80,23 +82,52 @@ export class SessionService {
       homedir: string;
     },
     private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'> &
-      Pick<FileSystemPort, 'lstat' | 'readlink' | 'symlink'>,
+      Pick<FileSystemPort, 'lstat' | 'readlink' | 'symlink' | 'unlink' | 'readdir' | 'pathExists'>,
     options?: { maxBufferChars?: number },
   ) {
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
-    this.claudeSession.onData((sessionId, chunk) => {
-      this.appendToBuffer(sessionId, chunk);
-      for (const listener of this.outputListeners) listener(sessionId, chunk);
-    });
-    this.claudeSession.onExit((sessionId, exitCode) => {
-      // A deliberate restart's own kill lands here late — the replacement PTY
-      // is already up (or about to be) by the time it does, so this exit is
-      // stale, not a real one.
-      if (this.restarting.has(sessionId)) return;
-      const session = this.sessions.get(sessionId);
-      if (session) session.status = 'exited';
-      for (const listener of this.exitListeners) listener(sessionId, 'exited', exitCode);
-    });
+    for (const runtime of Object.values(this.runtimes)) {
+      runtime.onData((sessionId, chunk) => {
+        this.appendToBuffer(sessionId, chunk);
+        for (const listener of this.outputListeners) listener(sessionId, chunk);
+      });
+      runtime.onExit((sessionId, exitCode) => {
+        // A deliberate restart's own kill lands here late — the replacement PTY
+        // is already up (or about to be) by the time it does, so this exit is
+        // stale, not a real one.
+        if (this.restarting.has(sessionId)) return;
+        const session = this.sessions.get(sessionId);
+        if (session) session.status = 'exited';
+        for (const listener of this.exitListeners) listener(sessionId, 'exited', exitCode);
+      });
+    }
+  }
+
+  /** The runtime for a harness, or a validation error when it can't run sessions. */
+  private runtimeFor(harness: HarnessId): SessionRuntimePort {
+    const runtime = this.runtimes[harness];
+    if (!runtime || !harnessSupports(harness, 'run')) {
+      throw new DomainError('validation', `${HARNESSES[harness].displayName} cannot run sessions`, {
+        reason: 'harness_cannot_run',
+        harness,
+      });
+    }
+    return runtime;
+  }
+
+  /** Which harnesses have a runnable CLI on this machine right now. */
+  async availableHarnesses(): Promise<HarnessId[]> {
+    const entries = await Promise.all(
+      (Object.entries(this.runtimes) as Array<[HarnessId, SessionRuntimePort]>).map(
+        async ([harness, runtime]) => [harness, await runtime.isAvailable()] as const,
+      ),
+    );
+    return entries.filter(([, available]) => available).map(([harness]) => harness);
+  }
+
+  private runtimeOf(sessionId: string): SessionRuntimePort | undefined {
+    const session = this.sessions.get(sessionId);
+    return session ? this.runtimes[session.harness] : undefined;
   }
 
   private appendToBuffer(sessionId: string, chunk: string): void {
@@ -109,8 +140,8 @@ export class SessionService {
     return { ...session, outputBuffer: (this.outputBuffers.get(session.sessionId) ?? []).join('') };
   }
 
-  async spawn(anchor: SessionAnchor): Promise<SessionSnapshotWithOutput> {
-    if (anchor.kind !== 'entity') return this.launch(randomUUID(), anchor);
+  async spawn(anchor: SessionAnchor, harness: HarnessId = 'claude'): Promise<SessionSnapshotWithOutput> {
+    if (anchor.kind !== 'entity') return this.launch(randomUUID(), anchor, harness);
 
     const sessionId = sessionAnchorKey(anchor);
     const existing = this.sessions.get(sessionId);
@@ -119,7 +150,7 @@ export class SessionService {
     const pendingSpawn = this.pending.get(sessionId);
     if (pendingSpawn) return pendingSpawn;
 
-    const spawnPromise = this.launch(sessionId, anchor).finally(() => {
+    const spawnPromise = this.launch(sessionId, anchor, harness).finally(() => {
       this.pending.delete(sessionId);
     });
     this.pending.set(sessionId, spawnPromise);
@@ -149,9 +180,9 @@ export class SessionService {
     const resumePromise = (async () => {
       // Relaunching a session that already had its own conversation — reattach
       // to that exact one by id, not to whatever this cwd last talked to.
-      await this.spawnPty(sessionId, existing.cwd, {
+      await this.spawnPty(sessionId, existing.harness, existing.cwd, {
         mode: 'resume',
-        claudeSessionId: existing.claudeSessionId,
+        conversationId: existing.conversationId,
       });
       existing.status = 'running';
       return this.withOutput(existing);
@@ -168,7 +199,7 @@ export class SessionService {
    * and registers it as an ordinary session, indistinguishable from any other
    * from that point on.
    *
-   * Its `sessionId` is the `claudeSessionId` itself: a UUID, so it can't
+   * Its `sessionId` is the `conversationId` itself: a UUID, so it can't
    * collide with an entity anchor's key, and stable, so adopting the same
    * conversation twice reattaches rather than forking it.
    *
@@ -177,11 +208,13 @@ export class SessionService {
    * ran in — `resume` reuses the stored `cwd`, never the anchor's.
    */
   async adoptConversation(input: {
-    claudeSessionId: string;
+    conversationId: string;
     cwd: string;
     label: string;
+    harness?: HarnessId;
   }): Promise<SessionSnapshotWithOutput> {
-    const sessionId = input.claudeSessionId;
+    const harness = input.harness ?? 'claude';
+    const sessionId = input.conversationId;
     const existing = this.sessions.get(sessionId);
     if (existing && existing.status === 'running') return this.withOutput(existing);
 
@@ -189,13 +222,14 @@ export class SessionService {
     if (pendingAdopt) return pendingAdopt;
 
     const adoptPromise = (async () => {
-      await this.spawnPty(sessionId, input.cwd, {
+      await this.spawnPty(sessionId, harness, input.cwd, {
         mode: 'resume',
-        claudeSessionId: input.claudeSessionId,
+        conversationId: input.conversationId,
       });
       const session: SessionSnapshot = {
         sessionId,
-        claudeSessionId: input.claudeSessionId,
+        harness,
+        conversationId: input.conversationId,
         anchor: this.anchorForCwd(input.cwd),
         cwd: input.cwd,
         label: input.label,
@@ -211,7 +245,7 @@ export class SessionService {
     return adoptPromise;
   }
 
-  private async launch(sessionId: string, anchor: SessionAnchor): Promise<SessionSnapshotWithOutput> {
+  private async launch(sessionId: string, anchor: SessionAnchor, requested: HarnessId): Promise<SessionSnapshotWithOutput> {
     const { cwd, label } = await this.resolveAnchor(anchor);
     // Only an `entity` anchor can land here with a prior entry: its sessionId
     // is the anchor key, so reopening an exited one reuses the same slot.
@@ -220,35 +254,51 @@ export class SessionService {
     const finalLabel =
       previous?.label ?? (anchor.kind === 'entity' ? label : this.nextOrdinalLabel(anchor, label));
     // Reopening keeps the conversation it already had; a genuinely new
-    // session names a brand-new one. Either way the id is ours, not the
-    // CLI's, so the transcript's filename is known before the process starts.
-    const claudeSessionId = previous?.claudeSessionId ?? randomUUID();
+    // session names a brand-new one. Either way the id is known before the
+    // process starts, so the transcript can be matched to the session.
+    // A reopened session keeps its harness: its conversation lives in that CLI.
+    const harness = previous?.harness ?? requested;
+    const conversationId = previous?.conversationId ?? (await this.newConversationId(harness, cwd));
 
-    await this.spawnPty(sessionId, cwd, {
+    await this.spawnPty(sessionId, harness, cwd, {
       mode: previous ? 'resume' : 'start',
-      claudeSessionId,
+      conversationId,
     });
 
     const session: SessionSnapshot = {
       sessionId,
-      claudeSessionId,
+      harness,
+      conversationId,
       anchor,
       cwd,
       label: finalLabel,
       status: 'running',
       // A reopened entity-anchor session (spawn again after exit) is the same
       // logical session as `previous` — same reasoning as `finalLabel`/
-      // `claudeSessionId` above, so its browser toggle carries forward too.
+      // `conversationId` above, so its browser toggle carries forward too.
       browserEnabled: previous?.browserEnabled ?? false,
     };
     this.sessions.set(sessionId, session);
     return this.withOutput(session);
   }
 
-  private async spawnPty(sessionId: string, cwd: string, conversation: ClaudeConversationTarget): Promise<void> {
-    const mcpConfigPath = this.browserMcpConfigPaths.get(sessionId);
+  private async newConversationId(harness: HarnessId, cwd: string): Promise<string> {
     try {
-      await this.claudeSession.spawn(sessionId, cwd, {
+      return await this.runtimeFor(harness).newConversationId(cwd);
+    } catch (err) {
+      if (err instanceof DomainError) throw err;
+      throw ioError({
+        message: `Failed to start a ${HARNESSES[harness].displayName} session: ${(err as Error).message}`,
+        details: { reason: 'session_spawn_failed' },
+      });
+    }
+  }
+
+  private async spawnPty(sessionId: string, harness: HarnessId, cwd: string, conversation: ConversationTarget): Promise<void> {
+    const mcpConfigPath = this.browserMcpConfigPaths.get(sessionId);
+    const runtime = this.runtimeFor(harness);
+    try {
+      await runtime.spawn(sessionId, cwd, {
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
         conversation,
@@ -256,8 +306,8 @@ export class SessionService {
       });
     } catch (err) {
       throw ioError({
-        message: `Failed to start a claude session: ${(err as Error).message}`,
-        details: { reason: 'claude_session_spawn_failed' },
+        message: `Failed to start a ${HARNESSES[harness].displayName} session: ${(err as Error).message}`,
+        details: { reason: 'session_spawn_failed' },
       });
     }
   }
@@ -273,7 +323,7 @@ export class SessionService {
   write(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
-    this.claudeSession.write(sessionId, data);
+    this.runtimeOf(sessionId)?.write(sessionId, data);
   }
 
   /**
@@ -316,13 +366,13 @@ export class SessionService {
   resize(sessionId: string, cols: number, rows: number): void {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
-    this.claudeSession.resize(sessionId, cols, rows);
+    this.runtimeOf(sessionId)?.resize(sessionId, cols, rows);
   }
 
   kill(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
-    this.claudeSession.kill(sessionId);
+    this.runtimeOf(sessionId)?.kill(sessionId);
     session.status = 'exited';
   }
 
@@ -337,7 +387,7 @@ export class SessionService {
    */
   async remove(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
-    if (session?.status === 'running') this.claudeSession.kill(sessionId);
+    if (session?.status === 'running') this.runtimeOf(sessionId)?.kill(sessionId);
     if (this.browserMcpConfigPaths.has(sessionId)) {
       // A failure here shouldn't strand the session forgotten-by-half —
       // forgetting it is the point of `remove`, resource leak or not.
@@ -357,7 +407,7 @@ export class SessionService {
    *
    * The CLI only reads `--mcp-config` at its own startup, so a session that's
    * currently running is restarted right here — killed and immediately
-   * resumed under the same `claudeSessionId`, so the conversation carries
+   * resumed under the same `conversationId`, so the conversation carries
    * over — rather than leaving the toggle queued for whenever the session
    * next happens to die on its own. The only observable cost is whatever the
    * CLI was doing at that exact instant (e.g. a tool call) getting cut off.
@@ -368,6 +418,12 @@ export class SessionService {
       throw new DomainError('not_found', `Unknown session '${sessionId}'`, { sessionId });
     }
     if (session.browserEnabled === enabled) return session;
+    if (session.harness !== 'claude') {
+      throw new DomainError('validation', 'The embedded browser is only available in Claude sessions', {
+        reason: 'browser_unsupported_for_harness',
+        harness: session.harness,
+      });
+    }
 
     if (enabled) {
       const { mcpConfigPath } = await this.embeddedBrowser.create(sessionId);
@@ -380,9 +436,9 @@ export class SessionService {
 
     if (session.status === 'running') {
       this.restarting.add(sessionId);
-      this.claudeSession.kill(sessionId);
+      this.runtimeOf(sessionId)?.kill(sessionId);
       try {
-        await this.spawnPty(sessionId, session.cwd, { mode: 'resume', claudeSessionId: session.claudeSessionId });
+        await this.spawnPty(sessionId, session.harness, session.cwd, { mode: 'resume', conversationId: session.conversationId });
       } catch (err) {
         // The old PTY is already dead and the replacement never came up —
         // this session really is exited now, and nothing else will report it
@@ -410,7 +466,7 @@ export class SessionService {
   killAll(): void {
     for (const [sessionId, session] of this.sessions) {
       if (session.status === 'running') {
-        this.claudeSession.kill(sessionId);
+        this.runtimeOf(sessionId)?.kill(sessionId);
         session.status = 'exited';
       }
     }

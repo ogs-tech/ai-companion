@@ -222,7 +222,7 @@ describe('WorkspaceScreen', () => {
     renderScreen();
     await user.click(await screen.findByTestId('workspace-sessions-new'));
     await waitFor(() =>
-      expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'workspace', workspaceId: 'w1' } }),
+      expect(ipc.callIpc).toHaveBeenCalledWith('session.spawn', { anchor: { kind: 'workspace', workspaceId: 'w1' }, harness: 'claude' }),
     );
     expect(await screen.findByTestId('workbench-tab-session:sess-w1')).toBeInTheDocument();
     expect(await screen.findByTestId('session-panel')).toBeInTheDocument();
@@ -730,8 +730,8 @@ describe('WorkspaceScreen', () => {
         if (method === 'workspace.getActive') return null;
         if (method === 'session.list') {
           return [
-            { sessionId: 'personal', claudeSessionId: 'c1', anchor: { kind: 'personal' }, cwd: '/home/u', label: 'Início', status: 'running', browserEnabled: false },
-            { sessionId: 'workspace:w9', claudeSessionId: 'c2', anchor: { kind: 'workspace', workspaceId: 'w9' }, cwd: '/repos/x', label: 'X', status: 'running', browserEnabled: false },
+            { sessionId: 'personal', conversationId: 'c1', anchor: { kind: 'personal' }, cwd: '/home/u', label: 'Início', status: 'running', browserEnabled: false },
+            { sessionId: 'workspace:w9', conversationId: 'c2', anchor: { kind: 'workspace', workspaceId: 'w9' }, cwd: '/repos/x', label: 'X', status: 'running', browserEnabled: false },
           ];
         }
         return undefined;

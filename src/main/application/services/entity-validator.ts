@@ -4,6 +4,8 @@ import {
   skillEntitySchema,
   agentEntitySchema,
   instructionEntitySchema,
+  mcpEntitySchema,
+  hookEntitySchema,
 } from '../schemas/entity-schema.js';
 
 export class EntityValidator {
@@ -15,7 +17,11 @@ export class EntityValidator {
           ? agentEntitySchema
           : entity.kind === 'instruction'
             ? instructionEntitySchema
-            : null;
+            : entity.kind === 'mcp'
+              ? mcpEntitySchema
+              : entity.kind === 'hook'
+                ? hookEntitySchema
+                : null;
     if (schema === null) {
       throw new DomainError('validation', `Unsupported entity kind: ${entity.kind}`);
     }

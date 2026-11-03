@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
-import { KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
+import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
 import { OriginMeta } from './OriginMeta.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { OriginGroups, type OriginView } from './OriginGroups.js';
@@ -9,6 +9,8 @@ import { RowMenuButton } from './RowMenuButton.js';
 import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useMcpList } from '../../hooks/use-mcp-list.js';
+import { useImportDetected } from '../../hooks/use-detected.js';
+import { HARNESS_LABEL } from './DetectedTreeGroup.js';
 import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp } from '../../hooks/use-mcp-mutations.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
@@ -41,7 +43,8 @@ const MCP_SCOPE_LABEL: Record<McpServer['scope'], string> = {
 
 function isLocal(server: McpServer, matchPath: string | undefined): boolean {
   if (matchPath === undefined) return true;
-  return (server.scope === 'project-local' || server.scope === 'project-shared') && server.repoPath === matchPath;
+  const projectScoped = server.scope === 'project-local' || server.scope === 'project-shared' || server.scope === 'detected';
+  return projectScoped && server.repoPath === matchPath;
 }
 
 function errorMessage(err: unknown): string {
@@ -71,6 +74,7 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
   const del = useDeleteMcp();
   const setEnabled = useSetMcpEnabled();
   const authenticate = useAuthenticateMcp();
+  const importer = useImportDetected();
   const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; server?: McpServer } | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<McpServer>();
@@ -88,11 +92,22 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
               { key: 'delete', label: 'Excluir', glyph: Trash2, danger: true, onSelect: () => del.mutate({ id: rowMenuTarget.id }, { onError: onMutationError }) },
             ]
           : []),
+        ...(rowMenuTarget.source.kind === 'detected' && rowMenuTarget.source.importable === true && rowMenuTarget.source.detectedId !== undefined
+          ? [
+              {
+                key: 'import',
+                label: 'Importar',
+                glyph: Download,
+                onSelect: () => importer.mutate({ id: rowMenuTarget.source.kind === 'detected' ? (rowMenuTarget.source.detectedId ?? '') : '' }, { onError: onMutationError }),
+              },
+            ]
+          : []),
       ]
     : [];
 
-  // Plugin-provided servers offer no menu unless they need authentication.
-  const rowMenuActionsFor = (server: McpServer): boolean => server.source.kind === 'workspace' || needsAuth(server);
+  // Plugin-provided servers offer no menu unless they need authentication; detected ones only when importable.
+  const rowMenuActionsFor = (server: McpServer): boolean =>
+    server.source.kind === 'workspace' || needsAuth(server) || (server.source.kind === 'detected' && server.source.importable === true);
   const items = data ?? [];
   const localItems = onlyGlobal ? [] : items.filter((s) => isLocal(s, matchPath));
   const globalItems = matchPath !== undefined && (showGlobal || onlyGlobal) ? items.filter((s) => !isLocal(s, matchPath)) : [];
@@ -144,6 +159,11 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
                     {server.source.kind !== 'plugin' && (nameCounts.get(server.name) ?? 0) > 1 && (
                       <Typography component="span" data-testid={`tree-mcp-scope-${server.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
                         {MCP_SCOPE_LABEL[server.scope]}
+                      </Typography>
+                    )}
+                    {server.source.kind === 'detected' && server.source.harness !== undefined && (
+                      <Typography component="span" data-testid={`tree-mcp-harness-${server.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+                        {HARNESS_LABEL[server.source.harness]}
                       </Typography>
                     )}
                     <HealthDot server={server} />

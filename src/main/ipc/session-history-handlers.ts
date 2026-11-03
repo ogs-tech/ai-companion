@@ -65,17 +65,18 @@ export function buildSessionHistoryHandlers(
     },
     'sessionHistory.resume': async (params) => {
       const raw = asObject(params, 'sessionHistory.resume');
-      const claudeSessionId = asString(raw['claudeSessionId'], 'claudeSessionId');
-      const entry = await service.find(claudeSessionId);
+      const conversationId = asString(raw['conversationId'], 'conversationId');
+      const entry = await service.find(conversationId);
       if (!entry) {
-        throw new DomainError('not_found', `No transcript for conversation '${claudeSessionId}'`, {
-          claudeSessionId,
+        throw new DomainError('not_found', `No transcript for conversation '${conversationId}'`, {
+          conversationId,
         });
       }
       return sessionService.adoptConversation({
-        claudeSessionId,
+        conversationId,
+        harness: entry.harness,
         cwd: entry.cwd,
-        label: entry.title ?? claudeSessionId.slice(0, 8),
+        label: entry.title ?? conversationId.slice(0, 8),
       });
     },
   };

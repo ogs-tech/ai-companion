@@ -63,6 +63,9 @@ import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } f
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
+import { useRunHarnesses } from '../../hooks/use-run-harnesses.js';
+import type { HarnessId } from '../../../shared/harness.js';
+import { harnessGlyph } from '../../components/HarnessMark.js';
 import { NewSessionDialog } from '../../components/workspace/NewSessionDialog.js';
 import { useFolderRouting } from '../../hooks/use-folder-routing.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
@@ -640,10 +643,10 @@ export function WorkspaceScreen(): React.ReactElement {
 
   // The "+" in the Sessões panel header: always a fresh session (coexisting
   // with any already open for the same anchor) wherever the user currently is.
-  const spawnSession = (anchor: SessionAnchor): void => {
+  const spawnSession = (anchor: SessionAnchor, harness: HarnessId = 'claude'): void => {
     void (async () => {
       try {
-        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor });
+        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor, harness });
         openSessionTab(session);
         void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
       } catch (err) {
@@ -653,9 +656,13 @@ export function WorkspaceScreen(): React.ReactElement {
   };
   // A multi-folder workspace asks which folders the session sees; otherwise it starts right away.
   const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const runHarnesses = useRunHarnesses();
+  // The dialog also opens when a second harness is enabled, so the harness can be chosen.
   const handleNewSession = (): void => {
-    if (activeWorkspace && folderRouting.multi) setNewSessionOpen(true);
-    else spawnSession(currentAnchor);
+    if ((activeWorkspace && folderRouting.multi) || runHarnesses.options.length > 1) {
+      runHarnesses.refresh();
+      setNewSessionOpen(true);
+    } else spawnSession(currentAnchor);
   };
 
   // The imperative collapse()/expand() calls drive the real (pixel-measured)
@@ -860,9 +867,10 @@ export function WorkspaceScreen(): React.ReactElement {
       // process is still 'running' is a minimize, not a real close, so the
       // action reads that way instead of implying the session is gone.
       const running = sessions?.some((s) => s.sessionId === tab.sessionId && s.status === 'running') ?? false;
+      const tabHarness = sessions?.find((s) => s.sessionId === tab.sessionId)?.harness;
       return {
         id: tab.id,
-        glyph: SquareTerminal,
+        glyph: tabHarness ? harnessGlyph(tabHarness) : SquareTerminal,
         label: tab.label,
         closeLabel: running ? 'Minimizar' : 'Fechar',
         // Manages its own edge-to-edge spacing (padding only around the
@@ -1116,15 +1124,19 @@ export function WorkspaceScreen(): React.ReactElement {
         </Group>
       </Box>
 
-      {activeWorkspace && folderRouting.multi && (
+      {activeWorkspace && (
         <NewSessionDialog
           open={newSessionOpen}
-          folders={folderRouting.folders}
+          folders={folderRouting.multi ? folderRouting.folders : []}
           aliases={folderRouting.aliases}
+          harnesses={runHarnesses.options}
           onCancel={() => setNewSessionOpen(false)}
-          onStart={(folders) => {
+          onStart={(folders, harness) => {
             setNewSessionOpen(false);
-            spawnSession({ kind: 'workspace', workspaceId: activeWorkspace.id, folders });
+            spawnSession(
+              folderRouting.multi ? { kind: 'workspace', workspaceId: activeWorkspace.id, folders } : currentAnchor,
+              harness,
+            );
           }}
         />
       )}

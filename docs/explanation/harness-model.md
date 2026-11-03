@@ -84,9 +84,11 @@ For each harness in the registry, this app declares what it can do:
 
 The asymmetry follows straight from the boundary test rather than being
 arbitrary. Every harness runs the loop (criterion 1), but only some expose that
-loop as a command-line program that can be spawned inside a PTY. Cursor runs
-its loop inside its own GUI process — unreachable to `NodePtySessionAdapter`,
-and no amount of work on our side changes that.
+loop as a command-line program that can be spawned inside a PTY. Claude Code
+(`claude`) and Cursor (`cursor-agent`, the Cursor Agent CLI) both do, so both
+have `run`. Cursor's GUI runs the same loop inside its own process, which stays
+out of reach — only the CLI is driven. A harness with no CLI would stay
+`manage`-only.
 
 **`manage` is the baseline; `run` is depth.** Most harnesses will only ever
 offer `manage`, and that is where breadth of coverage lives. A manage-only
@@ -97,7 +99,7 @@ harness is not a second-class citizen — it is the normal case.
 | Harness | manage | run | Surface |
 |---|:---:|:---:|---|
 | **Claude Code** | ✅ | ✅ | `~/.claude/`, `<repo>/.claude/`, `~/AGENTS.md` · the `claude` CLI and its JSONL transcripts |
-| **Cursor** | ✅ (opt-in, off by default) | — | `~/.cursor/`, `<repo>/.cursor/`, a generated `AGENTS.md` per repo |
+| **Cursor** | ✅ (opt-in, off by default) | ✅ (same switch) | `~/.cursor/`, `<repo>/.cursor/`, a generated `AGENTS.md` per repo · the `cursor-agent` CLI and its chat metadata (`~/.cursor/chats/`) — no cost, token or model data |
 
 Source of truth: `HARNESSES` in `src/shared/harness.ts`. Default settings,
 settings validation and the Settings screen's toggles all derive from it, so
@@ -131,7 +133,7 @@ steps — see the named debt below.
 The `manage` side is harness-agnostic: `AdapterManager` iterates a
 `Map<adapterId, Adapter>` and the `Adapter` port names no vendor.
 
-The `run` side is not. `ClaudeSessionPort`, `ClaudeRuntimePort`,
+The `run` side is not. `SessionRuntimePort`, `ClaudeRuntimePort`,
 `ClaudeSettingsPort` and `SessionTranscriptPort` put a vendor's name inside the
 **application layer** — the hexagonal direction is respected (no service
 imports `node-pty`), but the core knows there is a product called Claude.
@@ -143,7 +145,7 @@ clearest example is `FsClaudeTranscriptAdapter` reading a conversation from a
 re-appends `cost-state` and `ai-title` on every turn. That is an *observed*
 contract, never a published one. It belongs pinned to one harness.
 
-Generalizing the naming (`ClaudeSessionPort` → `HarnessSessionPort`, and so on)
+Generalizing the naming (`SessionRuntimePort` → `HarnessSessionPort`, and so on)
 touches 38 files and 92 occurrences across four ports, with no behaviour change.
 It is a mechanical rename and deserves its own commit, not a ride along with a
 feature.

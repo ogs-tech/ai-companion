@@ -18,10 +18,10 @@ afterEach(async () => {
 });
 
 /** Writes a transcript as JSONL, exactly as the CLI appends it. */
-async function transcript(slug: string, claudeSessionId: string, lines: readonly unknown[]): Promise<string> {
+async function transcript(slug: string, conversationId: string, lines: readonly unknown[]): Promise<string> {
   const dir = join(projectsDir, slug);
   await mkdir(dir, { recursive: true });
-  const filePath = join(dir, `${claudeSessionId}.jsonl`);
+  const filePath = join(dir, `${conversationId}.jsonl`);
   await writeFile(filePath, lines.map((line) => JSON.stringify(line)).join('\n'), 'utf8');
   return filePath;
 }
@@ -72,7 +72,7 @@ describe('FsClaudeTranscriptAdapter', () => {
       const refs = await adapter().listRefs();
 
       expect(refs).toHaveLength(3);
-      expect(refs.map((ref) => ref.claudeSessionId).sort()).toEqual([
+      expect(refs.map((ref) => ref.conversationId).sort()).toEqual([
         'aaaaaaaa-0000-4000-8000-000000000001',
         'aaaaaaaa-0000-4000-8000-000000000002',
         'aaaaaaaa-0000-4000-8000-000000000003',
@@ -113,7 +113,7 @@ describe('FsClaudeTranscriptAdapter', () => {
       const refs = await adapter().listRefs();
 
       expect(refs).toHaveLength(1);
-      expect(refs[0]?.claudeSessionId).toBe('aaaaaaaa-0000-4000-8000-000000000001');
+      expect(refs[0]?.conversationId).toBe('aaaaaaaa-0000-4000-8000-000000000001');
     });
 
     it('skips a transcript with no cwd anywhere rather than guessing one from the folder name', async () => {

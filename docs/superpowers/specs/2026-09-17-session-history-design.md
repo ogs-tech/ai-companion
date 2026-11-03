@@ -67,9 +67,9 @@ both:
 
 **Consequence for entity anchors.** `sessionAnchorKey(anchor)` returns `entity:urn:skill:foo`, which
 is not a UUID and cannot be passed to `--session-id`. `SessionSnapshot` therefore gains a
-`claudeSessionId: string` field (always a UUID, minted at spawn and passed to the CLI) that is
+`conversationId: string` field (always a UUID, minted at spawn and passed to the CLI) that is
 independent of `sessionId` (the app's own key, unchanged). `sessionId` keeps every identity rule it
-has today; `claudeSessionId` is the join key to the transcript.
+has today; `conversationId` is the join key to the transcript.
 
 **Not in this change.** `NodePtySessionAdapter`'s `NO_CONVERSATION_MARKER` retry
 (`node-pty-session-adapter.ts:130`) becomes dead weight once `--continue` is gone from the spawn
@@ -111,7 +111,7 @@ No IPC change, no service change, one file plus its test.
 ```ts
 // src/main/application/ports/session-transcript-port.ts
 export interface TranscriptRef {
-  claudeSessionId: string;  // the .jsonl basename
+  conversationId: string;  // the .jsonl basename
   filePath: string;
   cwd: string;              // read from the file's first line, never decoded from the folder name
   modifiedAt: string;       // ISO, from stat().mtime
@@ -188,7 +188,7 @@ the aggregation cache:
 - `list(query): Promise<SessionHistoryPage>` — filters refs by scope, sorts by `modifiedAt`
   descending, slices the requested page, and calls `readUsage` **only for that page's refs**.
   Pagination is cursor-based, not offset-based: the returned `nextCursor` encodes the last row's
-  `modifiedAt` and `claudeSessionId`, and the next call resumes after that pair. Offsets would skip
+  `modifiedAt` and `conversationId`, and the next call resumes after that pair. Offsets would skip
   or duplicate rows when a live session writes to its transcript mid-scroll and jumps to the top of
   the sort; a cursor anchored to a value cannot. `nextCursor` is `null` at the end of the list.
 - `stats(query): Promise<SessionHistoryStats>` — scope total, session count, and per-day totals for
@@ -228,7 +228,7 @@ New namespace `sessionHistory`, added to `docs/reference/ipc-contract.md`:
 |---|---|---|
 | `sessionHistory.list` | `{ scope: HistoryScope; cursor?: string; limit?: number; filters?: HistoryFilters }` | `SessionHistoryPage` |
 | `sessionHistory.stats` | `{ scope: HistoryScope; filters?: HistoryFilters }` | `SessionHistoryStats` |
-| `sessionHistory.resume` | `{ claudeSessionId: string }` | `SessionSnapshotWithOutput` |
+| `sessionHistory.resume` | `{ conversationId: string }` | `SessionSnapshotWithOutput` |
 
 `HistoryScope` is `{ kind: 'project'; projectId: string } | { kind: 'workspace'; workspaceId: string }
 | { kind: 'all' }`. `HistoryFilters` carries `models?: string[]`, `from?: string`, `to?: string`,
@@ -236,7 +236,7 @@ New namespace `sessionHistory`, added to `docs/reference/ipc-contract.md`:
 `src/main/ipc/session-history-handlers.ts`; shared types go in `src/shared/session-history.ts`.
 
 `sessionHistory.resume` delegates to `SessionService`, which spawns a PTY with
-`--resume <claudeSessionId>` and registers the result as an ordinary session — so a resumed history
+`--resume <conversationId>` and registers the result as an ordinary session — so a resumed history
 entry is indistinguishable from any other live session from that point on.
 
 ## 8. Renderer
@@ -245,7 +245,7 @@ entry is indistinguishable from any other live session from that point on.
 
 `SessionsTreeGroup` is revised rather than duplicated. It renders **one list from two sources**:
 live sessions from `session.list` (in-memory, `SessionSnapshot`) and past ones from
-`sessionHistory.list` (on disk). The two are merged on `claudeSessionId` — a running session has a
+`sessionHistory.list` (on disk). The two are merged on `conversationId` — a running session has a
 transcript on disk *and* an entry in memory, and must appear once, not twice. The in-memory entry
 wins on status and label; the transcript contributes model, tokens and cost. A history row with no
 in-memory match renders as ended; an in-memory row with no transcript yet (spawned seconds ago,
@@ -311,7 +311,7 @@ sortable.
   only for the current page (asserted against a fake port's call log), cache hit/miss on
   `mtime`/`size` change.
 - `session-history-handlers`: validation rejects a malformed scope with `kind: 'validation'`.
-- `SessionService`: `--session-id` passed at spawn; `resume` uses `--resume <claudeSessionId>`.
+- `SessionService`: `--session-id` passed at spawn; `resume` uses `--resume <conversationId>`.
 
 **jsdom project** (`tests/renderer/**`):
 
@@ -327,7 +327,7 @@ new `application/`, `ipc/`, `infrastructure/` and `renderer/` code.
 ## 10. Build order
 
 1. Shift+Enter (independent of everything else; ships alone).
-2. `claudeSessionId` on `SessionSnapshot`, `--session-id` at spawn, `--resume` in `SessionService`.
+2. `conversationId` on `SessionSnapshot`, `--session-id` at spawn, `--resume` in `SessionService`.
 3. Port + adapter + pricing, with tests, no UI.
 4. `SessionHistoryService` + aggregation cache + IPC.
 5. Control Panel revision (ordering, two-line row, infinite scroll, footer).

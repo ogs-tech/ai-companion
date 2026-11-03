@@ -9,7 +9,6 @@ import { InMemoryEntityRepository } from '../../../../../src/main/infrastructure
 import { InMemorySettingsRepository } from '../../../../../src/main/infrastructure/settings/in-memory-settings-repository.js';
 import { InMemoryFileSystem } from '../../../../../src/main/infrastructure/filesystem/in-memory-filesystem.js';
 import { FixedClock } from '../../../../../src/main/infrastructure/clock/fixed-clock.js';
-import { GENERATED_FILE_MARKER } from '../../../../../src/main/application/entity/agents-file.js';
 import {
   CURSOR_PLUGIN_ID,
   CURSOR_PLUGIN_JSON_MARKER,
@@ -91,14 +90,17 @@ describe('Cursor instruction sync (e2e)', () => {
     expect(await fs.pathExists(rulePath)).toBe(false);
   });
 
-  it('materializes a workspace instruction as <repoPath>/AGENTS.md and removes it on removeAll', async () => {
+  it('materializes a workspace instruction as <repoPath>/.cursor/rules/<name>.mdc and removes it on removeAll', async () => {
     const fs = new InMemoryFileSystem();
     const manager = makeManager(fs, [project]);
 
     await manager.syncAll({ adapterId: 'cursor' });
-    expect(await fs.readFile('/repos/acme/AGENTS.md')).toBe(`${GENERATED_FILE_MARKER}\n\nOnly in acme.\n`);
+    const rule = await fs.readFile('/repos/acme/.cursor/rules/acme.mdc');
+    expect(rule).toContain('alwaysApply: true');
+    expect(rule).toContain('Only in acme.');
+    expect(await fs.pathExists('/repos/acme/AGENTS.md')).toBe(false);
 
     await manager.removeAll({ adapterId: 'cursor' });
-    expect(await fs.pathExists('/repos/acme/AGENTS.md')).toBe(false);
+    expect(await fs.pathExists('/repos/acme/.cursor/rules/acme.mdc')).toBe(false);
   });
 });

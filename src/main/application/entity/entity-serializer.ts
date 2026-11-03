@@ -4,6 +4,8 @@ import type {
   Agent,
   Entity,
   EntityKind,
+  HookEntity,
+  McpEntity,
   EntityMetadata,
   EntitySource,
   Instruction,
@@ -55,7 +57,65 @@ function readScopes(fm: Record<string, unknown>): Scope[] {
   return ['personal'];
 }
 
+const MCP_KEYS = [...COMMON_KEYS, 'def', 'enabled'];
+const HOOK_KEYS = [...COMMON_KEYS, 'event', 'matcher', 'handler', 'enabled'];
+
+/** `mcp` and `hook` are pure data, so they are stored as JSON rather than Markdown + frontmatter. */
+function renderJsonEntity(entity: McpEntity | HookEntity): string {
+  const payload: Record<string, unknown> =
+    entity.kind === 'mcp'
+      ? { ...metaFrontmatter(entity), def: entity.def, enabled: entity.enabled }
+      : {
+          ...metaFrontmatter(entity),
+          event: entity.event,
+          ...(entity.matcher !== undefined ? { matcher: entity.matcher } : {}),
+          handler: entity.handler,
+          enabled: entity.enabled,
+        };
+  return `${JSON.stringify({ ...payload, ...(entity.ext ?? {}) }, null, 2)}\n`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJsonEntity(kind: 'mcp' | 'hook', name: string, raw: string, source: EntitySource): Entity {
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error(`parseEntityFile: ${kind} '${name}' is not a JSON object`);
+  const base = {
+    urn: entityUrn(kind, name),
+    name,
+    description: typeof parsed['description'] === 'string' ? parsed['description'] : '',
+    scopes: readScopes(parsed),
+    ...(typeof parsed['scopeId'] === 'string' ? { scopeId: parsed['scopeId'] } : {}),
+    metadata: readMetadata(parsed),
+    source,
+    enabled: parsed['enabled'] !== false,
+  };
+  if (kind === 'mcp') {
+    if (!isRecord(parsed['def'])) throw new Error(`parseEntityFile: mcp '${name}' has no 'def' object`);
+    const ext = extOf(parsed, MCP_KEYS);
+    const mcp: McpEntity = { ...base, kind: 'mcp', def: parsed['def'], ...(ext !== undefined ? { ext } : {}) };
+    return mcp;
+  }
+  const event = parsed['event'];
+  if (typeof event !== 'string' || !isRecord(parsed['handler'])) {
+    throw new Error(`parseEntityFile: hook '${name}' needs 'event' and a 'handler' object`);
+  }
+  const ext = extOf(parsed, HOOK_KEYS);
+  const hook: HookEntity = {
+    ...base,
+    kind: 'hook',
+    event,
+    ...(typeof parsed['matcher'] === 'string' ? { matcher: parsed['matcher'] } : {}),
+    handler: parsed['handler'],
+    ...(ext !== undefined ? { ext } : {}),
+  };
+  return hook;
+}
+
 export function renderEntityFile(entity: Entity): string {
+  if (entity.kind === 'mcp' || entity.kind === 'hook') return renderJsonEntity(entity as McpEntity | HookEntity);
   if (entity.kind === 'instruction') {
     // Frontmatter-free: the body is the whole file. Description/metadata
     // for workspace instructions lives in a sidecar meta.json (not this file).
@@ -101,6 +161,7 @@ export interface ParseEntityFileArgs {
 
 export function parseEntityFile(args: ParseEntityFileArgs): Entity {
   const { kind, name, raw, source, instructionSidecar } = args;
+  if (kind === 'mcp' || kind === 'hook') return parseJsonEntity(kind, name, raw, source);
   const { frontmatter, body } = parseMarkdown<Record<string, unknown>>(raw);
 
   const base = {

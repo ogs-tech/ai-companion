@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
 import { brand } from '../shared/brand.js';
 import { devLockPath, workspaceHomePath, workspacePath as workspaceDataDir } from '../shared/brand-paths.js';
@@ -54,7 +54,10 @@ import { PluginService } from './application/services/plugin-service.js';
 import { PluginProvenanceService } from './application/services/plugin-provenance.js';
 import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plugin-reader.js';
 import { HookService } from './application/services/hook-service.js';
-import { NodePtySessionAdapter } from './infrastructure/claude-cli/node-pty-session-adapter.js';
+import { NodePtySessionAdapter } from './infrastructure/session-runtime/node-pty-session-adapter.js';
+import { CURSOR_PROFILE } from './infrastructure/session-runtime/cli-profiles.js';
+import { CompositeTranscriptAdapter } from './infrastructure/session-runtime/composite-transcript-adapter.js';
+import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-cursor-transcript-adapter.js';
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
@@ -68,10 +71,8 @@ import { MarketplaceService } from './application/services/marketplace-service.j
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
 import { SettingsMarketplaceRepository } from './infrastructure/marketplace/settings-marketplace-repository.js';
 import { FsClaudeRuntimeReader } from './infrastructure/claude-runtime/fs-claude-runtime-reader.js';
-import { FsMcpConfigStore } from './infrastructure/mcp/fs-mcp-config-store.js';
 import { PluginMcpReader } from './infrastructure/mcp/plugin-mcp-reader.js';
 import { McpService } from './application/services/mcp-service.js';
-import { McpDisabledStash } from './infrastructure/mcp/mcp-disabled-stash.js';
 import { UnixSocketLinkRouter } from './infrastructure/link-routing/unix-socket-link-router.js';
 import { EXTERNAL_LINK_CHANNEL } from '../shared/external-link.js';
 import { ElectronShell } from './infrastructure/shell/electron-shell.js';
@@ -319,10 +320,14 @@ async function wireIpc(): Promise<void> {
     fs: nodeFsAdapter,
     claudeCodeRegistry: claudeCodePluginReader,
   });
-  const hookService = new HookService(claudeSettingsFile, {
-    cache: pluginCache,
-    fs: nodeFsAdapter,
-  });
+  const hookService = new HookService(
+    () => ({
+      entities: workspaceScoped.entityService,
+      detection: workspaceScoped.detectionService,
+      workspaceId: workspaceScoped.entityRepository.activeWorkspaceId,
+    }),
+    { cache: pluginCache, fs: nodeFsAdapter },
+  );
   const marketplacesCacheRoot = (scope: 'personal' | 'project'): string =>
     scope === 'personal'
       ? join(workspacePath, 'marketplaces-cache')
@@ -343,24 +348,18 @@ async function wireIpc(): Promise<void> {
     mcpLogsBaseDir: join(homedir(), 'Library', 'Caches', 'claude-cli-nodejs'),
   });
 
-  const mcpConfigStore = new FsMcpConfigStore({
-    claudeJsonPath: join(homedir(), '.claude.json'),
-  });
   const pluginMcpReader = new PluginMcpReader({
     listRoots: (scope) => pluginProvenance.roots(scope),
   });
-  const mcpDisabledStash = new McpDisabledStash({
-    stashPath: join(workspacePath, 'mcp-disabled.json'),
-  });
   const mcpService = new McpService({
-    config: mcpConfigStore,
+    // Rebuilt per workspace activation, hence a getter over the live graph.
+    canonical: () => ({
+      entities: workspaceScoped.entityService,
+      detection: workspaceScoped.detectionService,
+      workspaceId: workspaceScoped.entityRepository.activeWorkspaceId,
+    }),
     plugins: pluginMcpReader,
     runtime: claudeRuntimeReader,
-    // Project-scoped MCP config used to be read from every linked repo. That
-    // list is gone with linkedRepos; project MCPs will come from the per-entity
-    // repoPath in a follow-up iteration. For now, only personal + plugin MCPs.
-    linkedRepoPaths: async () => [],
-    disabledStash: mcpDisabledStash,
     shell: shellPort,
   });
 
@@ -385,11 +384,23 @@ async function wireIpc(): Promise<void> {
     pluginService,
     claudeRuntimeReader,
     claudeSettingsFile,
-    claudeSessionPort: new NodePtySessionAdapter('claude', () => ({ ...process.env, ...linkRouter.shimEnv() })),
+    sessionRuntimes: {
+      claude: new NodePtySessionAdapter('claude', () => ({ ...process.env, ...linkRouter.shimEnv() })),
+      // `cursor-agent` installs to ~/.local/bin, which a GUI-launched app's PATH usually lacks.
+      cursor: new NodePtySessionAdapter(
+        'cursor-agent',
+        () => ({ ...process.env, PATH: [process.env['PATH'], join(home, '.local', 'bin')].filter(Boolean).join(delimiter) }),
+        CURSOR_PROFILE,
+        [join(home, '.local', 'bin')],
+      ),
+    },
     embeddedBrowserPort: embeddedBrowserAdapter,
     // The CLI's own transcript directory — resolved here, like every other
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
-    sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
+    sessionTranscriptPort: new CompositeTranscriptAdapter({
+      claude: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
+      cursor: new FsCursorTranscriptAdapter(join(home, '.cursor', 'chats')),
+    }),
     fileWatcherPort: new ChokidarFileWatcher(),
     launchConfigReaderPort: new FsLaunchConfigReader(),
     terminalPort: new NodePtyTerminalAdapter(),
@@ -496,6 +507,7 @@ async function wireIpc(): Promise<void> {
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
+    detectionService: workspaceScoped.detectionService,
     openWithService,
     notificationPort,
     workspaceTeardownService: workspaceScoped.workspaceTeardownService,

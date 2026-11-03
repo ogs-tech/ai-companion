@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, Typography } from '@mui/material';
+import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+import { HARNESSES, type HarnessId } from '../../../shared/harness.js';
+import type { RunHarnessOption } from '../../hooks/use-run-harnesses.js';
+import { HarnessMark } from '../HarnessMark.js';
 import { folderColor } from '../../lib/folder-identity.js';
 
 interface NewSessionDialogProps {
@@ -9,12 +12,16 @@ interface NewSessionDialogProps {
   aliases: Record<string, string>;
   /** Ticked when the dialog opens — the folder of the item the user is looking at. */
   defaultFolder?: string;
-  onStart: (folders: string[]) => void;
+  /** Harnesses a session can start in. One (the default) hides the selector. */
+  harnesses?: readonly RunHarnessOption[];
+  onStart: (folders: string[], harness: HarnessId) => void;
   onCancel: () => void;
 }
 
+const CLAUDE_ONLY: readonly RunHarnessOption[] = [{ id: 'claude', available: true }];
+
 /**
- * Which of the workspace's folders a new session sees. Folders left unticked
+ * Which harness a new session runs in, and which of the workspace's folders it sees. Folders left unticked
  * are completely outside the session. One folder runs in it; two or more run
  * from a helper directory linking to exactly the ticked ones (no main folder).
  */
@@ -23,8 +30,12 @@ export function NewSessionDialog(props: NewSessionDialogProps): React.ReactEleme
   return props.open ? <NewSessionForm {...props} /> : <></>;
 }
 
-function NewSessionForm({ folders, aliases, defaultFolder, onStart, onCancel }: NewSessionDialogProps): React.ReactElement {
-  const [ticked, setTicked] = useState<string[]>(() => [defaultFolder ?? (folders[0] as string)]);
+function NewSessionForm({ folders, aliases, defaultFolder, harnesses = CLAUDE_ONLY, onStart, onCancel }: NewSessionDialogProps): React.ReactElement {
+  const [ticked, setTicked] = useState<string[]>(() => (folders.length === 0 ? [] : [defaultFolder ?? (folders[0] as string)]));
+  // Always opens on Claude (or the first option when Claude is off): the choice is per session, not remembered.
+  const [harness, setHarness] = useState<HarnessId>(() => (harnesses.some((h) => h.id === 'claude') ? 'claude' : (harnesses[0]?.id ?? 'claude')));
+  const chosen = harnesses.find((h) => h.id === harness);
+  const pickFolders = folders.length > 1;
 
   const all = ticked.length === folders.length;
   const toggle = (folder: string): void =>
@@ -34,6 +45,35 @@ function NewSessionForm({ folders, aliases, defaultFolder, onStart, onCancel }: 
     <Dialog open onClose={onCancel} maxWidth="xs" fullWidth data-testid="new-session-dialog">
       <DialogTitle>Nova sessão</DialogTitle>
       <DialogContent>
+        {harnesses.length > 1 && (
+          <ToggleButtonGroup
+            exclusive
+            fullWidth
+            size="small"
+            value={harness}
+            onChange={(_, next: HarnessId | null) => next && setHarness(next)}
+            aria-label="Harness da sessão"
+            data-testid="new-session-harness"
+            sx={{ mb: 2 }}
+          >
+            {harnesses.map((option) => (
+              <Tooltip key={option.id} title={option.available ? '' : `${HARNESSES[option.id].displayName} não encontrado neste computador`}>
+                <span style={{ flex: 1, display: 'flex' }}>
+                  <ToggleButton
+                    value={option.id}
+                    disabled={!option.available}
+                    data-testid={`new-session-harness-${option.id}`}
+                    sx={{ flex: 1, gap: 1, textTransform: 'none' }}
+                  >
+                    <HarnessMark harness={option.id} size={16} />
+                    {HARNESSES[option.id].displayName}
+                  </ToggleButton>
+                </span>
+              </Tooltip>
+            ))}
+          </ToggleButtonGroup>
+        )}
+        {pickFolders && (<>
         <DialogContentText sx={{ mb: 1 }}>
           Escolha as pastas que a sessão enxerga. As que ficarem de fora ficam fora de verdade — nem como diretório extra.
         </DialogContentText>
@@ -69,10 +109,11 @@ function NewSessionForm({ folders, aliases, defaultFolder, onStart, onCancel }: 
             />
           </Box>
         ))}
+        </>)}
       </DialogContent>
       <DialogActions>
         <Button data-testid="new-session-cancel" onClick={onCancel}>Cancelar</Button>
-        <Button data-testid="new-session-start" variant="contained" disabled={ticked.length === 0} onClick={() => onStart(ticked)}>
+        <Button data-testid="new-session-start" variant="contained" disabled={(pickFolders && ticked.length === 0) || !chosen?.available} onClick={() => onStart(ticked, harness)}>
           Iniciar
         </Button>
       </DialogActions>

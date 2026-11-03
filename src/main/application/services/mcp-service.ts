@@ -1,24 +1,31 @@
-import type { McpConfigPort, RawMcpServer } from '../ports/mcp-config-port.js';
 import type { ClaudeRuntimePort } from '../ports/claude-runtime-port.js';
 import type { PluginMcpReader, PluginMcpServer } from '../../infrastructure/mcp/plugin-mcp-reader.js';
-import type { McpServer, McpHealth, McpScope, McpServerInput } from '../../../shared/mcp.js';
-import { transportOf, mcpServerDefSchema } from '../schemas/mcp.js';
+import type { McpServer, McpHealth, McpServerInput } from '../../../shared/mcp.js';
+import type { DetectedEntity } from '../../../shared/detected.js';
+import type { McpEntity } from '../../../shared/entity.js';
+import { entityUrn, WORKSPACE_SOURCE } from '../../../shared/entity.js';
+import type { EntityService } from './entity-service.js';
+import type { DetectionService } from './detection-service.js';
+import { transportOf, mcpServerDefSchema, type McpServerDef } from '../schemas/mcp.js';
+import type { SyncResult } from '../../../shared/sync-result.js';
 import { mcpServerId, parseMcpServerId, type McpServerRef } from '../../domain/mcp-server-id.js';
-import { locationRepoPath } from '../../domain/mcp-location.js';
 import type { McpLocation } from '../../domain/mcp-location.js';
 import { OperationNotAllowedForOriginError } from '../../domain/plugin-errors.js';
 import { DomainError } from '../../domain/errors.js';
-import type { McpDisabledStash } from '../../infrastructure/mcp/mcp-disabled-stash.js';
 import type { ShellPort } from '../ports/shell-port.js';
 
+/** The per-workspace pieces McpService needs; a getter because they are rebuilt on every workspace switch. */
+export interface McpCanonical {
+  entities: Pick<EntityService, 'list' | 'get' | 'save' | 'delete'>;
+  detection: Pick<DetectionService, 'list'>;
+  /** The open workspace's id; `null` at Início. */
+  workspaceId: string | null;
+}
+
 export interface McpServiceDeps {
-  config: McpConfigPort;
+  canonical: () => McpCanonical;
   plugins: PluginMcpReader;
   runtime: ClaudeRuntimePort;
-  /** Linked repo paths whose .mcp.json should be read. */
-  linkedRepoPaths: () => Promise<string[]>;
-  /** Optional stash for parking/restoring disabled inline (global/project-local) servers. */
-  disabledStash?: McpDisabledStash;
   /** Optional shell, used to open the external claude.ai auth flow. */
   shell?: ShellPort;
 }
@@ -29,42 +36,28 @@ const CLAUDE_AI_CONNECTORS_URL = 'https://claude.ai/customize/connectors';
 export class McpService {
   constructor(private readonly deps: McpServiceDeps) {}
 
+  /** Canonical servers (managed by the app, written to every harness) + plugin servers + items detected in harness files. */
   async list(): Promise<McpServer[]> {
-    const repoPaths = await this.deps.linkedRepoPaths();
-    const [config, plugins] = await Promise.all([
-      this.deps.config.read({ repoPaths }),
+    const { entities, detection } = this.deps.canonical();
+    const [canonical, detected, plugins] = await Promise.all([
+      entities.list('mcp') as Promise<McpEntity[]>,
+      detection.list({ kinds: ['mcp'] }),
       this.deps.plugins.read('personal'),
     ]);
     const health = await this.buildHealthMap();
 
-    const own = config.map((s) => this.toDto(s, { kind: 'workspace' }, health));
+    const own = canonical.map((e) => this.entityToDto(e, health));
     const fromPlugins = plugins.map((s) => this.pluginToDto(s, health));
+    const found = detected.map((d) => this.detectedToDto(d, health));
 
-    // Names already represented by a config/plugin/parked row, so the health
-    // join doesn't double-list them as detected orphans below.
-    const claimed = new Set<string>();
-    for (const s of config) claimed.add(s.name);
+    // Names already represented, so the runtime-health join doesn't double-list them as orphans.
+    const claimed = new Set<string>([...canonical.map((e) => e.name), ...detected.map((d) => d.name)]);
     for (const s of plugins) {
       claimed.add(`plugin-${s.pluginId}-${s.name}`);
       claimed.add(s.name);
     }
 
-    const stash = this.deps.disabledStash;
-    const parked = stash
-      ? (await stash.list()).map((entry) => {
-          const ref = parseMcpServerId(entry.id);
-          claimed.add(ref.name);
-          return this.toDto(
-            { location: ref.location, name: ref.name, def: entry.def, enabled: false },
-            { kind: 'workspace' },
-            health,
-          );
-        })
-      : [];
-
-    const detected = this.detectedOrphans(health, claimed);
-
-    return [...own, ...fromPlugins, ...parked, ...detected];
+    return [...own, ...fromPlugins, ...found, ...this.detectedOrphans(health, claimed)];
   }
 
   /**
@@ -87,136 +80,113 @@ export class McpService {
     return (await this.list()).find((s) => s.id === mcpServerId(ref));
   }
 
-  async save(input: { server: McpServerInput; isCreate?: boolean }): Promise<{ ok: true }> {
+  async save(input: { server: McpServerInput; isCreate?: boolean }): Promise<{ ok: true; syncReport: SyncResult[] }> {
     const { server } = input;
     if (server.name.trim().length === 0) {
       throw new DomainError('validation', 'MCP server name must not be empty');
     }
     const def = mcpServerDefSchema.parse(server.def); // throws validation on bad def
-    const location = this.inputLocation(server);
-    await this.deps.config.upsert(location, server.name, def);
-    return { ok: true };
+    const { entities, workspaceId } = this.deps.canonical();
+    const scope = this.inputScope(server);
+    if (scope === 'workspace' && workspaceId === null) {
+      throw new DomainError('validation', 'No workspace is open — open a folder before saving a workspace MCP server');
+    }
+    const urn = entityUrn('mcp', server.name);
+    const existing = input.isCreate === true ? undefined : await entities.get(urn).catch(() => undefined);
+    const entity: McpEntity = {
+      urn,
+      kind: 'mcp',
+      name: server.name,
+      description: existing?.description ?? '',
+      scopes: [scope],
+      ...(scope === 'workspace' && workspaceId !== null ? { scopeId: workspaceId } : {}),
+      ...(scope === 'workspace' && server.repoPath !== undefined ? { folder: server.repoPath } : {}),
+      metadata: existing?.metadata ?? { version: '1.0.0', createdAt: '', updatedAt: '' },
+      source: WORKSPACE_SOURCE,
+      def: def as Record<string, unknown>,
+      enabled: (existing as McpEntity | undefined)?.enabled ?? true,
+    };
+    const result = await entities.save({ entity, isCreate: existing === undefined });
+    return { ok: true, syncReport: result.syncReport };
   }
 
   async delete(input: { id: string }): Promise<{ ok: true }> {
-    const ref = parseMcpServerId(input.id);
+    const ref = this.canonicalRef(input.id, 'delete');
+    await this.deps.canonical().entities.delete({ urn: entityUrn('mcp', ref.name), removeSymlinks: true });
+    return { ok: true };
+  }
+
+  async setEnabled(input: { id: string; enabled: boolean }): Promise<{ ok: true; syncReport: SyncResult[] }> {
+    const ref = this.canonicalRef(input.id, 'save');
+    const { entities } = this.deps.canonical();
+    const current = (await entities.get(entityUrn('mcp', ref.name))) as McpEntity;
+    const result = await entities.save({ entity: { ...current, enabled: input.enabled } as McpEntity });
+    return { ok: true, syncReport: result.syncReport };
+  }
+
+  /** Plugin and detected rows are read-only; everything else is a canonical server addressed by name. */
+  private canonicalRef(id: string, operation: 'save' | 'delete'): { name: string } {
+    const ref = parseMcpServerId(id);
     if (ref.location.kind === 'plugin') {
       throw new OperationNotAllowedForOriginError(
-        `Cannot delete MCP server '${ref.name}' provided by plugin '${ref.location.pluginId}'`,
-        { origin: 'plugin', operation: 'delete' },
+        `Cannot ${operation === 'delete' ? 'delete' : 'toggle'} MCP server '${ref.name}' provided by plugin '${ref.location.pluginId}'`,
+        { origin: 'plugin', operation },
       );
     }
     if (ref.location.kind === 'detected') {
       throw new OperationNotAllowedForOriginError(
-        `Cannot delete detected MCP server '${ref.name}': it has no broker config`,
-        { origin: 'detected', operation: 'delete' },
+        `Detected MCP server '${ref.name}' is read-only: import it first (detected.import)`,
+        { origin: 'detected', operation },
       );
     }
-    await this.deps.config.remove(ref.location, ref.name);
-    return { ok: true };
+    return { name: ref.name };
   }
 
-  async setEnabled(input: { id: string; enabled: boolean }): Promise<{ ok: true }> {
-    const ref = parseMcpServerId(input.id);
-    if (ref.location.kind === 'plugin') {
-      throw new OperationNotAllowedForOriginError(
-        `Cannot toggle MCP server '${ref.name}' provided by plugin '${ref.location.pluginId}'`,
-        { origin: 'plugin', operation: 'save' },
-      );
-    }
-    if (ref.location.kind === 'detected') {
-      throw new OperationNotAllowedForOriginError(
-        `Cannot toggle detected MCP server '${ref.name}': it has no broker config`,
-        { origin: 'detected', operation: 'save' },
-      );
-    }
-    if (ref.location.kind === 'project-shared') {
-      await this.deps.config.setDisabledShared(ref.location.repoPath, ref.name, !input.enabled);
-      return { ok: true };
-    }
-    // Inline (global/project-local): the stash and config are separate stores; each direction compensates on failure to stay consistent.
-    const stash = this.deps.disabledStash;
-    if (stash === undefined) {
-      throw new DomainError('internal', 'MCP disabled stash is not configured');
-    }
-    if (input.enabled) {
-      const def = await stash.take(input.id);
-      if (def === undefined) {
-        // Nothing parked under this id. Either the server is already enabled
-        // (idempotent re-enable) or its saved def was lost — surface the latter
-        // instead of a phantom success that leaves the row vanished from both
-        // the config and the stash.
-        const alreadyEnabled = (
-          await this.deps.config.read({ repoPaths: await this.deps.linkedRepoPaths() })
-        ).some(
-          (s) =>
-            s.name === ref.name &&
-            s.location.kind === ref.location.kind &&
-            locationRepoPath(s.location) === locationRepoPath(ref.location),
-        );
-        if (alreadyEnabled) return { ok: true };
-        throw new DomainError(
-          'not_found',
-          `Could not re-enable MCP server '${ref.name}': its saved configuration is missing.`,
-        );
-      }
-      try {
-        await this.deps.config.upsert(ref.location, ref.name, def);
-      } catch (err) {
-        // Cross-store op is not atomic: restore the parked def so it isn't lost.
-        await stash.park(input.id, def);
-        throw err;
-      }
-      return { ok: true };
-    }
-    const current = (await this.deps.config.read({ repoPaths: await this.deps.linkedRepoPaths() })).find(
-      (s) =>
-        s.name === ref.name &&
-        s.location.kind === ref.location.kind &&
-        locationRepoPath(s.location) === locationRepoPath(ref.location),
-    );
-    if (current !== undefined) {
-      await stash.park(input.id, current.def);
-      try {
-        await this.deps.config.remove(ref.location, ref.name);
-      } catch (err) {
-        // Cross-store op is not atomic: undo the park so the server isn't double-listed.
-        await stash.take(input.id);
-        throw err;
-      }
-    }
-    return { ok: true };
-  }
-
-  private inputLocation(server: McpServerInput): McpLocation {
+  private inputScope(server: McpServerInput): 'personal' | 'workspace' {
     const ALLOWED = new Set(['global', 'project-local', 'project-shared']);
     if (!ALLOWED.has(server.scope)) {
       throw new DomainError('validation', `Invalid MCP scope '${String(server.scope)}'`);
     }
-    if (server.scope === 'global') return { kind: 'global' };
-    if (server.repoPath === undefined || server.repoPath.length === 0) {
-      throw new DomainError('validation', `Missing 'repoPath' for scope '${server.scope}'`);
-    }
-    return { kind: server.scope, repoPath: server.repoPath };
+    return server.scope === 'global' ? 'personal' : 'workspace';
   }
 
-  private toDto(
-    raw: RawMcpServer,
-    source: McpServer['source'],
-    health: Map<string, McpHealth>,
-  ): McpServer {
-    const ref: McpServerRef = { location: raw.location, name: raw.name };
-    const repoPath = locationRepoPath(raw.location);
-    const found = health.get(raw.name);
+  private entityToDto(e: McpEntity, health: Map<string, McpHealth>): McpServer {
+    const personal = e.scopes[0] === 'personal';
+    const location: McpLocation = personal ? { kind: 'global' } : { kind: 'project-shared', repoPath: e.folder ?? '' };
+    const found = health.get(e.name);
     return {
-      id: mcpServerId(ref),
-      name: raw.name,
-      transport: transportOf(raw.def),
-      def: raw.def as Record<string, unknown>,
-      scope: raw.location.kind as McpScope,
-      ...(repoPath !== undefined ? { repoPath } : {}),
-      source,
-      enabled: raw.enabled,
+      id: mcpServerId({ location, name: e.name }),
+      name: e.name,
+      transport: transportOf(e.def as McpServerDef),
+      def: e.def,
+      scope: personal ? 'global' : 'project-shared',
+      ...(!personal && e.folder !== undefined ? { repoPath: e.folder } : {}),
+      source: { kind: 'workspace' },
+      enabled: e.enabled,
+      ...(found !== undefined ? { health: found } : {}),
+    };
+  }
+
+  private detectedToDto(d: DetectedEntity, health: Map<string, McpHealth>): McpServer {
+    const def = (d.preview['def'] ?? {}) as Record<string, unknown>;
+    const parsed = mcpServerDefSchema.safeParse(def);
+    const found = health.get(d.name);
+    return {
+      // Harness-qualified so the same server found in Claude and Cursor gets two distinct row ids.
+      id: mcpServerId({ location: { kind: 'detected' }, name: `${d.harness}/${d.scope}/${d.name}` }),
+      name: d.name,
+      ...(parsed.success ? { transport: transportOf(parsed.data) } : {}),
+      def,
+      scope: 'detected',
+      ...(d.folder !== undefined ? { repoPath: d.folder } : {}),
+      source: {
+        kind: 'detected',
+        detectedId: d.id,
+        harness: d.harness,
+        importable: d.importable,
+        ...(d.reason !== undefined ? { reason: d.reason } : {}),
+      },
+      enabled: true,
       ...(found !== undefined ? { health: found } : {}),
     };
   }

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Only `type: "node"`, `request: "launch"` configurations are runnable — everything else (other `type`s, `request: "attach"`) is listed but shown disabled with a tooltip, never attempted.
-- Plain `child_process`, never `node-pty`/`ClaudeSessionPort` — a launched process is never a `Session`, has no anchor, no transcript.
+- Plain `child_process`, never `node-pty`/`SessionRuntimePort` — a launched process is never a `Session`, has no anchor, no transcript.
 - Scope is every Project registered in the active Workspace (`ProjectService.list()`), not just the currently selected one.
 - New dependency: `jsonc-parser` — no hand-rolled comment/trailing-comma stripping.
 - Only `${workspaceFolder}` is substituted in `program`/`args`/`cwd` — no other VS Code variables.
@@ -487,10 +487,10 @@ export type LaunchProcessExitListener = (processId: string, exitCode: number | n
 /**
  * Spawns a plain child process per `processId` — no PTY, no interactive
  * input, distinct stdout/stderr streams. `onOutput`/`onExit` each store a
- * single listener (mirroring `ClaudeSessionPort`'s real shape, one callback
+ * single listener (mirroring `SessionRuntimePort`'s real shape, one callback
  * per port instance) — the array-based multi-listener fan-out lives one
  * layer up, in `LaunchProcessService`, exactly like `SessionService` does
- * over `ClaudeSessionPort`.
+ * over `SessionRuntimePort`.
  */
 export interface LaunchProcessPort {
   spawn(processId: string, opts: LaunchProcessSpawnOptions): Promise<void>;
@@ -686,7 +686,7 @@ Expected: PASS (all 5 tests).
 
 - [ ] **Step 7: Write `src/main/application/services/__fixtures__/fake-launch-process-port.ts`**
 
-No test of its own — a test double, mirroring `fake-claude-session-port.ts`, consumed by Task 5's and Task 6's tests.
+No test of its own — a test double, mirroring `fake-session-runtime-port.ts`, consumed by Task 5's and Task 6's tests.
 
 ```ts
 import type {
@@ -1448,7 +1448,7 @@ import { NodeChildProcessAdapter } from './infrastructure/launch-process/node-ch
 import { LAUNCH_PROCESS_OUTPUT_CHANNEL, LAUNCH_PROCESS_EXIT_CHANNEL } from '../shared/launch-config.js';
 ```
 
-Add two entries to `sharedDeps` (right beside `claudeSessionPort`/`sessionTranscriptPort`):
+Add two entries to `sharedDeps` (right beside `sessionRuntimePort`/`sessionTranscriptPort`):
 
 ```ts
     launchConfigReaderPort: new FsLaunchConfigReader(),

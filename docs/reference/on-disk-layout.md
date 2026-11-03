@@ -30,7 +30,8 @@ Only ever read from `~/.ai-companion/`, whichever workspace is open.
 | `workspaces.json` | `WorkspaceService` | `{ schemaVersion: 2, workspaces, activeWorkspaceId }` — every `Workspace` (`id`, `name`, `rootPath` as a real path, `createdAt`); `activeWorkspaceId: null` means Início. Written empty on a fresh install, or by the boot migration from the project-era shape. |
 | `plugins/` | `PluginCacheFile` | Personal-scope plugins: imported clones and owned plugins, each with `_meta.json`. |
 | `marketplaces-cache/` | `MarketplaceService` | Personal-scope marketplace clones. |
-| `mcp-disabled.json` | `McpDisabledStash` | Inline MCP server definitions parked while disabled (restored on enable). |
+| `mcps/<name>.json`, `hooks/<name>.json` | `FsEntityRepository` | Canonical MCP-server and hook entities (JSON; `personal` ones here, `workspace` ones in the workspace's own data dir). |
+| `merge-index.json` | `MergeMaterializer` | Per harness file, which JSON entries the app wrote and a hash of each — how it tells its own entries from the user's. |
 | `_backups/<timestamp>/…` | `SymlinkManager`, `FileMaterializer` | Copies of whatever a sync overwrote — always here, whichever workspace is open. Never pruned automatically. |
 | `_backups/migration-v2-<timestamp>/` | `WorkspaceModelMigration` | Pre-migration copies of the project-era files (absolute paths preserved beneath it) plus `log.json`. Written once, by the boot migration. |
 | `bin/open` | `UnixSocketLinkRouter` | Shell shim, rewritten (mode `0755`) on every start. Prepended to a session PTY's `PATH` and set as its `$BROWSER`, so a URL the `claude` CLI opens reaches the app instead of the default browser. Non-`http(s)` or flagged invocations pass straight to `/usr/bin/open`. |
@@ -78,10 +79,12 @@ writes is surgical — only the keys listed are touched.
 
 | Path | Keys touched | By |
 |---|---|---|
-| `~/.claude/settings.json` (`project` tier: the open workspace's `<rootPath>/.claude/settings.json`) | `hooks`, `enabledPlugins`, `extraKnownMarketplaces` | `HookService`, `PluginInstaller`, `MarketplaceService` (through `ClaudeSettingsFile`) |
+| `~/.claude/settings.json` (`project` tier: the open workspace's `<rootPath>/.claude/settings.json`) | `hooks` (app-managed entries only, via the merge sync), `enabledPlugins`, `extraKnownMarketplaces` | `MergeMaterializer`, `PluginInstaller`, `MarketplaceService` (through `ClaudeSettingsFile`) |
 | `~/.claude/plugins/cache/local/<id>` (`project` tier: `<rootPath>/.claude/plugins/cache/local/<id>`) | symlink to the plugin in `~/.ai-companion/plugins/` (or the workspace's) | `PluginInstaller` |
-| `~/.claude.json` | `mcpServers`, `projects[<path>].mcpServers`, `projects[<path>].disabledMcpjsonServers` | `McpService` (atomic write, previous file kept as `~/.claude.json.bak`) |
-| `<repo>/.mcp.json` | project-shared MCP servers | `McpService` |
+| `~/.claude.json` | `mcpServers.<name>` (app-managed entries only) | `MergeMaterializer` (atomic write; the file is backed up to `_backups/` whenever it changes) |
+| `<repo>/.mcp.json` | `mcpServers.<name>` (app-managed entries only) | `MergeMaterializer` |
+| `~/.cursor/mcp.json`, `~/.cursor/hooks.json`, `<repo>/.cursor/{mcp,hooks}.json` | the app-managed entries (Cursor adapter enabled) | `MergeMaterializer` |
+| `<repo>/.cursor/rules/<name>.mdc` | generated, marker-owned (workspace instructions; Cursor adapter enabled) | `FileMaterializer` |
 
 ## Files the app only reads
 

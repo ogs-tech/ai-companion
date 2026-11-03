@@ -1310,7 +1310,7 @@ In `src/main/index.ts`, remove the top-level `const claudeAdapter = new ClaudeAd
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeCli: new NodeClaudeCliAdapter(),
-    claudeSessionPort: new NodePtySessionAdapter(),
+    sessionRuntimePort: new NodePtySessionAdapter(),
   };
 ```
 
@@ -1375,7 +1375,7 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const scopeDeps = {
     workspaceService: { get: async () => { throw new Error('not stubbed'); } },
     projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
@@ -1411,7 +1411,7 @@ In `src/main/application/services/session-service.ts`, change the imports:
 import type { Entity, Instruction } from '../../../shared/entity.js';
 import type { SessionSnapshot, SessionStatus } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
-import type { ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { SessionRuntimePort } from '../ports/session-runtime-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { ProjectService } from './project-service.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
@@ -1423,7 +1423,7 @@ import { ioError } from '../../domain/errors.js';
 ```ts
   constructor(
     private readonly entityService: EntityService,
-    private readonly claudeSession: ClaudeSessionPort,
+    private readonly claudeSession: SessionRuntimePort,
     private readonly workspacePath: string,
     private readonly scopeDeps: {
       workspaceService: Pick<WorkspaceService, 'get'>;
@@ -1470,7 +1470,7 @@ Run: `npx vitest run tests/main/ipc/session-handlers.test.ts` — still passes u
 In `src/main/application/workspace-scoped-services.ts`, update the `sessionService` construction:
 
 ```ts
-  const sessionService = new SessionService(entityService, claudeSessionPort, dataDir, {
+  const sessionService = new SessionService(entityService, sessionRuntimePort, dataDir, {
     workspaceService: shared.workspaceService,
     projectService,
   });

@@ -1,283 +1,126 @@
-import { randomUUID } from 'node:crypto';
-import { describe, it, expect } from 'vitest';
-import { HookService } from '../../../../src/main/application/services/hook-service.js';
-import { FakeClaudeSettingsPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-settings-port.js';
+import { describe, it, expect, vi } from 'vitest';
+import { HookService, type HookCanonical } from '../../../../src/main/application/services/hook-service.js';
 import { FakePluginCachePort } from '../../../../src/main/application/services/__fixtures__/fake-plugin-cache-port.js';
 import { InMemoryFileSystem } from '../../../../src/main/infrastructure/filesystem/in-memory-filesystem.js';
 import { OperationNotAllowedForOriginError } from '../../../../src/main/domain/plugin-errors.js';
 import { hookId } from '../../../../src/main/domain/hook-id.js';
 import type { PluginId } from '../../../../src/main/domain/plugin-id.js';
+import type { HookEntity } from '../../../../src/shared/entity.js';
+import type { DetectedEntity } from '../../../../src/shared/detected.js';
 
-describe('HookService', () => {
-  describe('save / list (workspace)', () => {
-    it('creates a workspace hook and lists it', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const service = new HookService(settings);
+const entity = (over: Partial<HookEntity> = {}): HookEntity => ({
+  urn: 'urn:hook:h1', kind: 'hook', name: 'h1', description: '', scopes: ['personal'],
+  metadata: { version: '1.0.0', createdAt: 't0', updatedAt: 't0' }, source: { kind: 'workspace' },
+  event: 'PreToolUse', matcher: 'Bash', handler: { type: 'command', command: './c.sh' }, enabled: true, ...over,
+});
 
-      const result = await service.save({
-        hook: {
-          event: 'SessionStart',
-          matcher: 'startup',
-          handler: { type: 'command', command: 'echo hello' },
-        },
-      });
+const detectedHook: DetectedEntity = {
+  id: 'det-hook', kind: 'hook', name: 'hook-abc', description: '', harness: 'cursor', scope: 'personal',
+  path: '/home/u/.cursor/hooks.json', importable: true,
+  preview: { event: 'Stop', handler: { type: 'command', command: './s.sh' } },
+};
 
-      expect(result.hook.event).toBe('SessionStart');
-      expect(result.hook.matcher).toBe('startup');
-      expect(result.hook.source.kind).toBe('workspace');
-      expect(typeof result.hook.id).toBe('string');
+function make(opts: { canonical?: HookEntity[]; detected?: DetectedEntity[]; workspaceId?: string | null; plugin?: { cache: FakePluginCachePort; fs: InMemoryFileSystem } } = {}) {
+  const store = new Map((opts.canonical ?? []).map((e) => [e.urn, e]));
+  const save = vi.fn(async ({ entity: e }: { entity: HookEntity; isCreate?: boolean }) => {
+    store.set(e.urn, e);
+    return { entity: e, syncReport: [] };
+  });
+  const del = vi.fn(async () => ({ ok: true as const }));
+  const canonical: HookCanonical = {
+    entities: {
+      list: async () => [...store.values()],
+      get: async (urn: string) => {
+        const found = store.get(urn);
+        if (!found) throw new Error('not_found');
+        return found;
+      },
+      save,
+      delete: del,
+    } as unknown as HookCanonical['entities'],
+    detection: { list: async () => opts.detected ?? [] },
+    workspaceId: opts.workspaceId === undefined ? 'ws-1' : opts.workspaceId,
+  };
+  return { service: new HookService(() => canonical, opts.plugin), save, del };
+}
 
-      const listed = await service.list('personal');
-      expect(listed).toHaveLength(1);
-      expect(listed[0]?.id).toBe(result.hook.id);
-    });
-
-    it('writes _sdeAiId discriminator into settings.json hooks entry', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const service = new HookService(settings);
-
-      const { hook } = await service.save({
-        hook: {
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          handler: { type: 'command', command: 'echo foo' },
-        },
-      });
-
-      const persisted = settings.getSettings('personal');
-      const block = persisted.hooks?.['PreToolUse']?.[0];
-      expect(block?.matcher).toBe('Bash');
-      const handler = block?.hooks[0] as { _sdeAiId?: string; command?: string };
-      expect(handler?._sdeAiId).toBe(hook.id);
-      expect(handler?.command).toBe('echo foo');
-    });
-
-    it('updates an existing hook by id (no duplication)', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const service = new HookService(settings);
-
-      const { hook } = await service.save({
-        hook: {
-          event: 'SessionStart',
-          handler: { type: 'command', command: 'echo old' },
-        },
-      });
-
-      await service.save({
-        hook: {
-          id: hook.id,
-          event: 'SessionStart',
-          handler: { type: 'command', command: 'echo new' },
-        },
-      });
-
-      const listed = await service.list('personal');
-      expect(listed).toHaveLength(1);
-      const handler = listed[0]?.handler as { command?: string };
-      expect(handler.command).toBe('echo new');
-    });
-
-    it('moves hook to a different event when event field changes', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const service = new HookService(settings);
-
-      const { hook } = await service.save({
-        hook: {
-          event: 'SessionStart',
-          handler: { type: 'command', command: 'echo x' },
-        },
-      });
-
-      await service.save({
-        hook: {
-          id: hook.id,
-          event: 'Stop',
-          handler: { type: 'command', command: 'echo x' },
-        },
-      });
-
-      const persisted = settings.getSettings('personal');
-      expect(persisted.hooks?.['SessionStart']).toBeUndefined();
-      expect(persisted.hooks?.['Stop']).toHaveLength(1);
-    });
-
-    it('preserves hooks added directly to settings.json without _sdeAiId', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      settings.seedSettings('personal', {
-        extraKnownMarketplaces: {},
-        enabledPlugins: {},
-        hooks: {
-          SessionStart: [
-            { matcher: 'startup', hooks: [{ type: 'command', command: 'manual' }] },
-          ],
-        },
-      });
-      const service = new HookService(settings);
-
-      const listed = await service.list('personal');
-      expect(listed).toHaveLength(1);
-      const handler = listed[0]?.handler as { command?: string };
-      expect(handler.command).toBe('manual');
-      // synthetic id is generated for unmarked entries; still lists as workspace
-      expect(listed[0]?.source.kind).toBe('workspace');
-    });
+describe('HookService (canonical layer)', () => {
+  it('creates a canonical hook with a generated slug name and returns the sync report', async () => {
+    const { service, save } = make();
+    const result = await service.save({ hook: { event: 'Stop', handler: { type: 'command', command: './s.sh' } } });
+    const saved = save.mock.calls[0]![0];
+    expect(saved.isCreate).toBe(true);
+    expect(saved.entity).toMatchObject({ kind: 'hook', event: 'Stop', scopes: ['personal'], enabled: true });
+    expect(saved.entity.name).toMatch(/^hook-[0-9a-f]{8}$/);
+    expect(result.hook.id).toBe(saved.entity.name);
+    expect(result.syncReport).toEqual([]);
   });
 
-  describe('delete', () => {
-    it('removes the workspace hook from settings.json', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const service = new HookService(settings);
-
-      const { hook } = await service.save({
-        hook: {
-          event: 'SessionStart',
-          handler: { type: 'command', command: 'echo x' },
-        },
-      });
-
-      await service.delete({ id: hook.id });
-
-      const persisted = settings.getSettings('personal');
-      expect(persisted.hooks?.['SessionStart']).toBeUndefined();
-      const listed = await service.list('personal');
-      expect(listed).toHaveLength(0);
-    });
+  it('updates an existing hook in place, keeping its enabled flag and metadata', async () => {
+    const { service, save } = make({ canonical: [entity({ enabled: false })] });
+    await service.save({ hook: { id: hookId('h1'), event: 'PreToolUse', matcher: 'Read', handler: { type: 'command', command: './n.sh' } } });
+    expect(save.mock.calls[0]![0]).toMatchObject({ isCreate: false, entity: { name: 'h1', matcher: 'Read', enabled: false } });
   });
 
-  describe('get', () => {
-    it('get() throws a not_found DomainError for a missing hook', async () => {
-      const service = new HookService(new FakeClaudeSettingsPort());
-      await expect(
-        service.get({ id: hookId(randomUUID()) }),
-      ).rejects.toMatchObject({ kind: 'not_found' });
-    });
+  it('rejects an invalid handler and a project hook without an open workspace', async () => {
+    await expect(make().service.save({ hook: { event: 'Stop', handler: { type: 'command' } as never } })).rejects.toThrow();
+    await expect(
+      make({ workspaceId: null }).service.save({ scope: 'project', hook: { event: 'Stop', handler: { type: 'command', command: 'x' } } }),
+    ).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('lists canonical hooks by scope tier and detected ones as read-only', async () => {
+    const project = entity({ urn: 'urn:hook:p', name: 'p', scopes: ['workspace'] });
+    const { service } = make({ canonical: [entity(), project], detected: [detectedHook] });
+    const personal = await service.list('personal');
+    expect(personal.map((h) => h.id)).toContain('h1');
+    expect(personal.map((h) => h.id)).not.toContain('p');
+    const found = personal.find((h) => h.source.kind === 'detected');
+    expect(found).toMatchObject({ event: 'Stop', source: { detectedId: 'det-hook', harness: 'cursor', importable: true } });
+    expect((await service.list('project')).map((h) => h.id)).toEqual(['p']);
+  });
+
+  it('blocks save/delete of a detected hook until imported', async () => {
+    const { service } = make({ detected: [detectedHook] });
+    const [row] = await service.list('personal');
+    await expect(service.delete({ id: row!.id })).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+    await expect(service.save({ hook: { id: row!.id, event: 'Stop', handler: { type: 'command', command: 'x' } } })).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+  });
+
+  it('deletes the canonical entity together with its harness entries', async () => {
+    const { service, del } = make({ canonical: [entity()] });
+    await service.delete({ id: hookId('h1') });
+    expect(del).toHaveBeenCalledWith({ urn: 'urn:hook:h1', removeSymlinks: true });
+  });
+
+  it('get() throws not_found for a missing hook', async () => {
+    await expect(make().service.get({ id: hookId('nope') })).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   describe('plugin hooks (read-only discovery)', () => {
-    it('lists hooks from installed plugins via hooks/hooks.json', async () => {
-      const settings = new FakeClaudeSettingsPort();
+    const seed = () => {
       const cache = new FakePluginCachePort();
       const fs = new InMemoryFileSystem();
       const pid = 'superpowers' as PluginId;
       cache.seedMeta('personal', {
         version: 2,
-        plugins: [
-          {
-            id: pid,
-            origin: 'imported',
-            installedAt: '2026-05-04T14:30:00Z',
-            scope: 'personal',
-            enabled: true,
-          },
-        ],
+        plugins: [{ id: pid, origin: 'imported', installedAt: '2026-05-04T14:30:00Z', scope: 'personal', enabled: true }],
       });
       fs.createFile(
         `${cache.pluginDir('personal', pid)}/hooks/hooks.json`,
-        JSON.stringify({
-          hooks: {
-            SessionStart: [
-              {
-                matcher: 'startup|clear|compact',
-                hooks: [{ type: 'command', command: 'run-hook session-start' }],
-              },
-            ],
-          },
-        }),
+        JSON.stringify({ hooks: { SessionStart: [{ matcher: 'startup|clear', hooks: [{ type: 'command', command: 'run-hook session-start' }] }] } }),
       );
-      const service = new HookService(settings, { cache, fs });
+      return { cache, fs, pid };
+    };
 
-      const listed = await service.list('personal');
-      expect(listed).toHaveLength(1);
-      expect(listed[0]?.event).toBe('SessionStart');
-      expect(listed[0]?.matcher).toBe('startup|clear|compact');
-      expect(listed[0]?.source).toEqual({
-        kind: 'plugin',
-        pluginId: pid,
-        provenance: 'workspace-managed',
-      });
-      expect(listed[0]?.id.startsWith('superpowers:SessionStart:')).toBe(true);
-    });
-
-    it('blocks save for plugin-sourced hook ids', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const cache = new FakePluginCachePort();
-      const fs = new InMemoryFileSystem();
-      const pid = 'superpowers' as PluginId;
-      cache.seedMeta('personal', {
-        version: 2,
-        plugins: [
-          {
-            id: pid,
-            origin: 'imported',
-            installedAt: '2026-05-04T14:30:00Z',
-            scope: 'personal',
-            enabled: true,
-          },
-        ],
-      });
-      fs.createFile(
-        `${cache.pluginDir('personal', pid)}/hooks/hooks.json`,
-        JSON.stringify({
-          hooks: {
-            SessionStart: [
-              { matcher: 'x', hooks: [{ type: 'command', command: 'cmd' }] },
-            ],
-          },
-        }),
-      );
-      const service = new HookService(settings, { cache, fs });
-
-      const listed = await service.list('personal');
-      const pluginHook = listed[0];
-      if (!pluginHook) throw new Error('expected one plugin hook');
-
-      await expect(
-        service.save({
-          hook: {
-            id: hookId(pluginHook.id),
-            event: 'SessionStart',
-            handler: { type: 'command', command: 'evil' },
-          },
-        }),
-      ).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
-    });
-
-    it('blocks delete for plugin-sourced hook ids', async () => {
-      const settings = new FakeClaudeSettingsPort();
-      const cache = new FakePluginCachePort();
-      const fs = new InMemoryFileSystem();
-      const pid = 'superpowers' as PluginId;
-      cache.seedMeta('personal', {
-        version: 2,
-        plugins: [
-          {
-            id: pid,
-            origin: 'imported',
-            installedAt: '2026-05-04T14:30:00Z',
-            scope: 'personal',
-            enabled: true,
-          },
-        ],
-      });
-      fs.createFile(
-        `${cache.pluginDir('personal', pid)}/hooks/hooks.json`,
-        JSON.stringify({
-          hooks: {
-            SessionStart: [
-              { matcher: 'x', hooks: [{ type: 'command', command: 'cmd' }] },
-            ],
-          },
-        }),
-      );
-      const service = new HookService(settings, { cache, fs });
-
-      const listed = await service.list('personal');
-      const pluginHook = listed[0];
-      if (!pluginHook) throw new Error('expected one plugin hook');
-
-      await expect(
-        service.delete({ id: hookId(pluginHook.id) }),
-      ).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+    it('lists plugin hooks and blocks save/delete on them', async () => {
+      const { cache, fs, pid } = seed();
+      const { service } = make({ plugin: { cache, fs } });
+      const [hook] = await service.list('personal');
+      expect(hook).toMatchObject({ event: 'SessionStart', source: { kind: 'plugin', pluginId: pid } });
+      expect(hook!.id.startsWith('superpowers:SessionStart:')).toBe(true);
+      await expect(service.save({ hook: { id: hook!.id, event: 'SessionStart', handler: { type: 'command', command: 'evil' } } })).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+      await expect(service.delete({ id: hook!.id })).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
     });
   });
 });

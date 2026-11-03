@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { Adapter, AdapterDestination } from '../../application/ports/adapter.js';
-import type { Entity, Instruction } from '../../../shared/entity.js';
+import type { Entity, HookEntity, Instruction, McpEntity } from '../../../shared/entity.js';
 import type { WorkspaceService } from '../../application/services/workspace-service.js';
 import { resolveScopePath } from '../../application/resolve-scope-path.js';
 import { DomainError } from '../../domain/errors.js';
@@ -51,6 +51,10 @@ export class ClaudeAdapter implements Adapter {
       ];
     }
 
+    if (kind === 'mcp' || kind === 'hook') {
+      return this.sharedFileDestinations(args.entity as McpEntity | HookEntity);
+    }
+
     if (kind !== 'skill' && kind !== 'agent') {
       return [];
     }
@@ -66,5 +70,34 @@ export class ClaudeAdapter implements Adapter {
     }
     const basePath = await resolveScopePath(args.entity, this.scopeDeps);
     return [{ scope, destination: join(basePath, subfolder, fileName), strategy: 'symlink' }];
+  }
+
+  /** MCP servers and hooks live in files Claude also edits: merge one entry, never own the file. */
+  private async sharedFileDestinations(entity: McpEntity | HookEntity): Promise<AdapterDestination[]> {
+    const scope = entity.scopes[0];
+    if (scope === undefined) {
+      throw new DomainError('internal', `${entity.kind} ${entity.urn} has no scope`, { reason: 'missing-scope' });
+    }
+    const base = scope === 'personal' ? this.homedir : await resolveScopePath(entity, this.scopeDeps);
+    if (entity.kind === 'mcp') {
+      const file = scope === 'personal' ? join(base, '.claude.json') : join(base, '.mcp.json');
+      return [{ scope, destination: file, strategy: 'merge', target: { shape: 'object-key', path: ['mcpServers'], key: entity.name, value: entity.def } }];
+    }
+    const file = scope === 'personal' ? join(base, '.claude/settings.json') : join(base, '.claude/settings.json');
+    const handler = entity.handler;
+    const key = ['command', 'url', 'prompt'].find((k) => typeof handler[k] === 'string') ?? 'type';
+    return [
+      {
+        scope,
+        destination: file,
+        strategy: 'merge',
+        target: {
+          shape: 'array-item',
+          path: ['hooks', entity.event],
+          identity: { matcher: entity.matcher, 'hooks.0.type': handler['type'], [`hooks.0.${key}`]: handler[key] },
+          value: { ...(entity.matcher !== undefined ? { matcher: entity.matcher } : {}), hooks: [handler] },
+        },
+      },
+    ];
   }
 }

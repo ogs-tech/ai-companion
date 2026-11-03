@@ -136,7 +136,7 @@ export class FsClaudeTranscriptAdapter implements SessionTranscriptPort {
     return refs;
   }
 
-  private async readRef(filePath: string, claudeSessionId: string): Promise<TranscriptRef | null> {
+  private async readRef(filePath: string, conversationId: string): Promise<TranscriptRef | null> {
     let stats;
     try {
       stats = await stat(filePath);
@@ -150,7 +150,8 @@ export class FsClaudeTranscriptAdapter implements SessionTranscriptPort {
     // guessed at from the (lossy) folder name.
     if (!cwd) return null;
     return {
-      claudeSessionId,
+      harness: 'claude',
+      conversationId,
       filePath,
       cwd,
       modifiedAt: new Date(stats.mtimeMs).toISOString(),

@@ -10,8 +10,15 @@ export interface McpHealth {
 export type McpProvenance =
   | { kind: 'workspace' }
   | { kind: 'plugin'; pluginId: string; provenance: 'workspace-managed' | 'claude-code' }
-  // Detected from the Claude Code runtime only; no broker config to edit.
-  | { kind: 'detected' };
+  // Found in a harness's own files (or only in the Claude Code runtime): read-only until imported.
+  | {
+      kind: 'detected';
+      /** Set for items found on disk; `mcp`/`detected.import` takes this id. */
+      detectedId?: string;
+      harness?: 'claude' | 'cursor';
+      importable?: boolean;
+      reason?: string;
+    };
 
 /** A server as shown in the renderer. `def` is the raw, passthrough-preserved definition. */
 export interface McpServer {

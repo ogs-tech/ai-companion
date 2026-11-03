@@ -1,3 +1,4 @@
+import type { DetectionService } from '../../../src/main/application/services/detection-service.js';
 import { describe, expect, it, vi } from 'vitest';
 import { buildHandlers } from '../../../src/main/ipc/registry.js';
 import { SettingsService } from '../../../src/main/application/services/settings-service.js';
@@ -60,6 +61,7 @@ interface Deps {
   hookService: HookService;
   healthService: HealthService;
   mcpService: McpService;
+  detectionService: DetectionService;
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
@@ -122,6 +124,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const hookService = null as unknown as HookService;
   const healthService = null as unknown as HealthService;
   const mcpService = null as unknown as McpService;
+  const detectionService = null as unknown as DetectionService;
   const notificationPort = null as unknown as NotificationPort;
   const workspaceTeardownService = {
     restore: vi.fn().mockResolvedValue(undefined),
@@ -157,6 +160,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     hookService,
     healthService,
     mcpService,
+    detectionService,
     openWithService,
     notificationPort,
     workspaceTeardownService,

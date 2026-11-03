@@ -1,10 +1,14 @@
+import type { HarnessId } from '../../../shared/harness.js';
+
 /**
  * One `claude` conversation as it exists on disk, located and dated without
  * reading its body.
  */
 export interface TranscriptRef {
+  /** Which harness wrote the conversation. */
+  harness: HarnessId;
   /** The `.jsonl` basename — the same UUID the CLI was handed via `--session-id`. */
-  claudeSessionId: string;
+  conversationId: string;
   filePath: string;
   /**
    * The directory the conversation ran in, read from inside the file.
@@ -39,6 +43,8 @@ export interface TranscriptModelUsage {
 export interface TranscriptUsage {
   /** The CLI's name for the conversation, or a trimmed opening of the last prompt; `null` when it got neither. */
   title: string | null;
+  /** The harness records no usage at all (Cursor): cost is unknown, not zero. */
+  unpriced?: true;
   /** One entry per model used. Empty when the conversation never reached the API. */
   models: TranscriptModelUsage[];
   /**

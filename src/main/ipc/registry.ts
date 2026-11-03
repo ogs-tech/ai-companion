@@ -26,6 +26,8 @@ import { buildCredentialsHandlers } from './credentials-handlers.js';
 import { buildSkillHandlers } from './skill-handlers.js';
 import { buildAgentHandlers } from './agent-handlers.js';
 import { buildHookHandlers } from './hook-handlers.js';
+import { buildDetectedHandlers } from './detected-handlers.js';
+import type { DetectionService } from '../application/services/detection-service.js';
 import { buildInstructionHandlers } from './instruction-handlers.js';
 import { buildMarketplaceHandlers } from './marketplace-handlers.js';
 import { buildHealthHandlers } from './health-handlers.js';
@@ -69,6 +71,7 @@ export interface IpcDeps {
   marketplaceService: MarketplaceService;
   healthService: HealthService;
   mcpService: McpService;
+  detectionService: DetectionService;
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
   workspaceTeardownService: WorkspaceTeardownService;
@@ -114,6 +117,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     marketplaceService,
     healthService,
     mcpService,
+    detectionService,
     openWithService,
     notificationPort,
     workspaceTeardownService,
@@ -232,6 +236,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),
+    ...buildDetectedHandlers(detectionService),
     ...buildOpenWithHandlers({
       openWithService,
       workspaceBrowser: fileBrowserService,

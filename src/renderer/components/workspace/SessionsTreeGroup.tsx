@@ -47,7 +47,7 @@ interface MergedRow {
  * Two sources, one list: `session.list` knows what is running in this
  * process's memory, `sessionHistory.list` knows what the CLI has on disk. A
  * running session is in both and must appear once — they are merged on
- * `claudeSessionId`, with memory winning on status and label, and the
+ * `conversationId`, with memory winning on status and label, and the
  * transcript contributing model, cost and duration.
  *
  * Ordered by time rather than by name. Alphabetical order survives three live
@@ -98,7 +98,7 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
       const resumed = row.live
         ? await callIpc<SessionSnapshotWithOutput>('session.resume', { sessionId: row.live.sessionId })
         : await callIpc<SessionSnapshotWithOutput>('sessionHistory.resume', {
-            claudeSessionId: row.history!.claudeSessionId,
+            conversationId: row.history!.conversationId,
           });
       await invalidate();
       onOpen(resumed);
@@ -182,6 +182,7 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
             key={row.key}
             testId={`tree-session-${row.key}`}
             label={row.label}
+            harness={(row.live?.harness ?? row.history?.harness) ?? 'claude'}
             status={row.status}
             history={row.history}
             onOpen={() => void handleOpen(row)}
@@ -279,7 +280,7 @@ export function SessionsTreeGroup({ scope, onOpen, onRemoved, onSeeAll }: Sessio
 
 /**
  * Folds the in-memory sessions and the on-disk transcripts into one ordered
- * list, keyed on `claudeSessionId` so a running session — which is in both —
+ * list, keyed on `conversationId` so a running session — which is in both —
  * appears once.
  */
 /** Global (Início) lists its own sessions only — never one anchored to a workspace. */
@@ -289,14 +290,14 @@ export function liveInScope(live: readonly SessionSnapshot[], scope: HistoryScop
 
 function mergeRows(live: readonly SessionSnapshot[], history: readonly SessionHistoryEntry[]): MergedRow[] {
   const byConversation = new Map<string, SessionHistoryEntry>();
-  for (const entry of history) byConversation.set(entry.claudeSessionId, entry);
+  for (const entry of history) byConversation.set(entry.conversationId, entry);
 
   const rows: MergedRow[] = [];
   const claimed = new Set<string>();
 
   for (const session of live) {
-    const entry = byConversation.get(session.claudeSessionId) ?? null;
-    if (entry) claimed.add(session.claudeSessionId);
+    const entry = byConversation.get(session.conversationId) ?? null;
+    if (entry) claimed.add(session.conversationId);
     rows.push({
       key: session.sessionId,
       // Memory wins on label: it knows the anchor this session was opened
@@ -312,10 +313,10 @@ function mergeRows(live: readonly SessionSnapshot[], history: readonly SessionHi
   }
 
   for (const entry of history) {
-    if (claimed.has(entry.claudeSessionId)) continue;
+    if (claimed.has(entry.conversationId)) continue;
     rows.push({
-      key: entry.claudeSessionId,
-      label: entry.title ?? entry.claudeSessionId.slice(0, 8),
+      key: entry.conversationId,
+      label: entry.title ?? entry.conversationId.slice(0, 8),
       status: 'exited',
       live: null,
       history: entry,

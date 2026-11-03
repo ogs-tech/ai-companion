@@ -2,6 +2,7 @@ import type { IpcHandlers } from './dispatcher.js';
 import type { SessionService } from '../application/services/session-service.js';
 import type { SessionAnchor } from '../../shared/session.js';
 import { asObject, asString, asStringArray } from './_validators.js';
+import { HARNESS_IDS, isHarnessId, type HarnessId } from '../../shared/harness.js';
 import { DomainError } from '../domain/errors.js';
 
 function asRawString(value: unknown, field: string): string {
@@ -34,11 +35,17 @@ function asSessionAnchor(value: unknown, field: string): SessionAnchor {
   );
 }
 
+function asHarness(value: unknown, field: string): HarnessId {
+  if (typeof value === 'string' && isHarnessId(value)) return value;
+  throw new DomainError('validation', `Invalid '${field}': expected one of ${HARNESS_IDS.join(' | ')}`);
+}
+
 export function buildSessionHandlers(service: SessionService): IpcHandlers {
   return {
     'session.spawn': async (params) => {
       const raw = asObject(params, 'session.spawn');
-      return service.spawn(asSessionAnchor(raw['anchor'], 'anchor'));
+      const anchor = asSessionAnchor(raw['anchor'], 'anchor');
+      return raw['harness'] === undefined ? service.spawn(anchor) : service.spawn(anchor, asHarness(raw['harness'], 'harness'));
     },
     'session.write': async (params) => {
       const raw = asObject(params, 'session.write');
@@ -77,5 +84,6 @@ export function buildSessionHandlers(service: SessionService): IpcHandlers {
       return service.status(asString(raw['sessionId'], 'sessionId')) ?? null;
     },
     'session.list': async () => service.list(),
+    'session.availableHarnesses': async () => service.availableHarnesses(),
   };
 }

@@ -101,7 +101,7 @@ CDP → the same `WebContentsView`) both act on one page. Neither is a proxy or 
   `@playwright/mcp` child process. One instance per session that has the browser enabled; torn down
   whenever the session is (matching how `NodePtySessionAdapter` already ties a PTY's lifetime to its
   `sessionId`).
-- **`ClaudeSessionSpawnOptions` (`claude-session-port.ts`) gains `mcpConfigPath?: string`.**
+- **`SessionSpawnOptions` (`session-runtime-port.ts`) gains `mcpConfigPath?: string`.**
   `NodePtySessionAdapter.spawnWithArgs` appends `--mcp-config <path>` to the CLI args when present —
   additive to whatever MCP servers the user's own project/global config already declares, never a
   replacement for them.

@@ -61,6 +61,15 @@ export function renderCursorPersonalRule(instruction: Instruction): string {
   ].join('\n');
 }
 
+/** Workspace instruction as `<folder>/.cursor/rules/<name>.mdc`, always applied. */
+export function renderCursorWorkspaceRule(instruction: Instruction): string {
+  const description = escapeYaml(
+    instruction.description || `Workspace instruction '${instruction.name}' managed by ${brand.managedByPhrase}`,
+  );
+  const body = instruction.content.endsWith('\n') ? instruction.content : `${instruction.content}\n`;
+  return ['---', `description: ${description}`, 'alwaysApply: true', CURSOR_RULE_MDC_MARKER, '---', '', body].join('\n');
+}
+
 function escapeYaml(text: string): string {
   // Simple safe quoting: wrap single-line strings that may contain colons or
   // special YAML chars. Multi-line descriptions are truncated to their first

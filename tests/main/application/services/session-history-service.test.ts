@@ -23,7 +23,7 @@ class FakeTranscriptPort implements SessionTranscriptPort {
   }
 
   async readUsage(ref: TranscriptRef): Promise<TranscriptUsage> {
-    this.readUsageCalls.push(ref.claudeSessionId);
+    this.readUsageCalls.push(ref.conversationId);
     const found = this.transcripts.find((t) => t.ref.filePath === ref.filePath);
     if (!found) throw new Error(`no such transcript: ${ref.filePath}`);
     return found.usage;
@@ -48,7 +48,8 @@ function transcript(overrides: {
   const model = overrides.model ?? 'claude-opus-5';
   return {
     ref: {
-      claudeSessionId: id,
+      harness: 'claude',
+      conversationId: id,
       filePath: `/transcripts/${id}.jsonl`,
       cwd: overrides.cwd ?? '/repos/acme',
       modifiedAt: new Date(mtimeMs).toISOString(),
@@ -107,7 +108,7 @@ describe('SessionHistoryService', () => {
 
       const page = await service.list({ scope: ACME });
 
-      expect(page.entries.map((e) => e.claudeSessionId).sort()).toEqual(['inside', 'nested']);
+      expect(page.entries.map((e) => e.conversationId).sort()).toEqual(['inside', 'nested']);
     });
 
     it('does not mistake a sibling directory that merely shares a prefix for a child of the workspace', async () => {
@@ -118,7 +119,7 @@ describe('SessionHistoryService', () => {
 
       const page = await service.list({ scope: ACME });
 
-      expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['inside']);
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['inside']);
     });
 
     it("covers every folder under a workspace's root, nested workspaces included", async () => {
@@ -130,7 +131,7 @@ describe('SessionHistoryService', () => {
 
       const page = await service.list({ scope: { kind: 'workspace', workspaceId: 'w1' } });
 
-      expect(page.entries.map((e) => e.claudeSessionId).sort()).toEqual(['a', 'b']);
+      expect(page.entries.map((e) => e.conversationId).sort()).toEqual(['a', 'b']);
     });
 
     it('takes everything on the machine when asked for everything', async () => {
@@ -151,7 +152,7 @@ describe('SessionHistoryService', () => {
 
       const page = await service.list({ scope: { kind: 'personal' } });
 
-      expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['global']);
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['global']);
     });
   });
 
@@ -165,7 +166,7 @@ describe('SessionHistoryService', () => {
 
       const page = await service.list({ scope: ALL });
 
-      expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['newest', 'middle', 'old']);
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['newest', 'middle', 'old']);
     });
 
     it('pages ten at a time by default and hands back a cursor for the rest', async () => {
@@ -188,7 +189,7 @@ describe('SessionHistoryService', () => {
           scope: ALL,
           ...(cursor ? { cursor } : {}),
         });
-        seen.push(...page.entries.map((e) => e.claudeSessionId));
+        seen.push(...page.entries.map((e) => e.conversationId));
         cursor = page.nextCursor;
       } while (cursor);
 
@@ -214,19 +215,19 @@ describe('SessionHistoryService', () => {
       const transcripts = Array.from({ length: 6 }, (_, i) => transcript({ id: `s${i}`, mtimeMs: 1000 + i }));
       const { service, port } = setup(transcripts);
       const firstPage = await service.list({ scope: ALL, limit: 3 });
-      expect(firstPage.entries.map((e) => e.claudeSessionId)).toEqual(['s5', 's4', 's3']);
+      expect(firstPage.entries.map((e) => e.conversationId)).toEqual(['s5', 's4', 's3']);
 
       // s0, the oldest and still unseen, is written to and becomes the newest.
-      const live = port.transcripts.find((t) => t.ref.claudeSessionId === 's0')!;
+      const live = port.transcripts.find((t) => t.ref.conversationId === 's0')!;
       live.ref.mtimeMs = 9999;
       live.ref.modifiedAt = new Date(9999).toISOString();
 
       const secondPage = await service.list({ scope: ALL, limit: 3, cursor: firstPage.nextCursor! });
 
-      expect(secondPage.entries.map((e) => e.claudeSessionId)).toEqual(['s2', 's1']);
+      expect(secondPage.entries.map((e) => e.conversationId)).toEqual(['s2', 's1']);
       // s0 moved above the cursor, so it is not served again here — and no
       // row that was below the cursor was skipped.
-      expect(secondPage.entries.map((e) => e.claudeSessionId)).not.toContain('s0');
+      expect(secondPage.entries.map((e) => e.conversationId)).not.toContain('s0');
     });
 
     it('rejects a cursor that is not one it issued', async () => {
@@ -295,7 +296,7 @@ describe('SessionHistoryService', () => {
       });
       const originalReadUsage = port.readUsage.bind(port);
       port.readUsage = async (ref) => {
-        started.push(ref.claudeSessionId); // recorded before the gate, unlike readUsageCalls below
+        started.push(ref.conversationId); // recorded before the gate, unlike readUsageCalls below
         await gate; // every read blocks here until released together
         return originalReadUsage(ref);
       };
@@ -359,7 +360,7 @@ describe('SessionHistoryService', () => {
 
       const page = await service.list({ scope: ALL, filters: { models: ['claude-haiku-4-5'] } });
 
-      expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['haiku']);
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['haiku']);
     });
 
     it('searches the title and the directory, case-insensitively', async () => {
@@ -383,7 +384,7 @@ describe('SessionHistoryService', () => {
         filters: { from: '2026-09-10T00:00:00.000Z', to: '2026-09-10T23:59:59.000Z' },
       });
 
-      expect(page.entries.map((e) => e.claudeSessionId)).toEqual(['inside']);
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['inside']);
     });
   });
 
@@ -453,13 +454,46 @@ describe('SessionHistoryService', () => {
     it('locates one conversation by id', async () => {
       const { service } = setup([transcript({ id: 'wanted' }), transcript({ id: 'other' })]);
 
-      expect((await service.find('wanted'))?.claudeSessionId).toBe('wanted');
+      expect((await service.find('wanted'))?.conversationId).toBe('wanted');
     });
 
     it('is undefined for a conversation with no transcript', async () => {
       const { service } = setup([transcript({ id: 'a' })]);
 
       expect(await service.find('nope')).toBeUndefined();
+    });
+  });
+
+  describe('harnesses', () => {
+    const cursorChat = (id: string): FakeTranscript => ({
+      ref: { harness: 'cursor', conversationId: id, filePath: `/chats/${id}/meta.json`, cwd: '/repos/acme', modifiedAt: '', mtimeMs: 2_000_000, sizeBytes: 10 },
+      usage: { title: 'Criar Readme', unpriced: true, models: [], reportedCostUsd: null, startedAt: '2026-11-02T10:00:00.000Z', endedAt: '2026-11-02T10:05:00.000Z', durationMs: null },
+    });
+    const withCursor = { adapters: { claude: { enabled: true }, cursor: { enabled: true } } };
+
+    it('reports a Cursor chat with no cost or model — unknown, never zero', async () => {
+      const { service } = setup([cursorChat('chat-1')], withCursor);
+
+      const [entry] = (await service.list({ scope: ALL })).entries;
+
+      expect(entry).toMatchObject({ harness: 'cursor', conversationId: 'chat-1', title: 'Criar Readme', costUsd: null, costSource: 'unknown', model: null });
+    });
+
+    it('counts a Cursor chat as unpriced in the stats rather than adding $0 to the total', async () => {
+      const { service } = setup([cursorChat('chat-1'), transcript({ id: 'c1', reportedCostUsd: 2 })], withCursor);
+
+      const stats = await service.stats({ scope: ALL });
+
+      expect(stats).toMatchObject({ totalCostUsd: 2, unpricedCount: 1, sessionCount: 2 });
+    });
+
+    it('leaves a harness out of the history while it is switched off in Settings', async () => {
+      const { service } = setup([cursorChat('chat-1'), transcript({ id: 'c1' })], { adapters: { claude: { enabled: true }, cursor: { enabled: false } } });
+
+      const page = await service.list({ scope: ALL });
+
+      expect(page.entries.map((e) => e.conversationId)).toEqual(['c1']);
+      expect(await service.find('chat-1')).toBeUndefined();
     });
   });
 });

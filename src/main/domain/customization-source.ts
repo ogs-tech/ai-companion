@@ -4,7 +4,9 @@ export type PluginProvenance = 'workspace-managed' | 'claude-code';
 
 export type CustomizationSource =
   | { kind: 'workspace' }
-  | { kind: 'plugin'; pluginId: PluginId; provenance: PluginProvenance };
+  | { kind: 'plugin'; pluginId: PluginId; provenance: PluginProvenance }
+  /** Found in a harness's own files; read-only until imported (`detected.import`). */
+  | { kind: 'detected'; detectedId: string; harness: 'claude' | 'cursor'; importable: boolean; reason?: string };
 
 export const WORKSPACE_SOURCE: CustomizationSource = { kind: 'workspace' };
 

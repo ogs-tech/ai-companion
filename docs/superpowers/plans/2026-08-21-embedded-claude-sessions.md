@@ -4,7 +4,7 @@
 
 **Goal:** Let the author launch and interact with a real, interactive `claude` CLI session — anchored to a specific Skill, Agent, or Instruction entity — from inside AI Companion's own editor screens, instead of alt-tabbing to a terminal.
 
-**Architecture:** A new `session` bounded context, hexagonally layered exactly like the existing `entity` context: a `ClaudeSessionPort` (spawn/write/resize/kill a PTY) implemented by a `node-pty`-backed adapter; a `SessionService` that owns the one-live-session-per-entity invariant and resolves each session's working directory from the entity itself; a `session.*` IPC namespace over the existing request/response envelope; and a new main→renderer push channel (`session:output` / `session:exit`) for streamed terminal output, since request/response can't carry a continuous PTY stream. The renderer gets a `SessionPanel` component (`@xterm/xterm` + `@xterm/addon-fit`) embedded inside `CustomizationEditor`.
+**Architecture:** A new `session` bounded context, hexagonally layered exactly like the existing `entity` context: a `SessionRuntimePort` (spawn/write/resize/kill a PTY) implemented by a `node-pty`-backed adapter; a `SessionService` that owns the one-live-session-per-entity invariant and resolves each session's working directory from the entity itself; a `session.*` IPC namespace over the existing request/response envelope; and a new main→renderer push channel (`session:output` / `session:exit`) for streamed terminal output, since request/response can't carry a continuous PTY stream. The renderer gets a `SessionPanel` component (`@xterm/xterm` + `@xterm/addon-fit`) embedded inside `CustomizationEditor`.
 
 **Tech Stack:** Electron 41 (main/preload/renderer via `electron-vite`), TypeScript (strict), `node-pty` (new native dependency — first one in this codebase), `@xterm/xterm` + `@xterm/addon-fit` (renderer terminal, pure JS), Vitest 4 (node + jsdom projects), React 19 + MUI.
 
@@ -36,12 +36,12 @@ At the time this plan was written, the working tree already has substantial **un
 ## File structure
 
 ```
-src/main/application/ports/claude-session-port.ts          # NEW — ClaudeSessionPort interface
+src/main/application/ports/session-runtime-port.ts          # NEW — SessionRuntimePort interface
 src/main/infrastructure/claude-cli/
   node-pty-session-adapter.ts                               # NEW — node-pty implementation
 src/main/application/services/session-service.ts            # NEW — one-session-per-entity use case
 src/main/application/services/__fixtures__/
-  fake-claude-session-port.ts                                # NEW — test double
+  fake-session-runtime-port.ts                                # NEW — test double
 src/main/ipc/session-handlers.ts                             # NEW — session.* IPC handlers
 src/main/ipc/registry.ts                                     # MODIFY — wire sessionService into IpcDeps
 src/main/index.ts                                             # MODIFY — instantiate adapter/service, before-quit
@@ -65,17 +65,17 @@ tests/renderer/test-utils.tsx                                 # MODIFY — mockA
 
 ---
 
-### Task 1: Dependencies + `ClaudeSessionPort` + `NodePtySessionAdapter`
+### Task 1: Dependencies + `SessionRuntimePort` + `NodePtySessionAdapter`
 
 **Files:**
 - Modify: `package.json`
-- Create: `src/main/application/ports/claude-session-port.ts`
+- Create: `src/main/application/ports/session-runtime-port.ts`
 - Create: `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts`
 - Test: `tests/main/infrastructure/claude-cli/node-pty-session-adapter.test.ts`
 - Create: `tests/main/infrastructure/claude-cli/__fixtures__/stub-interactive.sh`
 
 **Interfaces:**
-- Produces: `ClaudeSessionPort` (`spawn(sessionId, cwd, opts): Promise<void>`, `write(sessionId, data): void`, `resize(sessionId, cols, rows): void`, `kill(sessionId): void`, `onData(listener): void`, `onExit(listener): void`), `ClaudeSessionSpawnOptions { cols: number; rows: number }`, `ClaudeSessionDataListener = (sessionId: string, chunk: string) => void`, `ClaudeSessionExitListener = (sessionId: string, exitCode: number) => void`. `NodePtySessionAdapter implements ClaudeSessionPort`, constructor `(bin = 'claude')`.
+- Produces: `SessionRuntimePort` (`spawn(sessionId, cwd, opts): Promise<void>`, `write(sessionId, data): void`, `resize(sessionId, cols, rows): void`, `kill(sessionId): void`, `onData(listener): void`, `onExit(listener): void`), `SessionSpawnOptions { cols: number; rows: number }`, `SessionDataListener = (sessionId: string, chunk: string) => void`, `SessionExitListener = (sessionId: string, exitCode: number) => void`. `NodePtySessionAdapter implements SessionRuntimePort`, constructor `(bin = 'claude')`.
 
 **Note on native module ABI:** `node-pty` must be rebuilt against **Electron's** Node ABI to run inside the packaged app, but that rebuilt binary can't be `require()`'d from plain-Node `vitest`. This task deliberately does **not** add a `postinstall` rebuild hook — that would silently break `npm test`. Instead the rebuild is wired into `predev`/`prebuild` only (added in Step 1), so `npm install` / `npm test` always see the binary built against the **host** Node ABI vitest itself runs on, and the adapter's own integration test (Step 6) spawns a real PTY safely under that ABI. Running `npm run dev` or `npm run build` after this leaves `node-pty` rebuilt for Electron's ABI; running `npm test` again after that will fail to load the native binding until `npm install` (or `npm rebuild node-pty`) restores the host build. This trade-off is called out in Task 7's docs update.
 
@@ -100,16 +100,16 @@ npm automatically runs `pre<script>` before `<script>`, so `npm run dev` and `np
 
 - [ ] **Step 2: Write the port interface**
 
-Create `src/main/application/ports/claude-session-port.ts`:
+Create `src/main/application/ports/session-runtime-port.ts`:
 
 ```ts
-export interface ClaudeSessionSpawnOptions {
+export interface SessionSpawnOptions {
   cols: number;
   rows: number;
 }
 
-export type ClaudeSessionDataListener = (sessionId: string, chunk: string) => void;
-export type ClaudeSessionExitListener = (sessionId: string, exitCode: number) => void;
+export type SessionDataListener = (sessionId: string, chunk: string) => void;
+export type SessionExitListener = (sessionId: string, exitCode: number) => void;
 
 /**
  * Spawns and controls a single interactive `claude` CLI process per session,
@@ -117,13 +117,13 @@ export type ClaudeSessionExitListener = (sessionId: string, exitCode: number) =>
  * caller-assigned (SessionService uses the entity's urn) — the port itself
  * doesn't know about entities.
  */
-export interface ClaudeSessionPort {
-  spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void>;
+export interface SessionRuntimePort {
+  spawn(sessionId: string, cwd: string, opts: SessionSpawnOptions): Promise<void>;
   write(sessionId: string, data: string): void;
   resize(sessionId: string, cols: number, rows: number): void;
   kill(sessionId: string): void;
-  onData(listener: ClaudeSessionDataListener): void;
-  onExit(listener: ClaudeSessionExitListener): void;
+  onData(listener: SessionDataListener): void;
+  onExit(listener: SessionExitListener): void;
 }
 ```
 
@@ -205,11 +205,11 @@ Create `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts`:
 ```ts
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import type {
-  ClaudeSessionDataListener,
-  ClaudeSessionExitListener,
-  ClaudeSessionPort,
-  ClaudeSessionSpawnOptions,
-} from '../../application/ports/claude-session-port.js';
+  SessionDataListener,
+  SessionExitListener,
+  SessionRuntimePort,
+  SessionSpawnOptions,
+} from '../../application/ports/session-runtime-port.js';
 
 const CLAUDE_ARGS = ['--continue'];
 
@@ -222,25 +222,25 @@ const CLAUDE_ARGS = ['--continue'];
  * both "first ever open" and "resume" without the adapter needing to detect
  * which case it is.
  */
-export class NodePtySessionAdapter implements ClaudeSessionPort {
+export class NodePtySessionAdapter implements SessionRuntimePort {
   private readonly ptys = new Map<string, IPty>();
-  private dataListener: ClaudeSessionDataListener | null = null;
-  private exitListener: ClaudeSessionExitListener | null = null;
+  private dataListener: SessionDataListener | null = null;
+  private exitListener: SessionExitListener | null = null;
 
   // `bin` is overridable so tests can point at a stub script and exercise the
   // real ENOENT/exit-code branches without depending on `claude` being
   // installed — mirrors NodeClaudeCliAdapter's testability pattern.
   constructor(private readonly bin = 'claude') {}
 
-  onData(listener: ClaudeSessionDataListener): void {
+  onData(listener: SessionDataListener): void {
     this.dataListener = listener;
   }
 
-  onExit(listener: ClaudeSessionExitListener): void {
+  onExit(listener: SessionExitListener): void {
     this.exitListener = listener;
   }
 
-  spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
+  spawn(sessionId: string, cwd: string, opts: SessionSpawnOptions): Promise<void> {
     return new Promise((resolve, reject) => {
       let child: IPty;
       try {
@@ -294,8 +294,8 @@ Expected: no errors.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add package.json package-lock.json src/main/application/ports/claude-session-port.ts src/main/infrastructure/claude-cli/node-pty-session-adapter.ts tests/main/infrastructure/claude-cli/node-pty-session-adapter.test.ts tests/main/infrastructure/claude-cli/__fixtures__/stub-interactive.sh
-git commit -m "feat: add node-pty ClaudeSessionPort and adapter"
+git add package.json package-lock.json src/main/application/ports/session-runtime-port.ts src/main/infrastructure/claude-cli/node-pty-session-adapter.ts tests/main/infrastructure/claude-cli/node-pty-session-adapter.test.ts tests/main/infrastructure/claude-cli/__fixtures__/stub-interactive.sh
+git commit -m "feat: add node-pty SessionRuntimePort and adapter"
 ```
 
 ---
@@ -304,13 +304,13 @@ git commit -m "feat: add node-pty ClaudeSessionPort and adapter"
 
 **Files:**
 - Create: `src/shared/session.ts`
-- Create: `src/main/application/services/__fixtures__/fake-claude-session-port.ts`
+- Create: `src/main/application/services/__fixtures__/fake-session-runtime-port.ts`
 - Create: `src/main/application/services/session-service.ts`
 - Test: `tests/main/application/services/session-service.test.ts`
 
 **Interfaces:**
-- Consumes: `ClaudeSessionPort` (Task 1), `EntityService` (`get(urn: string): Promise<Entity>` — existing, `src/main/application/services/entity-service.ts`), `Entity`/`Instruction`/`isProjectInstruction` (existing, `src/shared/entity.ts`), `ioError` (existing, `src/main/domain/errors.ts`).
-- Produces: `SessionStatus = 'running' | 'exited'`, `SessionSnapshot { entityUrn: string; cwd: string; status: SessionStatus }` (`src/shared/session.ts`); `SessionService` with `spawn(entityUrn): Promise<SessionSnapshot>`, `write(sessionId, data): void`, `resize(sessionId, cols, rows): void`, `kill(sessionId): void`, `status(sessionId): SessionSnapshot | undefined`, `killAll(): void`, `onOutput(listener: (sessionId: string, chunk: string) => void): void`, `onExit(listener: (sessionId: string, status: SessionStatus, exitCode: number) => void): void`. `FakeClaudeSessionPort` test double (`spawnCalls`, `writes`, `resizes`, `killed` arrays; `failNextSpawn(error)`, `simulateData(sessionId, chunk)`, `simulateExit(sessionId, exitCode)`).
+- Consumes: `SessionRuntimePort` (Task 1), `EntityService` (`get(urn: string): Promise<Entity>` — existing, `src/main/application/services/entity-service.ts`), `Entity`/`Instruction`/`isProjectInstruction` (existing, `src/shared/entity.ts`), `ioError` (existing, `src/main/domain/errors.ts`).
+- Produces: `SessionStatus = 'running' | 'exited'`, `SessionSnapshot { entityUrn: string; cwd: string; status: SessionStatus }` (`src/shared/session.ts`); `SessionService` with `spawn(entityUrn): Promise<SessionSnapshot>`, `write(sessionId, data): void`, `resize(sessionId, cols, rows): void`, `kill(sessionId): void`, `status(sessionId): SessionSnapshot | undefined`, `killAll(): void`, `onOutput(listener: (sessionId: string, chunk: string) => void): void`, `onExit(listener: (sessionId: string, status: SessionStatus, exitCode: number) => void): void`. `FakeSessionRuntimePort` test double (`spawnCalls`, `writes`, `resizes`, `killed` arrays; `failNextSpawn(error)`, `simulateData(sessionId, chunk)`, `simulateExit(sessionId, exitCode)`).
 
 - [ ] **Step 1: Write the shared session types**
 
@@ -328,31 +328,31 @@ export interface SessionSnapshot {
 
 - [ ] **Step 2: Write the fake port fixture**
 
-Create `src/main/application/services/__fixtures__/fake-claude-session-port.ts`:
+Create `src/main/application/services/__fixtures__/fake-session-runtime-port.ts`:
 
 ```ts
 import type {
-  ClaudeSessionDataListener,
-  ClaudeSessionExitListener,
-  ClaudeSessionPort,
-  ClaudeSessionSpawnOptions,
-} from '../../ports/claude-session-port.js';
+  SessionDataListener,
+  SessionExitListener,
+  SessionRuntimePort,
+  SessionSpawnOptions,
+} from '../../ports/session-runtime-port.js';
 
-export class FakeClaudeSessionPort implements ClaudeSessionPort {
-  spawnCalls: Array<{ sessionId: string; cwd: string; opts: ClaudeSessionSpawnOptions }> = [];
+export class FakeSessionRuntimePort implements SessionRuntimePort {
+  spawnCalls: Array<{ sessionId: string; cwd: string; opts: SessionSpawnOptions }> = [];
   writes: Array<[string, string]> = [];
   resizes: Array<[string, number, number]> = [];
   killed: string[] = [];
 
   private nextSpawnFailure: Error | null = null;
-  private dataListener: ClaudeSessionDataListener | null = null;
-  private exitListener: ClaudeSessionExitListener | null = null;
+  private dataListener: SessionDataListener | null = null;
+  private exitListener: SessionExitListener | null = null;
 
-  onData(listener: ClaudeSessionDataListener): void {
+  onData(listener: SessionDataListener): void {
     this.dataListener = listener;
   }
 
-  onExit(listener: ClaudeSessionExitListener): void {
+  onExit(listener: SessionExitListener): void {
     this.exitListener = listener;
   }
 
@@ -360,7 +360,7 @@ export class FakeClaudeSessionPort implements ClaudeSessionPort {
     this.nextSpawnFailure = error;
   }
 
-  async spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
+  async spawn(sessionId: string, cwd: string, opts: SessionSpawnOptions): Promise<void> {
     if (this.nextSpawnFailure) {
       const err = this.nextSpawnFailure;
       this.nextSpawnFailure = null;
@@ -402,7 +402,7 @@ import { EntityService } from '../../../../src/main/application/services/entity-
 import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeSessionPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill, type ProjectInstruction } from '../../../../src/shared/entity.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
 
@@ -427,7 +427,7 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const service = new SessionService(base, claudeSession, WORKSPACE);
   return { service, base, claudeSession };
 };
@@ -564,7 +564,7 @@ import type { Entity, Instruction } from '../../../shared/entity.js';
 import { isProjectInstruction } from '../../../shared/entity.js';
 import type { SessionSnapshot, SessionStatus } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
-import type { ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { SessionRuntimePort } from '../ports/session-runtime-port.js';
 import { ioError } from '../../domain/errors.js';
 
 const DEFAULT_COLS = 80;
@@ -585,7 +585,7 @@ export class SessionService {
 
   constructor(
     private readonly entityService: EntityService,
-    private readonly claudeSession: ClaudeSessionPort,
+    private readonly claudeSession: SessionRuntimePort,
     private readonly workspacePath: string,
   ) {
     this.claudeSession.onData((sessionId, chunk) => {
@@ -682,7 +682,7 @@ Expected: no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/shared/session.ts src/main/application/services/session-service.ts src/main/application/services/__fixtures__/fake-claude-session-port.ts tests/main/application/services/session-service.test.ts
+git add src/shared/session.ts src/main/application/services/session-service.ts src/main/application/services/__fixtures__/fake-session-runtime-port.ts tests/main/application/services/session-service.test.ts
 git commit -m "feat: add SessionService with one-session-per-entity invariant"
 ```
 
@@ -715,7 +715,7 @@ import { EntityService } from '../../../src/main/application/services/entity-ser
 import { InMemoryEntityRepository } from '../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill } from '../../../src/shared/entity.js';
 
 const skill = (name = 'foo'): Skill => ({
@@ -731,7 +731,7 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const service = new SessionService(base, claudeSession, '/workspace');
   return { service, base, claudeSession };
 };
@@ -938,8 +938,8 @@ import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.
 Inside `wireIpc()`, after the `instructionService`/`emitInstructionGenerateProgress` block, add:
 
 ```ts
-  const claudeSessionPort = new NodePtySessionAdapter();
-  const sessionService = new SessionService(entityService, claudeSessionPort, workspacePath);
+  const sessionRuntimePort = new NodePtySessionAdapter();
+  const sessionService = new SessionService(entityService, sessionRuntimePort, workspacePath);
   sessionService.onOutput((sessionId, chunk) => {
     mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
   });
@@ -1523,7 +1523,7 @@ Edit `docs/reference/architecture.md`. Add a new section after "### Tool adapter
 ```markdown
 ## Session bounded context
 
-`src/main/application/ports/claude-session-port.ts` (`ClaudeSessionPort`) + `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts` (`NodePtySessionAdapter`, backed by `node-pty` — the first native module in this codebase) spawn a real interactive `claude` CLI process per session inside a PTY, so the CLI's TUI renders correctly. `SessionService` (`src/main/application/services/session-service.ts`) owns the one-live-session-per-entity invariant, keyed by the entity's own `urn` (no separate generated session id), and resolves each session's working directory from the entity itself: a `ProjectInstruction` uses its own `repoPath`; every other entity kind (`Skill`, `Agent`, `PersonalInstruction`) uses the app's workspace root. `Session` is **not** a fourth `Entity` kind — it's ephemeral process state and never goes through `EntityRepository`; `SessionService` only reads entities (via `EntityService.get`) to resolve cwd.
+`src/main/application/ports/session-runtime-port.ts` (`SessionRuntimePort`) + `src/main/infrastructure/claude-cli/node-pty-session-adapter.ts` (`NodePtySessionAdapter`, backed by `node-pty` — the first native module in this codebase) spawn a real interactive `claude` CLI process per session inside a PTY, so the CLI's TUI renders correctly. `SessionService` (`src/main/application/services/session-service.ts`) owns the one-live-session-per-entity invariant, keyed by the entity's own `urn` (no separate generated session id), and resolves each session's working directory from the entity itself: a `ProjectInstruction` uses its own `repoPath`; every other entity kind (`Skill`, `Agent`, `PersonalInstruction`) uses the app's workspace root. `Session` is **not** a fourth `Entity` kind — it's ephemeral process state and never goes through `EntityRepository`; `SessionService` only reads entities (via `EntityService.get`) to resolve cwd.
 
 The `session.*` IPC namespace (`src/main/ipc/session-handlers.ts`) exposes `spawn`/`write`/`resize`/`kill`/`status` over the normal request/response `ipc:call` envelope. Streamed terminal output can't fit that request/response shape, so it travels over a second main→renderer push channel (`session:output` / `session:exit`, `src/shared/session.ts`) — see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse). Every live session is SIGTERM'd on `app.on('before-quit', ...)` in `src/main/index.ts` (`SessionService.killAll()`) — there is no background daemon; sessions do not survive the app closing.
 
@@ -1554,7 +1554,7 @@ Add a new `### session` section in "## Methods", after the `### instruction` sec
 | `session.kill` | `{ sessionId: string }` | `void` |
 | `session.status` | `{ sessionId: string }` | `SessionSnapshot \| null` |
 
-`SessionSnapshot` (`src/shared/session.ts`): `{ entityUrn: string; cwd: string; status: 'running' \| 'exited' }`. A session is anchored to a single Skill, Agent, or Instruction entity by its `urn` — there's no separate "project" registry. `session.spawn` is idempotent: calling it again for an `entityUrn` that already has a live session returns the existing `SessionSnapshot` instead of spawning a second PTY. Working directory is derived from the entity, never asked for: a `ProjectInstruction` uses its own `repoPath`; every other kind uses the app's workspace root. Backed by `SessionService` (`src/main/application/services/session-service.ts`) over `ClaudeSessionPort` (`NodePtySessionAdapter`, `src/main/infrastructure/claude-cli/`) — see [Session bounded context](architecture.md#session-bounded-context). Spawn failures (binary missing, PTY spawn error) surface as `kind: 'io'`; an unknown `entityUrn` surfaces as `kind: 'not_found'`. Live PTY output streams separately over the `session:output` / `session:exit` push channels (see above) — `session.spawn`'s response only confirms the process started, it doesn't carry any output itself.
+`SessionSnapshot` (`src/shared/session.ts`): `{ entityUrn: string; cwd: string; status: 'running' \| 'exited' }`. A session is anchored to a single Skill, Agent, or Instruction entity by its `urn` — there's no separate "project" registry. `session.spawn` is idempotent: calling it again for an `entityUrn` that already has a live session returns the existing `SessionSnapshot` instead of spawning a second PTY. Working directory is derived from the entity, never asked for: a `ProjectInstruction` uses its own `repoPath`; every other kind uses the app's workspace root. Backed by `SessionService` (`src/main/application/services/session-service.ts`) over `SessionRuntimePort` (`NodePtySessionAdapter`, `src/main/infrastructure/claude-cli/`) — see [Session bounded context](architecture.md#session-bounded-context). Spawn failures (binary missing, PTY spawn error) surface as `kind: 'io'`; an unknown `entityUrn` surfaces as `kind: 'not_found'`. Live PTY output streams separately over the `session:output` / `session:exit` push channels (see above) — `session.spawn`'s response only confirms the process started, it doesn't carry any output itself.
 ```
 
 - [ ] **Step 3: Proofread**

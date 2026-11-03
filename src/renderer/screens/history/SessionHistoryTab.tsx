@@ -73,7 +73,7 @@ export function SessionHistoryTab({ projectScope, onOpenSession }: SessionHistor
   const handleResume = async (entry: SessionHistoryEntry): Promise<void> => {
     try {
       const resumed = await callIpc<SessionSnapshotWithOutput>('sessionHistory.resume', {
-        claudeSessionId: entry.claudeSessionId,
+        conversationId: entry.conversationId,
       });
       await queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
       onOpenSession(resumed);
@@ -87,14 +87,14 @@ export function SessionHistoryTab({ projectScope, onOpenSession }: SessionHistor
       name: 'sessão',
       pluralName: 'sessões',
       defaultView: 'table',
-      getKey: (item) => item.claudeSessionId,
+      getKey: (item) => item.conversationId,
       fields: [
         {
           key: 'title',
           label: 'Sessão',
           primary: true,
           searchable: true,
-          render: (item) => item.title ?? item.claudeSessionId.slice(0, 8),
+          render: (item) => item.title ?? item.conversationId.slice(0, 8),
         },
         {
           key: 'costUsd',
@@ -104,7 +104,7 @@ export function SessionHistoryTab({ projectScope, onOpenSession }: SessionHistor
           render: (item) => (
             <Typography
               component="span"
-              title={describeCostSource(item.costSource)}
+              title={describeCostSource(item.costSource, item.harness)}
               sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.8125rem' })}
             >
               {formatCostUsd(item.costUsd)}

@@ -7,7 +7,7 @@ description: Field contract for the canonical Entity model (skill, agent, instru
 
 An **entity** is the canonical, tool-agnostic unit synced to Claude Code — the `Entity` interface in [`src/shared/entity.ts`](../../src/shared/entity.ts). It replaced the old polymorphic `Customization`/`CustomizationFrontmatter` model: fields are **flat** on the object (`entity.name`, `entity.description`, `entity.content`) rather than nested under `frontmatter`/`body`, and every entity carries a `urn` (`urn:{kind}:{name}`).
 
-Three kinds are implemented today — `skill`, `agent`, `instruction`. (`EntityKind` also lists `'mcp'` and `'hook'` for a future unification; those two are **not yet** canonical entities — `hook-service`/`mcp-service` have their own separate schemas and storage, see [Architecture](architecture.md).) The former `command` kind has been **removed**: a slash-command is now a `skill` with `explicitOnly: true` (↔ frontmatter `disable-model-invocation: true`). Existing `commands/*.md` files under the workspace are orphaned — there is no migration.
+Five kinds are implemented — `skill`, `agent`, `instruction`, `mcp` and `hook`. `mcp` and `hook` are pure data and are stored as one JSON file each (`mcps/<name>.json`, `hooks/<name>.json`) instead of Markdown + frontmatter. The former `command` kind has been **removed**: a slash-command is now a `skill` with `explicitOnly: true` (↔ frontmatter `disable-model-invocation: true`). Existing `commands/*.md` files under the workspace are orphaned — there is no migration.
 
 ```ts
 interface Entity {
@@ -125,6 +125,18 @@ on the entity, only the id.
 Project-era data (`scopes: ['project']` entities, `repoPath`-only sidecars) is no longer read: the one-time
 boot migration (`WorkspaceModelMigration`) rescoped it to `workspace` and moved it into the target
 workspace's data dir — see `docs/reference/architecture.md`'s "Global / Workspace" section.
+
+### `mcp`
+
+- `def: McpServerDef` — Claude's `mcpServers.<name>` shape (`{ command, args?, env? }`, or `{ type: 'http' | 'sse', url, headers? }`), validated by `mcpServerDefSchema`.
+- `enabled: boolean` — `false` keeps the canonical copy but writes it to no harness.
+- `name` is the server key and the file name: `^[A-Za-z0-9][A-Za-z0-9_.-]*$` (looser than the slug rule, since existing server names like `my_server` or `Notion` must stay importable).
+- `scopes`/`scopeId` follow the shared single-scope rule. `env`/`headers` values are stored in plain text.
+
+### `hook`
+
+- `event: string`, `matcher?: string`, `handler` (Claude's handler shape: `command`, `http`, `mcp_tool`, `prompt` or `agent`, validated by `hookHandlerSchema`) — one (event, matcher, handler) tuple per entity, in Claude's shape. Cursor receives the translatable subset (see [Adapter targets](adapter-targets.md#merged-entries-mcp-and-hooks)).
+- `enabled: boolean`, `name` (slug; generated as `hook-<8 hex>` in the UI), `scopes`/`scopeId` as above.
 
 ## Body
 

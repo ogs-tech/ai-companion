@@ -1,45 +1,32 @@
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import type {
-  ClaudeSessionDataListener,
-  ClaudeSessionExitListener,
-  ClaudeSessionPort,
-  ClaudeSessionSpawnOptions,
-} from '../../application/ports/claude-session-port.js';
+  SessionDataListener,
+  SessionExitListener,
+  SessionRuntimePort,
+  SessionSpawnOptions,
+} from '../../application/ports/session-runtime-port.js';
+import { CLAUDE_PROFILE, type CliProfile } from './cli-profiles.js';
+import { isExecutableAvailable } from './find-executable.js';
 
-/** Names a conversation the CLI must create, writing its transcript to `<uuid>.jsonl`. */
-const startArgs = (claudeSessionId: string): string[] => ['--session-id', claudeSessionId];
-/** Reattaches to a conversation that already exists, by the same id. */
-const resumeArgs = (claudeSessionId: string): string[] => ['--resume', claudeSessionId];
-/**
- * `claude` refuses rather than falling back when it's asked for a
- * conversation it can't find: `--resume <id>` prints
- * "No conversation found with session ID: <id>" and exits 1 (the retired
- * `--continue` printed "No conversation found to continue"). Matching on the
- * shared prefix lets `spawnWithArgs` retry once as a fresh `--session-id`
- * under the *same* id, so a session whose transcript was never written — it
- * exited before the first response — still reopens, and its id still lines
- * up with the transcript it is about to create.
- */
-const NO_CONVERSATION_MARKER = 'No conversation found';
-/** Only needed to catch NO_CONVERSATION_MARKER at exit — capped so a long-running session's onData doesn't accumulate its entire output in memory for the rest of its life. */
+/** Only needed to catch the profile's missing-conversation marker at exit — capped so a long-running session's onData doesn't accumulate its entire output in memory for the rest of its life. */
 const DETECTION_WINDOW_CHARS = 4096;
 
 /**
- * Spawns the user's locally installed `claude` CLI inside a real PTY via
+ * Spawns a harness's locally installed CLI inside a real PTY via
  * `node-pty` so its interactive TUI renders correctly (cursor movement,
  * spinners, raw keyboard input all depend on `process.stdout.isTTY`).
  * The conversation is always named explicitly by `opts.conversation`, never
- * inferred from the cwd: `start` passes `--session-id <uuid>` so the CLI
- * creates that exact conversation, `resume` passes `--resume <uuid>` to
- * reattach to it. Naming it up front is what makes a live session and its
- * on-disk transcript (`<uuid>.jsonl`) the same thing rather than a guess,
- * and it is why two sessions sharing a cwd can no longer capture each
- * other's conversation the way `--continue` allowed.
+ * inferred from the cwd; the flags that do so come from the {@link CliProfile}
+ * (Claude: `--session-id` / `--resume`; Cursor: `--resume` of a chat made by
+ * `create-chat`). Naming it up front is what makes a live session and its
+ * on-disk transcript the same thing rather than a guess, and it is why two
+ * sessions sharing a cwd can no longer capture each other's conversation the
+ * way `--continue` allowed.
  */
-export class NodePtySessionAdapter implements ClaudeSessionPort {
+export class NodePtySessionAdapter implements SessionRuntimePort {
   private readonly ptys = new Map<string, IPty>();
-  private dataListener: ClaudeSessionDataListener | null = null;
-  private exitListener: ClaudeSessionExitListener | null = null;
+  private dataListener: SessionDataListener | null = null;
+  private exitListener: SessionExitListener | null = null;
 
   // `bin` is overridable so tests can point at a stub script and exercise the
   // real ENOENT/exit-code branches without depending on `claude` being installed.
@@ -48,13 +35,24 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
   constructor(
     private readonly bin = 'claude',
     private readonly buildSessionEnv: () => NodeJS.ProcessEnv = () => process.env,
+    private readonly profile: CliProfile = CLAUDE_PROFILE,
+    /** Directories searched besides `PATH` when checking the CLI exists. */
+    private readonly extraBinDirs: readonly string[] = [],
   ) {}
 
-  onData(listener: ClaudeSessionDataListener): void {
+  isAvailable(): Promise<boolean> {
+    return isExecutableAvailable(this.bin, this.extraBinDirs, this.buildSessionEnv()['PATH']);
+  }
+
+  newConversationId(cwd: string): Promise<string> {
+    return this.profile.newConversationId({ bin: this.bin, cwd, env: this.buildSessionEnv() });
+  }
+
+  onData(listener: SessionDataListener): void {
     this.dataListener = listener;
   }
 
-  onExit(listener: ClaudeSessionExitListener): void {
+  onExit(listener: SessionExitListener): void {
     this.exitListener = listener;
   }
 
@@ -67,15 +65,15 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
    * a spawn failure. Callers should not assume spawn rejection is *only* caused
    * by a missing binary — it could be a fast, silent exit from the process itself.
    */
-  spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
-    const { mode, claudeSessionId } = opts.conversation;
+  spawn(sessionId: string, cwd: string, opts: SessionSpawnOptions): Promise<void> {
+    const { mode, conversationId } = opts.conversation;
     // Additive to whatever conversation args apply — appended once here so
     // both the primary attempt and the resume-fallback retry below carry it,
     // rather than each of `startArgs`/`resumeArgs` needing to know about it.
     const withMcpConfig = (args: string[]): string[] =>
-      opts.mcpConfigPath ? [...args, '--mcp-config', opts.mcpConfigPath] : args;
+      opts.mcpConfigPath && this.profile.supportsMcpConfig ? [...args, '--mcp-config', opts.mcpConfigPath] : args;
     if (mode === 'start') {
-      return this.spawnWithArgs(sessionId, cwd, opts, withMcpConfig(startArgs(claudeSessionId)), null);
+      return this.spawnWithArgs(sessionId, cwd, opts, withMcpConfig(this.profile.startArgs(conversationId)), null);
     }
     // A resume that finds nothing to resume falls back to creating that same
     // conversation, rather than dead-ending as an immediately-'exited' session.
@@ -83,15 +81,15 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
       sessionId,
       cwd,
       opts,
-      withMcpConfig(resumeArgs(claudeSessionId)),
-      withMcpConfig(startArgs(claudeSessionId)),
+      withMcpConfig(this.profile.resumeArgs(conversationId)),
+      this.profile.missingConversationMarker === null ? null : withMcpConfig(this.profile.startArgs(conversationId)),
     );
   }
 
   private spawnWithArgs(
     sessionId: string,
     cwd: string,
-    opts: ClaudeSessionSpawnOptions,
+    opts: SessionSpawnOptions,
     args: readonly string[],
     /** Args to retry once with when `args` reports no such conversation; `null` disables the retry. */
     missingConversationFallback: readonly string[] | null,
@@ -142,7 +140,8 @@ export class NodePtySessionAdapter implements ClaudeSessionPort {
           return;
         }
 
-        if (missingConversationFallback && recentOutput.includes(NO_CONVERSATION_MARKER)) {
+        const marker = this.profile.missingConversationMarker;
+        if (missingConversationFallback && marker !== null && recentOutput.includes(marker)) {
           // Retry transparently under the same sessionId — SessionService and
           // the renderer never see this exit, they just see a live session.
           this.spawnWithArgs(sessionId, cwd, opts, missingConversationFallback, null).catch(() => {

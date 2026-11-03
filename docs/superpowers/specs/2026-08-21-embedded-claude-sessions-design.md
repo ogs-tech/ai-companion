@@ -84,7 +84,7 @@ see §2 for the specific decisions and why.
 Mirrors the existing hexagonal split (`domain` / `application/{ports,services}` / `infrastructure`
 / `ipc`) used by the `entity` context, so the pattern stays consistent across the codebase.
 
-- **`src/main/application/ports/claude-session-port.ts`** — `ClaudeSessionPort`:
+- **`src/main/application/ports/session-runtime-port.ts`** — `SessionRuntimePort`:
   `spawn(entityUrn, cwd, opts)`, `write(sessionId, data)`, `resize(sessionId, cols, rows)`,
   `kill(sessionId)`, plus `onData`/`onExit` callbacks. Services depend on this port only, never on
   `node-pty` directly — same rule the rest of `src/main/` already follows.
@@ -127,7 +127,7 @@ Mirrors the existing hexagonal split (`domain` / `application/{ports,services}` 
    `callIpc('session.spawn', { entityUrn })`.
 2. `SessionService.spawn` looks up an existing live session for that `urn` and returns it if found
    (idempotent open — no duplicate process); otherwise resolves `cwd` from the entity and asks
-   `ClaudeSessionPort.spawn` to fork a PTY running `claude` (`--continue` if a prior transcript for
+   `SessionRuntimePort.spawn` to fork a PTY running `claude` (`--continue` if a prior transcript for
    that entity exists) with that `cwd`.
 3. The adapter's PTY `onData` forwards each chunk immediately; `SessionService` relays it to the IPC
    layer, which pushes `webContents.send('session:output', { sessionId, chunk })` to the owning
@@ -161,7 +161,7 @@ Mirrors the existing hexagonal split (`domain` / `application/{ports,services}` 
 
 ## 6. Testing
 
-- `node` project: `SessionService` unit tests against a `FakeClaudeSessionPort` (mirrors the
+- `node` project: `SessionService` unit tests against a `FakeSessionRuntimePort` (mirrors the
   existing `tests/main/.../__fixtures__/fake-claude-cli-port.ts` pattern) — covering
   spawn/reuse-by-urn, write, kill, `killAll`, and the running → exited transition, with no real PTY
   involved.

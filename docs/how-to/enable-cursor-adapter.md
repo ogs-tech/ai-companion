@@ -6,24 +6,38 @@ description: Turn syncing to Cursor (or Claude Code) on and off, and clean up wh
 # Enable or disable a harness
 
 Each harness the app can `manage` has an on/off switch. Claude Code is on by default; Cursor is off. Turning
-one on materializes every entity of the active workspace into that harness; turning it off can remove
-everything the app put there. Paths: [Adapter targets](../reference/adapter-targets.md).
+one on materializes every entity of the active workspace into that harness and makes it available for new
+sessions; turning it off can remove everything the app put there and hides it from new sessions and the
+session history. Paths: [Adapter targets](../reference/adapter-targets.md).
 
 ## Enable Cursor
 
 1. Open **Settings** (gear icon, top right).
 2. Under **Adapters**, switch **Cursor** on.
 
-The app immediately syncs every skill, agent and instruction of the **active workspace** into
-`~/.cursor/…` and `<repo>/.cursor/…`. The personal instruction becomes a local Cursor plugin at
+The app immediately syncs every skill, agent, instruction, MCP server and hook of the **active workspace**
+into `~/.cursor/…` and `<repo>/.cursor/…`: workspace instructions become `.cursor/rules/<name>.mdc`, and MCP
+servers and hooks are added as single entries to `mcp.json` / `hooks.json` without touching your other entries. The personal instruction becomes a local Cursor plugin at
 `~/.cursor/plugins/ai-companion/` with an always-applied rule — restart Cursor so it loads the plugin.
 If any target had to be overwritten, a **Sync report** lists each one with its backup path.
 
 Other workspaces' entities are synced the next time each one is saved while its workspace is active.
 
-> Cursor and Claude Code both claim `<folder>/AGENTS.md` for workspace instructions, and with
-> both enabled they overwrite each other on every sync. See
-> [Adapter targets → Known issues](../reference/adapter-targets.md#known-issues).
+A hook Cursor cannot express (an event it lacks, a matcher or a non-`command` type it cannot represent) is not
+written to Cursor at all; it stays active in Claude Code and the **Sync report** lists it as a warning.
+
+Skills, agents, MCP servers and hooks that already exist in `~/.cursor/` (or `<repo>/.cursor/`) appear as
+**Detectados** rows. Import one from its row menu (**Importar**) and it becomes managed by the app and is
+written to every enabled harness. See
+[Adapter targets → Detected items and import](../reference/adapter-targets.md#detected-items-and-import).
+
+## Start a Cursor session
+
+With Cursor enabled and the `cursor-agent` CLI installed (`~/.local/bin/cursor-agent`), **Nova sessão** opens a
+dialog with a **Claude / Cursor** selector (it always opens on Claude; the choice is per session). A Cursor
+session runs in the same terminal panel as a Claude one, shows the Cursor mark on its tab and row, and can be
+reopened from the sessions list. If the CLI is not found, Cursor appears disabled in the selector. Cursor
+sessions have no cost, tokens or model — the list shows "—". Sign in to Cursor inside the terminal if the CLI asks.
 
 ## Disable a harness
 

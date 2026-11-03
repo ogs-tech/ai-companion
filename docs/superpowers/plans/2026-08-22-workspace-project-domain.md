@@ -1197,7 +1197,7 @@ import { PluginProvenanceService } from '../../../src/main/application/services/
 import { PluginCacheFile } from '../../../src/main/infrastructure/plugins/plugin-cache-file.js';
 import { ClaudeCodePluginReader } from '../../../src/main/infrastructure/plugins/claude-code-plugin-reader.js';
 import { FakeClaudeCliPort } from '../../../src/main/application/services/__fixtures__/fake-claude-cli-port.js';
-import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { FsClaudeRuntimeReader } from '../../../src/main/infrastructure/claude-runtime/fs-claude-runtime-reader.js';
 import { PluginService } from '../../../src/main/application/services/plugin-service.js';
 import { PluginManifestParser } from '../../../src/main/application/services/plugin-manifest-parser.js';
@@ -1281,7 +1281,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeCli: new FakeClaudeCliPort(),
-    claudeSessionPort: new FakeClaudeSessionPort(),
+    sessionRuntimePort: new FakeSessionRuntimePort(),
   };
 }
 
@@ -1334,7 +1334,7 @@ import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
 import type { ClaudeCliPort } from './ports/claude-cli-port.js';
-import type { ClaudeSessionPort } from './ports/claude-session-port.js';
+import type { SessionRuntimePort } from './ports/session-runtime-port.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
 import { FsEntityRepository } from '../infrastructure/entity/fs-entity-repository.js';
@@ -1367,7 +1367,7 @@ export interface WorkspaceScopedSharedDeps {
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
   claudeCli: ClaudeCliPort;
-  claudeSessionPort: ClaudeSessionPort;
+  sessionRuntimePort: SessionRuntimePort;
 }
 
 export interface WorkspaceScopedServices {
@@ -1393,7 +1393,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, claudeAdapter, cursorAdapter,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    claudeCli, claudeSessionPort,
+    claudeCli, sessionRuntimePort,
   } = shared;
 
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, dataDir);
@@ -1417,7 +1417,7 @@ export function buildWorkspaceScopedServices(
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const instructionService = new InstructionService(entityService, claudeCli);
-  const sessionService = new SessionService(entityService, claudeSessionPort, dataDir);
+  const sessionService = new SessionService(entityService, sessionRuntimePort, dataDir);
   const projectService = new ProjectService(new FsProjectRegistry(join(dataDir, 'projects.json')), clock);
 
   const healthCollectors: HealthCollector[] = [
@@ -1516,7 +1516,7 @@ Replace the block Step 1 identified (the direct `symlinkManager`/`fileMaterializ
     claudeRuntimeReader,
     claudeSettingsFile,
     claudeCli: new NodeClaudeCliAdapter(),
-    claudeSessionPort: new NodePtySessionAdapter(),
+    sessionRuntimePort: new NodePtySessionAdapter(),
   };
 
   let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(activeDataDir, sharedDeps);
@@ -1534,7 +1534,7 @@ Replace the block Step 1 identified (the direct `symlinkManager`/`fileMaterializ
 
 (`agentService`/`skillService`/`instructionService`/`entityService`/`adapterManager`/`symlinkManager`/`fileMaterializer`/`healthService`/`workspaceTeardownService`/`projectService` are now accessed as `workspaceScoped.<name>` everywhere below instead of as bare locals — update every reference in the rest of `wireIpc()`, e.g. the `healthCollectors` array literal is gone entirely since it now lives inside `buildWorkspaceScopedServices`.)
 
-Remove the old `const claudeSessionPort = new NodePtySessionAdapter();` / `const sessionService = new SessionService(...)` / `sessionService.onOutput(...)` / `sessionService.onExit(...)` lines — replaced by `sharedDeps.claudeSessionPort` and `attachSessionBridges` above.
+Remove the old `const sessionRuntimePort = new NodePtySessionAdapter();` / `const sessionService = new SessionService(...)` / `sessionService.onOutput(...)` / `sessionService.onExit(...)` lines — replaced by `sharedDeps.sessionRuntimePort` and `attachSessionBridges` above.
 
 - [ ] **Step 2: Rebuild `app.on('before-quit', ...)` against the mutable graph**
 

@@ -1,3 +1,5 @@
+import type { HarnessId } from './harness.js';
+
 /**
  * Which conversations a history query covers. `workspace` matches a
  * conversation by the directory it ran in — including anything below it, so a
@@ -33,7 +35,9 @@ export type CostSource =
 
 /** One past conversation, as a history row sees it. */
 export interface SessionHistoryEntry {
-  claudeSessionId: string;
+  /** Which harness's CLI recorded the conversation. */
+  harness: HarnessId;
+  conversationId: string;
   /** The CLI's own name for it, or the opening of its last prompt; `null` when it has neither. */
   title: string | null;
   cwd: string;

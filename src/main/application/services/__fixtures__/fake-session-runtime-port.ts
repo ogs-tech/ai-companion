@@ -1,25 +1,35 @@
+import { randomUUID } from 'node:crypto';
 import type {
-  ClaudeSessionDataListener,
-  ClaudeSessionExitListener,
-  ClaudeSessionPort,
-  ClaudeSessionSpawnOptions,
-} from '../../ports/claude-session-port.js';
+  SessionDataListener,
+  SessionExitListener,
+  SessionRuntimePort,
+  SessionSpawnOptions,
+} from '../../ports/session-runtime-port.js';
 
-export class FakeClaudeSessionPort implements ClaudeSessionPort {
-  spawnCalls: Array<{ sessionId: string; cwd: string; opts: ClaudeSessionSpawnOptions }> = [];
+export class FakeSessionRuntimePort implements SessionRuntimePort {
+  spawnCalls: Array<{ sessionId: string; cwd: string; opts: SessionSpawnOptions }> = [];
   writes: Array<[string, string]> = [];
   resizes: Array<[string, number, number]> = [];
   killed: string[] = [];
 
+  available = true;
   private nextSpawnFailure: Error | null = null;
-  private dataListener: ClaudeSessionDataListener | null = null;
-  private exitListener: ClaudeSessionExitListener | null = null;
+  private dataListener: SessionDataListener | null = null;
+  private exitListener: SessionExitListener | null = null;
 
-  onData(listener: ClaudeSessionDataListener): void {
+  async isAvailable(): Promise<boolean> {
+    return this.available;
+  }
+
+  async newConversationId(): Promise<string> {
+    return randomUUID();
+  }
+
+  onData(listener: SessionDataListener): void {
     this.dataListener = listener;
   }
 
-  onExit(listener: ClaudeSessionExitListener): void {
+  onExit(listener: SessionExitListener): void {
     this.exitListener = listener;
   }
 
@@ -27,7 +37,7 @@ export class FakeClaudeSessionPort implements ClaudeSessionPort {
     this.nextSpawnFailure = error;
   }
 
-  async spawn(sessionId: string, cwd: string, opts: ClaudeSessionSpawnOptions): Promise<void> {
+  async spawn(sessionId: string, cwd: string, opts: SessionSpawnOptions): Promise<void> {
     if (this.nextSpawnFailure) {
       const err = this.nextSpawnFailure;
       this.nextSpawnFailure = null;

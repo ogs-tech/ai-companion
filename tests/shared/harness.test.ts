@@ -34,11 +34,10 @@ describe('harness registry', () => {
 });
 
 describe('harnessSupports', () => {
-  it('reports run only for a harness that exposes its loop as a CLI', () => {
-    // Claude Code can be spawned in a PTY; Cursor runs its loop inside its own
-    // GUI process, out of reach. This asymmetry is the domain, not a gap.
+  it('reports run for a harness that exposes its loop as a CLI', () => {
+    // Claude Code (`claude`) and Cursor (`cursor-agent`) can both be spawned in a PTY.
     expect(harnessSupports('claude', 'run')).toBe(true);
-    expect(harnessSupports('cursor', 'run')).toBe(false);
+    expect(harnessSupports('cursor', 'run')).toBe(true);
   });
 
   it('reports manage for both', () => {

@@ -5,10 +5,11 @@ description: Add, edit, disable and authenticate Claude Code MCP servers; review
 
 # Configure MCP servers and hooks
 
-MCP servers and hooks are not canonical entities yet: the app edits Claude Code's own config files directly
-instead of keeping a copy in its data dir and linking it. Which files and keys:
+MCP servers and hooks are managed once, in the app, and written to every enabled harness — Claude Code and
+(if enabled) Cursor — as single entries in their own config files; your other entries are never touched. Which
+files and keys:
 [On-disk layout → Files the app edits outside its data dir](../reference/on-disk-layout.md#files-the-app-edits-outside-its-data-dir).
-Both apply to Claude Code only.
+Items that already exist in those files show as **detected** until you import them (below).
 
 Both live under **Customizations** → the **Integrações** chip.
 
@@ -18,14 +19,17 @@ Both live under **Customizations** → the **Integrações** chip.
 2. Fill in:
    - **Name** — the server key Claude Code will show.
    - **Scope**:
-     - **Personal (global)** — every project; written to `mcpServers` in `~/.claude.json`.
-     - **Project (local)** — one repo, only for you; written to `projects[<repo>].mcpServers` in `~/.claude.json`.
-     - **Project (shared / .mcp.json)** — one repo, committed with it; written to `<repo>/.mcp.json`.
+     - **Personal (global)** — every project; written to `mcpServers` in `~/.claude.json` (and `~/.cursor/mcp.json`).
+     - **Project (local)** and **Project (shared / .mcp.json)** — one repo of the open workspace; written to
+       `<repo>/.mcp.json` (and `<repo>/.cursor/mcp.json`). They are the same thing now: both are workspace
+       servers. Needs an open workspace.
    - **Repo path** — for the two Project scopes.
    - **Transport** — `stdio` (fill **Command**) or `http` / `sse` (fill **URL**).
 3. Save.
 
-`~/.claude.json` is rewritten atomically and the previous version kept at `~/.claude.json.bak`.
+Each harness file is rewritten atomically, and its previous version is kept under
+`~/.ai-companion/_backups/`. If an entry with that name already exists and the app did not write it, it is
+replaced and the **Sync report** shows a conflict with the backup path.
 
 **Arguments, env vars and headers** have no fields in the dialog. Add them by editing the server's entry
 in the file above (`args`, `env`, `headers`); editing the server from the app afterwards preserves them.
@@ -35,12 +39,16 @@ in the file above (`args`, `env`, `headers`); editing the server from the app af
 On the server's row: the switch disables/enables it, the pencil (**Editar**) reopens the dialog, the trash
 (**Excluir**) removes it.
 
-Disabling a shared server adds it to `projects[<repo>].disabledMcpjsonServers` — `.mcp.json` itself is
-untouched. Disabling a personal or local server moves its definition out of `~/.claude.json` into
-`~/.ai-companion/mcp-disabled.json`, and enabling moves it back.
+Disabling a server removes it from every harness's file but keeps the app's copy; enabling writes it back.
 
-Servers provided by a plugin, and servers **detected** from Claude Code's runtime (see below), are
-read-only.
+Servers provided by a plugin, and **detected** servers (see below), are read-only.
+
+## Import what already exists
+
+Servers found in `~/.claude.json`, `<repo>/.mcp.json` and Cursor's `mcp.json` that the app did not create
+show as **detected**, labeled with the harness. Nothing is adopted automatically. On a detected row's menu
+choose **Importar**: it becomes a managed server and is written to every enabled harness. Skills and agents
+found in `.claude/` and `.cursor/` appear the same way under **Detectados**.
 
 ## Fix a server that needs authentication
 
@@ -54,13 +62,15 @@ suggested fix — see [Diagnose and reset](diagnose-and-reset.md).
 
 ## Hooks
 
-The **Integrações** chip lists every hook in `~/.claude/settings.json`, plus hooks contributed by
-installed plugins (labeled with their plugin). From the app you can:
+The **Integrações** chip lists the app's hooks, hooks **detected** in `~/.claude/settings.json` and
+`~/.cursor/hooks.json`, and hooks contributed by installed plugins (labeled with their plugin). From the app you can:
 
 - **Review** them — event, matcher and handler are shown on the row.
-- **Delete** one — trash icon (**Excluir hook**). Plugin hooks are read-only.
+- **Import** a detected one — **Importar** on its menu. It is then written to every enabled harness; for
+  Cursor only what it can express (the Sync report lists any hook that was skipped).
+- **Delete** a managed one — trash icon (**Excluir hook**), which also removes it from the harness files.
+  Plugin hooks and detected hooks are read-only.
 
-Creating or editing a hook is not available in the UI yet. Add it to the `hooks` key of
-`~/.claude/settings.json` in Claude Code's own format; it appears in the list on the next refresh.
+Creating or editing a hook is not available in the UI yet; the `hook.save` IPC method exists.
 
 Hooks are personal-only: they are listed on **Início**, and inside a workspace under **Do Global**.

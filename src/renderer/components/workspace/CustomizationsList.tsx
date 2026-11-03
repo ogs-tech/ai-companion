@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Folder, ListFilter, Lock, Package, Plus, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, ContainerHeader, FooterLink } from '../ds/ContainerChrome.js';
+import { useDetected } from '../../hooks/use-detected.js';
 import { EntityTreeGroup, seedNewEntity } from './EntityTreeGroup.js';
 import { HooksTreeGroup } from './HooksTreeGroup.js';
 import { InstructionTreeRow } from './InstructionTreeRow.js';
@@ -357,7 +358,11 @@ export function CustomizationsList({
   const routing = useFolderRouting();
   const { data: skillList } = useCustomizationList('skill', 'skill.list');
   const { data: agentList } = useCustomizationList('agent', 'agent.list');
+  const { data: detectedList } = useDetected(['skill', 'agent']);
+  const detectedCount = (folder: string | null): number =>
+    folder === null ? 0 : (detectedList ?? []).filter((d) => d.scope === 'workspace' && d.folder === folder && matchesQuery(query, d.name, d.description)).length;
   const originCount = (folder: string | null): number =>
+    detectedCount(folder) +
     [...(skillList ?? []), ...(agentList ?? [])].filter(
       (e) =>
         e.source.kind !== 'plugin' &&

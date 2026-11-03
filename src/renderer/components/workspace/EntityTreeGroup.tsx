@@ -3,8 +3,9 @@ import { Stack } from '@mui/material';
 import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { OriginMeta } from './OriginMeta.js';
+import { DetectedRows, useDetectedItems } from './DetectedTreeGroup.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
-import { OriginGroups, type OriginView } from './OriginGroups.js';
+import { MINE_KEY, OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
@@ -80,6 +81,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
+  const detected = useDetectedItems(kind, localScope ? { scope: 'workspace', ...(localScope.folder !== undefined ? { folder: localScope.folder } : {}) } : undefined, query, !inherited && origin !== 'plugins');
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<Skill | Agent>();
@@ -104,7 +106,10 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
     .sort((a, b) => a.name.localeCompare(b.name));
   const groupTestId = inherited ? `inherited-${kind}` : kind;
 
-  useReportCount(visible.length, onCount);
+  useReportCount(visible.length + detected.length, onCount);
+
+  // Census views only count; a bucket view lists one origin — detected items are the user's own.
+  const showDetected = view?.kind !== 'census' && (view?.kind !== 'bucket' || view.key === MINE_KEY);
 
   const startCreate = (): void => onEdit(kind, seedNewEntity(kind, localScope), true);
 
@@ -153,7 +158,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
         testId={groupTestId}
         glyph={ENTITY_GROUP_ICONS[kind]}
         label={label}
-        count={visible.length}
+        count={visible.length + detected.length}
         depth={depth}
         flat={flat}
         {...(inherited ? {} : { onCreate: startCreate, createLabel: `Novo ${kind === 'skill' ? 'skill' : 'agent'}` })}
@@ -169,6 +174,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
           {...(view ? { view } : {})}
           renderRow={renderRow}
         />
+        {showDetected && <DetectedRows items={detected} depth={depth} />}
       </TreeGroup>
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

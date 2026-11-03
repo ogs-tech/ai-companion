@@ -34,7 +34,7 @@ a real debugger; "launch" means "spawn the configured program as a plain process
    wrong for types that need a runtime prefix (e.g. Python), so rejected in favor of an explicit
    "unsupported" state.
 3. **Execution model: plain child process, not the PTY session infrastructure.** Explicitly NOT reusing
-   `ClaudeSessionPort`/`node-pty` (that's `claude`-CLI-specific, interactive, and carries native-module
+   `SessionRuntimePort`/`node-pty` (that's `claude`-CLI-specific, interactive, and carries native-module
    rebuild baggage this feature doesn't need) and NOT surfacing launched processes as `Session`s (no
    `claude`-specific concepts — no transcript, no anchor resolution) apply here.
 4. **Scope: every Project registered in the active Workspace.** `ProjectService.list()` already returns
@@ -132,7 +132,7 @@ export interface LaunchConfigReaderPort {
 }
 ```
 
-**`launch-process-port.ts`** — shaped like `ClaudeSessionPort` minus PTY concerns, plus distinct
+**`launch-process-port.ts`** — shaped like `SessionRuntimePort` minus PTY concerns, plus distinct
 stdout/stderr streams `child_process` gives for free:
 ```ts
 export interface LaunchProcessSpawnOptions {
@@ -150,7 +150,7 @@ export interface LaunchProcessPort {
 ```
 
 `onOutput`/`onExit` each store a **single** listener (last registration wins), exactly mirroring
-`ClaudeSessionPort`'s real shape (`claude-session-port.ts`'s `onData`/`onExit`, each backed by one stored
+`SessionRuntimePort`'s real shape (`session-runtime-port.ts`'s `onData`/`onExit`, each backed by one stored
 callback in `NodePtySessionAdapter`, not an array) — events are tagged with `processId`/`stream` so one
 listener demuxes many spawned processes. The array-based multi-listener fan-out lives one layer up, in
 `LaunchProcessService` (mirroring `SessionService`'s `outputListeners`/`exitListeners` arrays), not on the

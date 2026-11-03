@@ -157,7 +157,7 @@ New bounded context, `workspace`, mirroring the existing `entity`/`session` hexa
   folder-picker dialog, used when creating a new workspace at an arbitrary location; `listDir`/
   `readFile` take a path relative to the active workspace's root.
 - **`session.spawn`'s param becomes `{ anchor: SessionAnchor }`** (§2.12) instead of `{ entityUrn }`;
-  `SessionService`/`ClaudeSessionPort` key live sessions by a string derived from the anchor
+  `SessionService`/`SessionRuntimePort` key live sessions by a string derived from the anchor
   (`entity:<urn>` / `workspace:<id>` / `project:<id>`) instead of by urn alone. This is a signature
   change to the separately in-progress, not-yet-implemented embedded-sessions design — flagged there
   too (see the cross-reference below), not re-litigating the rest of that design.

@@ -1,3 +1,4 @@
+import { HARNESSES, type HarnessId } from '../../shared/harness.js';
 import type { CostSource } from '../../shared/session-history.js';
 
 /**
@@ -13,7 +14,8 @@ export function formatCostUsd(costUsd: number | null): string {
 }
 
 /** Spells out what a cost figure actually is, for the row's title attribute. */
-export function describeCostSource(source: CostSource): string {
+export function describeCostSource(source: CostSource, harness: HarnessId = 'claude'): string {
+  if (source === 'unknown' && harness !== 'claude') return `${HARNESSES[harness].displayName} não registra custo nas sessões`;
   if (source === 'reported') return 'Custo informado pelo próprio claude';
   if (source === 'estimated') return 'Custo estimado a partir dos tokens';
   return 'Modelo sem preço publicado — não dá para estimar';

@@ -24,6 +24,9 @@ export function mapFilePathToEntity(dataDir: string, absolutePath: string): Watc
   if (parts.length === 2 && parts[0] === 'agents' && parts[1]!.endsWith('.md')) {
     return { kind: 'agent', name: parts[1]!.slice(0, -'.md'.length) };
   }
+  if (parts.length === 2 && (parts[0] === 'mcps' || parts[0] === 'hooks') && parts[1]!.endsWith('.json')) {
+    return { kind: parts[0] === 'mcps' ? 'mcp' : 'hook', name: parts[1]!.slice(0, -'.json'.length) };
+  }
   if (parts.length === 2 && parts[0] === 'instructions' && parts[1] === 'default.md') {
     return { kind: 'instruction', name: 'default' };
   }

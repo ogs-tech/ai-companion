@@ -12,7 +12,7 @@ export type TerminalExitListener = (terminalId: string, exitCode: number | null,
 
 /**
  * One PTY per `terminalId`, with input and resize. `onData`/`onExit` each
- * store a single listener (like `ClaudeSessionPort`); the multi-listener
+ * store a single listener (like `SessionRuntimePort`); the multi-listener
  * fan-out lives one layer up, in `TerminalService`. Spawning under an id that
  * already ran replaces it, and the replaced PTY's late exit is not reported.
  */

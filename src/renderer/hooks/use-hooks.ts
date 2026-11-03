@@ -8,7 +8,10 @@ export interface Hook {
   matcher?: string;
   description?: string;
   handler: HookHandler;
-  source: { kind: 'workspace' } | { kind: 'plugin'; pluginId: string };
+  source:
+    | { kind: 'workspace' }
+    | { kind: 'plugin'; pluginId: string }
+    | { kind: 'detected'; detectedId: string; harness: 'claude' | 'cursor'; importable: boolean; reason?: string };
 }
 
 export const hooksQueryKey = ['hooks', 'personal'] as const;

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { NodePtySessionAdapter } from '../../../../src/main/infrastructure/claude-cli/node-pty-session-adapter.js';
+import { CURSOR_PROFILE } from '../../../../src/main/infrastructure/session-runtime/cli-profiles.js';
+import { NodePtySessionAdapter } from '../../../../src/main/infrastructure/session-runtime/node-pty-session-adapter.js';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 const stub = (name: string): string => path.join(fixturesDir, name);
@@ -17,7 +18,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-1', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'start', claudeSessionId: 'c-1' },
+      conversation: { mode: 'start', conversationId: 'c-1' },
     });
     adapter.write('sess-1', 'hello\r');
 
@@ -42,7 +43,7 @@ describe('NodePtySessionAdapter', () => {
       adapter.spawn('sess-2', process.cwd(), {
         cols: 80,
         rows: 24,
-        conversation: { mode: 'start', claudeSessionId: 'c-2' },
+        conversation: { mode: 'start', conversationId: 'c-2' },
       }),
     ).rejects.toThrow();
   });
@@ -57,7 +58,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-3', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'resume', claudeSessionId: 'c-3' },
+      conversation: { mode: 'resume', conversationId: 'c-3' },
     });
 
     await vi.waitFor(() => {
@@ -85,7 +86,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-4', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'start', claudeSessionId: 'c-4' },
+      conversation: { mode: 'start', conversationId: 'c-4' },
     });
 
     await vi.waitFor(() => {
@@ -103,7 +104,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-5', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'start', claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' },
+      conversation: { mode: 'start', conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' },
     });
 
     await vi.waitFor(() => {
@@ -119,7 +120,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-6', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'resume', claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' },
+      conversation: { mode: 'resume', conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' },
     });
 
     await vi.waitFor(() => {
@@ -135,7 +136,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-7', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'start', claudeSessionId: 'c-7' },
+      conversation: { mode: 'start', conversationId: 'c-7' },
       mcpConfigPath: '/tmp/browser-mcp-abc/config.json',
     });
 
@@ -154,7 +155,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-8', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'start', claudeSessionId: 'c-8' },
+      conversation: { mode: 'start', conversationId: 'c-8' },
     });
 
     await vi.waitFor(() => {
@@ -171,7 +172,7 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-9', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'resume', claudeSessionId: 'c-9' },
+      conversation: { mode: 'resume', conversationId: 'c-9' },
       mcpConfigPath: '/tmp/browser-mcp-xyz/config.json',
     });
 
@@ -190,11 +191,36 @@ describe('NodePtySessionAdapter', () => {
     await adapter.spawn('sess-env', process.cwd(), {
       cols: 80,
       rows: 24,
-      conversation: { mode: 'start', claudeSessionId: 'c-env' },
+      conversation: { mode: 'start', conversationId: 'c-env' },
     });
     await vi.waitFor(() => {
       expect(chunks.join('')).toContain('SOCKET=/tmp/x.sock');
       expect(chunks.join('')).toContain(`HOME=${process.env['HOME']}`);
     });
+  });
+
+  it('with the Cursor profile, starts and resumes with --resume and never passes --mcp-config', async () => {
+    const adapter = new NodePtySessionAdapter(stub('stub-echo-args.sh'), () => process.env, CURSOR_PROFILE);
+    const chunks: string[] = [];
+    adapter.onData((_sessionId, chunk) => chunks.push(chunk));
+    adapter.onExit(() => undefined);
+
+    await adapter.spawn('sess-cursor', process.cwd(), {
+      cols: 80,
+      rows: 24,
+      conversation: { mode: 'start', conversationId: 'chat-9' },
+      mcpConfigPath: '/tmp/mcp.json',
+    });
+
+    await vi.waitFor(() => {
+      expect(chunks.join('')).toContain('ARGV:--resume chat-9');
+    });
+    expect(chunks.join('')).not.toContain('--mcp-config');
+    adapter.write('sess-cursor', '\r');
+  });
+
+  it('reports whether its binary can be found', async () => {
+    expect(await new NodePtySessionAdapter(stub('stub-echo-args.sh')).isAvailable()).toBe(true);
+    expect(await new NodePtySessionAdapter('/definitely/not/a/real/binary-xyz').isAvailable()).toBe(false);
   });
 });

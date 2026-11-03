@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Tooltip } from '@mui/material';
-import { Trash2, Webhook } from 'lucide-react';
+import { Tooltip, Typography } from '@mui/material';
+import { Download, Trash2, Webhook } from 'lucide-react';
 import { OriginMeta } from './OriginMeta.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { OriginGroups, type OriginView } from './OriginGroups.js';
@@ -8,6 +8,8 @@ import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './
 import { RowMenuButton } from './RowMenuButton.js';
 import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { useDeleteHook, useHooks, type Hook } from '../../hooks/use-hooks.js';
+import { useImportDetected } from '../../hooks/use-detected.js';
+import { HARNESS_LABEL } from './DetectedTreeGroup.js';
 import { describeHookHandler, hookRowLabel } from '../../lib/describe-hook-handler.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { IpcCallError } from '../../lib/ipc.js';
@@ -33,12 +35,16 @@ interface HooksTreeGroupProps {
 export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, query = '', origin = 'all', onCount, view }: HooksTreeGroupProps): React.ReactElement {
   const { data } = useHooks();
   const del = useDeleteHook();
+  const importer = useImportDetected();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<Hook>();
   const rowMenuTarget = rowMenu.state?.target;
-  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
-    ? [{ key: 'delete', label: 'Excluir', glyph: Trash2, danger: true, onSelect: () => handleDelete(rowMenuTarget.id, describeHookHandler(rowMenuTarget.handler)) }]
-    : [];
+  const rowMenuActions: RowContextMenuAction[] = !rowMenuTarget
+    ? []
+    : rowMenuTarget.source.kind === 'detected'
+      ? [{ key: 'import', label: 'Importar', glyph: Download, onSelect: () => importer.mutate({ id: (rowMenuTarget.source as { detectedId: string }).detectedId }, { onError: onMutationError }) }]
+      : [{ key: 'delete', label: 'Excluir', glyph: Trash2, danger: true, onSelect: () => handleDelete(rowMenuTarget.id, describeHookHandler(rowMenuTarget.handler)) }];
+  const onMutationError = (err: unknown): void => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
   const items = (isProjectContext && !showGlobal ? [] : (data ?? [])).filter((h) => matchesOrigin(origin, h.source.kind === 'plugin') && matchesQuery(query, describeHookHandler(h.handler), h.event))
     .sort((a, b) => hookRowLabel(a).localeCompare(hookRowLabel(b)));
   useReportCount(items.length, onCount);
@@ -74,10 +80,17 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
               accentColor={ENTITY_ACCENT_COLOR.hook}
               primary={<Tooltip title={describeHookHandler(item.handler)}><span>{hookRowLabel(item)}</span></Tooltip>}
               badge={
-                <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
+                <>
+                  {item.source.kind === 'detected' && (
+                    <Typography component="span" noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+                      {HARNESS_LABEL[item.source.harness]}{item.source.importable ? '' : ' · não importável'}
+                    </Typography>
+                  )}
+                  <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
+                </>
               }
               actions={
-                item.source.kind === 'workspace' ? (
+                item.source.kind === 'workspace' || (item.source.kind === 'detected' && item.source.importable) ? (
                   <RowMenuButton testId={`tree-hook-menu-${item.id}`} label="Ações do hook" onOpen={(e) => rowMenu.openMenu(e, item)} />
                 ) : undefined
               }

@@ -116,9 +116,9 @@ export class SessionHistoryService {
   }
 
   /** One conversation by id, or `undefined` — the lookup behind resuming a history row. */
-  async find(claudeSessionId: string): Promise<SessionHistoryEntry | undefined> {
-    const refs = await this.transcripts.listRefs();
-    const ref = refs.find((candidate) => candidate.claudeSessionId === claudeSessionId);
+  async find(conversationId: string): Promise<SessionHistoryEntry | undefined> {
+    const refs = await this.enabledRefs();
+    const ref = refs.find((candidate) => candidate.conversationId === conversationId);
     if (!ref) return undefined;
     const overrides = await this.rateOverrides();
     return toEntry(ref, await this.usageFor(ref), overrides);
@@ -126,7 +126,7 @@ export class SessionHistoryService {
 
   private async rowsFor(scope: HistoryScope, filters?: HistoryFilters): Promise<HistoryRow[]> {
     const inScope = await this.scopeMatcher(scope);
-    const refs = (await this.transcripts.listRefs()).filter((ref) => inScope(ref.cwd));
+    const refs = (await this.enabledRefs()).filter((ref) => inScope(ref.cwd));
     const overrides = await this.rateOverrides();
 
     // One disk round trip per file, all in flight together — a sequential
@@ -146,7 +146,7 @@ export class SessionHistoryService {
     // cursor anchored to the pair unambiguous.
     rows.sort((a, b) => {
       const byTime = b.ref.mtimeMs - a.ref.mtimeMs;
-      return byTime !== 0 ? byTime : a.ref.claudeSessionId.localeCompare(b.ref.claudeSessionId);
+      return byTime !== 0 ? byTime : a.ref.conversationId.localeCompare(b.ref.conversationId);
     });
     this.evictMissing(refs);
     return rows;
@@ -184,6 +184,12 @@ export class SessionHistoryService {
     }
   }
 
+  /** Conversations of the harnesses switched on in Settings — a disabled harness leaves the history, not just the new-session dialog. */
+  private async enabledRefs(): Promise<TranscriptRef[]> {
+    const settings = (await this.settingsService.load()) ?? this.settingsService.getDefaults();
+    return (await this.transcripts.listRefs()).filter((ref) => settings.adapters[ref.harness]?.enabled !== false);
+  }
+
   private async rateOverrides(): Promise<Record<string, ModelRate> | undefined> {
     const settings = (await this.settingsService.load()) ?? this.settingsService.getDefaults();
     return settings.pricing;
@@ -206,9 +212,11 @@ function toEntry(
   usage: TranscriptUsage,
   overrides: Record<string, ModelRate> | undefined,
 ): SessionHistoryEntry {
-  const costUsd = resolveCostUsd(usage, overrides);
+  const unpriced = usage.unpriced === true;
+  const costUsd = unpriced ? null : resolveCostUsd(usage, overrides);
   return {
-    claudeSessionId: ref.claudeSessionId,
+    harness: ref.harness,
+    conversationId: ref.conversationId,
     title: usage.title,
     cwd: ref.cwd,
     model: primaryModel(usage),
@@ -257,7 +265,7 @@ function localDay(iso: string): string {
 }
 
 function encodeCursor(row: HistoryRow): string {
-  return Buffer.from(`${row.ref.mtimeMs}|${row.ref.claudeSessionId}`, 'utf8').toString('base64url');
+  return Buffer.from(`${row.ref.mtimeMs}|${row.ref.conversationId}`, 'utf8').toString('base64url');
 }
 
 /**
@@ -276,18 +284,18 @@ function indexAfterCursor(rows: readonly HistoryRow[], cursor: string): number {
   }
   const separatorAt = decoded.indexOf('|');
   const mtimeMs = Number(decoded.slice(0, separatorAt));
-  const claudeSessionId = decoded.slice(separatorAt + 1);
+  const conversationId = decoded.slice(separatorAt + 1);
   if (separatorAt < 0 || !Number.isFinite(mtimeMs)) {
     throw new DomainError('validation', 'Malformed history cursor');
   }
 
-  const exact = rows.findIndex((row) => row.ref.claudeSessionId === claudeSessionId);
+  const exact = rows.findIndex((row) => row.ref.conversationId === conversationId);
   if (exact >= 0) return exact + 1;
 
   const index = rows.findIndex(
     (row) =>
       row.ref.mtimeMs < mtimeMs ||
-      (row.ref.mtimeMs === mtimeMs && row.ref.claudeSessionId.localeCompare(claudeSessionId) > 0),
+      (row.ref.mtimeMs === mtimeMs && row.ref.conversationId.localeCompare(conversationId) > 0),
   );
   return index < 0 ? rows.length : index;
 }

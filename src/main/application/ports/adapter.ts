@@ -10,8 +10,40 @@ import type { Entity } from '../../../shared/entity.js';
  */
 export type OwnershipCheck = 'startsWith' | 'includes';
 
+/**
+ * What a `merge` destination puts into a shared JSON file (`~/.claude.json`,
+ * `~/.cursor/hooks.json`, …). The file also holds other keys and hand edits, so
+ * the app only ever touches the one entry it names here.
+ *
+ *  - `object-key`: `value` is the property `key` of the object at `path`
+ *    (e.g. path `['mcpServers']`, key `github`).
+ *  - `array-item`: `value` is one element of the array at `path`
+ *    (e.g. `['hooks', 'PreToolUse']`). The element is found again on later
+ *    syncs by `identity` — dotted-path → expected value, e.g.
+ *    `{ matcher: 'Bash', 'hooks.0.command': './check.sh' }`.
+ */
+export type MergeTarget =
+  | { shape: 'object-key'; path: string[]; key: string; value: unknown }
+  | { shape: 'array-item'; path: string[]; identity: Record<string, unknown>; value: unknown };
+
 export type AdapterDestination =
   | { scope: 'personal' | 'workspace'; destination: string; strategy: 'symlink' }
+  | {
+      scope: 'personal' | 'workspace';
+      /** The shared JSON file the entry is merged into. */
+      destination: string;
+      strategy: 'merge';
+      target: MergeTarget;
+      /** Top-level keys written only when the file does not exist yet (e.g. Cursor's `version: 1`). */
+      seed?: Record<string, unknown>;
+    }
+  | {
+      scope: 'personal' | 'workspace';
+      destination: string;
+      strategy: 'skip';
+      /** Why this harness cannot express the entity; surfaced as a Sync-report warning. */
+      reason: string;
+    }
   | {
       scope: 'personal' | 'workspace';
       destination: string;

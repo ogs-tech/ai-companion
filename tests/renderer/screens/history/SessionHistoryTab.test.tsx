@@ -8,7 +8,8 @@ import type { SessionHistoryEntry } from '../../../../src/shared/session-history
 const PROJECT_SCOPE = { kind: 'workspace', workspaceId: 'ws-1' } as const;
 
 const entry = (overrides: Partial<SessionHistoryEntry> = {}): SessionHistoryEntry => ({
-  claudeSessionId: 'c1',
+  harness: 'claude',
+  conversationId: 'c1',
   title: 'Uma sessão',
   cwd: '/repos/acme',
   model: 'claude-opus-5',
@@ -189,8 +190,8 @@ describe('<SessionHistoryTab>', () => {
   describe('the table', () => {
     it('answers "what was expensive" first, sorting by cost descending', async () => {
       route([
-        entry({ claudeSessionId: 'cheap', title: 'Barata', costUsd: 1 }),
-        entry({ claudeSessionId: 'dear', title: 'Cara', costUsd: 88.28 }),
+        entry({ conversationId: 'cheap', title: 'Barata', costUsd: 1 }),
+        entry({ conversationId: 'dear', title: 'Cara', costUsd: 88.28 }),
       ]);
 
       render();
@@ -202,8 +203,8 @@ describe('<SessionHistoryTab>', () => {
 
     it('sorts an unpriced session below every priced one instead of treating its blank as free', async () => {
       route([
-        entry({ claudeSessionId: 'unknown', title: 'Sem preço', costUsd: null, costSource: 'unknown' }),
-        entry({ claudeSessionId: 'cheap', title: 'Barata', costUsd: 0.01 }),
+        entry({ conversationId: 'unknown', title: 'Sem preço', costUsd: null, costSource: 'unknown' }),
+        entry({ conversationId: 'cheap', title: 'Barata', costUsd: 0.01 }),
       ]);
 
       render();
@@ -214,7 +215,7 @@ describe('<SessionHistoryTab>', () => {
     });
 
     it('falls back to a short conversation id for a session that never got a title', async () => {
-      route([entry({ claudeSessionId: 'abcdefgh-1234', title: null })]);
+      route([entry({ conversationId: 'abcdefgh-1234', title: null })]);
 
       render();
 
@@ -227,7 +228,7 @@ describe('<SessionHistoryTab>', () => {
 
       await userEvent.click(await screen.findByText('Uma sessão'));
 
-      await waitFor(() => expect(call).toHaveBeenCalledWith('sessionHistory.resume', { claudeSessionId: 'c1' }));
+      await waitFor(() => expect(call).toHaveBeenCalledWith('sessionHistory.resume', { conversationId: 'c1' }));
       await waitFor(() => expect(onOpenSession).toHaveBeenCalled());
     });
 

@@ -97,7 +97,7 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     expect((rule as { content: string }).content.startsWith('---\n')).toBe(true);
   });
 
-  it('routes a workspace instruction to <resolved workspace root>/AGENTS.md (write, marker-owned)', async () => {
+  it('routes a workspace instruction to <root>/.cursor/rules/<name>.mdc (write, marker-owned, alwaysApply)', async () => {
     const ins: Instruction = {
       urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
       description: '', scopes: ['workspace'], scopeId: 'proj-1', metadata: meta,
@@ -107,9 +107,11 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
     expect(result).toEqual([
       {
         scope: 'workspace',
-        destination: '/repos/acme/AGENTS.md',
+        destination: '/repos/acme/.cursor/rules/acme.mdc',
         strategy: 'write',
-        content: expect.stringContaining('body'),
+        content: expect.stringContaining('alwaysApply: true'),
+        ownershipMarker: CURSOR_RULE_MDC_MARKER,
+        ownershipCheck: 'includes',
       },
     ]);
   });

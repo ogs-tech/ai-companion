@@ -163,7 +163,7 @@ import { EntityService } from '../../../../src/main/application/services/entity-
 import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeSessionPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
 import type { SessionAnchor } from '../../../../src/shared/session.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
@@ -189,7 +189,7 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const scopeDeps = {
     workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', isDefault: false, createdAt: '' }) },
     projectService: { get: async (id: string) => ({ id, name: 'acme', path: '/repos/acme', createdAt: '' }) },
@@ -330,7 +330,7 @@ import type { Entity, Instruction } from '../../../shared/entity.js';
 import type { SessionAnchor, SessionSnapshot, SessionStatus } from '../../../shared/session.js';
 import { sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
-import type { ClaudeSessionPort } from '../ports/claude-session-port.js';
+import type { SessionRuntimePort } from '../ports/session-runtime-port.js';
 import type { WorkspaceService } from './workspace-service.js';
 import type { ProjectService } from './project-service.js';
 import { resolveScopePath } from '../resolve-scope-path.js';
@@ -431,7 +431,7 @@ import { EntityService } from '../../../src/main/application/services/entity-ser
 import { InMemoryEntityRepository } from '../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill } from '../../../src/shared/entity.js';
 
 const skill = (name = 'foo'): Skill => ({
@@ -447,7 +447,7 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(repo, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const scopeDeps = {
     workspaceService: { get: async () => { throw new Error('not stubbed'); } },
     projectService: { get: async () => { throw new Error('not stubbed'); } },

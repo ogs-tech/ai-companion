@@ -5,7 +5,7 @@ import { EntityService } from '../../../src/main/application/services/entity-ser
 import { InMemoryEntityRepository } from '../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeSessionPort } from '../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { FakeEmbeddedBrowserPort } from '../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill } from '../../../src/shared/entity.js';
 import { scopedRepository } from '../helpers/scoped-repository.js';
@@ -23,7 +23,7 @@ const setup = () => {
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(scopedRepository({ global: repo }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
     workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/workspace', createdAt: '' }) },
@@ -36,8 +36,11 @@ const setup = () => {
     lstat: vi.fn().mockResolvedValue({ kind: 'none' }),
     readlink: vi.fn().mockResolvedValue(''),
     symlink: vi.fn().mockResolvedValue(undefined),
+    unlink: vi.fn().mockResolvedValue(undefined),
+    readdir: vi.fn().mockResolvedValue([]),
+    pathExists: vi.fn().mockResolvedValue(false),
   };
-  const service = new SessionService(base, claudeSession, embeddedBrowser, '/workspace', scopeDeps, fs);
+  const service = new SessionService(base, { claude: claudeSession }, embeddedBrowser, '/workspace', scopeDeps, fs);
   return { service, base, claudeSession, embeddedBrowser, fs };
 };
 
@@ -148,7 +151,7 @@ describe('session-handlers', () => {
   it('session.resume validates and forwards sessionId to service.resume', async () => {
     const { service } = setup();
     const spy = vi.spyOn(service, 'resume').mockResolvedValue({
-      sessionId: 'workspace:w1', claudeSessionId: 'c-w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
+      sessionId: 'workspace:w1', harness: 'claude', conversationId: 'c-w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
       cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
     });
     const h = buildSessionHandlers(service);
@@ -193,5 +196,20 @@ describe('session-handlers', () => {
     const result = (await h['session.list']!({})) as Array<{ sessionId: string }>;
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ sessionId: 'entity:urn:skill:foo', label: 'foo', status: 'running' });
+  });
+
+  it('session.spawn forwards a valid harness and rejects an unknown one', async () => {
+    const { service } = setup();
+    const spy = vi.spyOn(service, 'spawn').mockResolvedValue({} as never);
+    const h = buildSessionHandlers(service);
+    await h['session.spawn']!({ anchor: { kind: 'personal' }, harness: 'cursor' });
+    expect(spy).toHaveBeenCalledWith({ kind: 'personal' }, 'cursor');
+    await expect(h['session.spawn']!({ anchor: { kind: 'personal' }, harness: 'vim' })).rejects.toThrow(/harness/);
+  });
+
+  it('session.availableHarnesses lists the harnesses whose CLI is installed', async () => {
+    const { service } = setup();
+    const h = buildSessionHandlers(service);
+    expect(await h['session.availableHarnesses']!({})).toEqual(['claude']);
   });
 });

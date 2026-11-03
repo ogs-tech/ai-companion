@@ -6,6 +6,7 @@ import type { EntityRepository } from '../ports/entity-repository.js';
 import type { Adapter, AdapterDestination } from '../ports/adapter.js';
 import type { SymlinkManager } from './symlink-manager.js';
 import type { FileMaterializer } from './file-materializer.js';
+import type { MergeMaterializer } from './merge-materializer.js';
 import { DomainError } from '../../domain/errors.js';
 
 export interface SymlinkError {
@@ -25,6 +26,8 @@ export interface AdapterManagerDeps {
   entityRepository: EntityRepository;
   symlinkManager: SymlinkManager;
   fileMaterializer: FileMaterializer;
+  /** Required for `merge` destinations (mcp / hook entities); the composition root always supplies it. */
+  mergeMaterializer?: MergeMaterializer;
   adapters: Map<string, Adapter>;
   /** The data dir holding an entity's canonical files (Global or the active workspace's) — see `ScopedEntityRepository.dataDirFor`. */
   entityDataDir: (entity: Entity) => string;
@@ -71,6 +74,7 @@ export class AdapterManager {
     const entities = await this.deps.entityRepository.list();
     const results: SyncResult[] = [];
     for (const entity of entities) {
+      if ((entity as { enabled?: boolean }).enabled === false) continue;
       for (const adapter of enabledAdapters) {
         let destinations: AdapterDestination[];
         try {
@@ -96,6 +100,10 @@ export class AdapterManager {
   }
 
   async syncEntity(command: SyncEntityCommand): Promise<SyncResult[]> {
+    // A disabled mcp/hook keeps its canonical copy but is written to no harness.
+    if ((command.entity as { enabled?: boolean }).enabled === false) {
+      return this.removeEntity({ entity: command.entity });
+    }
     const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
     const enabledAdapters = this.enabledAdapters(settings);
     const results: SyncResult[] = [];
@@ -225,6 +233,20 @@ export class AdapterManager {
         continue;
       }
       for (const dest of destinations) {
+        if (dest.strategy === 'merge') {
+          try {
+            const { removed: gone } = await this.merger().remove({ file: dest.destination, target: dest.target });
+            if (gone) removed++;
+            else skipped++;
+          } catch (err) {
+            errors.push({
+              destination: dest.destination,
+              kind: err instanceof DomainError ? err.kind : 'internal',
+              message: err instanceof Error ? err.message : 'Unknown error',
+            });
+          }
+          continue;
+        }
         if (dest.strategy !== 'write') continue;
         try {
           const removeArgs: Parameters<typeof this.deps.fileMaterializer.removeIfOwned>[0] = {
@@ -281,7 +303,10 @@ export class AdapterManager {
           if (dest.strategy === 'symlink') {
             const isWorkspaceLink = await this.deps.symlinkManager.isSymlinkToWorkspace(dest.destination, this.deps.entityDataDir(entity));
             if (isWorkspaceLink) count++;
-          } else {
+          } else if (dest.strategy === 'merge') {
+            const state = await this.merger().validate({ file: dest.destination, target: dest.target });
+            if (state === 'ok' || state === 'drift') count++;
+          } else if (dest.strategy === 'write') {
             const validateArgs: Parameters<typeof this.deps.fileMaterializer.validate>[0] = {
               destination: dest.destination,
               content: dest.content,
@@ -357,6 +382,10 @@ export class AdapterManager {
         if (dest.ownershipMarker !== undefined) removeArgs.ownershipMarker = dest.ownershipMarker;
         if (dest.ownershipCheck !== undefined) removeArgs.ownershipCheck = dest.ownershipCheck;
         result = await this.deps.fileMaterializer.removeIfOwned(removeArgs);
+      } else if (dest.strategy === 'merge') {
+        result = await this.merger().remove({ file: dest.destination, target: dest.target });
+      } else if (dest.strategy === 'skip') {
+        result = { removed: false };
       } else {
         result = await this.deps.symlinkManager.removeIfExists({ destination: dest.destination });
       }
@@ -391,7 +420,8 @@ export class AdapterManager {
       }
       return join(dataDir, 'instructions', 'project', entity.name, 'INSTRUCTION.md');
     }
-    throw new DomainError('validation', `Unsupported entity kind for sync: ${entity.kind}`);
+    // mcp / hook are never linked: their adapters only emit merge/skip destinations.
+    return '';
   }
 
   private async syncDestination(
@@ -402,6 +432,18 @@ export class AdapterManager {
     if (dest.strategy === 'write') {
       return this.writeDestination(adapterId, dest);
     }
+    if (dest.strategy === 'merge') {
+      return this.mergeDestination(adapterId, dest);
+    }
+    if (dest.strategy === 'skip') {
+      return {
+        adapter: adapterId,
+        destination: dest.destination,
+        status: 'ok',
+        message: dest.reason,
+        details: { skipped: 'unsupported-by-target', reason: dest.reason },
+      };
+    }
     try {
       const result = await this.deps.symlinkManager.create({ source, destination: dest.destination });
       const payload: SyncResult = { adapter: adapterId, destination: dest.destination, status: result.status };
@@ -409,6 +451,29 @@ export class AdapterManager {
         payload.message = 'Overwrote existing destination and created a backup';
       }
       if (result.details !== undefined) payload.details = result.details;
+      return payload;
+    } catch (err) {
+      return this.symlinkError(adapterId, dest.destination, err);
+    }
+  }
+
+  private merger(): MergeMaterializer {
+    if (this.deps.mergeMaterializer === undefined) {
+      throw new DomainError('internal', 'AdapterManager: a merge destination needs a MergeMaterializer');
+    }
+    return this.deps.mergeMaterializer;
+  }
+
+  private async mergeDestination(adapterId: string, dest: Extract<AdapterDestination, { strategy: 'merge' }>): Promise<SyncResult> {
+    try {
+      const result = await this.merger().apply({
+        file: dest.destination,
+        target: dest.target,
+        ...(dest.seed !== undefined ? { seed: dest.seed } : {}),
+      });
+      const payload: SyncResult = { adapter: adapterId, destination: dest.destination, status: result.status };
+      if (result.status === 'conflict') payload.message = 'Replaced an existing entry and created a backup';
+      if (result.details !== undefined) payload.details = result.details as SyncResultDetails;
       return payload;
     } catch (err) {
       return this.symlinkError(adapterId, dest.destination, err);

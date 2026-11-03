@@ -5,7 +5,8 @@ import type { SessionService } from '../../../src/main/application/services/sess
 import type { SessionHistoryEntry } from '../../../src/shared/session-history.js';
 
 const entry = (overrides: Partial<SessionHistoryEntry> = {}): SessionHistoryEntry => ({
-  claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+  harness: 'claude',
+  conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
   title: 'Sessões com dash e filtros',
   cwd: '/repos/acme',
   model: 'claude-opus-5',
@@ -111,10 +112,11 @@ describe('session-history handlers', () => {
     it('adopts the conversation in the directory it actually ran in, under its own title', async () => {
       const { sessionService, handlers } = setup();
 
-      await handlers['sessionHistory.resume']!({ claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' });
+      await handlers['sessionHistory.resume']!({ conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' });
 
       expect(sessionService.adoptConversation).toHaveBeenCalledWith({
-        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        harness: 'claude',
         cwd: '/repos/acme',
         label: 'Sessões com dash e filtros',
       });
@@ -123,7 +125,7 @@ describe('session-history handlers', () => {
     it('falls back to a short form of the id when the conversation never got a title', async () => {
       const { sessionService, handlers } = setup({ find: vi.fn().mockResolvedValue(entry({ title: null })) });
 
-      await handlers['sessionHistory.resume']!({ claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' });
+      await handlers['sessionHistory.resume']!({ conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' });
 
       expect(sessionService.adoptConversation).toHaveBeenCalledWith(expect.objectContaining({ label: 'aaaaaaaa' }));
     });
@@ -131,7 +133,7 @@ describe('session-history handlers', () => {
     it('reports a missing transcript as not_found rather than spawning into nowhere', async () => {
       const { sessionService, handlers } = setup({ find: vi.fn().mockResolvedValue(undefined) });
 
-      await expect(handlers['sessionHistory.resume']!({ claudeSessionId: 'gone' })).rejects.toMatchObject({
+      await expect(handlers['sessionHistory.resume']!({ conversationId: 'gone' })).rejects.toMatchObject({
         kind: 'not_found',
       });
       expect(sessionService.adoptConversation).not.toHaveBeenCalled();

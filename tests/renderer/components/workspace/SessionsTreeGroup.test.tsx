@@ -15,7 +15,8 @@ const SCOPE = { kind: 'workspace', workspaceId: 'ws-1' } as const;
 
 const runningSession = {
   sessionId: 'workspace:w1',
-  claudeSessionId: 'conv-running',
+  harness: 'claude',
+  conversationId: 'conv-running',
   anchor: { kind: 'workspace' as const, workspaceId: 'w1' },
   cwd: '/repos/ws',
   label: 'Acme',
@@ -24,7 +25,7 @@ const runningSession = {
 
 const exitedSession = {
   sessionId: 'entity:urn:skill:foo',
-  claudeSessionId: 'conv-exited',
+  conversationId: 'conv-exited',
   anchor: { kind: 'entity' as const, urn: 'urn:skill:foo' },
   cwd: '/repos/ws',
   label: 'foo',
@@ -32,7 +33,8 @@ const exitedSession = {
 };
 
 const entry = (overrides: Partial<SessionHistoryEntry> = {}): SessionHistoryEntry => ({
-  claudeSessionId: 'conv-running',
+  harness: 'claude',
+  conversationId: 'conv-running',
   title: 'Título gerado',
   cwd: '/repos/ws',
   model: 'claude-opus-5',
@@ -96,7 +98,7 @@ describe('SessionsTreeGroup', () => {
     it('shows a running session once, not twice, when it also has a transcript', async () => {
       route({
         'session.list': ok([runningSession]),
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'conv-running' })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-running' })])),
       });
 
       render();
@@ -108,7 +110,7 @@ describe('SessionsTreeGroup', () => {
     it("keeps the app's own label for a live session rather than the CLI's generated title", async () => {
       route({
         'session.list': ok([runningSession]),
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'conv-running', title: 'Título gerado' })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-running', title: 'Título gerado' })])),
       });
 
       render();
@@ -121,7 +123,7 @@ describe('SessionsTreeGroup', () => {
     it('takes cost and model from the transcript for that same live session', async () => {
       route({
         'session.list': ok([runningSession]),
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'conv-running', costUsd: 4.4 })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-running', costUsd: 4.4 })])),
       });
 
       render();
@@ -132,7 +134,7 @@ describe('SessionsTreeGroup', () => {
     });
 
     it('shows a past conversation that is not in memory at all, titled by the CLI', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ claudeSessionId: 'conv-old', title: 'Uma sessão antiga' })])) });
+      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'conv-old', title: 'Uma sessão antiga' })])) });
 
       render();
 
@@ -151,7 +153,7 @@ describe('SessionsTreeGroup', () => {
     });
 
     it('shows a dash, not a zero, for a conversation whose model has no published rate', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ claudeSessionId: 'c1', costUsd: null, costSource: 'unknown' })])) });
+      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1', costUsd: null, costSource: 'unknown' })])) });
 
       render();
 
@@ -164,8 +166,8 @@ describe('SessionsTreeGroup', () => {
       route({
         'sessionHistory.list': ok(
           page([
-            entry({ claudeSessionId: 'a-oldest', title: 'AAA', endedAt: '2026-09-01T10:00:00.000Z' }),
-            entry({ claudeSessionId: 'z-newest', title: 'ZZZ', endedAt: '2026-09-20T10:00:00.000Z' }),
+            entry({ conversationId: 'a-oldest', title: 'AAA', endedAt: '2026-09-01T10:00:00.000Z' }),
+            entry({ conversationId: 'z-newest', title: 'ZZZ', endedAt: '2026-09-20T10:00:00.000Z' }),
           ]),
         ),
       });
@@ -179,8 +181,8 @@ describe('SessionsTreeGroup', () => {
 
     it('floats a just-spawned session with no transcript to the top', async () => {
       route({
-        'session.list': ok([{ ...runningSession, claudeSessionId: 'brand-new' }]),
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'older', endedAt: '2026-09-20T10:00:00.000Z' })])),
+        'session.list': ok([{ ...runningSession, conversationId: 'brand-new' }]),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'older', endedAt: '2026-09-20T10:00:00.000Z' })])),
       });
 
       render();
@@ -216,7 +218,7 @@ describe('SessionsTreeGroup', () => {
 
     it('resumes a conversation that only exists on disk through the history, by its conversation id', async () => {
       route({
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'conv-old' })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-old' })])),
         'sessionHistory.resume': ok({ ...runningSession, sessionId: 'conv-old' }),
       });
       const onOpen = vi.fn();
@@ -225,7 +227,7 @@ describe('SessionsTreeGroup', () => {
       await userEvent.click(await screen.findByTestId('tree-session-conv-old'));
 
       await waitFor(() =>
-        expect(call).toHaveBeenCalledWith('sessionHistory.resume', { claudeSessionId: 'conv-old' }),
+        expect(call).toHaveBeenCalledWith('sessionHistory.resume', { conversationId: 'conv-old' }),
       );
       await waitFor(() => expect(onOpen).toHaveBeenCalled());
     });
@@ -256,7 +258,7 @@ describe('SessionsTreeGroup', () => {
     });
 
     it('offers no destructive action on a row that is only a transcript — there is nothing in memory to remove', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ claudeSessionId: 'conv-old' })])) });
+      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'conv-old' })])) });
 
       render();
 
@@ -291,7 +293,7 @@ describe('SessionsTreeGroup', () => {
 
   describe('paging', () => {
     it('asks for the next page when the sentinel below the last row scrolls into view', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ claudeSessionId: 'c1' })], 'cursor-1')) });
+      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })], 'cursor-1')) });
       render();
       await screen.findByTestId('tree-session-c1');
       call.mockClear();
@@ -304,7 +306,7 @@ describe('SessionsTreeGroup', () => {
     });
 
     it('stops asking once the list has reached its end', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ claudeSessionId: 'c1' })], null)) });
+      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })], null)) });
       render();
       await screen.findByTestId('tree-session-c1');
       call.mockClear();
@@ -318,7 +320,7 @@ describe('SessionsTreeGroup', () => {
   describe('footer', () => {
     it("shows the scope's total and says plainly that it is an estimate", async () => {
       route({
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'c1' })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })])),
         'sessionHistory.stats': ok(stats({ totalCostUsd: 31.8 })),
       });
 
@@ -330,7 +332,7 @@ describe('SessionsTreeGroup', () => {
 
     it('says how many sessions it could not price, rather than folding them in as zero', async () => {
       route({
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'c1' })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })])),
         'sessionHistory.stats': ok(stats({ unpricedCount: 3 })),
       });
 
@@ -342,7 +344,7 @@ describe('SessionsTreeGroup', () => {
     it('offers a way through to the full history', async () => {
       const onSeeAll = vi.fn();
       route({
-        'sessionHistory.list': ok(page([entry({ claudeSessionId: 'c1' })])),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })])),
         'sessionHistory.stats': ok(stats({ sessionCount: 41 })),
       });
       render({ onSeeAll });

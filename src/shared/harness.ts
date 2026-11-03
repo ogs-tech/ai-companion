@@ -31,6 +31,7 @@
  * - `run` — this app can spawn and observe that harness's own sessions. Only
  *   a harness that exposes its agentic loop as a CLI qualifies: a GUI-only
  *   harness runs its loop inside its own process, out of reach of a PTY.
+ *   Claude Code (`claude`) and Cursor (`cursor-agent`) both have one.
  *
  * The asymmetry is part of the domain, not a gap. `manage` is the baseline
  * and where breadth lives; `run` is depth, and most harnesses will never
@@ -59,7 +60,7 @@ export const HARNESSES: Readonly<Record<HarnessId, HarnessDescriptor>> = {
   cursor: {
     id: 'cursor',
     displayName: 'Cursor',
-    capabilities: ['manage'],
+    capabilities: ['manage', 'run'],
     defaultEnabled: false,
   },
 };

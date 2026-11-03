@@ -6,11 +6,13 @@ import type { PluginProvenanceService } from './services/plugin-provenance.js';
 import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
-import type { ClaudeSessionPort } from './ports/claude-session-port.js';
+import type { HarnessId } from '../../shared/harness.js';
+import type { SessionRuntimePort } from './ports/session-runtime-port.js';
 import type { EmbeddedBrowserPort } from './ports/embedded-browser-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
+import { MergeMaterializer } from './services/merge-materializer.js';
 import type { Workspace } from '../../shared/workspace.js';
 import { FsEntityRepository } from '../infrastructure/entity/fs-entity-repository.js';
 import { ScopedEntityRepository, type DataDirRepository } from './entity/scoped-entity-repository.js';
@@ -43,6 +45,7 @@ import type { TerminalPort } from './ports/terminal-port.js';
 import type { RepoGitPort } from './ports/repo-git-port.js';
 import { workspaceFolders } from '../../shared/workspace.js';
 import { projectWorkspacePath, workspaceHomePath } from '../../shared/brand-paths.js';
+import { DetectionService } from './services/detection-service.js';
 import { GitService } from './services/git-service.js';
 import type { ConventionSourcePort } from './ports/convention-source-port.js';
 import type { CommitMessageGeneratorPort } from './ports/commit-message-generator-port.js';
@@ -60,7 +63,7 @@ export interface WorkspaceScopedSharedDeps {
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
-  claudeSessionPort: ClaudeSessionPort;
+  sessionRuntimes: Readonly<Partial<Record<HarnessId, SessionRuntimePort>>>;
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
@@ -77,6 +80,7 @@ export interface WorkspaceScopedServices {
   fileMaterializer: FileMaterializer;
   adapterManager: AdapterManager;
   entityService: EntityService;
+  detectionService: DetectionService;
   skillService: SkillService;
   agentService: AgentService;
   instructionService: InstructionService;
@@ -113,7 +117,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService, globalEntities,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    claudeSessionPort, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
+    sessionRuntimes, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
     launchConfigReaderPort, terminalPort, repoGitPort,
     conventionSourcePort, commitMessageGeneratorFor,
   } = shared;
@@ -126,6 +130,7 @@ export function buildWorkspaceScopedServices(
   // Backups of anything a sync displaces always land under Global's `_backups/`.
   const symlinkManager = new SymlinkManager(nodeFsAdapter, clock, globalDataDir);
   const fileMaterializer = new FileMaterializer(nodeFsAdapter, clock, globalDataDir);
+  const mergeMaterializer = new MergeMaterializer(nodeFsAdapter, clock, globalDataDir);
 
   const claudeAdapter = new ClaudeAdapter({ homedir, workspaceService });
   const cursorAdapter = new CursorAdapter({ homedir, workspaceService });
@@ -157,6 +162,7 @@ export function buildWorkspaceScopedServices(
     entityRepository,
     symlinkManager,
     fileMaterializer,
+    mergeMaterializer,
     entityDataDir: (entity) => entityRepository.dataDirFor(entity),
     adapters: new Map<string, Adapter>([
       [claudeAdapter.adapterId, claudeAdapter],
@@ -167,12 +173,19 @@ export function buildWorkspaceScopedServices(
   const entityValidator = new EntityValidator();
   const entityService = new EntityService(entityRepository, clock, adapterManager, entityValidator);
 
+  const detectionService = new DetectionService({
+    fs: nodeFsAdapter,
+    homedir,
+    entities: entityService,
+    context: { workspace: activeWorkspace === null ? null : { id: activeWorkspace.id, folders: workspaceFolders(activeWorkspace) } },
+  });
+
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const instructionService = new InstructionService(entityService);
   const sessionService = new SessionService(
     entityService,
-    claudeSessionPort,
+    sessionRuntimes,
     embeddedBrowserPort,
     dataDir,
     { workspaceService, activeWorkspace, homedir },
@@ -235,7 +248,7 @@ export function buildWorkspaceScopedServices(
   );
 
   return {
-    entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService,
+    entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService, detectionService,
     skillService, agentService, instructionService, sessionService, sessionHistoryService,
     healthService, workspaceTeardownService, entityWatchService, launchConfigService, terminalService, openEditorsService,
     gitService, commitMessageService,

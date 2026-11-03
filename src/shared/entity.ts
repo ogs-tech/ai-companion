@@ -97,6 +97,25 @@ export interface InstructionSidecar {
   scopeId?: string;
 }
 
+/** MCP server definition (Claude's `mcpServers.<name>` shape); `enabled: false` keeps the canonical copy but writes it to no harness. */
+export interface McpEntity extends Entity {
+  kind: 'mcp';
+  def: Record<string, unknown>;
+  enabled: boolean;
+}
+
+/**
+ * One hook: a single (event, matcher, handler) tuple in Claude's shape. Cursor
+ * receives the subset it can express (see `hook-translation.ts`).
+ */
+export interface HookEntity extends Entity {
+  kind: 'hook';
+  event: string;
+  matcher?: string;
+  handler: Record<string, unknown>;
+  enabled: boolean;
+}
+
 export interface EntityChangedEvent {
   kind: EntityKind;
   urn: string;

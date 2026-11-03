@@ -4,7 +4,7 @@ import { EntityService } from '../../../../src/main/application/services/entity-
 import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
-import { FakeClaudeSessionPort } from '../../../../src/main/application/services/__fixtures__/fake-claude-session-port.js';
+import { FakeSessionRuntimePort } from '../../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { FakeEmbeddedBrowserPort } from '../../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
 import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
 import type { SessionAnchor } from '../../../../src/shared/session.js';
@@ -38,7 +38,7 @@ const setup = (options?: { maxBufferChars?: number; extraFolders?: string[] }) =
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
   const base = new EntityService(scopedRepository({ global: repo, workspaceId: 'ws-1' }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
-  const claudeSession = new FakeClaudeSessionPort();
+  const claudeSession = new FakeSessionRuntimePort();
   const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
     workspaceService: {
@@ -53,9 +53,12 @@ const setup = (options?: { maxBufferChars?: number; extraFolders?: string[] }) =
     lstat: vi.fn().mockResolvedValue({ kind: 'none' }),
     readlink: vi.fn().mockResolvedValue(''),
     symlink: vi.fn().mockResolvedValue(undefined),
+    unlink: vi.fn().mockResolvedValue(undefined),
+    readdir: vi.fn().mockResolvedValue([]),
+    pathExists: vi.fn().mockResolvedValue(false),
   };
   const { extraFolders: _extra, ...serviceOptions } = options ?? {};
-  const service = new SessionService(base, claudeSession, embeddedBrowser, WORKSPACE, scopeDeps, fs, serviceOptions);
+  const service = new SessionService(base, { claude: claudeSession }, embeddedBrowser, WORKSPACE, scopeDeps, fs, serviceOptions);
   return { service, base, claudeSession, embeddedBrowser, fs };
 };
 
@@ -309,8 +312,8 @@ describe('SessionService concurrent workspace/personal sessions', () => {
 
     const session = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
 
-    expect(session.claudeSessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(claudeSession.spawnCalls[0]?.opts.conversation.claudeSessionId).toBe(session.claudeSessionId);
+    expect(session.conversationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(claudeSession.spawnCalls[0]?.opts.conversation.conversationId).toBe(session.conversationId);
   });
 
   it('gives two sessions of the same anchor different conversations, so neither can capture the other one', async () => {
@@ -319,7 +322,7 @@ describe('SessionService concurrent workspace/personal sessions', () => {
     const first = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
     const second = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
 
-    expect(second.claudeSessionId).not.toBe(first.claudeSessionId);
+    expect(second.conversationId).not.toBe(first.conversationId);
   });
 
   it('reopening an exited entity session resumes its original conversation instead of minting a second one', async () => {
@@ -332,10 +335,10 @@ describe('SessionService concurrent workspace/personal sessions', () => {
 
     const reopened = await service.spawn(anchor);
 
-    expect(reopened.claudeSessionId).toBe(first.claudeSessionId);
+    expect(reopened.conversationId).toBe(first.conversationId);
     expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
       mode: 'resume',
-      claudeSessionId: first.claudeSessionId,
+      conversationId: first.conversationId,
     });
   });
 
@@ -414,7 +417,7 @@ describe('SessionService.resume', () => {
 
     expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
       mode: 'resume',
-      claudeSessionId: session.claudeSessionId,
+      conversationId: session.conversationId,
     });
   });
 
@@ -478,18 +481,18 @@ describe('SessionService output buffering', () => {
       const { service, claudeSession } = setup();
 
       const adopted = await service.adoptConversation({
-        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
         cwd: '/repos/from-history',
         label: 'Sessões com dash e filtros',
       });
 
       expect(adopted.status).toBe('running');
       expect(adopted.label).toBe('Sessões com dash e filtros');
-      expect(adopted.claudeSessionId).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+      expect(adopted.conversationId).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
       expect(service.list().map((s) => s.sessionId)).toContain('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
       expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
         mode: 'resume',
-        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
       });
     });
 
@@ -497,7 +500,7 @@ describe('SessionService output buffering', () => {
       const { service } = setup();
 
       const adopted = await service.adoptConversation({
-        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
         cwd: '/repos/ws/packages/api',
         label: 'x',
       });
@@ -510,7 +513,7 @@ describe('SessionService output buffering', () => {
       const { service } = setup();
 
       const adopted = await service.adoptConversation({
-        claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
         cwd: '/repos/from-history',
         label: 'x',
       });
@@ -521,7 +524,7 @@ describe('SessionService output buffering', () => {
 
     it('reattaches to an already-running adoption instead of forking a second PTY onto the same conversation', async () => {
       const { service, claudeSession } = setup();
-      const input = { claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
+      const input = { conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
       await service.adoptConversation(input);
 
       await service.adoptConversation(input);
@@ -531,7 +534,7 @@ describe('SessionService output buffering', () => {
 
     it('is single-flight, so a double-click cannot start two PTYs under one id', async () => {
       const { service, claudeSession } = setup();
-      const input = { claudeSessionId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
+      const input = { conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
 
       await Promise.all([service.adoptConversation(input), service.adoptConversation(input)]);
 
@@ -602,7 +605,7 @@ describe('SessionService browser toggle', () => {
     expect(claudeSession.spawnCalls).toHaveLength(1);
     expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
       mode: 'resume',
-      claudeSessionId: session.claudeSessionId,
+      conversationId: session.conversationId,
     });
     expect(claudeSession.spawnCalls[0]?.opts.mcpConfigPath).toMatch(/config\.json$/);
     expect(updated.status).toBe('running');
@@ -824,7 +827,7 @@ describe('SessionService.stageAttachment', () => {
       const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/ws', '/repos/api'] });
       expect(session.cwd).toMatch(/^\/home\/u\/\.ai-companion\/workspaces\/ws-1\/sessions\/[0-9a-f]{10}$/);
       const targets = fs.symlink.mock.calls.map((call: unknown[]) => (call[0] as { target: string }).target).sort();
-      expect(targets).toEqual(['/home/u/.ai-companion/workspaces/ws-1/.claude', '/repos/api', '/repos/ws']);
+      expect(targets).toEqual(['/repos/api', '/repos/ws']);
     });
 
     it('refuses a folder that does not belong to the workspace', async () => {
@@ -832,5 +835,92 @@ describe('SessionService.stageAttachment', () => {
       await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/elsewhere'] })).rejects.toMatchObject({ kind: 'validation' });
       await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: [] })).rejects.toMatchObject({ kind: 'validation' });
     });
+  });
+
+});
+
+describe('SessionService harnesses', () => {
+  const withCursor = () => {
+    const ctx = setup();
+    const cursorRuntime = new FakeSessionRuntimePort();
+    const service = new SessionService(
+      ctx.base,
+      { claude: ctx.claudeSession, cursor: cursorRuntime },
+      ctx.embeddedBrowser,
+      WORKSPACE,
+      { workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) }, activeWorkspace: null, homedir: '/home/u' },
+      ctx.fs,
+    );
+    return { ...ctx, service, cursorRuntime };
+  };
+  const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'ws-1' };
+
+  it('defaults to Claude', async () => {
+    const { service, claudeSession, cursorRuntime } = withCursor();
+    const session = await service.spawn(anchor);
+    expect(session.harness).toBe('claude');
+    expect(claudeSession.spawnCalls).toHaveLength(1);
+    expect(cursorRuntime.spawnCalls).toHaveLength(0);
+  });
+
+  it('starts a Cursor session on the Cursor runtime, with the conversation id that runtime handed out', async () => {
+    const { service, claudeSession, cursorRuntime } = withCursor();
+    const session = await service.spawn(anchor, 'cursor');
+    expect(session.harness).toBe('cursor');
+    expect(claudeSession.spawnCalls).toHaveLength(0);
+    expect(cursorRuntime.spawnCalls[0]?.opts.conversation).toEqual({ mode: 'start', conversationId: session.conversationId });
+  });
+
+  it('routes input, resize and kill of a Cursor session to the Cursor runtime only', async () => {
+    const { service, claudeSession, cursorRuntime } = withCursor();
+    const session = await service.spawn(anchor, 'cursor');
+    service.write(session.sessionId, 'hi');
+    service.resize(session.sessionId, 100, 30);
+    service.kill(session.sessionId);
+    expect(cursorRuntime.writes).toEqual([[session.sessionId, 'hi']]);
+    expect(cursorRuntime.resizes).toEqual([[session.sessionId, 100, 30]]);
+    expect(cursorRuntime.killed).toEqual([session.sessionId]);
+    expect(claudeSession.writes).toEqual([]);
+    expect(claudeSession.killed).toEqual([]);
+  });
+
+  it('resumes a Cursor session on the Cursor runtime with the id it started with', async () => {
+    const { service, cursorRuntime } = withCursor();
+    const session = await service.spawn(anchor, 'cursor');
+    service.kill(session.sessionId);
+    await service.resume(session.sessionId);
+    expect(cursorRuntime.spawnCalls[1]?.opts.conversation).toEqual({ mode: 'resume', conversationId: session.conversationId });
+  });
+
+  it('adopts a past Cursor chat on the Cursor runtime', async () => {
+    const { service, claudeSession, cursorRuntime } = withCursor();
+    const adopted = await service.adoptConversation({ conversationId: 'chat-7', cwd: '/repos/x', label: 'x', harness: 'cursor' });
+    expect(adopted.harness).toBe('cursor');
+    expect(cursorRuntime.spawnCalls[0]?.opts.conversation).toEqual({ mode: 'resume', conversationId: 'chat-7' });
+    expect(claudeSession.spawnCalls).toHaveLength(0);
+  });
+
+  it('refuses a harness it has no runtime for', async () => {
+    await expect(setup().service.spawn(anchor, 'cursor')).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('reports a failure to mint the conversation as an io error naming the harness', async () => {
+    const { service, cursorRuntime } = withCursor();
+    cursorRuntime.newConversationId = async () => {
+      throw new Error('not logged in');
+    };
+    await expect(service.spawn(anchor, 'cursor')).rejects.toMatchObject({ message: expect.stringContaining('Cursor') });
+  });
+
+  it('does not offer the embedded browser to a Cursor session', async () => {
+    const { service } = withCursor();
+    const session = await service.spawn(anchor, 'cursor');
+    await expect(service.setBrowserEnabled(session.sessionId, true)).rejects.toMatchObject({ kind: 'validation' });
+  });
+
+  it('lists only the harnesses whose CLI is installed', async () => {
+    const { service, cursorRuntime } = withCursor();
+    cursorRuntime.available = false;
+    expect(await service.availableHarnesses()).toEqual(['claude']);
   });
 });

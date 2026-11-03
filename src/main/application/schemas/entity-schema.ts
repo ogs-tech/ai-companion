@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { mcpServerDefSchema } from './mcp.js';
+import { hookHandlerSchema } from './hook.js';
 
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'name must match ^[a-z0-9][a-z0-9-]*$');
 const version = z.string().regex(/^\d+\.\d+\.\d+(-[\w.-]+)?$/, 'version must follow semver');
@@ -100,3 +102,30 @@ export const instructionEntitySchema = entityBase
     }
     requireScopeIdWhenScoped(scope, val.scopeId, ctx);
   });
+
+// MCP server names are whatever the user's tools already use (`my_server`,
+// `Notion`), and double as the file name, so only path-unsafe characters are refused.
+const mcpName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/, 'name must match ^[A-Za-z0-9][A-Za-z0-9_.-]*$');
+
+export const mcpEntitySchema = entityBase
+  .extend({
+    kind: z.literal('mcp'),
+    name: mcpName,
+    def: mcpServerDefSchema,
+    enabled: z.boolean(),
+    scopes: scopeTuple('mcp'),
+  })
+  .passthrough()
+  .superRefine((val, ctx) => requireScopeIdWhenScoped(val.scopes[0], val.scopeId, ctx));
+
+export const hookEntitySchema = entityBase
+  .extend({
+    kind: z.literal('hook'),
+    event: z.string().min(1),
+    matcher: z.string().optional(),
+    handler: hookHandlerSchema,
+    enabled: z.boolean(),
+    scopes: scopeTuple('hook'),
+  })
+  .passthrough()
+  .superRefine((val, ctx) => requireScopeIdWhenScoped(val.scopes[0], val.scopeId, ctx));

@@ -1,4 +1,6 @@
 import { Box, Skeleton, Stack, Tooltip, Typography } from '@mui/material';
+import type { HarnessId } from '../../../shared/harness.js';
+import { HarnessMark } from '../HarnessMark.js';
 import type { SessionHistoryEntry } from '../../../shared/session-history.js';
 import {
   describeCostSource,
@@ -10,6 +12,8 @@ import {
 
 export interface SessionRowProps {
   label: string;
+  /** Which harness runs (or ran) the session — shown before the model. */
+  harness: HarnessId;
   status: 'running' | 'exited';
   /** The transcript's reading of this conversation; absent while a just-spawned session has yet to write one. */
   history: SessionHistoryEntry | null;
@@ -33,7 +37,7 @@ export interface SessionRowProps {
  * focus ring is visible, because this is the only way to reach a session once
  * its tab is closed.
  */
-export function SessionRow({ label, status, history, onOpen, actions, testId }: SessionRowProps): React.ReactElement {
+export function SessionRow({ label, harness, status, history, onOpen, actions, testId }: SessionRowProps): React.ReactElement {
   const running = status === 'running';
   const costLabel = history ? formatCostUsd(history.costUsd) : null;
 
@@ -74,7 +78,7 @@ export function SessionRow({ label, status, history, onOpen, actions, testId }: 
         {costLabel === null ? (
           <Skeleton variant="text" width={34} sx={{ flexShrink: 0 }} data-testid={`${testId}-cost-pending`} />
         ) : (
-          <Tooltip title={describeCostSource(history!.costSource)}>
+          <Tooltip title={describeCostSource(history!.costSource, harness)}>
             <Typography
               component="span"
               data-testid={`${testId}-cost`}
@@ -91,7 +95,8 @@ export function SessionRow({ label, status, history, onOpen, actions, testId }: 
         )}
       </Stack>
 
-      <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0, mt: 0.125 }}>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0, mt: 0.125 }}>
+        <HarnessMark harness={harness} size={11} sx={{ mr: -0.5 }} />
         {/*
           `text.secondary` at full opacity rather than the primary ink at 55%:
           on the rail's cream surface the latter measures 3.6:1 and fails

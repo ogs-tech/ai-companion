@@ -9,12 +9,17 @@ import { DomainError } from '../../domain/errors.js';
 
 type WorkspacePathProvider = string | (() => string) | (() => Promise<string>);
 
-const KINDS: EntityKind[] = ['skill', 'agent', 'instruction'];
-const FOLDER: Record<'skill' | 'agent' | 'instruction', string> = {
+type StoredKind = 'skill' | 'agent' | 'instruction' | 'mcp' | 'hook';
+const KINDS: StoredKind[] = ['skill', 'agent', 'instruction', 'mcp', 'hook'];
+const FOLDER: Record<StoredKind, string> = {
   skill: 'skills',
   agent: 'agents',
   instruction: 'instructions',
+  mcp: 'mcps',
+  hook: 'hooks',
 };
+/** `mcp` and `hook` are one JSON file each (`mcps/<name>.json`); skill and agent are `.md`. */
+const FILE_EXT: Partial<Record<StoredKind, string>> = { agent: '.md', mcp: '.json', hook: '.json' };
 const PERSONAL_INSTRUCTION_NAME = 'default';
 const PROJECT_INSTRUCTIONS_SUBDIR = 'project';
 const PROJECT_INSTRUCTION_BODY_FILE = 'INSTRUCTION.md';
@@ -65,6 +70,7 @@ export class FsEntityRepository implements EntityRepository {
     const root = await this.root();
     if (kind === 'skill') return join(root, FOLDER.skill, name, 'SKILL.md');
     if (kind === 'agent') return join(root, FOLDER.agent, `${name}.md`);
+    if (kind === 'mcp' || kind === 'hook') return join(root, FOLDER[kind], `${name}.json`);
     if (kind === 'instruction') {
       if (isPersonalName(name)) return this.personalInstructionFile();
       return (await this.projectInstructionPaths(name)).body;
@@ -80,7 +86,7 @@ export class FsEntityRepository implements EntityRepository {
     const kinds = query?.kind ? [query.kind] : KINDS;
     const out: Entity[] = [];
     for (const kind of kinds) {
-      if (kind !== 'skill' && kind !== 'agent' && kind !== 'instruction') continue;
+      if (!KINDS.includes(kind)) continue;
       out.push(...(await this.listByKind(kind)));
     }
     // A file of the other scope (e.g. a pre-migration leftover) is not this
@@ -88,7 +94,7 @@ export class FsEntityRepository implements EntityRepository {
     return out.filter((entity) => entity.scopes[0] === this.role);
   }
 
-  private async listByKind(kind: 'skill' | 'agent' | 'instruction'): Promise<Entity[]> {
+  private async listByKind(kind: StoredKind): Promise<Entity[]> {
     if (kind === 'instruction') return this.listInstructions();
     const dir = join(await this.root(), FOLDER[kind]);
     let entries: import('node:fs').Dirent[];
@@ -104,8 +110,9 @@ export class FsEntityRepository implements EntityRepository {
       let name: string | undefined;
       if (kind === 'skill') {
         if (entry.isDirectory()) name = entry.name;
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        name = entry.name.slice(0, -'.md'.length);
+      } else {
+        const ext = FILE_EXT[kind] ?? '.md';
+        if (entry.isFile() && entry.name.endsWith(ext)) name = entry.name.slice(0, -ext.length);
       }
       if (name === undefined) continue;
       try {

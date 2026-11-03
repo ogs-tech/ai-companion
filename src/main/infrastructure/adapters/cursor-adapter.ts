@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import type { Adapter, AdapterDestination } from '../../application/ports/adapter.js';
-import type { Entity, Instruction } from '../../../shared/entity.js';
+import type { Entity, HookEntity, Instruction, McpEntity } from '../../../shared/entity.js';
 import type { WorkspaceService } from '../../application/services/workspace-service.js';
 import { resolveScopePath } from '../../application/resolve-scope-path.js';
 import { DomainError } from '../../domain/errors.js';
-import { renderAgentsFile } from '../../application/entity/agents-file.js';
+import { CURSOR_HOOKS_VERSION, translateHookToCursor } from '../../application/entity/hook-translation.js';
 import {
   CURSOR_PLUGIN_ID,
   CURSOR_PLUGIN_JSON_MARKER,
@@ -13,6 +13,7 @@ import {
   CURSOR_PLUGIN_RULES_SUBPATH,
   CURSOR_RULE_MDC_MARKER,
   renderCursorPersonalRule,
+  renderCursorWorkspaceRule,
   renderCursorPluginManifest,
 } from '../../application/entity/cursor-plugin-manifest.js';
 
@@ -30,7 +31,9 @@ export interface CursorAdapterDeps {
  *   startup and applies rules with `alwaysApply: true` to every conversation,
  *   which is the closest analogue to Claude's home-level CLAUDE.md today —
  *   native `~/.cursor/rules/*.mdc` support is not stable as of this writing).
- * - Workspace Instruction → `<resolved scope path>/AGENTS.md` (write, marker-owned).
+ * - Workspace Instruction → `<scope path>/.cursor/rules/<name>.mdc` (write, marker-owned,
+ *   `alwaysApply: true`). `<scope path>/AGENTS.md` belongs to the Claude adapter's symlink.
+ * - MCP servers / hooks → merged entry in `mcp.json` / `hooks.json` (`~/.cursor/` or `<scope path>/.cursor/`).
  */
 export class CursorAdapter implements Adapter {
   readonly adapterId = 'cursor';
@@ -65,11 +68,17 @@ export class CursorAdapter implements Adapter {
       return [
         {
           scope,
-          destination: join(repoPath, 'AGENTS.md'),
+          destination: join(repoPath, '.cursor', 'rules', `${instruction.name}.mdc`),
           strategy: 'write' as const,
-          content: renderAgentsFile(instruction),
+          content: renderCursorWorkspaceRule(instruction),
+          ownershipMarker: CURSOR_RULE_MDC_MARKER,
+          ownershipCheck: 'includes' as const,
         },
       ];
+    }
+
+    if (kind === 'mcp' || kind === 'hook') {
+      return this.sharedFileDestinations(args.entity as McpEntity | HookEntity);
     }
 
     if (kind !== 'skill' && kind !== 'agent') {
@@ -87,6 +96,30 @@ export class CursorAdapter implements Adapter {
     }
     const basePath = await resolveScopePath(args.entity, this.scopeDeps);
     return [{ scope, destination: join(basePath, subfolder, fileName), strategy: 'symlink' }];
+  }
+
+  private async sharedFileDestinations(entity: McpEntity | HookEntity): Promise<AdapterDestination[]> {
+    const scope = entity.scopes[0];
+    if (scope === undefined) {
+      throw new DomainError('internal', `${entity.kind} ${entity.urn} has no scope`, { reason: 'missing-scope' });
+    }
+    const base = scope === 'personal' ? this.homedir : await resolveScopePath(entity, this.scopeDeps);
+    if (entity.kind === 'mcp') {
+      const file = join(base, '.cursor', 'mcp.json');
+      return [{ scope, destination: file, strategy: 'merge', target: { shape: 'object-key', path: ['mcpServers'], key: entity.name, value: toCursorMcpDef(entity.def) } }];
+    }
+    const file = join(base, '.cursor', 'hooks.json');
+    const translated = translateHookToCursor(entity);
+    if (!translated.ok) return [{ scope, destination: file, strategy: 'skip', reason: `${entity.name}: ${translated.reason}` }];
+    return [
+      {
+        scope,
+        destination: file,
+        strategy: 'merge',
+        seed: { version: CURSOR_HOOKS_VERSION },
+        target: { shape: 'array-item', path: ['hooks', translated.event], identity: translated.identity, value: translated.item },
+      },
+    ];
   }
 
   private personalInstructionDestinations(instruction: Instruction): AdapterDestination[] {
@@ -110,4 +143,14 @@ export class CursorAdapter implements Adapter {
       },
     ];
   }
+}
+
+/**
+ * Cursor's `mcp.json` entries are `{ command, args, env }` or `{ url }`; the
+ * `type` discriminator is Claude's, so it is dropped (Cursor infers the transport).
+ */
+function toCursorMcpDef(def: Record<string, unknown>): Record<string, unknown> {
+  const { type: _type, ...rest } = def;
+  void _type;
+  return rest;
 }
