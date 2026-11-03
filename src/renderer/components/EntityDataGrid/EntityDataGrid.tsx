@@ -10,8 +10,8 @@ import {
 import { CardView } from './CardView.js';
 import { TableView } from './TableView.js';
 import { Toolbar } from './Toolbar.js';
-import type { EntityDataGridProps, ViewMode } from './types.js';
-import { filterBySearch, paginate, viewStorageKey } from './utils.js';
+import type { EntityDataGridProps, SortState, ViewMode } from './types.js';
+import { filterBySearch, paginate, sortItems, viewStorageKey } from './utils.js';
 import { LoadingState } from '../ds/LoadingState.js';
 import { ErrorState } from '../ds/ErrorState.js';
 
@@ -39,6 +39,7 @@ export function EntityDataGrid<T>({
 }: EntityDataGridProps<T>): React.ReactElement {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortState | null>(entity.defaultSort ?? null);
   const [currentPageSize, setCurrentPageSize] = useState(pageSize);
   const [view, setView] = useState<ViewMode>(() =>
     resolveInitialView(entity.name, entity.defaultView ?? 'card'),
@@ -54,6 +55,21 @@ export function EntityDataGrid<T>({
     setPage(1);
   };
 
+  // First click on a column sorts ascending, the next flips it.
+  const handleSortChange = (key: string): void => {
+    setSort((current) =>
+      current?.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' },
+    );
+    setPage(1);
+  };
+
+  const handleSortSet = (next: SortState): void => {
+    setSort(next);
+    setPage(1);
+  };
+
   const handleViewChange = (v: ViewMode): void => {
     setView(v);
     localStorage.setItem(viewStorageKey(entity.name), v);
@@ -64,11 +80,15 @@ export function EntityDataGrid<T>({
     () => filterBySearch(items, entity.fields, search),
     [items, entity.fields, search],
   );
+  const sorted = useMemo(
+    () => sortItems(filtered, entity.fields, sort),
+    [filtered, entity.fields, sort],
+  );
   const totalPages = Math.max(1, Math.ceil(filtered.length / currentPageSize));
   const safePage = Math.min(page, totalPages);
   const paged = useMemo(
-    () => paginate(filtered, safePage, currentPageSize),
-    [filtered, safePage, currentPageSize],
+    () => paginate(sorted, safePage, currentPageSize),
+    [sorted, safePage, currentPageSize],
   );
 
   const pageSizeOptions = useMemo<readonly number[]>(() => {
@@ -98,6 +118,9 @@ export function EntityDataGrid<T>({
         view={view}
         onViewChange={handleViewChange}
         toolbarActions={toolbarActions}
+        sortFields={entity.fields.filter((f) => f.sortable).map(({ key, label }) => ({ key, label }))}
+        sort={sort}
+        onSortSet={handleSortSet}
       />
 
       {errorMessage !== null && (
@@ -119,6 +142,8 @@ export function EntityDataGrid<T>({
           actions={actions}
           onRowClick={onRowClick}
           isDimmed={isDimmed}
+          sort={sort}
+          onSortChange={handleSortChange}
         />
       ) : (
         <CardView

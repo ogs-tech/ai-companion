@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react';
 import {
   Box,
+  IconButton,
   InputAdornment,
+  MenuItem,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { LayoutGrid, Search, Table } from 'lucide-react';
+import { ArrowDown, ArrowUp, LayoutGrid, Search, Table } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import type { ViewMode } from './types.js';
+import type { SortState, ViewMode } from './types.js';
 
 interface ToolbarProps {
   search: string;
@@ -19,6 +21,10 @@ interface ToolbarProps {
   onViewChange: (view: ViewMode) => void;
   toolbarActions?: ReactNode | undefined;
   entityName: string;
+  /** Fields the user can sort by; the sort control is shown only in card view, where there are no headers. */
+  sortFields?: { key: string; label: string }[] | undefined;
+  sort?: SortState | null | undefined;
+  onSortSet?: ((sort: SortState) => void) | undefined;
 }
 
 export function Toolbar({
@@ -29,6 +35,9 @@ export function Toolbar({
   onViewChange,
   toolbarActions,
   entityName,
+  sortFields = [],
+  sort,
+  onSortSet,
 }: ToolbarProps): React.ReactElement {
   return (
     <Stack
@@ -56,6 +65,36 @@ export function Toolbar({
         }}
         sx={{ flex: 1, minWidth: 220 }}
       />
+      {view === 'card' && sortFields.length > 0 && onSortSet && (
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <TextField
+            select
+            size="small"
+            label="Ordenar por"
+            value={sort?.key ?? ''}
+            onChange={(e) => onSortSet({ key: e.target.value, direction: sort?.direction ?? 'asc' })}
+            slotProps={{ htmlInput: { 'data-testid': `entity-grid-sort-${entityName}` } }}
+            sx={{ minWidth: 140 }}
+          >
+            {sortFields.map((f) => (
+              <MenuItem key={f.key} value={f.key}>
+                {f.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <IconButton
+            size="small"
+            disabled={!sort}
+            aria-label={sort?.direction === 'desc' ? 'Ordem decrescente' : 'Ordem crescente'}
+            data-testid={`entity-grid-sort-direction-${entityName}`}
+            onClick={() => {
+              if (sort) onSortSet({ ...sort, direction: sort.direction === 'asc' ? 'desc' : 'asc' });
+            }}
+          >
+            <Icon glyph={sort?.direction === 'desc' ? ArrowDown : ArrowUp} size={16} />
+          </IconButton>
+        </Stack>
+      )}
       <ToggleButtonGroup
         size="small"
         exclusive

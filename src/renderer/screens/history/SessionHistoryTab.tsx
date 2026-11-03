@@ -40,9 +40,9 @@ interface SessionHistoryTabProps {
  *
  * Opens scoped to the project in view, because that is the question being
  * asked most of the time; turning `Só este projeto` off widens it to every
- * conversation on the machine. The table is sorted by cost descending rather
- * than by date — the question is "what was expensive", so the answer is the
- * first row.
+ * conversation on the machine. The table starts sorted by most recent; the
+ * header of any sortable column (cost included, for "what was expensive")
+ * re-sorts it.
  */
 export function SessionHistoryTab({
   projectScope,
@@ -91,10 +91,7 @@ export function SessionHistoryTab({
   const stats = useSessionHistoryStats(scope, chartFilters);
   const entries = useSessionHistoryAll(scope, tableFilters);
 
-  const rows = useMemo(
-    () => [...(entries.data?.entries ?? [])].sort((a, b) => (b.costUsd ?? -1) - (a.costUsd ?? -1)),
-    [entries.data],
-  );
+  const rows = entries.data?.entries;
 
   const handleResume = async (entry: SessionHistoryEntry): Promise<void> => {
     try {
@@ -116,18 +113,22 @@ export function SessionHistoryTab({
       name: 'sessão',
       pluralName: 'sessões',
       defaultView: 'table',
+      defaultSort: { key: 'endedAt', direction: 'desc' },
       getKey: (item) => item.conversationId,
       fields: [
         {
           key: 'title',
           label: 'Sessão',
           primary: true,
+          sortable: true,
+          sortValue: (item) => item.title ?? item.conversationId,
           searchable: true,
           render: (item) => item.title ?? item.conversationId.slice(0, 8),
         },
         {
           key: 'costUsd',
           label: 'Custo',
+          sortable: true,
           align: 'right',
           width: 110,
           render: (item) => (
@@ -143,6 +144,7 @@ export function SessionHistoryTab({
         {
           key: 'harness',
           label: 'Harness',
+          sortable: true,
           width: 110,
           render: (item) => (
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
@@ -151,10 +153,12 @@ export function SessionHistoryTab({
             </Stack>
           ),
         },
-        { key: 'model', label: 'Modelo', width: 130, render: (item) => formatModel(item.model) },
+        { key: 'model', label: 'Modelo', sortable: true, width: 130, render: (item) => formatModel(item.model) },
         {
           key: 'outputTokens',
           label: 'Tokens',
+          sortable: true,
+          sortValue: (item) => item.inputTokens + item.outputTokens,
           align: 'right',
           width: 100,
           render: (item) => (
@@ -169,6 +173,7 @@ export function SessionHistoryTab({
         {
           key: 'durationMs',
           label: 'Duração',
+          sortable: true,
           align: 'right',
           width: 90,
           render: (item) => formatDuration(item.durationMs),
@@ -176,6 +181,7 @@ export function SessionHistoryTab({
         {
           key: 'endedAt',
           label: 'Quando',
+          sortable: true,
           align: 'right',
           width: 90,
           render: (item) => formatWhen(item.endedAt),
@@ -324,7 +330,7 @@ export function SessionHistoryTab({
         )}
       </Stack>
 
-      <Box sx={{ flexGrow: 1, minHeight: 0 }}>
+      <Box sx={{ flexGrow: 1, flexShrink: 0, pb: 2 }}>
         <EntityDataGrid<SessionHistoryEntry>
           entity={entity}
           data={rows}

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, onTestFinished, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionHistoryTab } from '../../../../src/renderer/screens/history/SessionHistoryTab.js';
@@ -233,7 +233,20 @@ describe('<SessionHistoryTab>', () => {
   });
 
   describe('the table', () => {
-    it('answers "what was expensive" first, sorting by cost descending', async () => {
+    it('starts with the most recent session first', async () => {
+      route([
+        entry({ conversationId: 'old', title: 'Antiga', endedAt: '2026-09-01T10:00:00.000Z' }),
+        entry({ conversationId: 'new', title: 'Recente', endedAt: '2026-09-11T10:00:00.000Z' }),
+      ]);
+
+      render();
+
+      await screen.findByText('Recente');
+      const rendered = screen.getAllByText(/^(Recente|Antiga)$/).map((el) => el.textContent);
+      expect(rendered).toEqual(['Recente', 'Antiga']);
+    });
+
+    it('answers "what was expensive" when the cost header is clicked, flipping on the second click', async () => {
       route([
         entry({ conversationId: 'cheap', title: 'Barata', costUsd: 1 }),
         entry({ conversationId: 'dear', title: 'Cara', costUsd: 88.28 }),
@@ -242,11 +255,40 @@ describe('<SessionHistoryTab>', () => {
       render();
 
       await screen.findByText('Cara');
-      const rendered = screen.getAllByText(/^(Cara|Barata)$/).map((el) => el.textContent);
-      expect(rendered[0]).toBe('Cara');
+      const titles = (): (string | null)[] =>
+        screen.getAllByText(/^(Cara|Barata)$/).map((el) => el.textContent);
+
+      await userEvent.click(screen.getByTestId('sort-costUsd'));
+      expect(titles()).toEqual(['Barata', 'Cara']);
+      await userEvent.click(screen.getByTestId('sort-costUsd'));
+      expect(titles()).toEqual(['Cara', 'Barata']);
     });
 
-    it('sorts an unpriced session below every priced one instead of treating its blank as free', async () => {
+    it('offers the same sorting in card view through a sort select and a direction toggle', async () => {
+      route([
+        entry({ conversationId: 'cheap', title: 'Barata', costUsd: 1 }),
+        entry({ conversationId: 'dear', title: 'Cara', costUsd: 88.28 }),
+      ]);
+
+      render();
+
+      await screen.findByText('Cara');
+      // The chosen view is persisted; don't leak card view into other tests.
+      onTestFinished(() => localStorage.clear());
+      await userEvent.click(screen.getByTestId('entity-grid-view-card-sessão'));
+      const titles = (): (string | null)[] =>
+        screen.getAllByText(/^(Cara|Barata)$/).map((el) => el.textContent);
+
+      await userEvent.click(screen.getByLabelText('Ordenar por'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Custo' }));
+      // Switching the field keeps the current (descending) direction.
+      expect(titles()).toEqual(['Cara', 'Barata']);
+
+      await userEvent.click(screen.getByTestId('entity-grid-sort-direction-sessão'));
+      expect(titles()).toEqual(['Barata', 'Cara']);
+    });
+
+    it('keeps an unpriced session last in either direction instead of treating its blank as free', async () => {
       route([
         entry({
           conversationId: 'unknown',
@@ -260,8 +302,13 @@ describe('<SessionHistoryTab>', () => {
       render();
 
       await screen.findByText('Barata');
-      const rendered = screen.getAllByText(/^(Barata|Sem preço)$/).map((el) => el.textContent);
-      expect(rendered[0]).toBe('Barata');
+      const titles = (): (string | null)[] =>
+        screen.getAllByText(/^(Barata|Sem preço)$/).map((el) => el.textContent);
+
+      await userEvent.click(screen.getByTestId('sort-costUsd'));
+      expect(titles()).toEqual(['Barata', 'Sem preço']);
+      await userEvent.click(screen.getByTestId('sort-costUsd'));
+      expect(titles()).toEqual(['Barata', 'Sem preço']);
     });
 
     it('falls back to a short conversation id for a session that never got a title', async () => {

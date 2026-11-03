@@ -9,9 +9,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Tooltip,
 } from '@mui/material';
-import type { EntityDef, FieldDef, RowAction } from './types.js';
+import type { EntityDef, FieldDef, RowAction, SortState } from './types.js';
 import { renderFieldValue } from './utils.js';
 
 interface TableViewProps<T> {
@@ -20,6 +21,8 @@ interface TableViewProps<T> {
   actions?: RowAction<T>[] | undefined;
   onRowClick?: ((item: T) => void) | undefined;
   isDimmed?: ((item: T) => boolean) | undefined;
+  sort?: SortState | null | undefined;
+  onSortChange?: ((key: string) => void) | undefined;
 }
 
 export function TableView<T>({
@@ -28,6 +31,8 @@ export function TableView<T>({
   actions,
   onRowClick,
   isDimmed,
+  sort,
+  onSortChange,
 }: TableViewProps<T>): React.ReactElement {
   const columns = entity.fields.filter((f) => !f.hideInTable);
   const hasActions = !!actions && actions.length > 0;
@@ -54,6 +59,7 @@ export function TableView<T>({
               <TableCell
                 key={col.key}
                 align={col.align ?? 'left'}
+                sortDirection={sort?.key === col.key ? sort.direction : false}
                 sx={{
                   width: col.width,
                   fontWeight: 600,
@@ -61,7 +67,18 @@ export function TableView<T>({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {col.label}
+                {col.sortable && onSortChange ? (
+                  <TableSortLabel
+                    active={sort?.key === col.key}
+                    direction={sort?.key === col.key ? sort.direction : 'asc'}
+                    onClick={() => onSortChange(col.key)}
+                    data-testid={`sort-${col.key}`}
+                  >
+                    {col.label}
+                  </TableSortLabel>
+                ) : (
+                  col.label
+                )}
               </TableCell>
             ))}
             {hasActions && (
