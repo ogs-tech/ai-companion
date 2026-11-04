@@ -1022,33 +1022,43 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
+      await user.click(await screen.findByTestId('sessions-filter-exited'));
       await user.click(await screen.findByTestId('tree-session-workspace:w1'));
       await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('session.resume', { sessionId: 'workspace:w1' }));
       expect(await screen.findByTestId('workbench-tab-session:workspace:w1')).toBeInTheDocument();
     });
 
-    it('apagar a session whose tab is open closes that tab too', async () => {
-      const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return projectWorkspace;
-        if (method === 'workspace.listDir') return [];
-        if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
-        }
-        if (method === 'session.spawn') {
-          return { sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
-        }
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByTestId('workspace-sessions-new'));
-      expect(await screen.findByTestId('workbench-tab-session:workspace:w1')).toBeInTheDocument();
+    it('apagar a session whose tab is open closes that tab too, once the undo window ends', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+        let status = 'running';
+        (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+          if (method === 'workspace.getActive') return projectWorkspace;
+          if (method === 'workspace.listDir') return [];
+          if (method === 'session.list') {
+            return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status }];
+          }
+          if (method === 'session.spawn') {
+            return { sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
+          }
+          if (method === 'session.kill') status = 'exited';
+          return undefined;
+        });
+        renderScreen();
+        await user.click(await screen.findByTestId('workspace-sessions-new'));
+        expect(await screen.findByTestId('workbench-tab-session:workspace:w1')).toBeInTheDocument();
 
-      await user.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }));
-      expect(screen.queryByTestId('workbench-tab-session:workspace:w1')).not.toBeInTheDocument();
-      confirmSpy.mockRestore();
+        await user.click(await screen.findByTestId('tree-session-stop-workspace:w1'));
+        await user.click(await screen.findByTestId('sessions-filter-exited'));
+        await user.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
+        await vi.advanceTimersByTimeAsync(6100);
+
+        await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }));
+        expect(screen.queryByTestId('workbench-tab-session:workspace:w1')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

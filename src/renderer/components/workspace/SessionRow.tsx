@@ -1,7 +1,13 @@
 import { Box, Skeleton, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
 import type { HarnessId } from '../../../shared/harness.js';
 import type { SessionAttention } from '../../../shared/session.js';
-import { attentionLabel, formatWait, type SessionRowState } from '../../lib/session-attention.js';
+import {
+  attentionLabel,
+  FILTER_GLYPHS,
+  formatIdleFor,
+  formatWait,
+  type SessionRowState,
+} from '../../lib/session-attention.js';
 import type { SessionHistoryEntry } from '../../../shared/session-history.js';
 import {
   describeCostSource,
@@ -12,6 +18,7 @@ import {
 } from '../../lib/format-session-history.js';
 
 const pulse = keyframes`50% { opacity: 0.35; }`;
+const shimmer = keyframes`50% { opacity: 0.45; }`;
 
 export interface SessionRowProps {
   label: string;
@@ -23,12 +30,14 @@ export interface SessionRowProps {
   attention?: SessionAttention | undefined;
   /** Epoch ms a `needs-input` row started waiting. */
   waitingSince?: number | null;
+  /** Epoch ms an `idle` row stopped, for "há 3min". */
+  idleSince?: number | null;
   /** Epoch ms "now", injected so waiting time ticks and tests stay deterministic. */
   now?: number;
   /** The transcript's reading of this conversation; absent while a just-spawned session has yet to write one. */
   history: SessionHistoryEntry | null;
   onOpen: () => void;
-  /** Trailing hover actions (stop/delete), stopPropagation'd from the row itself. */
+  /** Hover/focus actions (stop/delete), shown in place of the time on line two; stopPropagation'd from the row itself. */
   actions?: React.ReactNode;
   testId: string;
 }
@@ -47,19 +56,21 @@ export interface SessionRowProps {
  * focus ring is visible, because this is the only way to reach a session once
  * its tab is closed.
  */
-const INDICATORS: Record<
+const ROW_NAMES: Record<SessionRowState, string> = {
+  'needs-input': 'Precisa de você',
+  working: 'Trabalhando',
+  idle: 'Terminou',
+  exited: 'Encerrada',
+};
+
+const INDICATOR_COLORS: Record<
   SessionRowState,
-  {
-    glyph: string;
-    name: string;
-    color: 'warning.main' | 'success.main' | 'text.secondary';
-    pulse: boolean;
-  }
+  'warning.main' | 'success.main' | 'info.main' | 'text.secondary'
 > = {
-  'needs-input': { glyph: '!', name: 'Precisa de você', color: 'warning.main', pulse: true },
-  working: { glyph: '✻', name: 'Trabalhando', color: 'success.main', pulse: true },
-  idle: { glyph: '◌', name: 'Ociosa', color: 'text.secondary', pulse: false },
-  exited: { glyph: '×', name: 'Encerrada', color: 'text.secondary', pulse: false },
+  'needs-input': 'warning.main',
+  working: 'success.main',
+  idle: 'info.main',
+  exited: 'text.secondary',
 };
 
 export function SessionRow({
@@ -68,6 +79,7 @@ export function SessionRow({
   state,
   attention,
   waitingSince = null,
+  idleSince = null,
   now,
   history,
   onOpen,
@@ -75,14 +87,12 @@ export function SessionRow({
   testId,
 }: SessionRowProps): React.ReactElement {
   const running = state !== 'exited';
-  const indicator = INDICATORS[state];
   const needsInput = state === 'needs-input';
-  const dimmed = state === 'idle' || state === 'exited';
+  const working = state === 'working';
+  const dimmed = state === 'exited';
   const model =
     running && !history ? 'iniciando…' : history?.model ? formatModel(history.model) : null;
-  const harnessText = [harness, model, state === 'idle' ? 'ociosa' : null]
-    .filter(Boolean)
-    .join(' · ');
+  const harnessText = [harness, model].filter(Boolean).join(' · ');
   const costLabel = history ? formatCostUsd(history.costUsd) : null;
 
   return (
@@ -98,17 +108,37 @@ export function SessionRow({
         textAlign: 'left',
         border: 0,
         borderRadius: `${theme.ogs.radius.xs}px`,
-        // The 3px bar carries state for sighted users; the indicator glyph and
-        // its accessible name carry it for everyone else.
-        borderLeft: `3px solid ${needsInput ? theme.palette.warning.main : state === 'working' ? theme.palette.success.main : 'transparent'}`,
+        // The 3px bar (below) is only for the two states that want attention or
+        // show activity; the indicator glyph and its accessible name carry
+        // every state for everyone else. Blue lives on the glyph alone.
+        borderLeft: '3px solid transparent',
         bgcolor: needsInput ? alpha(theme.palette.warning.main, 0.07) : 'transparent',
+        '&::before':
+          needsInput || working
+            ? {
+                content: '""',
+                position: 'absolute',
+                left: -3,
+                top: 0,
+                bottom: 0,
+                width: 3,
+                bgcolor: needsInput ? theme.palette.warning.main : theme.palette.success.main,
+                '@media (prefers-reduced-motion: no-preference)': working
+                  ? { animation: `${shimmer} 3s ease-in-out infinite` }
+                  : {},
+              }
+            : undefined,
         opacity: dimmed ? 0.72 : 1,
         cursor: 'pointer',
         px: 1.25,
         py: 0.75,
         font: 'inherit',
         '&:hover': { bgcolor: theme.palette.action.hover },
-        '&:hover .session-row-actions, &:focus-visible .session-row-actions': { opacity: 1 },
+        // Actions take the time's place on line two; cost on line one stays put.
+        '&:hover .session-row-time, &:focus-visible .session-row-time, &:focus-within .session-row-time':
+          { display: 'none' },
+        '&:hover .session-row-actions, &:focus-visible .session-row-actions, &:focus-within .session-row-actions':
+          { display: 'flex' },
         '&:focus-visible': {
           outline: `2px solid ${theme.palette.primary.main}`,
           outlineOffset: -2,
@@ -119,7 +149,7 @@ export function SessionRow({
         <Box
           component="span"
           role="img"
-          aria-label={indicator.name}
+          aria-label={ROW_NAMES[state]}
           data-testid={`${testId}-indicator`}
           data-state={state}
           sx={{
@@ -129,13 +159,14 @@ export function SessionRow({
             fontWeight: 700,
             fontSize: '0.8125rem',
             lineHeight: '1.2rem',
-            color: indicator.color,
-            '@media (prefers-reduced-motion: no-preference)': indicator.pulse
+            color: INDICATOR_COLORS[state],
+            // Only "precisa de você" moves: if everything blinks, nothing is urgent.
+            '@media (prefers-reduced-motion: no-preference)': needsInput
               ? { animation: `${pulse} 1.2s infinite` }
               : {},
           }}
         >
-          {indicator.glyph}
+          {FILTER_GLYPHS[state]}
         </Box>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
@@ -171,7 +202,10 @@ export function SessionRow({
             )}
           </Stack>
 
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0, mt: 0.125 }}>
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', gap: 1, minWidth: 0, mt: 0.125, minHeight: 22 }}
+          >
             {needsInput && (
               <Box
                 component="span"
@@ -208,6 +242,7 @@ export function SessionRow({
             <Typography
               component="span"
               noWrap
+              className={actions ? 'session-row-time' : undefined}
               sx={(theme) => ({
                 fontFamily: theme.ogs.fonts.mono,
                 fontSize: '0.625rem',
@@ -217,34 +252,24 @@ export function SessionRow({
             >
               {needsInput && waitingSince !== null && now !== undefined
                 ? formatWait(waitingSince, now)
-                : history
-                  ? `${formatWhen(history.endedAt)} · ${formatDuration(history.durationMs)}`
-                  : ''}
+                : state === 'idle' && idleSince !== null && now !== undefined
+                  ? formatIdleFor(idleSince, now)
+                  : history
+                    ? `${formatWhen(history.endedAt)} · ${formatDuration(history.durationMs)}`
+                    : ''}
             </Typography>
+            {actions && (
+              <Box
+                className="session-row-actions"
+                component="span"
+                sx={{ display: 'none', alignItems: 'center', gap: 0.25, flexShrink: 0 }}
+              >
+                {actions}
+              </Box>
+            )}
           </Stack>
         </Box>
       </Stack>
-
-      {actions && (
-        <Box
-          className="session-row-actions"
-          component="span"
-          sx={{
-            position: 'absolute',
-            right: 4,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            opacity: 0,
-            transition: 'opacity 120ms ease',
-            bgcolor: 'background.paper',
-            borderRadius: 1,
-          }}
-        >
-          {actions}
-        </Box>
-      )}
     </Box>
   );
 }

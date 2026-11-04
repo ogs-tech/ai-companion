@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import { Plus } from 'lucide-react';
 import { ContainerHeader } from '../ds/ContainerChrome.js';
 import { Icon } from '../ds/Icon.js';
 import { ResizeHandle } from '../ds/ResizeHandle.js';
 import { CustomizationsList, type CustomizationsListProps } from './CustomizationsList.js';
-import { SessionsTreeGroup, liveInScope } from './SessionsTreeGroup.js';
-import { useSessions } from '../../hooks/use-sessions.js';
+import { SessionsTreeGroup } from './SessionsTreeGroup.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
 import type { SessionSnapshot } from '../../../shared/session.js';
 
@@ -45,8 +44,6 @@ export function ControlPanelContent({
   const customizationsPanelRef = usePanelRef();
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [customizationsExpanded, setCustomizationsExpanded] = useState(true);
-  const { data: liveSessions } = useSessions();
-  const running = liveInScope(liveSessions ?? [], sessionsScope).filter((s) => s.status === 'running').length;
 
   // `onResize` keeps these in step with dragging; they are also set here
   // because jsdom never lays panels out, so `collapse()` alone would not
@@ -76,20 +73,6 @@ export function ControlPanelContent({
               testId="workspace-sessions"
               collapsed={!sessionsExpanded}
               onToggle={() => toggle(sessionsPanelRef, sessionsExpanded, setSessionsExpanded)}
-              status={
-                running > 0 ? (
-                  <Typography
-                    component="span"
-                    data-testid="workspace-sessions-running"
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 0.625, fontSize: '0.75rem', fontWeight: 500, color: 'success.main',
-                      '&::before': { content: '""', width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main' },
-                    }}
-                  >
-                    {running === 1 ? '1 ativa' : `${running} ativas`}
-                  </Typography>
-                ) : undefined
-              }
               actions={
                 <Tooltip title="Nova sessão">
                   {/* span wrapper keeps the tooltip working while the button is disabled */}

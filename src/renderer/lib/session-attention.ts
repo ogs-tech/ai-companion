@@ -1,34 +1,50 @@
 import type { SessionAttention, SessionSnapshot } from '../../shared/session.js';
 import { formatDuration } from './format-session-history.js';
 
-/** What a list row shows: the four states of the attention model. */
+/**
+ * What a list row shows. `idle` is a live session stopped at its prompt
+ * ("Terminou"); `exited` is a process that is gone ("Encerrada"). The other two
+ * map 1:1 to the session's activity.
+ */
 export type SessionRowState = 'needs-input' | 'working' | 'idle' | 'exited';
 
-/** Chips that filter the list; `done` covers idle and exited alike. */
-export type SessionFilter = 'needs-input' | 'working' | 'done';
+/** Chips that filter the list: one per state. */
+export type SessionFilter = SessionRowState;
 
-const STATE_ORDER: Record<SessionRowState, number> = { 'needs-input': 0, working: 1, idle: 2, exited: 3 };
+export const SESSION_FILTERS: readonly SessionFilter[] = [
+  'needs-input',
+  'working',
+  'idle',
+  'exited',
+];
+
+const STATE_ORDER: Record<SessionRowState, number> = {
+  'needs-input': 0,
+  working: 1,
+  idle: 2,
+  exited: 3,
+};
 
 /**
- * A live session with no activity signal yet is `working` — the spec's
- * degrade-to-running rule — never `needs-input`.
+ * A live session with no activity signal yet is `idle` — never `working`
+ * (tokens are not being spent) and never `needs-input`.
  */
 export function rowStateOf(live: SessionSnapshot | null): SessionRowState {
   if (!live || live.status !== 'running') return 'exited';
-  return live.activity ?? 'working';
+  return live.activity ?? 'idle';
 }
 
+/** With no filter every session is listed, encerradas last; each chip narrows to one state. */
 export function matchesFilter(state: SessionRowState, filter: SessionFilter | null): boolean {
-  if (filter === null) return true;
-  if (filter === 'done') return state === 'idle' || state === 'exited';
-  return state === filter;
+  return filter === null || state === filter;
 }
 
 export function countByFilter(states: readonly SessionRowState[]): Record<SessionFilter, number> {
   return {
     'needs-input': states.filter((s) => s === 'needs-input').length,
     working: states.filter((s) => s === 'working').length,
-    done: states.filter((s) => s === 'idle' || s === 'exited').length,
+    idle: states.filter((s) => s === 'idle').length,
+    exited: states.filter((s) => s === 'exited').length,
   };
 }
 
@@ -47,6 +63,11 @@ export function compareRows(a: Sortable, b: Sortable): number {
   return b.sortAt - a.sortAt;
 }
 
+/** "há 3min" — how long a session that finished its turn has been waiting at the prompt. */
+export function formatIdleFor(sinceMs: number, nowMs: number): string {
+  return `há ${formatDuration(Math.max(0, nowMs - sinceMs))}`;
+}
+
 /** "espera 4min" */
 export function formatWait(sinceMs: number, nowMs: number): string {
   return `espera ${formatDuration(Math.max(0, nowMs - sinceMs))}`;
@@ -61,5 +82,14 @@ export function attentionLabel(attention: SessionAttention | undefined): string 
 export const FILTER_LABELS: Record<SessionFilter, string> = {
   'needs-input': 'Precisa de você',
   working: 'Trabalhando',
-  done: 'Concluídas',
+  idle: 'Terminou',
+  exited: 'Encerradas',
+};
+
+/** The glyph a state wears in its row and on its chip. */
+export const FILTER_GLYPHS: Record<SessionFilter, string> = {
+  'needs-input': '!',
+  working: '✻',
+  idle: '◉',
+  exited: '×',
 };

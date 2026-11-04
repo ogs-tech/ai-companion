@@ -123,9 +123,12 @@ export class SessionService {
     }
   }
 
-  /** A live session with no signal yet counts as working until a hook says otherwise. */
+  /**
+   * A live session with no signal yet is idle: it sits at the prompt until a hook
+   * reports a turn. Working means tokens are being spent, never "just opened".
+   */
   private startActivity(session: SessionSnapshot): void {
-    session.activity = 'working';
+    session.activity = 'idle';
     session.activitySince = Date.now();
     delete session.attention;
     this.outputTails.delete(session.sessionId);

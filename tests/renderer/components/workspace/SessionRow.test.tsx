@@ -54,7 +54,7 @@ describe('SessionRow', () => {
   it.each([
     ['needs-input', '!', 'Precisa de você'],
     ['working', '✻', 'Trabalhando'],
-    ['idle', '◌', 'Ociosa'],
+    ['idle', '◉', 'Terminou'],
     ['exited', '×', 'Encerrada'],
   ] as const)('shows a distinct glyph and accessible name for %s', (state, glyph, name) => {
     renderWithTheme(
@@ -70,6 +70,14 @@ describe('SessionRow', () => {
     const indicator = screen.getByTestId('row-indicator');
     expect(indicator).toHaveTextContent(glyph);
     expect(indicator).toHaveAccessibleName(name);
+  });
+
+  it('shows how long an idle row has been stopped, with no reason pill', () => {
+    renderWithTheme(
+      <SessionRow label="api" harness="claude" state="idle" idleSince={0} now={5 * 60_000} history={null} onOpen={() => undefined} testId="row" />,
+    );
+    expect(screen.queryByTestId('row-reason')).not.toBeInTheDocument();
+    expect(screen.getByText('há 5min')).toBeInTheDocument();
   });
 
   it('shows the reason pill and how long a needs-input row has waited', () => {
@@ -88,20 +96,5 @@ describe('SessionRow', () => {
     );
     expect(screen.getByTestId('row-reason')).toHaveTextContent('Permissão: Bash');
     expect(screen.getByText('espera 4min')).toBeInTheDocument();
-  });
-
-  it('marks an idle row as ociosa and shows no reason pill', () => {
-    renderWithTheme(
-      <SessionRow
-        label="api"
-        harness="claude"
-        state="idle"
-        history={null}
-        onOpen={() => undefined}
-        testId="row"
-      />,
-    );
-    expect(screen.getByText(/ociosa/)).toBeInTheDocument();
-    expect(screen.queryByTestId('row-reason')).toBeNull();
   });
 });

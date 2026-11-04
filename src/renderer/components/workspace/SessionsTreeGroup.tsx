@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Box, Stack, Tooltip, Typography, alpha } from '@mui/material';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Stack, Tooltip, Typography, type Theme } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Square, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
@@ -17,9 +17,11 @@ import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import {
   compareRows,
   countByFilter,
+  FILTER_GLYPHS,
   FILTER_LABELS,
   matchesFilter,
   rowStateOf,
+  SESSION_FILTERS,
   type SessionFilter,
   type SessionRowState,
 } from '../../lib/session-attention.js';
@@ -39,6 +41,35 @@ interface SessionsTreeGroupProps {
   onSeeAll?: () => void;
 }
 
+/**
+ * A 22px bordered button on a raised surface: bare icons at the row's
+ * secondary ink nearly vanish on the dark theme, and the actions are the one
+ * thing on the row the user came to hover for.
+ */
+const actionButtonSx = (color: 'text.primary' | 'error.main') => (theme: Theme) => ({
+  display: 'inline-grid',
+  placeItems: 'center',
+  width: 22,
+  height: 22,
+  cursor: 'pointer',
+  borderRadius: '6px',
+  border: `1px solid ${theme.palette.divider}`,
+  bgcolor: theme.palette.action.selected,
+  color,
+  '&:hover': { bgcolor: theme.palette.action.hover, borderColor: theme.palette.text.secondary },
+  '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 1 },
+});
+
+/** How long "Desfazer" stays available before the session is really removed. */
+const UNDO_WINDOW_MS = 6000;
+
+const FILTER_COLORS: Record<SessionFilter, string> = {
+  'needs-input': 'warning.main',
+  working: 'success.main',
+  idle: 'info.main',
+  exited: 'text.secondary',
+};
+
 /** One row of the list, however many sources it was assembled from. */
 interface MergedRow {
   key: string;
@@ -53,6 +84,8 @@ interface MergedRow {
   state: SessionRowState;
   /** When a `needs-input` session started waiting. */
   waitingSince: number | null;
+  /** When an `idle` session stopped, for "há 3min". */
+  idleSince: number | null;
 }
 
 /**
@@ -86,27 +119,47 @@ export function SessionsTreeGroup({
     [history.data],
   );
 
-  const rows = useMemo(
-    () => mergeRows(liveInScope(liveSessions ?? [], scope), historyEntries),
-    [liveSessions, historyEntries, scope],
+  // Sessions the user just apagou: hidden at once (and out of the chip counts),
+  // actually removed only when the undo window closes.
+  const [pendingRemoval, setPendingRemoval] = useState<ReadonlySet<string>>(new Set());
+  const pendingTimers = useRef(
+    new Map<string, { timer: ReturnType<typeof setTimeout>; session: SessionSnapshot }>(),
   );
+  const liveScoped = useMemo(
+    () => liveInScope(liveSessions ?? [], scope).filter((s) => !pendingRemoval.has(s.sessionId)),
+    [liveSessions, scope, pendingRemoval],
+  );
+  const rows = useMemo(() => mergeRows(liveScoped, historyEntries), [liveScoped, historyEntries]);
   const [filter, setFilter] = useState<SessionFilter | null>(null);
-  const counts = useMemo(() => countByFilter(rows.map((r) => r.state)), [rows]);
+  const counts = useMemo(() => {
+    const loaded = countByFilter(rows.map((r) => r.state));
+    // History arrives page by page, so the loaded rows undercount. Every
+    // session not loaded yet is a past one, i.e. encerrada — add the gap so the
+    // chip stays put while the list scrolls in.
+    const claimed = rows.filter((r) => r.live && r.history).length;
+    const total = liveScoped.length + (stats.data?.sessionCount ?? 0) - claimed;
+    return { ...loaded, exited: loaded.exited + Math.max(0, total - rows.length) };
+  }, [rows, liveScoped, stats.data?.sessionCount]);
   const visibleRows = useMemo(
     () => rows.filter((r) => matchesFilter(r.state, filter)),
     [rows, filter],
   );
-  // Ticks only while someone is waiting, so "espera 4min" stays honest without a global timer.
+  // Ticks only while a live row shows a duration ("espera 4min", "há 3min"), so
+  // those stay honest without a global timer.
   const [now, setNow] = useState(() => Date.now());
+  const hasDurations = rows.some((r) => r.live && r.state !== 'working' && r.state !== 'exited');
   useEffect(() => {
-    if (counts['needs-input'] === 0) return;
+    if (!hasDurations) return;
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
-  }, [counts]);
+  }, [hasDurations]);
 
-  const sentinelRef = useInfiniteScrollSentinel(() => {
-    if (history.hasNextPage && !history.isFetchingNextPage) void history.fetchNextPage();
-  }, history.hasNextPage === true);
+  const sentinelRef = useInfiniteScrollSentinel(
+    () => {
+      if (history.hasNextPage && !history.isFetchingNextPage) void history.fetchNextPage();
+    },
+    history.hasNextPage === true && filter === 'exited',
+  );
 
   const invalidate = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
@@ -137,6 +190,9 @@ export function SessionsTreeGroup({
             conversationId: row.history!.conversationId,
           });
       await invalidate();
+      // Resuming turns an encerrada into a live one, which the `×` filter would
+      // hide: drop the filter so the row stays in view instead of vanishing.
+      setFilter(null);
       onOpen(resumed);
     } catch (err) {
       reportError(err);
@@ -152,11 +208,15 @@ export function SessionsTreeGroup({
     }
   };
 
-  const handleRemove = async (session: SessionSnapshot): Promise<void> => {
-    if (
-      !window.confirm(`Apagar a sessão de ${session.label}? O histórico desta sessão será perdido.`)
-    )
-      return;
+  const unmarkPending = (sessionId: string): void =>
+    setPendingRemoval((prev) => {
+      const next = new Set(prev);
+      next.delete(sessionId);
+      return next;
+    });
+
+  const commitRemoval = async (session: SessionSnapshot): Promise<void> => {
+    pendingTimers.current.delete(session.sessionId);
     try {
       await callIpc('session.remove', { sessionId: session.sessionId });
       // `SessionService.remove` already tears the embedded browser down
@@ -167,8 +227,41 @@ export function SessionsTreeGroup({
       onRemoved?.(session.sessionId);
     } catch (err) {
       reportError(err);
+    } finally {
+      unmarkPending(session.sessionId);
     }
   };
+
+  const handleRemove = (session: SessionSnapshot): void => {
+    setPendingRemoval((prev) => new Set(prev).add(session.sessionId));
+    const timer = setTimeout(() => void commitRemoval(session), UNDO_WINDOW_MS);
+    pendingTimers.current.set(session.sessionId, { timer, session });
+    setToast({
+      variant: 'success',
+      message: 'Sessão apagada',
+      action: {
+        label: 'Desfazer',
+        onClick: () => {
+          clearTimeout(timer);
+          pendingTimers.current.delete(session.sessionId);
+          unmarkPending(session.sessionId);
+          setToast(null);
+        },
+      },
+    });
+  };
+
+  // Closing the panel must not turn "apagada" into "not apagada": flush what is pending.
+  useEffect(() => {
+    const timers = pendingTimers.current;
+    return () => {
+      for (const { timer, session } of timers.values()) {
+        clearTimeout(timer);
+        void callIpc('session.remove', { sessionId: session.sessionId }).catch(() => undefined);
+      }
+      timers.clear();
+    };
+  }, []);
 
   if (history.isError && rows.length === 0) {
     return (
@@ -201,15 +294,18 @@ export function SessionsTreeGroup({
 
   if (rows.length === 0 && !history.isLoading) {
     return (
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        data-testid="sessions-empty"
-        sx={{ display: 'block', px: 1.5, py: 1 }}
-      >
-        Nenhuma sessão ainda — abra uma com <strong>+</strong> e ela aparece aqui com o custo assim
-        que a primeira resposta chegar.
-      </Typography>
+      <>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          data-testid="sessions-empty"
+          sx={{ display: 'block', px: 1.5, py: 1 }}
+        >
+          Nenhuma sessão ainda — abra uma com <strong>+</strong> e ela aparece aqui com o custo
+          assim que a primeira resposta chegar.
+        </Typography>
+        <Toast toast={toast} durationMs={UNDO_WINDOW_MS} onDismiss={() => setToast(null)} />
+      </>
     );
   }
 
@@ -226,41 +322,47 @@ export function SessionsTreeGroup({
         data-testid="sessions-filters"
         sx={{ gap: 0.625, px: 1.5, pb: 0.75, flexWrap: 'wrap' }}
       >
-        {(['needs-input', 'working', 'done'] as const).map((key) => {
+        {SESSION_FILTERS.map((key) => {
           const active = filter === key;
-          const attention = key === 'needs-input' && counts[key] > 0;
+          const count = counts[key];
+          const color = FILTER_COLORS[key];
           return (
-            <Box
-              key={key}
-              component="button"
-              type="button"
-              aria-pressed={active}
-              data-testid={`sessions-filter-${key}`}
-              onClick={() => setFilter(active ? null : key)}
-              sx={(theme) => ({
-                font: 'inherit',
-                fontSize: '0.65625rem',
-                whiteSpace: 'nowrap',
-                cursor: 'pointer',
-                borderRadius: '12px',
-                px: 1,
-                py: 0.125,
-                border: `1px solid ${attention ? alpha(theme.palette.warning.main, 0.45) : theme.palette.divider}`,
-                color: attention ? theme.palette.warning.main : theme.palette.text.secondary,
-                bgcolor: active
-                  ? attention
-                    ? alpha(theme.palette.warning.main, 0.14)
-                    : theme.palette.action.selected
-                  : 'transparent',
-                opacity: counts[key] === 0 ? 0.4 : 1,
-                '&:focus-visible': {
-                  outline: `2px solid ${theme.palette.primary.main}`,
-                  outlineOffset: 1,
-                },
-              })}
-            >
-              {FILTER_LABELS[key]} {counts[key]}
-            </Box>
+            <Tooltip key={key} title={FILTER_LABELS[key]}>
+              <Box
+                component="button"
+                type="button"
+                aria-pressed={active}
+                aria-label={`${FILTER_LABELS[key]}: ${count}`}
+                data-testid={`sessions-filter-${key}`}
+                onClick={() => setFilter(active ? null : key)}
+                sx={(theme) => ({
+                  font: 'inherit',
+                  fontSize: '0.71875rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.625,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  borderRadius: '12px',
+                  px: 1,
+                  py: 0.125,
+                  border: `1px solid ${active ? theme.palette.text.secondary : theme.palette.divider}`,
+                  bgcolor: active ? theme.palette.action.selected : 'transparent',
+                  color: theme.palette.text.primary,
+                  opacity: count === 0 ? 0.4 : 1,
+                  fontVariantNumeric: 'tabular-nums',
+                  '&:focus-visible': {
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: 1,
+                  },
+                })}
+              >
+                <Box component="span" aria-hidden sx={{ color, fontWeight: 700 }}>
+                  {FILTER_GLYPHS[key]}
+                </Box>
+                {count}
+              </Box>
+            </Tooltip>
           );
         })}
       </Stack>
@@ -276,36 +378,38 @@ export function SessionsTreeGroup({
               state={row.state}
               attention={row.live?.attention}
               waitingSince={row.waitingSince}
+              idleSince={row.idleSince}
               now={now}
               history={row.history}
               onOpen={() => void handleOpen(row)}
               actions={
                 row.live ? (
-                  <>
-                    {row.live.status === 'running' && (
-                      <Tooltip title="Encerrar">
-                        <Box
-                          component="span"
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Encerrar ${row.label}`}
-                          data-testid={`tree-session-stop-${row.key}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleStop(row.live!);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key !== 'Enter' && e.key !== ' ') return;
-                            if (e.key === ' ') e.preventDefault();
-                            e.stopPropagation();
-                            void handleStop(row.live!);
-                          }}
-                          sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-                        >
-                          <Icon glyph={Square} size={13} />
-                        </Box>
-                      </Tooltip>
-                    )}
+                  // One action per state: a running session can only be stopped, an
+                  // ended one can only be deleted.
+                  row.live.status === 'running' ? (
+                    <Tooltip title="Encerrar">
+                      <Box
+                        component="span"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Encerrar ${row.label}`}
+                        data-testid={`tree-session-stop-${row.key}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleStop(row.live!);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          if (e.key === ' ') e.preventDefault();
+                          e.stopPropagation();
+                          void handleStop(row.live!);
+                        }}
+                        sx={actionButtonSx('text.primary')}
+                      >
+                        <Icon glyph={Square} size={13} />
+                      </Box>
+                    </Tooltip>
+                  ) : (
                     <Tooltip title="Apagar">
                       <Box
                         component="span"
@@ -315,20 +419,20 @@ export function SessionsTreeGroup({
                         data-testid={`tree-session-remove-${row.key}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleRemove(row.live!);
+                          handleRemove(row.live!);
                         }}
                         onKeyDown={(e) => {
                           if (e.key !== 'Enter' && e.key !== ' ') return;
                           if (e.key === ' ') e.preventDefault();
                           e.stopPropagation();
-                          void handleRemove(row.live!);
+                          handleRemove(row.live!);
                         }}
-                        sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
+                        sx={actionButtonSx('error.main')}
                       >
                         <Icon glyph={Trash2} size={13} />
                       </Box>
                     </Tooltip>
-                  </>
+                  )
                 ) : null
               }
             />
@@ -379,7 +483,7 @@ export function SessionsTreeGroup({
           </FooterLink>
         )}
       </ContainerFooter>
-      <Toast toast={toast} onDismiss={() => setToast(null)} />
+      <Toast toast={toast} durationMs={UNDO_WINDOW_MS} onDismiss={() => setToast(null)} />
     </Box>
   );
 }
@@ -410,10 +514,12 @@ function mergeRows(
   for (const session of live) {
     const entry = byConversation.get(session.conversationId) ?? null;
     if (entry) claimed.add(session.conversationId);
+    const state = rowStateOf(session);
     rows.push({
       key: session.sessionId,
-      state: rowStateOf(session),
+      state,
       waitingSince: session.activity === 'needs-input' ? (session.activitySince ?? null) : null,
+      idleSince: state === 'idle' ? (session.activitySince ?? null) : null,
       // Memory wins on label: it knows the anchor this session was opened
       // from, which is more meaningful here than the CLI's generated title.
       label: session.label,
@@ -436,6 +542,7 @@ function mergeRows(
       history: entry,
       state: rowStateOf(null),
       waitingSince: null,
+      idleSince: null,
       sortAt: Date.parse(entry.endedAt),
     });
   }

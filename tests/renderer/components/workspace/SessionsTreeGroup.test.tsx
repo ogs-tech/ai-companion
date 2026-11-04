@@ -96,6 +96,11 @@ afterEach(() => {
   resetBrowserTabsForTests();
 });
 
+/** Encerradas are not listed until their chip is chosen. */
+const showExited = async (): Promise<void> => {
+  await userEvent.click(await screen.findByTestId('sessions-filter-exited'));
+};
+
 const render = (props: Partial<React.ComponentProps<typeof SessionsTreeGroup>> = {}) =>
   renderWithShell(<SessionsTreeGroup scope={SCOPE} onOpen={vi.fn()} {...props} />);
 
@@ -150,6 +155,7 @@ describe('SessionsTreeGroup', () => {
 
       render();
 
+      await showExited();
       const row = await screen.findByTestId('tree-session-conv-old');
       expect(within(row).getByText('Uma sessão antiga')).toBeInTheDocument();
     });
@@ -173,6 +179,7 @@ describe('SessionsTreeGroup', () => {
 
       render();
 
+      await showExited();
       expect(await screen.findByTestId('tree-session-c1-cost')).toHaveTextContent('—');
     });
   });
@@ -198,6 +205,7 @@ describe('SessionsTreeGroup', () => {
 
       render();
 
+      await showExited();
       await screen.findByTestId('tree-session-z-newest');
       const rows = screen.getAllByTestId(/^tree-session-/);
       expect(rows[0]).toHaveAttribute('data-testid', 'tree-session-z-newest');
@@ -237,6 +245,7 @@ describe('SessionsTreeGroup', () => {
         'session.resume': ok({ ...exitedSession, status: 'running' }),
       });
       render();
+      await showExited();
 
       await userEvent.click(await screen.findByTestId('tree-session-entity:urn:skill:foo'));
 
@@ -252,6 +261,7 @@ describe('SessionsTreeGroup', () => {
       });
       const onOpen = vi.fn();
       render({ onOpen });
+      await showExited();
 
       await userEvent.click(await screen.findByTestId('tree-session-conv-old'));
 
@@ -259,6 +269,44 @@ describe('SessionsTreeGroup', () => {
         expect(call).toHaveBeenCalledWith('sessionHistory.resume', { conversationId: 'conv-old' }),
       );
       await waitFor(() => expect(onOpen).toHaveBeenCalled());
+    });
+
+    it('turns an exited row into a live one as soon as it is reopened', async () => {
+      let resumed = false;
+      route({
+        'session.list': () => ok(resumed ? [{ ...exitedSession, status: 'running', activity: 'idle' }] : [exitedSession]),
+        'session.resume': () => {
+          resumed = true;
+          return ok({ ...exitedSession, status: 'running', activity: 'idle' });
+        },
+      });
+      render();
+      const row = await screen.findByTestId('tree-session-entity:urn:skill:foo');
+      expect(screen.getByTestId('tree-session-entity:urn:skill:foo-indicator')).toHaveAttribute('data-state', 'exited');
+
+      await userEvent.click(row);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('tree-session-entity:urn:skill:foo-indicator')).toHaveAttribute('data-state', 'idle'),
+      );
+    });
+
+    it('drops the × filter when reopening an exited row, so the row stays in view', async () => {
+      let resumed = false;
+      route({
+        'session.list': () => ok(resumed ? [{ ...exitedSession, status: 'running', activity: 'idle' }] : [exitedSession]),
+        'session.resume': () => {
+          resumed = true;
+          return ok({ ...exitedSession, status: 'running', activity: 'idle' });
+        },
+      });
+      render();
+      await showExited();
+
+      await userEvent.click(await screen.findByTestId('tree-session-entity:urn:skill:foo'));
+
+      await waitFor(() => expect(screen.getByTestId('sessions-filter-exited')).toHaveAttribute('aria-pressed', 'false'));
+      expect(screen.getByTestId('tree-session-entity:urn:skill:foo-indicator')).toHaveAttribute('data-state', 'idle');
     });
 
     it('is a real button, so it is reachable and activatable by keyboard alone', async () => {
@@ -276,53 +324,70 @@ describe('SessionsTreeGroup', () => {
   });
 
   describe('row actions', () => {
-    it('offers Encerrar only for a session that is actually running', async () => {
-      route({ 'session.list': ok([runningSession, exitedSession]) });
-
-      render();
-
-      await screen.findByTestId('tree-session-workspace:w1');
-      expect(screen.getByTestId('tree-session-stop-workspace:w1')).toBeInTheDocument();
-      expect(
-        screen.queryByTestId('tree-session-stop-entity:urn:skill:foo'),
-      ).not.toBeInTheDocument();
-    });
-
     it('offers no destructive action on a row that is only a transcript — there is nothing in memory to remove', async () => {
       route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'conv-old' })])) });
 
       render();
+      await showExited();
 
       await screen.findByTestId('tree-session-conv-old');
       expect(screen.queryByTestId('tree-session-remove-conv-old')).not.toBeInTheDocument();
     });
 
-    it('asks before apagando a session and reports it upward once done', async () => {
-      const onRemoved = vi.fn();
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
-      route({ 'session.list': ok([runningSession]) });
-      render({ onRemoved });
+    it('offers one action per state: stop while running, delete once ended', async () => {
+      route({ 'session.list': ok([runningSession, exitedSession]) });
+      render();
+      await screen.findByTestId('tree-session-workspace:w1');
+      expect(screen.getByTestId('tree-session-stop-workspace:w1')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-session-remove-workspace:w1')).not.toBeInTheDocument();
 
-      await userEvent.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
-
-      await waitFor(() =>
-        expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }),
-      );
-      await waitFor(() => expect(onRemoved).toHaveBeenCalledWith('workspace:w1'));
+      await showExited();
+      expect(await screen.findByTestId('tree-session-remove-entity:urn:skill:foo')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-session-stop-entity:urn:skill:foo')).not.toBeInTheDocument();
     });
 
-    it('forgets the session’s global browser tab, if it had one open', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
-      route({ 'session.list': ok([runningSession]) });
-      openSessionTab('workspace:w1');
-      render();
+    it('hides an apagada session at once, and removes it only after the undo window', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const onRemoved = vi.fn();
+        route({ 'session.list': ok([exitedSession]) });
+        openSessionTab('entity:urn:skill:foo');
+        render({ onRemoved });
+        await showExited();
 
-      await userEvent.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
+        await userEvent.click(await screen.findByTestId('tree-session-remove-entity:urn:skill:foo'));
 
-      await waitFor(() =>
-        expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }),
-      );
-      expect(getBrowserTabsSnapshot().tabs).toEqual([]);
+        expect(screen.queryByTestId('tree-session-entity:urn:skill:foo')).not.toBeInTheDocument();
+        expect(await screen.findByText('Sessão apagada')).toBeInTheDocument();
+        expect(call).not.toHaveBeenCalledWith('session.remove', expect.anything());
+
+        await vi.advanceTimersByTimeAsync(6100);
+        await waitFor(() =>
+          expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'entity:urn:skill:foo' }),
+        );
+        await waitFor(() => expect(onRemoved).toHaveBeenCalledWith('entity:urn:skill:foo'));
+        expect(getBrowserTabsSnapshot().tabs).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('brings the session back, and never removes it, when Desfazer is chosen', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        route({ 'session.list': ok([exitedSession]) });
+        render();
+        await showExited();
+        await userEvent.click(await screen.findByTestId('tree-session-remove-entity:urn:skill:foo'));
+
+        await userEvent.click(await screen.findByTestId('toast-action'));
+        expect(await screen.findByTestId('tree-session-entity:urn:skill:foo')).toBeInTheDocument();
+
+        await vi.advanceTimersByTimeAsync(7000);
+        expect(call).not.toHaveBeenCalledWith('session.remove', expect.anything());
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -330,6 +395,7 @@ describe('SessionsTreeGroup', () => {
     it('asks for the next page when the sentinel below the last row scrolls into view', async () => {
       route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })], 'cursor-1')) });
       render();
+      await showExited();
       await screen.findByTestId('tree-session-c1');
       call.mockClear();
 
@@ -346,6 +412,7 @@ describe('SessionsTreeGroup', () => {
     it('stops asking once the list has reached its end', async () => {
       route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })], null)) });
       render();
+      await showExited();
       await screen.findByTestId('tree-session-c1');
       call.mockClear();
 
@@ -453,6 +520,7 @@ describe('SessionsTreeGroup', () => {
 
     it('orders the flat list needs-input, working, idle, exited and counts per chip', async () => {
       route({
+        'sessionHistory.stats': ok(stats({ sessionCount: 0 })),
         'session.list': ok([
           live('idle', 'idle'),
           live('work', 'working'),
@@ -464,11 +532,10 @@ describe('SessionsTreeGroup', () => {
 
       await screen.findByTestId('tree-session-workspace:need');
       expect(order()).toEqual(['need', 'work', 'idle', 'gone']);
-      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveTextContent(
-        'Precisa de você 1',
-      );
-      expect(screen.getByTestId('sessions-filter-working')).toHaveTextContent('Trabalhando 1');
-      expect(screen.getByTestId('sessions-filter-done')).toHaveTextContent('Concluídas 2');
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Precisa de você: 1');
+      expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 1');
+      expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Terminou: 1');
+      expect(screen.getByTestId('sessions-filter-exited')).toHaveAccessibleName('Encerradas: 1');
       expect(screen.getByTestId('tree-session-workspace:need-reason')).toHaveTextContent(
         'Permissão: Bash',
       );
@@ -496,17 +563,33 @@ describe('SessionsTreeGroup', () => {
       expect(order()).toEqual(['need', 'work', 'idle']);
     });
 
-    it('shows a live session with no signal yet as working, never as needing you', async () => {
-      route({ 'session.list': ok([live('work', undefined)]) });
+    it('shows a live session with no signal yet as idle, never working or needing you', async () => {
+      route({ 'session.list': ok([live('open', undefined)]) });
+      render();
+      await screen.findByTestId('tree-session-workspace:open');
+      expect(screen.getByTestId('tree-session-workspace:open-indicator')).toHaveAttribute(
+        'data-state',
+        'idle',
+      );
+      expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 0');
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Precisa de você: 0');
+      expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Terminou: 1');
+    });
+
+    it('keeps the Encerradas count steady while history pages load', async () => {
+      route({
+        'sessionHistory.stats': ok(stats({ sessionCount: 30 })),
+        'sessionHistory.list': ok(
+          page([entry({ conversationId: 'conv-old' })], 'next'),
+        ),
+        'session.list': ok([live('work', 'working')]),
+      });
       render();
       await screen.findByTestId('tree-session-workspace:work');
-      expect(screen.getByTestId('tree-session-workspace:work-indicator')).toHaveAttribute(
-        'data-state',
-        'working',
+      await waitFor(() =>
+        expect(screen.getByTestId('sessions-filter-exited')).toHaveAccessibleName('Encerradas: 30'),
       );
-      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveTextContent(
-        'Precisa de você 0',
-      );
+      expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 1');
     });
   });
 });

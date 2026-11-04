@@ -1090,14 +1090,14 @@ describe('SessionService activity', () => {
     return { ...ctx, signals, changes };
   };
 
-  it('hands the CLI its signal file and starts the session as working', async () => {
+  it('hands the CLI its signal file and starts the session idle, not working', async () => {
     const { service, claudeSession, signals } = withSignals();
     const session = await service.spawn(anchor);
     expect(signals.prepared).toEqual([session.sessionId]);
     expect(claudeSession.spawnCalls[0]?.opts.signalFile).toBe(
       `/signals/${session.sessionId}.jsonl`,
     );
-    expect(session.activity).toBe('working');
+    expect(session.activity).toBe('idle');
   });
 
   it('follows hook signals: needs-input with its reason, then idle', async () => {
@@ -1120,19 +1120,20 @@ describe('SessionService activity', () => {
   it('ignores an idle_prompt notification instead of crying wolf', async () => {
     const { service, signals, changes } = withSignals();
     const { sessionId } = await service.spawn(anchor);
+    signals.emit(sessionId, { event: 'working' });
     signals.emit(sessionId, { event: 'idle' });
     signals.emit(sessionId, {
       event: 'notification',
       payload: { notification_type: 'idle_prompt' },
     });
     expect(service.status(sessionId)?.activity).toBe('idle');
-    expect(changes).toHaveLength(1);
+    expect(changes).toHaveLength(2);
   });
 
   it('does not re-emit when a signal changes nothing', async () => {
     const { service, signals, changes } = withSignals();
     const { sessionId } = await service.spawn(anchor);
-    signals.emit(sessionId, { event: 'working' });
+    signals.emit(sessionId, { event: 'idle' });
     expect(changes).toEqual([]);
   });
 
@@ -1199,7 +1200,7 @@ describe('SessionService activity', () => {
       const { service, cursorRuntime } = withCursor();
       const { sessionId } = await service.spawn(anchor, 'cursor');
       cursorRuntime.simulateData(sessionId, 'Waiting for appro');
-      expect(service.status(sessionId)?.activity).toBe('working');
+      expect(service.status(sessionId)?.activity).toBe('idle');
       cursorRuntime.simulateData(sessionId, 'val...');
       expect(service.status(sessionId)).toMatchObject({
         activity: 'needs-input',
@@ -1207,11 +1208,11 @@ describe('SessionService activity', () => {
       });
     });
 
-    it('stays working on ordinary output, and a Claude session is never scanned', async () => {
+    it('stays idle on ordinary output, and a Claude session is never scanned', async () => {
       const { service, cursorRuntime } = withCursor();
       const { sessionId } = await service.spawn(anchor, 'cursor');
       cursorRuntime.simulateData(sessionId, 'Reading files...\r\n');
-      expect(service.status(sessionId)?.activity).toBe('working');
+      expect(service.status(sessionId)?.activity).toBe('idle');
     });
 
     it('a stop hook takes a Cursor session back to idle', async () => {

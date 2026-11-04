@@ -3,6 +3,7 @@ import {
   attentionLabel,
   compareRows,
   countByFilter,
+  formatIdleFor,
   formatWait,
   matchesFilter,
   rowStateOf,
@@ -19,20 +20,22 @@ describe('rowStateOf', () => {
     expect(rowStateOf(null)).toBe('exited');
     expect(rowStateOf(live({ status: 'exited', activity: 'working' }))).toBe('exited');
   });
-  it('uses the activity, and degrades an unknown one to working — never needs-input', () => {
+  it('uses the activity, and degrades an unknown one to idle — never working or needs-input', () => {
     expect(rowStateOf(live({ activity: 'needs-input' }))).toBe('needs-input');
+    expect(rowStateOf(live({ activity: 'working' }))).toBe('working');
     expect(rowStateOf(live({ activity: 'idle' }))).toBe('idle');
-    expect(rowStateOf(live({}))).toBe('working');
+    expect(rowStateOf(live({}))).toBe('idle');
   });
 });
 
 describe('filters', () => {
-  it('Concluídas covers idle and exited', () => {
-    const states = ['needs-input', 'working', 'working', 'idle', 'exited'] as const;
-    expect(countByFilter(states)).toEqual({ 'needs-input': 1, working: 2, done: 2 });
-    expect(matchesFilter('idle', 'done')).toBe(true);
-    expect(matchesFilter('working', 'done')).toBe(false);
-    expect(matchesFilter('working', null)).toBe(true);
+  it('counts one chip per state and lists every row when unfiltered', () => {
+    const states = ['needs-input', 'working', 'working', 'idle', 'exited', 'exited'] as const;
+    expect(countByFilter(states)).toEqual({ 'needs-input': 1, working: 2, idle: 1, exited: 2 });
+    expect(matchesFilter('idle', null)).toBe(true);
+    expect(matchesFilter('exited', null)).toBe(true);
+    expect(matchesFilter('exited', 'exited')).toBe(true);
+    expect(matchesFilter('working', 'idle')).toBe(false);
   });
 });
 
@@ -53,6 +56,7 @@ describe('compareRows', () => {
 describe('labels', () => {
   it('formats the wait and the reason pill', () => {
     expect(formatWait(0, 4 * 60_000)).toBe('espera 4min');
+    expect(formatIdleFor(0, 3 * 60_000)).toBe('há 3min');
     expect(attentionLabel({ kind: 'permission', detail: 'Bash' })).toBe('Permissão: Bash');
     expect(attentionLabel({ kind: 'permission' })).toBe('Permissão');
     expect(attentionLabel({ kind: 'question' })).toBe('Pergunta');

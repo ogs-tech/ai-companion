@@ -74,7 +74,7 @@ export interface SessionSnapshot {
    * until the session is next restarted (`session.kill` + `session.resume`).
    */
   browserEnabled: boolean;
-  /** Present only while `status === 'running'` and a signal has been received (or the session just spawned). */
+  /** Present only while `status === 'running'`. A session with no signal yet is `idle`: `working` means a turn is running. */
   activity?: SessionActivity;
   /** Epoch ms of the last `activity` change — drives "espera <duração>" for `needs-input`. */
   activitySince?: number;
