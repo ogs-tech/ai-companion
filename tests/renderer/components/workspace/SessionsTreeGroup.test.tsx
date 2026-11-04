@@ -9,7 +9,10 @@ import {
 } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, fail, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { intersectionObservers } from '../../setup.js';
-import type { SessionHistoryEntry, SessionHistoryPage } from '../../../../src/shared/session-history.js';
+import type {
+  SessionHistoryEntry,
+  SessionHistoryPage,
+} from '../../../../src/shared/session-history.js';
 
 const SCOPE = { kind: 'workspace', workspaceId: 'ws-1' } as const;
 
@@ -50,7 +53,10 @@ const entry = (overrides: Partial<SessionHistoryEntry> = {}): SessionHistoryEntr
   ...overrides,
 });
 
-const page = (entries: SessionHistoryEntry[], nextCursor: string | null = null): SessionHistoryPage => ({
+const page = (
+  entries: SessionHistoryEntry[],
+  nextCursor: string | null = null,
+): SessionHistoryPage => ({
   entries,
   nextCursor,
   total: entries.length,
@@ -110,7 +116,9 @@ describe('SessionsTreeGroup', () => {
     it("keeps the app's own label for a live session rather than the CLI's generated title", async () => {
       route({
         'session.list': ok([runningSession]),
-        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-running', title: 'Título gerado' })])),
+        'sessionHistory.list': ok(
+          page([entry({ conversationId: 'conv-running', title: 'Título gerado' })]),
+        ),
       });
 
       render();
@@ -130,11 +138,15 @@ describe('SessionsTreeGroup', () => {
 
       const row = await screen.findByTestId('tree-session-workspace:w1');
       expect(within(row).getByTestId('tree-session-workspace:w1-cost')).toHaveTextContent('$4.40');
-      expect(within(row).getByText('opus-5')).toBeInTheDocument();
+      expect(within(row).getByText('claude · opus-5')).toBeInTheDocument();
     });
 
     it('shows a past conversation that is not in memory at all, titled by the CLI', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'conv-old', title: 'Uma sessão antiga' })])) });
+      route({
+        'sessionHistory.list': ok(
+          page([entry({ conversationId: 'conv-old', title: 'Uma sessão antiga' })]),
+        ),
+      });
 
       render();
 
@@ -149,11 +161,15 @@ describe('SessionsTreeGroup', () => {
 
       const row = await screen.findByTestId('tree-session-workspace:w1');
       expect(within(row).getByTestId('tree-session-workspace:w1-cost-pending')).toBeInTheDocument();
-      expect(within(row).getByText('iniciando…')).toBeInTheDocument();
+      expect(within(row).getByText('claude · iniciando…')).toBeInTheDocument();
     });
 
     it('shows a dash, not a zero, for a conversation whose model has no published rate', async () => {
-      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1', costUsd: null, costSource: 'unknown' })])) });
+      route({
+        'sessionHistory.list': ok(
+          page([entry({ conversationId: 'c1', costUsd: null, costSource: 'unknown' })]),
+        ),
+      });
 
       render();
 
@@ -166,8 +182,16 @@ describe('SessionsTreeGroup', () => {
       route({
         'sessionHistory.list': ok(
           page([
-            entry({ conversationId: 'a-oldest', title: 'AAA', endedAt: '2026-09-01T10:00:00.000Z' }),
-            entry({ conversationId: 'z-newest', title: 'ZZZ', endedAt: '2026-09-20T10:00:00.000Z' }),
+            entry({
+              conversationId: 'a-oldest',
+              title: 'AAA',
+              endedAt: '2026-09-01T10:00:00.000Z',
+            }),
+            entry({
+              conversationId: 'z-newest',
+              title: 'ZZZ',
+              endedAt: '2026-09-20T10:00:00.000Z',
+            }),
           ]),
         ),
       });
@@ -182,7 +206,9 @@ describe('SessionsTreeGroup', () => {
     it('floats a just-spawned session with no transcript to the top', async () => {
       route({
         'session.list': ok([{ ...runningSession, conversationId: 'brand-new' }]),
-        'sessionHistory.list': ok(page([entry({ conversationId: 'older', endedAt: '2026-09-20T10:00:00.000Z' })])),
+        'sessionHistory.list': ok(
+          page([entry({ conversationId: 'older', endedAt: '2026-09-20T10:00:00.000Z' })]),
+        ),
       });
 
       render();
@@ -206,7 +232,10 @@ describe('SessionsTreeGroup', () => {
     });
 
     it('resumes an exited session that is still in memory by its own id', async () => {
-      route({ 'session.list': ok([exitedSession]), 'session.resume': ok({ ...exitedSession, status: 'running' }) });
+      route({
+        'session.list': ok([exitedSession]),
+        'session.resume': ok({ ...exitedSession, status: 'running' }),
+      });
       render();
 
       await userEvent.click(await screen.findByTestId('tree-session-entity:urn:skill:foo'));
@@ -254,7 +283,9 @@ describe('SessionsTreeGroup', () => {
 
       await screen.findByTestId('tree-session-workspace:w1');
       expect(screen.getByTestId('tree-session-stop-workspace:w1')).toBeInTheDocument();
-      expect(screen.queryByTestId('tree-session-stop-entity:urn:skill:foo')).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId('tree-session-stop-entity:urn:skill:foo'),
+      ).not.toBeInTheDocument();
     });
 
     it('offers no destructive action on a row that is only a transcript — there is nothing in memory to remove', async () => {
@@ -274,7 +305,9 @@ describe('SessionsTreeGroup', () => {
 
       await userEvent.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
 
-      await waitFor(() => expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }));
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }),
+      );
       await waitFor(() => expect(onRemoved).toHaveBeenCalledWith('workspace:w1'));
     });
 
@@ -286,7 +319,9 @@ describe('SessionsTreeGroup', () => {
 
       await userEvent.click(await screen.findByTestId('tree-session-remove-workspace:w1'));
 
-      await waitFor(() => expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }));
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('session.remove', { sessionId: 'workspace:w1' }),
+      );
       expect(getBrowserTabsSnapshot().tabs).toEqual([]);
     });
   });
@@ -301,7 +336,10 @@ describe('SessionsTreeGroup', () => {
       intersectionObservers.at(-1)?.trigger();
 
       await waitFor(() =>
-        expect(call).toHaveBeenCalledWith('sessionHistory.list', expect.objectContaining({ cursor: 'cursor-1' })),
+        expect(call).toHaveBeenCalledWith(
+          'sessionHistory.list',
+          expect.objectContaining({ cursor: 'cursor-1' }),
+        ),
       );
     });
 
@@ -313,7 +351,9 @@ describe('SessionsTreeGroup', () => {
 
       intersectionObservers.at(-1)?.trigger();
 
-      await waitFor(() => expect(call).not.toHaveBeenCalledWith('sessionHistory.list', expect.anything()));
+      await waitFor(() =>
+        expect(call).not.toHaveBeenCalledWith('sessionHistory.list', expect.anything()),
+      );
     });
   });
 
@@ -338,7 +378,9 @@ describe('SessionsTreeGroup', () => {
 
       render();
 
-      await waitFor(() => expect(screen.getByTestId('sessions-footer')).toHaveTextContent('3 sem preço'));
+      await waitFor(() =>
+        expect(screen.getByTestId('sessions-footer')).toHaveTextContent('3 sem preço'),
+      );
     });
 
     it('offers a way through to the full history', async () => {
@@ -388,6 +430,83 @@ describe('SessionsTreeGroup', () => {
       render();
 
       expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
+    });
+  });
+
+  describe('attention states', () => {
+    const live = (
+      id: string,
+      activity: 'needs-input' | 'working' | 'idle' | undefined,
+      extra: Record<string, unknown> = {},
+    ) => ({
+      ...runningSession,
+      sessionId: `workspace:${id}`,
+      conversationId: `conv-${id}`,
+      label: id,
+      ...(activity ? { activity, activitySince: Date.now() - 4 * 60_000 } : {}),
+      ...extra,
+    });
+    const order = (): string[] =>
+      screen
+        .getAllByTestId(/^tree-session-workspace:[a-z]+$/)
+        .map((el) => el.getAttribute('data-testid')!.replace('tree-session-workspace:', ''));
+
+    it('orders the flat list needs-input, working, idle, exited and counts per chip', async () => {
+      route({
+        'session.list': ok([
+          live('idle', 'idle'),
+          live('work', 'working'),
+          live('need', 'needs-input', { attention: { kind: 'permission', detail: 'Bash' } }),
+          live('gone', undefined, { status: 'exited' }),
+        ]),
+      });
+      render();
+
+      await screen.findByTestId('tree-session-workspace:need');
+      expect(order()).toEqual(['need', 'work', 'idle', 'gone']);
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveTextContent(
+        'Precisa de você 1',
+      );
+      expect(screen.getByTestId('sessions-filter-working')).toHaveTextContent('Trabalhando 1');
+      expect(screen.getByTestId('sessions-filter-done')).toHaveTextContent('Concluídas 2');
+      expect(screen.getByTestId('tree-session-workspace:need-reason')).toHaveTextContent(
+        'Permissão: Bash',
+      );
+    });
+
+    it('filters in place by chip and clears when the chip is clicked again', async () => {
+      route({
+        'session.list': ok([
+          live('need', 'needs-input'),
+          live('work', 'working'),
+          live('idle', 'idle'),
+        ]),
+      });
+      render();
+      await screen.findByTestId('tree-session-workspace:need');
+
+      await userEvent.click(screen.getByTestId('sessions-filter-needs-input'));
+      expect(order()).toEqual(['need']);
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+
+      await userEvent.click(screen.getByTestId('sessions-filter-needs-input'));
+      expect(order()).toEqual(['need', 'work', 'idle']);
+    });
+
+    it('shows a live session with no signal yet as working, never as needing you', async () => {
+      route({ 'session.list': ok([live('work', undefined)]) });
+      render();
+      await screen.findByTestId('tree-session-workspace:work');
+      expect(screen.getByTestId('tree-session-workspace:work-indicator')).toHaveAttribute(
+        'data-state',
+        'working',
+      );
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveTextContent(
+        'Precisa de você 0',
+      );
     });
   });
 });

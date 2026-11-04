@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Session attention states: approved mockup (H3)</title><style>body{background:#0b0e14;color:#d7dbe3;font-family:Inter,system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px}h2{font-size:18px}.subtitle{color:#9aa3b2;font-size:13px}</style></head><body>
+<h2>H3 final: indicador de estado separado do harness</h2>
+<p class="subtitle">Esquerda: estado padrão (nenhum chip ativo). Centro: chip "Precisa de você" ativo. Direita: nada precisa de você (chip esmaecido). O ícone da esquerda só diz o estado, com forma diferente por estado (não depende só de cor); o harness vai em texto na segunda linha.</p>
+
+<style>
+  .pn{background:#10141c;border:1px solid #262c38;border-radius:10px;padding:10px 0;font-family:Inter,system-ui,sans-serif;color:#d7dbe3;font-size:12px}
+  .hd{display:flex;justify-content:space-between;align-items:center;padding:2px 14px 8px;font-weight:600;font-size:13px}
+  .y{color:#f5c542}.g{color:#3ecf8e}.m{color:#7d8696}
+  .chips{display:flex;gap:5px;padding:0 14px 8px;flex-wrap:wrap}
+  .chip{border:1px solid #262c38;border-radius:12px;padding:2px 8px;font-size:10.5px;color:#9aa3b2;white-space:nowrap}
+  .chip.on{background:#1b2230;color:#d7dbe3;border-color:#3a4356}
+  .chip.ya{color:#f5c542;border-color:rgba(245,197,66,.45)}
+  .chip.on.ya{background:rgba(245,197,66,.14)}
+  .chip.zero{opacity:.4}
+  .row{display:flex;gap:8px;padding:7px 14px;border-left:3px solid transparent;align-items:flex-start}
+  .ic{width:14px;text-align:center;margin-top:1px;font-weight:700}
+  .b{flex:1;min-width:0}
+  .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .s{font-size:10.5px;color:#7d8696;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r{text-align:right;font-size:10.5px;color:#7d8696;white-space:nowrap}
+  .need{border-left-color:#f5c542;background:rgba(245,197,66,.07)}
+  .work{border-left-color:#3ecf8e}
+  .dim .t{color:#8a93a3}.dim{opacity:.72}
+  .pulse{animation:p 1.2s infinite}@keyframes p{50%{opacity:.35}}
+  .pill{display:inline-block;background:rgba(245,197,66,.15);color:#f5c542;border-radius:9px;padding:1px 7px;font-size:10px;margin-right:4px}
+  .h{color:#9aa3b2}
+  .ft{display:flex;justify-content:space-between;padding:8px 14px 0;border-top:1px solid #262c38;margin-top:6px;font-size:11px;color:#7d8696}
+  .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .cap{font-size:11px;color:#7d8696;margin-bottom:6px}
+  .legend{margin-top:16px;font-size:12px;color:#9aa3b2;line-height:1.7}
+</style>
+
+<div class="three">
+
+<div>
+<div class="cap">Padrão (sem filtro)</div>
+<div class="pn">
+  <div class="hd"><span>Sessões</span><span>＋</span></div>
+  <div class="chips"><span class="chip ya">Precisa de você 1</span><span class="chip">Trabalhando 2</span><span class="chip">Concluídas 10</span></div>
+  <div class="row need"><span class="ic y pulse">!</span><div class="b"><div class="t">Leitura de AWS via CLI</div><div class="s"><span class="pill">Permissão: aws s3 ls</span><span class="h">claude · sonnet-5-5</span></div></div><div class="r">$0.87<br>espera 4min</div></div>
+  <div class="row work"><span class="ic g pulse">✻</span><div class="b"><div class="t">Refatorar auth do app</div><div class="s">cursor · gpt-5</div></div><div class="r">~$0.40<br>2min</div></div>
+  <div class="row work"><span class="ic g pulse">✻</span><div class="b"><div class="t">Console de páginas Meta WABA</div><div class="s">claude · sonnet-5-5</div></div><div class="r">$4.63<br>59min</div></div>
+  <div class="row dim"><span class="ic m">◌</span><div class="b"><div class="t">Serviço de gestão de sites</div><div class="s">claude · sonnet-5-5 · ociosa</div></div><div class="r">$1.25<br>24/10</div></div>
+  <div class="row dim"><span class="ic m">×</span><div class="b"><div class="t">Seletor do pedido e site completo</div><div class="s">claude · sonnet-5-5</div></div><div class="r">$0.67<br>25/10</div></div>
+  <div class="ft"><span>$13.57 estimado</span><span>Ver as 13 sessões</span></div>
+</div>
+</div>
+
+<div>
+<div class="cap">Chip "Precisa de você" ativo</div>
+<div class="pn">
+  <div class="hd"><span>Sessões</span><span>＋</span></div>
+  <div class="chips"><span class="chip on ya">Precisa de você 2</span><span class="chip">Trabalhando 2</span><span class="chip">Concluídas 9</span></div>
+  <div class="row need"><span class="ic y pulse">!</span><div class="b"><div class="t">Leitura de AWS via CLI</div><div class="s"><span class="pill">Permissão: aws s3 ls</span><span class="h">claude · sonnet-5-5</span></div></div><div class="r">$0.87<br>espera 4min</div></div>
+  <div class="row need"><span class="ic y pulse">!</span><div class="b"><div class="t">Migração do banco</div><div class="s"><span class="pill">Pergunta</span><span class="h">cursor · gpt-5</span></div></div><div class="r">~$0.22<br>espera 1min</div></div>
+  <div class="ft"><span>$13.57 estimado</span><span>Ver as 13 sessões</span></div>
+</div>
+</div>
+
+<div>
+<div class="cap">Nada precisa de você</div>
+<div class="pn">
+  <div class="hd"><span>Sessões</span><span>＋</span></div>
+  <div class="chips"><span class="chip zero">Precisa de você 0</span><span class="chip">Trabalhando 2</span><span class="chip">Concluídas 11</span></div>
+  <div class="row work"><span class="ic g pulse">✻</span><div class="b"><div class="t">Refatorar auth do app</div><div class="s">cursor · gpt-5</div></div><div class="r">~$0.40<br>2min</div></div>
+  <div class="row work"><span class="ic g pulse">✻</span><div class="b"><div class="t">Console de páginas Meta WABA</div><div class="s">claude · sonnet-5-5</div></div><div class="r">$4.63<br>59min</div></div>
+  <div class="row dim"><span class="ic m">◌</span><div class="b"><div class="t">Serviço de gestão de sites</div><div class="s">claude · sonnet-5-5 · ociosa</div></div><div class="r">$1.25<br>24/10</div></div>
+  <div class="ft"><span>$13.57 estimado</span><span>Ver as 13 sessões</span></div>
+</div>
+</div>
+
+</div>
+
+<div class="legend">
+  <b>Indicador da esquerda</b> (só estado): <span class="y">!</span> precisa de você · <span class="g">✻</span> trabalhando (pulsa) · <span class="m">◌</span> ociosa · <span class="m">×</span> encerrada.<br>
+  <b>Segunda linha</b>: motivo (só quando precisa de você) + harness · modelo. Cursor pode ficar sem modelo se não for conhecido.
+</div>
+</body></html>

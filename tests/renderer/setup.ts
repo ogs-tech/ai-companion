@@ -68,12 +68,14 @@ if (typeof (window as unknown as { api?: unknown }).api === 'undefined') {
       onOutput: () => () => {},
       onExit: () => () => {},
       onAnyExit: () => () => {},
+      onAnyActivity: () => () => {},
     },
     externalLink: { onOpen: () => () => {} },
     terminal: {
       onOutput: () => () => {},
       onExit: () => () => {},
       onAnyExit: () => () => {},
+      onAnyActivity: () => () => {},
     },
   };
 }

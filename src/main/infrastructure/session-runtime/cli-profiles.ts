@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { claudeSignalSettings } from '../../application/session-activity.js';
 
 /**
  * Everything that differs between harness CLIs when one PTY runs a
@@ -28,6 +29,8 @@ export interface CliProfile {
    * multi-folder session's helper directory.
    */
   supportsAddDir: boolean;
+  /** Args that inject the app's activity hooks for this one invocation; empty when the CLI's hooks live in a global file instead. */
+  signalArgs(): string[];
 }
 
 /** `claude` accepts a caller-chosen UUID, so the transcript's name is known up front. */
@@ -41,6 +44,7 @@ export const CLAUDE_PROFILE: CliProfile = {
   supportsMcpConfig: true,
   // Claude loads each folder's `.claude/` through links the app assembles in the helper dir.
   supportsAddDir: false,
+  signalArgs: () => ['--settings', claudeSignalSettings()],
 };
 
 /**
@@ -71,4 +75,6 @@ export const CURSOR_PROFILE: CliProfile = {
   missingConversationMarker: null,
   supportsMcpConfig: false,
   supportsAddDir: true,
+  // Cursor's hooks live in ~/.cursor/hooks.json (installed by SessionSignalHooksInstaller).
+  signalArgs: () => [],
 };

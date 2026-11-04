@@ -3,8 +3,10 @@ import { IPC_CHANNEL, type IpcResult } from '../shared/ipc-contract.js';
 import {
   SESSION_OUTPUT_CHANNEL,
   SESSION_EXIT_CHANNEL,
+  SESSION_ACTIVITY_CHANNEL,
   type SessionOutputEvent,
   type SessionExitEvent,
+  type SessionActivityEvent,
 } from '../shared/session.js';
 import { EXTERNAL_LINK_CHANNEL, type ExternalLinkEvent } from '../shared/external-link.js';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedEvent } from '../shared/entity.js';
@@ -35,6 +37,12 @@ const api = {
       };
       ipcRenderer.on(SESSION_EXIT_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_EXIT_CHANNEL, wrapped);
+    },
+    /** Fires when any running session's activity (working / idle / needs-input) changes. */
+    onAnyActivity: (listener: (sessionId: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: SessionActivityEvent): void => listener(payload.sessionId);
+      ipcRenderer.on(SESSION_ACTIVITY_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(SESSION_ACTIVITY_CHANNEL, wrapped);
     },
     /** Unfiltered exit listener — for a consolidated session list, which doesn't know every sessionId up front. */
     onAnyExit: (listener: (sessionId: string, exitCode: number) => void): (() => void) => {

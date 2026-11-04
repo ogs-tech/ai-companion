@@ -10,9 +10,13 @@ export function useSessions(): UseQueryResult<SessionSnapshot[]> {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    return window.api.session.onAnyExit(() => {
-      void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
-    });
+    const refresh = (): void => void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+    const offExit = window.api.session.onAnyExit(refresh);
+    const offActivity = window.api.session.onAnyActivity(refresh);
+    return () => {
+      offExit();
+      offActivity();
+    };
   }, [queryClient]);
 
   return useQuery<SessionSnapshot[]>({

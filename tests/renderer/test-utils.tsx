@@ -15,6 +15,7 @@ export function mockApi(): CallSpy {
     onOutput: vi.fn(() => () => {}),
     onExit: vi.fn(() => () => {}),
     onAnyExit: vi.fn(() => () => {}),
+    onAnyActivity: vi.fn(() => () => {}),
   };
   const entity = {
     onChanged: vi.fn(() => () => {}),

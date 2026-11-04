@@ -3,6 +3,20 @@ import type { HarnessId } from './harness.js';
 export type SessionStatus = 'running' | 'exited';
 
 /**
+ * What a *running* session is doing right now. `needs-input` means blocked on
+ * a question or permission prompt only the user can give — never merely
+ * "finished its turn" (that is `idle`). Absent on a snapshot = no signal yet,
+ * which the UI shows as today's plain "running" look.
+ */
+export type SessionActivity = 'needs-input' | 'working' | 'idle';
+
+/** Why a session is `needs-input`; `detail` is a short human hint (e.g. the tool awaiting permission). */
+export interface SessionAttention {
+  kind: 'permission' | 'question';
+  detail?: string;
+}
+
+/**
  * Shared by both `SessionPanel` (client-side check, fast feedback before
  * anything is sent) and `SessionService.stageAttachment` (the same check
  * re-enforced at the IPC boundary) so the two limits can't drift apart.
@@ -60,6 +74,12 @@ export interface SessionSnapshot {
    * until the session is next restarted (`session.kill` + `session.resume`).
    */
   browserEnabled: boolean;
+  /** Present only while `status === 'running'` and a signal has been received (or the session just spawned). */
+  activity?: SessionActivity;
+  /** Epoch ms of the last `activity` change — drives "espera <duração>" for `needs-input`. */
+  activitySince?: number;
+  /** Set only while `activity === 'needs-input'`. */
+  attention?: SessionAttention;
 }
 
 /**
@@ -87,3 +107,9 @@ export interface SessionExitEvent {
 export const SESSION_OUTPUT_CHANNEL = 'session:output' as const;
 /** Push channel main→renderer fired once when a session's `claude` process exits. */
 export const SESSION_EXIT_CHANNEL = 'session:exit' as const;
+/** Push channel main→renderer fired whenever a running session's `activity` changes. */
+export const SESSION_ACTIVITY_CHANNEL = 'session:activity' as const;
+
+export interface SessionActivityEvent {
+  sessionId: string;
+}

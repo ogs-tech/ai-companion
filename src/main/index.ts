@@ -55,6 +55,9 @@ import { PluginProvenanceService } from './application/services/plugin-provenanc
 import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plugin-reader.js';
 import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/session-runtime/node-pty-session-adapter.js';
+import { FsSessionSignalAdapter } from './infrastructure/session-signals/fs-session-signal-adapter.js';
+import { SessionSignalHooksInstaller } from './application/services/session-signal-hooks-installer.js';
+import { MergeMaterializer } from './application/services/merge-materializer.js';
 import { CURSOR_PROFILE } from './infrastructure/session-runtime/cli-profiles.js';
 import { CompositeTranscriptAdapter } from './infrastructure/session-runtime/composite-transcript-adapter.js';
 import { NodeSqliteCursorChatStore } from './infrastructure/session-runtime/node-sqlite-cursor-chat-store.js';
@@ -62,7 +65,7 @@ import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-c
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
-import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL } from '../shared/session.js';
+import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
 import { TERMINAL_OUTPUT_CHANNEL, TERMINAL_EXIT_CHANNEL } from '../shared/terminal.js';
 import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
@@ -374,7 +377,10 @@ async function wireIpc(): Promise<void> {
   });
   embeddedBrowserPortForReload = embeddedBrowserAdapter;
 
+  const sessionSignals = new FsSessionSignalAdapter(join(workspacePath, 'session-signals'));
+
   const sharedDeps = {
+    sessionSignals,
     clock,
     nodeFsAdapter,
     settingsService,
@@ -447,11 +453,21 @@ async function wireIpc(): Promise<void> {
     services.sessionService.onOutput((sessionId, chunk) => {
       mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
     });
+    services.sessionService.onActivity((sessionId) => {
+      mainWindow?.webContents.send(SESSION_ACTIVITY_CHANNEL, { sessionId });
+    });
     services.sessionService.onExit((sessionId, _status, exitCode) => {
       mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });
     });
   };
   attachSessionBridges(workspaceScoped);
+
+  // Cursor takes hooks only from its global hooks.json; best-effort, and only when the CLI exists.
+  if (await sharedDeps.sessionRuntimes.cursor.isAvailable()) {
+    new SessionSignalHooksInstaller(new MergeMaterializer(nodeFsAdapter, clock, workspacePath), join(home, '.cursor', 'hooks.json'))
+      .install()
+      .catch((error: unknown) => console.error('[session-signals] cursor hooks not installed:', error));
+  }
 
   const attachTerminalBridges = (services: WorkspaceScopedServices): void => {
     services.terminalService.onOutput((event) => {

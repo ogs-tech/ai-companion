@@ -28,6 +28,12 @@ export interface SessionSpawnOptions {
    * Ignored by a CLI that has no such flag.
    */
   addDirs?: readonly string[];
+  /**
+   * Absolute path of the session's signal file. Exposed to the CLI as
+   * `AI_COMPANION_SIGNAL_FILE`; a CLI that takes hooks per invocation (Claude)
+   * also gets its activity hooks injected.
+   */
+  signalFile?: string;
 }
 
 export type SessionDataListener = (sessionId: string, chunk: string) => void;

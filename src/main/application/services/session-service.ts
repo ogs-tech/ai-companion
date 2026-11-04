@@ -5,6 +5,8 @@ import { harnessSupports, HARNESSES } from '../../../shared/harness.js';
 import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
 import { MAX_SESSION_ATTACHMENT_BYTES, sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
+import type { SessionSignalPort } from '../ports/session-signal-port.js';
+import { detectCursorApprovalPrompt, interpretSignal, isAnswerInput, type ActivityChange } from '../session-activity.js';
 import type { ConversationTarget, SessionRuntimePort } from '../ports/session-runtime-port.js';
 import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
@@ -20,6 +22,8 @@ import { DomainError, ioError } from '../../domain/errors.js';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
+/** How much recent PTY output the Cursor approval-prompt heuristic looks at. */
+const APPROVAL_TAIL_CHARS = 1024;
 const ATTACHMENTS_DIR = 'attachments';
 /** Rejects base64 obviously too long to decode within the byte limit, before paying for the `Buffer.from` allocation at all. */
 const MAX_ATTACHMENT_BASE64_CHARS = Math.ceil((MAX_SESSION_ATTACHMENT_BYTES * 4) / 3) + 4;
@@ -28,6 +32,7 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 const CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/;
 
 export type SessionOutputListener = (sessionId: string, chunk: string) => void;
+export type SessionActivityListener = (sessionId: string) => void;
 export type SessionStatusListener = (sessionId: string, status: SessionStatus, exitCode: number) => void;
 
 /**
@@ -51,6 +56,10 @@ export class SessionService {
   private readonly pending = new Map<string, Promise<SessionSnapshotWithOutput>>();
   private readonly outputListeners: SessionOutputListener[] = [];
   private readonly exitListeners: SessionStatusListener[] = [];
+  private readonly activityListeners: SessionActivityListener[] = [];
+  /** Recent PTY output per Cursor session, for the approval-prompt heuristic. */
+  private readonly outputTails = new Map<string, string>();
+  private readonly signals: SessionSignalPort | undefined;
   private readonly outputBuffers = new Map<string, string[]>();
   private readonly maxBufferChars: number;
   /** Per-anchor count of `workspace`/`personal` sessions ever spawned — numbers the label suffix, never reused even after that session is removed. */
@@ -85,12 +94,18 @@ export class SessionService {
     },
     private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'> &
       Pick<FileSystemPort, 'lstat' | 'readlink' | 'symlink' | 'unlink' | 'readdir' | 'pathExists'>,
-    options?: { maxBufferChars?: number },
+    options?: { maxBufferChars?: number; signals?: SessionSignalPort },
   ) {
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
+    this.signals = options?.signals;
+    this.signals?.onSignal((sessionId, signal) => {
+      const change = interpretSignal(signal);
+      if (change) this.setActivity(sessionId, change);
+    });
     for (const runtime of Object.values(this.runtimes)) {
       runtime.onData((sessionId, chunk) => {
         this.appendToBuffer(sessionId, chunk);
+        this.detectApprovalPrompt(sessionId, chunk);
         for (const listener of this.outputListeners) listener(sessionId, chunk);
       });
       runtime.onExit((sessionId, exitCode) => {
@@ -99,10 +114,50 @@ export class SessionService {
         // stale, not a real one.
         if (this.restarting.has(sessionId)) return;
         const session = this.sessions.get(sessionId);
-        if (session) session.status = 'exited';
+        if (session) {
+          session.status = 'exited';
+          this.clearActivity(session);
+        }
         for (const listener of this.exitListeners) listener(sessionId, 'exited', exitCode);
       });
     }
+  }
+
+  /** A live session with no signal yet counts as working until a hook says otherwise. */
+  private startActivity(session: SessionSnapshot): void {
+    session.activity = 'working';
+    session.activitySince = Date.now();
+    delete session.attention;
+    this.outputTails.delete(session.sessionId);
+  }
+
+  private clearActivity(session: SessionSnapshot): void {
+    if (session.activity === undefined) return;
+    delete session.activity;
+    delete session.activitySince;
+    delete session.attention;
+    this.outputTails.delete(session.sessionId);
+    for (const listener of this.activityListeners) listener(session.sessionId);
+  }
+
+  private setActivity(sessionId: string, change: ActivityChange): void {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.status !== 'running') return;
+    const sameAttention = session.attention?.kind === change.attention?.kind && session.attention?.detail === change.attention?.detail;
+    if (session.activity === change.activity && sameAttention) return;
+    if (session.activity !== change.activity) session.activitySince = Date.now();
+    session.activity = change.activity;
+    if (change.attention) session.attention = change.attention;
+    else delete session.attention;
+    for (const listener of this.activityListeners) listener(sessionId);
+  }
+
+  /** Cursor exposes no hook for its approval prompt, so the PTY tail is read for it. */
+  private detectApprovalPrompt(sessionId: string, chunk: string): void {
+    if (this.sessions.get(sessionId)?.harness !== 'cursor') return;
+    const tail = ((this.outputTails.get(sessionId) ?? '') + chunk).slice(-APPROVAL_TAIL_CHARS);
+    this.outputTails.set(sessionId, tail);
+    if (detectCursorApprovalPrompt(tail)) this.setActivity(sessionId, { activity: 'needs-input', attention: { kind: 'permission' } });
   }
 
   /** The runtime for a harness, or a validation error when it can't run sessions. */
@@ -187,6 +242,7 @@ export class SessionService {
         conversationId: existing.conversationId,
       });
       existing.status = 'running';
+      this.startActivity(existing);
       return this.withOutput(existing);
     })().finally(() => {
       this.pending.delete(sessionId);
@@ -239,6 +295,7 @@ export class SessionService {
         browserEnabled: false,
       };
       this.sessions.set(sessionId, session);
+      this.startActivity(session);
       return this.withOutput(session);
     })().finally(() => {
       this.pending.delete(sessionId);
@@ -283,6 +340,7 @@ export class SessionService {
       browserEnabled: previous?.browserEnabled ?? false,
     };
     this.sessions.set(sessionId, session);
+    this.startActivity(session);
     return this.withOutput(session);
   }
 
@@ -302,6 +360,8 @@ export class SessionService {
     const mcpConfigPath = this.browserMcpConfigPaths.get(sessionId);
     const addDirs = this.sessionFolders.get(sessionId);
     const runtime = this.runtimeFor(harness);
+    // Best-effort: without a channel the session still runs, it just shows no activity.
+    const signalFile = await this.signals?.prepare(sessionId).catch(() => undefined);
     try {
       await runtime.spawn(sessionId, cwd, {
         cols: DEFAULT_COLS,
@@ -309,6 +369,7 @@ export class SessionService {
         conversation,
         ...(mcpConfigPath ? { mcpConfigPath } : {}),
         ...(addDirs ? { addDirs } : {}),
+        ...(signalFile ? { signalFile } : {}),
       });
     } catch (err) {
       throw ioError({
@@ -329,6 +390,9 @@ export class SessionService {
   write(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
+    // Typing an answer into a prompt unblocks the session before any hook can say so.
+    if (session.activity === 'needs-input' && isAnswerInput(data)) this.setActivity(sessionId, { activity: 'working' });
+    this.outputTails.delete(sessionId);
     this.runtimeOf(sessionId)?.write(sessionId, data);
   }
 
@@ -380,6 +444,7 @@ export class SessionService {
     if (!session || session.status !== 'running') return;
     this.runtimeOf(sessionId)?.kill(sessionId);
     session.status = 'exited';
+    this.clearActivity(session);
   }
 
   /**
@@ -403,6 +468,8 @@ export class SessionService {
     this.sessions.delete(sessionId);
     this.sessionFolders.delete(sessionId);
     this.outputBuffers.delete(sessionId);
+    this.outputTails.delete(sessionId);
+    await this.signals?.release(sessionId).catch(() => {});
   }
 
   /**
@@ -446,11 +513,13 @@ export class SessionService {
       this.runtimeOf(sessionId)?.kill(sessionId);
       try {
         await this.spawnPty(sessionId, session.harness, session.cwd, { mode: 'resume', conversationId: session.conversationId });
+        this.startActivity(session);
       } catch (err) {
         // The old PTY is already dead and the replacement never came up —
         // this session really is exited now, and nothing else will report it
         // since `restarting` is suppressing the stale exit event above.
         session.status = 'exited';
+        this.clearActivity(session);
         for (const listener of this.exitListeners) listener(sessionId, 'exited', -1);
         throw err;
       } finally {
@@ -475,12 +544,18 @@ export class SessionService {
       if (session.status === 'running') {
         this.runtimeOf(sessionId)?.kill(sessionId);
         session.status = 'exited';
+        this.clearActivity(session);
       }
     }
   }
 
   onOutput(listener: SessionOutputListener): void {
     this.outputListeners.push(listener);
+  }
+
+  /** Fires whenever a running session's `activity` (or its attention reason) changes, or is cleared on exit. */
+  onActivity(listener: SessionActivityListener): void {
+    this.activityListeners.push(listener);
   }
 
   onExit(listener: SessionStatusListener): void {

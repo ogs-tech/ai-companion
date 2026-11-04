@@ -1,6 +1,7 @@
-import { Box, Skeleton, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Skeleton, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
 import type { HarnessId } from '../../../shared/harness.js';
-import { HarnessMark } from '../HarnessMark.js';
+import type { SessionAttention } from '../../../shared/session.js';
+import { attentionLabel, formatWait, type SessionRowState } from '../../lib/session-attention.js';
 import type { SessionHistoryEntry } from '../../../shared/session-history.js';
 import {
   describeCostSource,
@@ -10,11 +11,20 @@ import {
   formatWhen,
 } from '../../lib/format-session-history.js';
 
+const pulse = keyframes`50% { opacity: 0.35; }`;
+
 export interface SessionRowProps {
   label: string;
   /** Which harness runs (or ran) the session — shown before the model. */
   harness: HarnessId;
-  status: 'running' | 'exited';
+  /** One of the four attention states; drives the indicator, the left bar and the dimming. */
+  state: SessionRowState;
+  /** Why a `needs-input` row is blocked. */
+  attention?: SessionAttention | undefined;
+  /** Epoch ms a `needs-input` row started waiting. */
+  waitingSince?: number | null;
+  /** Epoch ms "now", injected so waiting time ticks and tests stay deterministic. */
+  now?: number;
   /** The transcript's reading of this conversation; absent while a just-spawned session has yet to write one. */
   history: SessionHistoryEntry | null;
   onOpen: () => void;
@@ -37,8 +47,42 @@ export interface SessionRowProps {
  * focus ring is visible, because this is the only way to reach a session once
  * its tab is closed.
  */
-export function SessionRow({ label, harness, status, history, onOpen, actions, testId }: SessionRowProps): React.ReactElement {
-  const running = status === 'running';
+const INDICATORS: Record<
+  SessionRowState,
+  {
+    glyph: string;
+    name: string;
+    color: 'warning.main' | 'success.main' | 'text.secondary';
+    pulse: boolean;
+  }
+> = {
+  'needs-input': { glyph: '!', name: 'Precisa de você', color: 'warning.main', pulse: true },
+  working: { glyph: '✻', name: 'Trabalhando', color: 'success.main', pulse: true },
+  idle: { glyph: '◌', name: 'Ociosa', color: 'text.secondary', pulse: false },
+  exited: { glyph: '×', name: 'Encerrada', color: 'text.secondary', pulse: false },
+};
+
+export function SessionRow({
+  label,
+  harness,
+  state,
+  attention,
+  waitingSince = null,
+  now,
+  history,
+  onOpen,
+  actions,
+  testId,
+}: SessionRowProps): React.ReactElement {
+  const running = state !== 'exited';
+  const indicator = INDICATORS[state];
+  const needsInput = state === 'needs-input';
+  const dimmed = state === 'idle' || state === 'exited';
+  const model =
+    running && !history ? 'iniciando…' : history?.model ? formatModel(history.model) : null;
+  const harnessText = [harness, model, state === 'idle' ? 'ociosa' : null]
+    .filter(Boolean)
+    .join(' · ');
   const costLabel = history ? formatCostUsd(history.costUsd) : null;
 
   return (
@@ -54,74 +98,131 @@ export function SessionRow({ label, harness, status, history, onOpen, actions, t
         textAlign: 'left',
         border: 0,
         borderRadius: `${theme.ogs.radius.xs}px`,
-        // A live session keeps the verde spine; an ended one drops it but
-        // keeps full text contrast, because it is just as much a click target.
-        borderLeft: `2px solid ${running ? theme.palette.success.main : 'transparent'}`,
-        bgcolor: 'transparent',
+        // The 3px bar carries state for sighted users; the indicator glyph and
+        // its accessible name carry it for everyone else.
+        borderLeft: `3px solid ${needsInput ? theme.palette.warning.main : state === 'working' ? theme.palette.success.main : 'transparent'}`,
+        bgcolor: needsInput ? alpha(theme.palette.warning.main, 0.07) : 'transparent',
+        opacity: dimmed ? 0.72 : 1,
         cursor: 'pointer',
         px: 1.25,
         py: 0.75,
         font: 'inherit',
         '&:hover': { bgcolor: theme.palette.action.hover },
         '&:hover .session-row-actions, &:focus-visible .session-row-actions': { opacity: 1 },
-        '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: -2 },
+        '&:focus-visible': {
+          outline: `2px solid ${theme.palette.primary.main}`,
+          outlineOffset: -2,
+        },
       })}
     >
-      <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-        <Typography
+      <Stack direction="row" sx={{ alignItems: 'flex-start', gap: 1 }}>
+        <Box
           component="span"
-          noWrap
-          sx={{ fontSize: '0.8125rem', flexGrow: 1, minWidth: 0, color: 'text.primary' }}
+          role="img"
+          aria-label={indicator.name}
+          data-testid={`${testId}-indicator`}
+          data-state={state}
+          sx={{
+            width: 14,
+            flexShrink: 0,
+            textAlign: 'center',
+            fontWeight: 700,
+            fontSize: '0.8125rem',
+            lineHeight: '1.2rem',
+            color: indicator.color,
+            '@media (prefers-reduced-motion: no-preference)': indicator.pulse
+              ? { animation: `${pulse} 1.2s infinite` }
+              : {},
+          }}
         >
-          {label}
-        </Typography>
-        {costLabel === null ? (
-          <Skeleton variant="text" width={34} sx={{ flexShrink: 0 }} data-testid={`${testId}-cost-pending`} />
-        ) : (
-          <Tooltip title={describeCostSource(history!.costSource, harness)}>
+          {indicator.glyph}
+        </Box>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
             <Typography
               component="span"
-              data-testid={`${testId}-cost`}
-              sx={(theme) => ({
-                fontFamily: theme.ogs.fonts.mono,
-                fontSize: '0.6875rem',
-                flexShrink: 0,
-                color: 'text.primary',
-              })}
+              noWrap
+              sx={{ fontSize: '0.8125rem', flexGrow: 1, minWidth: 0, color: 'text.primary' }}
             >
-              {costLabel}
+              {label}
             </Typography>
-          </Tooltip>
-        )}
-      </Stack>
+            {costLabel === null ? (
+              <Skeleton
+                variant="text"
+                width={34}
+                sx={{ flexShrink: 0 }}
+                data-testid={`${testId}-cost-pending`}
+              />
+            ) : (
+              <Tooltip title={describeCostSource(history!.costSource, harness)}>
+                <Typography
+                  component="span"
+                  data-testid={`${testId}-cost`}
+                  sx={(theme) => ({
+                    fontFamily: theme.ogs.fonts.mono,
+                    fontSize: '0.6875rem',
+                    flexShrink: 0,
+                    color: 'text.primary',
+                  })}
+                >
+                  {costLabel}
+                </Typography>
+              </Tooltip>
+            )}
+          </Stack>
 
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0, mt: 0.125 }}>
-        <HarnessMark harness={harness} size={11} sx={{ mr: -0.5 }} />
-        {/*
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0, mt: 0.125 }}>
+            {needsInput && (
+              <Box
+                component="span"
+                data-testid={`${testId}-reason`}
+                sx={(theme) => ({
+                  flexShrink: 0,
+                  maxWidth: '70%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  bgcolor: alpha(theme.palette.warning.main, 0.15),
+                  color: 'warning.main',
+                  borderRadius: '9px',
+                  px: 0.875,
+                  fontSize: '0.625rem',
+                })}
+              >
+                {attentionLabel(attention)}
+              </Box>
+            )}
+            {/*
           `text.secondary` at full opacity rather than the primary ink at 55%:
           on the rail's cream surface the latter measures 3.6:1 and fails
           WCAG AA, the token measures 5.1:1 and passes. At 10px that is
           legibility, not pedantry.
         */}
-        <Typography
-          component="span"
-          noWrap
-          sx={{ fontSize: '0.625rem', color: 'text.secondary', flexGrow: 1, minWidth: 0 }}
-        >
-          {running && !history ? 'iniciando…' : formatModel(history?.model ?? null)}
-        </Typography>
-        <Typography
-          component="span"
-          noWrap
-          sx={(theme) => ({
-            fontFamily: theme.ogs.fonts.mono,
-            fontSize: '0.625rem',
-            color: 'text.secondary',
-            flexShrink: 0,
-          })}
-        >
-          {history ? `${formatWhen(history.endedAt)} · ${formatDuration(history.durationMs)}` : ''}
-        </Typography>
+            <Typography
+              component="span"
+              noWrap
+              sx={{ fontSize: '0.625rem', color: 'text.secondary', flexGrow: 1, minWidth: 0 }}
+            >
+              {harnessText}
+            </Typography>
+            <Typography
+              component="span"
+              noWrap
+              sx={(theme) => ({
+                fontFamily: theme.ogs.fonts.mono,
+                fontSize: '0.625rem',
+                color: 'text.secondary',
+                flexShrink: 0,
+              })}
+            >
+              {needsInput && waitingSince !== null && now !== undefined
+                ? formatWait(waitingSince, now)
+                : history
+                  ? `${formatWhen(history.endedAt)} · ${formatDuration(history.durationMs)}`
+                  : ''}
+            </Typography>
+          </Stack>
+        </Box>
       </Stack>
 
       {actions && (

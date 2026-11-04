@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Box, Stack, Tooltip, Typography } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, Stack, Tooltip, Typography, alpha } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Square, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
@@ -14,6 +14,15 @@ import {
 } from '../../hooks/use-session-history.js';
 import { defaultHistoryFilters } from '../../lib/history-period.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
+import {
+  compareRows,
+  countByFilter,
+  FILTER_LABELS,
+  matchesFilter,
+  rowStateOf,
+  type SessionFilter,
+  type SessionRowState,
+} from '../../lib/session-attention.js';
 import { closeSessionTab } from '../../lib/browser-tabs-store.js';
 import { formatCostUsd } from '../../lib/format-session-history.js';
 import type { HistoryScope, SessionHistoryEntry } from '../../../shared/session-history.js';
@@ -40,6 +49,10 @@ interface MergedRow {
   /** Present once the CLI has written a transcript for it. */
   history: SessionHistoryEntry | null;
   sortAt: number;
+  /** Attention state shown by the row's indicator, bar and chip counts. */
+  state: SessionRowState;
+  /** When a `needs-input` session started waiting. */
+  waitingSince: number | null;
 }
 
 /**
@@ -77,6 +90,19 @@ export function SessionsTreeGroup({
     () => mergeRows(liveInScope(liveSessions ?? [], scope), historyEntries),
     [liveSessions, historyEntries, scope],
   );
+  const [filter, setFilter] = useState<SessionFilter | null>(null);
+  const counts = useMemo(() => countByFilter(rows.map((r) => r.state)), [rows]);
+  const visibleRows = useMemo(
+    () => rows.filter((r) => matchesFilter(r.state, filter)),
+    [rows, filter],
+  );
+  // Ticks only while someone is waiting, so "espera 4min" stays honest without a global timer.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (counts['needs-input'] === 0) return;
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [counts]);
 
   const sentinelRef = useInfiniteScrollSentinel(() => {
     if (history.hasNextPage && !history.isFetchingNextPage) void history.fetchNextPage();
@@ -195,15 +221,62 @@ export function SessionsTreeGroup({
     // 178 sessions that is "scroll through all of them to reach Ver todas",
     // not a rare edge case.
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <Stack
+        direction="row"
+        data-testid="sessions-filters"
+        sx={{ gap: 0.625, px: 1.5, pb: 0.75, flexWrap: 'wrap' }}
+      >
+        {(['needs-input', 'working', 'done'] as const).map((key) => {
+          const active = filter === key;
+          const attention = key === 'needs-input' && counts[key] > 0;
+          return (
+            <Box
+              key={key}
+              component="button"
+              type="button"
+              aria-pressed={active}
+              data-testid={`sessions-filter-${key}`}
+              onClick={() => setFilter(active ? null : key)}
+              sx={(theme) => ({
+                font: 'inherit',
+                fontSize: '0.65625rem',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                borderRadius: '12px',
+                px: 1,
+                py: 0.125,
+                border: `1px solid ${attention ? alpha(theme.palette.warning.main, 0.45) : theme.palette.divider}`,
+                color: attention ? theme.palette.warning.main : theme.palette.text.secondary,
+                bgcolor: active
+                  ? attention
+                    ? alpha(theme.palette.warning.main, 0.14)
+                    : theme.palette.action.selected
+                  : 'transparent',
+                opacity: counts[key] === 0 ? 0.4 : 1,
+                '&:focus-visible': {
+                  outline: `2px solid ${theme.palette.primary.main}`,
+                  outlineOffset: 1,
+                },
+              })}
+            >
+              {FILTER_LABELS[key]} {counts[key]}
+            </Box>
+          );
+        })}
+      </Stack>
+
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <Stack spacing={0.25} sx={{ px: 0.75, pb: 0.5 }}>
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <SessionRow
               key={row.key}
               testId={`tree-session-${row.key}`}
               label={row.label}
               harness={row.live?.harness ?? row.history?.harness ?? 'claude'}
-              status={row.status}
+              state={row.state}
+              attention={row.live?.attention}
+              waitingSince={row.waitingSince}
+              now={now}
               history={row.history}
               onOpen={() => void handleOpen(row)}
               actions={
@@ -339,6 +412,8 @@ function mergeRows(
     if (entry) claimed.add(session.conversationId);
     rows.push({
       key: session.sessionId,
+      state: rowStateOf(session),
+      waitingSince: session.activity === 'needs-input' ? (session.activitySince ?? null) : null,
       // Memory wins on label: it knows the anchor this session was opened
       // from, which is more meaningful here than the CLI's generated title.
       label: session.label,
@@ -359,9 +434,11 @@ function mergeRows(
       status: 'exited',
       live: null,
       history: entry,
+      state: rowStateOf(null),
+      waitingSince: null,
       sortAt: Date.parse(entry.endedAt),
     });
   }
 
-  return rows.sort((a, b) => b.sortAt - a.sortAt);
+  return rows.sort(compareRows);
 }

@@ -5,6 +5,7 @@ import type {
   SessionRuntimePort,
   SessionSpawnOptions,
 } from '../../application/ports/session-runtime-port.js';
+import { SIGNAL_FILE_ENV } from '../../application/session-activity.js';
 import { CLAUDE_PROFILE, type CliProfile } from './cli-profiles.js';
 import { isExecutableAvailable } from './find-executable.js';
 
@@ -74,6 +75,7 @@ export class NodePtySessionAdapter implements SessionRuntimePort {
       ...args,
       ...(opts.mcpConfigPath && this.profile.supportsMcpConfig ? ['--mcp-config', opts.mcpConfigPath] : []),
       ...(this.profile.supportsAddDir ? (opts.addDirs ?? []).flatMap((dir) => ['--add-dir', dir]) : []),
+      ...(opts.signalFile ? this.profile.signalArgs() : []),
     ];
     if (mode === 'start') {
       return this.spawnWithArgs(sessionId, cwd, opts, withExtras(this.profile.startArgs(conversationId)), null);
@@ -105,7 +107,10 @@ export class NodePtySessionAdapter implements SessionRuntimePort {
           cols: opts.cols,
           rows: opts.rows,
           cwd,
-          env: this.buildSessionEnv() as Record<string, string>,
+          env: {
+            ...(this.buildSessionEnv() as Record<string, string>),
+            ...(opts.signalFile ? { [SIGNAL_FILE_ENV]: opts.signalFile } : {}),
+          },
         });
       } catch (err) {
         reject(err instanceof Error ? err : new Error(String(err)));

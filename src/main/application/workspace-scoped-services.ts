@@ -7,6 +7,7 @@ import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
 import type { HarnessId } from '../../shared/harness.js';
+import type { SessionSignalPort } from './ports/session-signal-port.js';
 import type { SessionRuntimePort } from './ports/session-runtime-port.js';
 import type { EmbeddedBrowserPort } from './ports/embedded-browser-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
@@ -64,6 +65,8 @@ export interface WorkspaceScopedSharedDeps {
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
   sessionRuntimes: Readonly<Partial<Record<HarnessId, SessionRuntimePort>>>;
+  /** Channel through which injected CLI hooks report what a session is doing; absent = no activity states. */
+  sessionSignals?: SessionSignalPort;
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
@@ -117,7 +120,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService, globalEntities,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    sessionRuntimes, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
+    sessionRuntimes, sessionSignals, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
     launchConfigReaderPort, terminalPort, repoGitPort,
     conventionSourcePort, commitMessageGeneratorFor,
   } = shared;
@@ -190,6 +193,7 @@ export function buildWorkspaceScopedServices(
     dataDir,
     { workspaceService, activeWorkspace, homedir },
     nodeFsAdapter,
+    sessionSignals ? { signals: sessionSignals } : undefined,
   );
   // Reads the CLI's own transcripts, which live outside any workspace — but
   // the service is per-workspace because its default scope, and its warm

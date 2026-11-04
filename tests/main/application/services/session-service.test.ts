@@ -6,45 +6,89 @@ import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-cloc
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { FakeSessionRuntimePort } from '../../../../src/main/application/services/__fixtures__/fake-session-runtime-port.js';
 import { FakeEmbeddedBrowserPort } from '../../../../src/main/application/services/__fixtures__/fake-embedded-browser-port.js';
-import { WORKSPACE_SOURCE, entityUrn, type Skill, type Instruction } from '../../../../src/shared/entity.js';
+import {
+  WORKSPACE_SOURCE,
+  entityUrn,
+  type Skill,
+  type Instruction,
+} from '../../../../src/shared/entity.js';
 import type { SessionAnchor } from '../../../../src/shared/session.js';
 import { DomainError } from '../../../../src/main/domain/errors.js';
+import type { SessionSignalPort } from '../../../../src/main/application/ports/session-signal-port.js';
+import { FakeSessionSignalPort } from '../../../../src/main/application/services/__fixtures__/fake-session-signal-port.js';
 import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const WORKSPACE = '/home/user/.ai-companion';
 
 const skill = (name = 'foo'): Skill => ({
-  urn: entityUrn('skill', name), kind: 'skill', name, description: '',
-  scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
-  source: WORKSPACE_SOURCE, content: 'body',
+  urn: entityUrn('skill', name),
+  kind: 'skill',
+  name,
+  description: '',
+  scopes: ['personal'],
+  metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE,
+  content: 'body',
 });
 
 const workspaceScopedSkill = (name = 'acme', scopeId = 'ws-1'): Skill => ({
-  urn: entityUrn('skill', name), kind: 'skill', name, description: '',
-  scopes: ['workspace'], scopeId, metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
-  source: WORKSPACE_SOURCE, content: 'body',
+  urn: entityUrn('skill', name),
+  kind: 'skill',
+  name,
+  description: '',
+  scopes: ['workspace'],
+  scopeId,
+  metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE,
+  content: 'body',
 });
 
 const workspaceInstruction = (name = 'acme', scopeId = 'ws-1'): Instruction => ({
-  urn: entityUrn('instruction', name), kind: 'instruction', name, description: '',
-  scopes: ['workspace'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
-  source: WORKSPACE_SOURCE, content: '# notes\n',
+  urn: entityUrn('instruction', name),
+  kind: 'instruction',
+  name,
+  description: '',
+  scopes: ['workspace'],
+  scopeId,
+  metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
+  source: WORKSPACE_SOURCE,
+  content: '# notes\n',
 });
 
-const setup = (options?: { maxBufferChars?: number; extraFolders?: string[] }) => {
+const setup = (options?: {
+  maxBufferChars?: number;
+  extraFolders?: string[];
+  signals?: SessionSignalPort;
+}) => {
   const repo = new InMemoryEntityRepository();
   const adapterManager = {
     syncEntity: vi.fn().mockResolvedValue([]),
     removeEntity: vi.fn().mockResolvedValue([]),
   } as unknown as AdapterManager;
-  const base = new EntityService(scopedRepository({ global: repo, workspaceId: 'ws-1' }).scoped, new FixedClock(new Date('2026-04-26T10:00:00.000Z')), adapterManager);
+  const base = new EntityService(
+    scopedRepository({ global: repo, workspaceId: 'ws-1' }).scoped,
+    new FixedClock(new Date('2026-04-26T10:00:00.000Z')),
+    adapterManager,
+  );
   const claudeSession = new FakeSessionRuntimePort();
   const embeddedBrowser = new FakeEmbeddedBrowserPort();
   const scopeDeps = {
     workspaceService: {
-      get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '', ...(options?.extraFolders ? { extraFolders: options.extraFolders } : {}) }),
+      get: async (id: string) => ({
+        id,
+        name: 'W',
+        rootPath: '/repos/ws',
+        createdAt: '',
+        ...(options?.extraFolders ? { extraFolders: options.extraFolders } : {}),
+      }),
     },
-    activeWorkspace: { id: 'ws-1', name: 'W', rootPath: '/repos/ws', createdAt: '', ...(options?.extraFolders ? { extraFolders: options.extraFolders } : {}) },
+    activeWorkspace: {
+      id: 'ws-1',
+      name: 'W',
+      rootPath: '/repos/ws',
+      createdAt: '',
+      ...(options?.extraFolders ? { extraFolders: options.extraFolders } : {}),
+    },
     homedir: '/home/u',
   };
   const fs = {
@@ -58,7 +102,15 @@ const setup = (options?: { maxBufferChars?: number; extraFolders?: string[] }) =
     pathExists: vi.fn().mockResolvedValue(false),
   };
   const { extraFolders: _extra, ...serviceOptions } = options ?? {};
-  const service = new SessionService(base, { claude: claudeSession }, embeddedBrowser, WORKSPACE, scopeDeps, fs, serviceOptions);
+  const service = new SessionService(
+    base,
+    { claude: claudeSession },
+    embeddedBrowser,
+    WORKSPACE,
+    scopeDeps,
+    fs,
+    serviceOptions,
+  );
   return { service, base, claudeSession, embeddedBrowser, fs };
 };
 
@@ -131,7 +183,9 @@ describe('SessionService', () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });
     claudeSession.failNextSpawn(new Error('claude CLI not found in PATH'));
-    const err = await service.spawn(entityAnchor(entityUrn('skill', 'foo'))).catch((e: unknown) => e);
+    const err = await service
+      .spawn(entityAnchor(entityUrn('skill', 'foo')))
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('io');
   });
@@ -312,8 +366,12 @@ describe('SessionService concurrent workspace/personal sessions', () => {
 
     const session = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
 
-    expect(session.conversationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(claudeSession.spawnCalls[0]?.opts.conversation.conversationId).toBe(session.conversationId);
+    expect(session.conversationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(claudeSession.spawnCalls[0]?.opts.conversation.conversationId).toBe(
+      session.conversationId,
+    );
   });
 
   it('gives two sessions of the same anchor different conversations, so neither can capture the other one', async () => {
@@ -380,7 +438,11 @@ describe('SessionService.resume', () => {
     expect(resumed.sessionId).toBe(second.sessionId);
     expect(resumed.label).toBe(second.label);
     expect(resumed.status).toBe('running');
-    expect(claudeSession.spawnCalls.map((c) => c.sessionId)).toEqual([first.sessionId, second.sessionId, second.sessionId]);
+    expect(claudeSession.spawnCalls.map((c) => c.sessionId)).toEqual([
+      first.sessionId,
+      second.sessionId,
+      second.sessionId,
+    ]);
   });
 
   it('resume deduplicates concurrent calls for the same sessionId (single-flight), spawning only one PTY', async () => {
@@ -489,7 +551,9 @@ describe('SessionService output buffering', () => {
       expect(adopted.status).toBe('running');
       expect(adopted.label).toBe('Sessões com dash e filtros');
       expect(adopted.conversationId).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
-      expect(service.list().map((s) => s.sessionId)).toContain('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+      expect(service.list().map((s) => s.sessionId)).toContain(
+        'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      );
       expect(claudeSession.spawnCalls[0]?.opts.conversation).toEqual({
         mode: 'resume',
         conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
@@ -524,7 +588,11 @@ describe('SessionService output buffering', () => {
 
     it('reattaches to an already-running adoption instead of forking a second PTY onto the same conversation', async () => {
       const { service, claudeSession } = setup();
-      const input = { conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
+      const input = {
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        cwd: '/repos/x',
+        label: 'x',
+      };
       await service.adoptConversation(input);
 
       await service.adoptConversation(input);
@@ -534,7 +602,11 @@ describe('SessionService output buffering', () => {
 
     it('is single-flight, so a double-click cannot start two PTYs under one id', async () => {
       const { service, claudeSession } = setup();
-      const input = { conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', cwd: '/repos/x', label: 'x' };
+      const input = {
+        conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        cwd: '/repos/x',
+        label: 'x',
+      };
 
       await Promise.all([service.adoptConversation(input), service.adoptConversation(input)]);
 
@@ -546,7 +618,9 @@ describe('SessionService output buffering', () => {
 describe('SessionService browser toggle', () => {
   it('setBrowserEnabled rejects not_found for an unknown sessionId', async () => {
     const { service } = setup();
-    const err = await service.setBrowserEnabled('entity:urn:skill:missing', true).catch((e: unknown) => e);
+    const err = await service
+      .setBrowserEnabled('entity:urn:skill:missing', true)
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect((err as DomainError).kind).toBe('not_found');
   });
@@ -664,7 +738,9 @@ describe('SessionService browser toggle', () => {
     service.onExit((sessionId) => exits.push(sessionId));
     claudeSession.failNextSpawn(new Error('claude CLI not found in PATH'));
 
-    await expect(service.setBrowserEnabled(session.sessionId, true)).rejects.toThrow('claude CLI not found in PATH');
+    await expect(service.setBrowserEnabled(session.sessionId, true)).rejects.toThrow(
+      'claude CLI not found in PATH',
+    );
 
     expect(service.status(session.sessionId)?.status).toBe('exited');
     expect(exits).toEqual([session.sessionId]);
@@ -779,7 +855,10 @@ describe('SessionService.stageAttachment', () => {
     const { service } = setup();
     const dataBase64 = Buffer.from('x').toString('base64');
 
-    const absolutePath = await service.stageAttachment('Screenshot 2026-09-19\r\nat 12.00.00.png', dataBase64);
+    const absolutePath = await service.stageAttachment(
+      'Screenshot 2026-09-19\r\nat 12.00.00.png',
+      dataBase64,
+    );
 
     expect(absolutePath.includes('\r')).toBe(false);
     expect(absolutePath.includes('\n')).toBe(false);
@@ -790,21 +869,27 @@ describe('SessionService.stageAttachment', () => {
     const { service } = setup();
     const dataBase64 = Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64');
 
-    await expect(service.stageAttachment('big.png', dataBase64)).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.stageAttachment('big.png', dataBase64)).rejects.toMatchObject({
+      kind: 'validation',
+    });
   });
 
   it('rejects a dataBase64 string long enough to decode past the limit before ever decoding it', async () => {
     const { service, fs } = setup();
     const tooLong = 'A'.repeat(Math.ceil((5 * 1024 * 1024 + 1) * (4 / 3)) + 4);
 
-    await expect(service.stageAttachment('big.png', tooLong)).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.stageAttachment('big.png', tooLong)).rejects.toMatchObject({
+      kind: 'validation',
+    });
     expect(fs.writeFile).not.toHaveBeenCalled();
   });
 
   it('rejects a dataBase64 string that is not valid base64', async () => {
     const { service } = setup();
 
-    await expect(service.stageAttachment('x.png', 'not-base64!!!')).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.stageAttachment('x.png', 'not-base64!!!')).rejects.toMatchObject({
+      kind: 'validation',
+    });
   });
 
   describe('multi-folder workspace anchor', () => {
@@ -812,27 +897,45 @@ describe('SessionService.stageAttachment', () => {
 
     it('one ticked folder is the working directory itself', async () => {
       const { service, fs } = multi();
-      const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/api'] });
+      const session = await service.spawn({
+        kind: 'workspace',
+        workspaceId: 'ws-1',
+        folders: ['/repos/api'],
+      });
       expect(session.cwd).toBe('/repos/api');
       expect(fs.symlink).not.toHaveBeenCalled();
     });
 
     it('defaults to the primary folder when none is named', async () => {
       const { service } = multi();
-      expect((await service.spawn({ kind: 'workspace', workspaceId: 'ws-1' })).cwd).toBe('/repos/ws');
+      expect((await service.spawn({ kind: 'workspace', workspaceId: 'ws-1' })).cwd).toBe(
+        '/repos/ws',
+      );
     });
 
     it('two or more ticked folders run from a helper dir under the workspace home, linking only those', async () => {
       const { service, fs } = multi();
-      const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/ws', '/repos/api'] });
-      expect(session.cwd).toMatch(/^\/home\/u\/\.ai-companion\/workspaces\/ws-1\/sessions\/[0-9a-f]{10}$/);
-      const targets = fs.symlink.mock.calls.map((call: unknown[]) => (call[0] as { target: string }).target).sort();
+      const session = await service.spawn({
+        kind: 'workspace',
+        workspaceId: 'ws-1',
+        folders: ['/repos/ws', '/repos/api'],
+      });
+      expect(session.cwd).toMatch(
+        /^\/home\/u\/\.ai-companion\/workspaces\/ws-1\/sessions\/[0-9a-f]{10}$/,
+      );
+      const targets = fs.symlink.mock.calls
+        .map((call: unknown[]) => (call[0] as { target: string }).target)
+        .sort();
       expect(targets).toEqual(['/repos/api', '/repos/ws']);
     });
 
     it('hands the ticked folders to the runtime as addDirs, and keeps them across a resume', async () => {
       const { service, claudeSession } = multi();
-      const session = await service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/repos/ws', '/repos/api'] });
+      const session = await service.spawn({
+        kind: 'workspace',
+        workspaceId: 'ws-1',
+        folders: ['/repos/ws', '/repos/api'],
+      });
       expect(claudeSession.spawnCalls[0]?.opts.addDirs).toEqual(['/repos/ws', '/repos/api']);
       service.kill(session.sessionId);
       await service.resume(session.sessionId);
@@ -847,11 +950,14 @@ describe('SessionService.stageAttachment', () => {
 
     it('refuses a folder that does not belong to the workspace', async () => {
       const { service } = multi();
-      await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/elsewhere'] })).rejects.toMatchObject({ kind: 'validation' });
-      await expect(service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: [] })).rejects.toMatchObject({ kind: 'validation' });
+      await expect(
+        service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: ['/elsewhere'] }),
+      ).rejects.toMatchObject({ kind: 'validation' });
+      await expect(
+        service.spawn({ kind: 'workspace', workspaceId: 'ws-1', folders: [] }),
+      ).rejects.toMatchObject({ kind: 'validation' });
     });
   });
-
 });
 
 describe('SessionService harnesses', () => {
@@ -863,7 +969,13 @@ describe('SessionService harnesses', () => {
       { claude: ctx.claudeSession, cursor: cursorRuntime },
       ctx.embeddedBrowser,
       WORKSPACE,
-      { workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) }, activeWorkspace: null, homedir: '/home/u' },
+      {
+        workspaceService: {
+          get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }),
+        },
+        activeWorkspace: null,
+        homedir: '/home/u',
+      },
       ctx.fs,
     );
     return { ...ctx, service, cursorRuntime };
@@ -883,7 +995,10 @@ describe('SessionService harnesses', () => {
     const session = await service.spawn(anchor, 'cursor');
     expect(session.harness).toBe('cursor');
     expect(claudeSession.spawnCalls).toHaveLength(0);
-    expect(cursorRuntime.spawnCalls[0]?.opts.conversation).toEqual({ mode: 'start', conversationId: session.conversationId });
+    expect(cursorRuntime.spawnCalls[0]?.opts.conversation).toEqual({
+      mode: 'start',
+      conversationId: session.conversationId,
+    });
   });
 
   it('routes input, resize and kill of a Cursor session to the Cursor runtime only', async () => {
@@ -904,19 +1019,32 @@ describe('SessionService harnesses', () => {
     const session = await service.spawn(anchor, 'cursor');
     service.kill(session.sessionId);
     await service.resume(session.sessionId);
-    expect(cursorRuntime.spawnCalls[1]?.opts.conversation).toEqual({ mode: 'resume', conversationId: session.conversationId });
+    expect(cursorRuntime.spawnCalls[1]?.opts.conversation).toEqual({
+      mode: 'resume',
+      conversationId: session.conversationId,
+    });
   });
 
   it('adopts a past Cursor chat on the Cursor runtime', async () => {
     const { service, claudeSession, cursorRuntime } = withCursor();
-    const adopted = await service.adoptConversation({ conversationId: 'chat-7', cwd: '/repos/x', label: 'x', harness: 'cursor' });
+    const adopted = await service.adoptConversation({
+      conversationId: 'chat-7',
+      cwd: '/repos/x',
+      label: 'x',
+      harness: 'cursor',
+    });
     expect(adopted.harness).toBe('cursor');
-    expect(cursorRuntime.spawnCalls[0]?.opts.conversation).toEqual({ mode: 'resume', conversationId: 'chat-7' });
+    expect(cursorRuntime.spawnCalls[0]?.opts.conversation).toEqual({
+      mode: 'resume',
+      conversationId: 'chat-7',
+    });
     expect(claudeSession.spawnCalls).toHaveLength(0);
   });
 
   it('refuses a harness it has no runtime for', async () => {
-    await expect(setup().service.spawn(anchor, 'cursor')).rejects.toMatchObject({ kind: 'validation' });
+    await expect(setup().service.spawn(anchor, 'cursor')).rejects.toMatchObject({
+      kind: 'validation',
+    });
   });
 
   it('reports a failure to mint the conversation as an io error naming the harness', async () => {
@@ -924,18 +1052,174 @@ describe('SessionService harnesses', () => {
     cursorRuntime.newConversationId = async () => {
       throw new Error('not logged in');
     };
-    await expect(service.spawn(anchor, 'cursor')).rejects.toMatchObject({ message: expect.stringContaining('Cursor') });
+    await expect(service.spawn(anchor, 'cursor')).rejects.toMatchObject({
+      message: expect.stringContaining('Cursor'),
+    });
   });
 
   it('does not offer the embedded browser to a Cursor session', async () => {
     const { service } = withCursor();
     const session = await service.spawn(anchor, 'cursor');
-    await expect(service.setBrowserEnabled(session.sessionId, true)).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.setBrowserEnabled(session.sessionId, true)).rejects.toMatchObject({
+      kind: 'validation',
+    });
   });
 
   it('lists only the harnesses whose CLI is installed', async () => {
     const { service, cursorRuntime } = withCursor();
     cursorRuntime.available = false;
     expect(await service.availableHarnesses()).toEqual(['claude']);
+  });
+});
+
+describe('SessionService activity', () => {
+  const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'ws-1' };
+  const permission = {
+    event: 'notification',
+    payload: {
+      notification_type: 'permission_prompt',
+      message: 'Claude needs your permission to use Bash',
+    },
+  } as const;
+
+  const withSignals = () => {
+    const signals = new FakeSessionSignalPort();
+    const ctx = setup({ signals });
+    const changes: string[] = [];
+    ctx.service.onActivity((id) => changes.push(id));
+    return { ...ctx, signals, changes };
+  };
+
+  it('hands the CLI its signal file and starts the session as working', async () => {
+    const { service, claudeSession, signals } = withSignals();
+    const session = await service.spawn(anchor);
+    expect(signals.prepared).toEqual([session.sessionId]);
+    expect(claudeSession.spawnCalls[0]?.opts.signalFile).toBe(
+      `/signals/${session.sessionId}.jsonl`,
+    );
+    expect(session.activity).toBe('working');
+  });
+
+  it('follows hook signals: needs-input with its reason, then idle', async () => {
+    const { service, signals, changes } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+
+    signals.emit(sessionId, permission);
+    expect(service.status(sessionId)).toMatchObject({
+      activity: 'needs-input',
+      attention: { kind: 'permission', detail: 'Bash' },
+    });
+
+    signals.emit(sessionId, { event: 'idle' });
+    const idle = service.status(sessionId);
+    expect(idle?.activity).toBe('idle');
+    expect(idle?.attention).toBeUndefined();
+    expect(changes).toEqual([sessionId, sessionId]);
+  });
+
+  it('ignores an idle_prompt notification instead of crying wolf', async () => {
+    const { service, signals, changes } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+    signals.emit(sessionId, { event: 'idle' });
+    signals.emit(sessionId, {
+      event: 'notification',
+      payload: { notification_type: 'idle_prompt' },
+    });
+    expect(service.status(sessionId)?.activity).toBe('idle');
+    expect(changes).toHaveLength(1);
+  });
+
+  it('does not re-emit when a signal changes nothing', async () => {
+    const { service, signals, changes } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+    signals.emit(sessionId, { event: 'working' });
+    expect(changes).toEqual([]);
+  });
+
+  it('typing an answer unblocks a needs-input session, but a focus report does not', async () => {
+    const { service, signals } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+    signals.emit(sessionId, permission);
+    service.write(sessionId, '\u001b[I');
+    expect(service.status(sessionId)?.activity).toBe('needs-input');
+    service.write(sessionId, 'y');
+    expect(service.status(sessionId)?.activity).toBe('working');
+  });
+
+  it('clears the activity when the process exits', async () => {
+    const { service, claudeSession, changes } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+    claudeSession.simulateExit(sessionId, 0);
+    const exited = service.status(sessionId);
+    expect(exited?.status).toBe('exited');
+    expect(exited?.activity).toBeUndefined();
+    expect(changes).toEqual([sessionId]);
+  });
+
+  it('releases the signal channel when the session is removed', async () => {
+    const { service, signals } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+    await service.remove(sessionId);
+    expect(signals.released).toEqual([sessionId]);
+  });
+
+  it('keeps working without a channel when preparing it fails', async () => {
+    const { service, signals } = withSignals();
+    signals.prepare = async () => {
+      throw new Error('disk full');
+    };
+    const session = await service.spawn(anchor);
+    expect(session.status).toBe('running');
+  });
+
+  describe('Cursor approval prompt (PTY heuristic)', () => {
+    const withCursor = () => {
+      const signals = new FakeSessionSignalPort();
+      const ctx = setup();
+      const cursorRuntime = new FakeSessionRuntimePort();
+      const service = new SessionService(
+        ctx.base,
+        { claude: ctx.claudeSession, cursor: cursorRuntime },
+        ctx.embeddedBrowser,
+        WORKSPACE,
+        {
+          workspaceService: {
+            get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }),
+          },
+          activeWorkspace: null,
+          homedir: '/home/u',
+        },
+        ctx.fs,
+        { signals },
+      );
+      return { service, cursorRuntime, signals };
+    };
+
+    it('flags needs-input when the approval chrome appears, split across chunks', async () => {
+      const { service, cursorRuntime } = withCursor();
+      const { sessionId } = await service.spawn(anchor, 'cursor');
+      cursorRuntime.simulateData(sessionId, 'Waiting for appro');
+      expect(service.status(sessionId)?.activity).toBe('working');
+      cursorRuntime.simulateData(sessionId, 'val...');
+      expect(service.status(sessionId)).toMatchObject({
+        activity: 'needs-input',
+        attention: { kind: 'permission' },
+      });
+    });
+
+    it('stays working on ordinary output, and a Claude session is never scanned', async () => {
+      const { service, cursorRuntime } = withCursor();
+      const { sessionId } = await service.spawn(anchor, 'cursor');
+      cursorRuntime.simulateData(sessionId, 'Reading files...\r\n');
+      expect(service.status(sessionId)?.activity).toBe('working');
+    });
+
+    it('a stop hook takes a Cursor session back to idle', async () => {
+      const { service, cursorRuntime, signals } = withCursor();
+      const { sessionId } = await service.spawn(anchor, 'cursor');
+      cursorRuntime.simulateData(sessionId, 'Waiting for approval...');
+      signals.emit(sessionId, { event: 'idle' });
+      expect(service.status(sessionId)?.activity).toBe('idle');
+    });
   });
 });

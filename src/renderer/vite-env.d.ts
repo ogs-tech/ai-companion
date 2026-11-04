@@ -13,6 +13,7 @@ declare global {
         onOutput(sessionId: string, listener: (chunk: string) => void): () => void;
         onExit(sessionId: string, listener: (exitCode: number) => void): () => void;
         onAnyExit(listener: (sessionId: string, exitCode: number) => void): () => void;
+        onAnyActivity(listener: (sessionId: string) => void): () => void;
       };
       externalLink: {
         onOpen(listener: (url: string) => void): () => void;
