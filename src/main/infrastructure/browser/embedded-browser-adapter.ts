@@ -112,6 +112,10 @@ export class EmbeddedBrowserAdapter implements EmbeddedBrowserPort {
     );
   }
 
+  async closeManualTabs(): Promise<void> {
+    await Promise.all(Array.from(this.tabs.keys(), (id) => this.closeTab(id)));
+  }
+
   async navigate(tabId: string, url: string): Promise<void> {
     const tab = this.tabs.get(tabId);
     if (!tab) return;

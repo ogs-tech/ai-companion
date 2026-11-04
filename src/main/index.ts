@@ -56,6 +56,7 @@ import { ClaudeCodePluginReader } from './infrastructure/plugins/claude-code-plu
 import { HookService } from './application/services/hook-service.js';
 import { NodePtySessionAdapter } from './infrastructure/session-runtime/node-pty-session-adapter.js';
 import { FsSessionSignalAdapter } from './infrastructure/session-signals/fs-session-signal-adapter.js';
+import { SessionService } from './application/services/session-service.js';
 import { SessionSignalHooksInstaller } from './application/services/session-signal-hooks-installer.js';
 import { MergeMaterializer } from './application/services/merge-materializer.js';
 import { CURSOR_PROFILE } from './infrastructure/session-runtime/cli-profiles.js';
@@ -379,8 +380,18 @@ async function wireIpc(): Promise<void> {
 
   const sessionSignals = new FsSessionSignalAdapter(join(workspacePath, 'session-signals'));
 
+  const sessionRuntimes = {
+    claude: new NodePtySessionAdapter('claude', () => ({ ...process.env, ...linkRouter.shimEnv() })),
+    // `cursor-agent` installs to ~/.local/bin, which a GUI-launched app's PATH usually lacks.
+    cursor: new NodePtySessionAdapter(
+      'cursor-agent',
+      () => ({ ...process.env, PATH: [process.env['PATH'], join(home, '.local', 'bin')].filter(Boolean).join(delimiter) }),
+      CURSOR_PROFILE,
+      [join(home, '.local', 'bin')],
+    ),
+  };
+
   const sharedDeps = {
-    sessionSignals,
     clock,
     nodeFsAdapter,
     settingsService,
@@ -391,17 +402,6 @@ async function wireIpc(): Promise<void> {
     pluginService,
     claudeRuntimeReader,
     claudeSettingsFile,
-    sessionRuntimes: {
-      claude: new NodePtySessionAdapter('claude', () => ({ ...process.env, ...linkRouter.shimEnv() })),
-      // `cursor-agent` installs to ~/.local/bin, which a GUI-launched app's PATH usually lacks.
-      cursor: new NodePtySessionAdapter(
-        'cursor-agent',
-        () => ({ ...process.env, PATH: [process.env['PATH'], join(home, '.local', 'bin')].filter(Boolean).join(delimiter) }),
-        CURSOR_PROFILE,
-        [join(home, '.local', 'bin')],
-      ),
-    },
-    embeddedBrowserPort: embeddedBrowserAdapter,
     // The CLI's own transcript directory — resolved here, like every other
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new CompositeTranscriptAdapter({
@@ -418,9 +418,20 @@ async function wireIpc(): Promise<void> {
 
   if (migration.migrated) await syncAfterMigration(migration.touchedWorkspaceIds);
 
-  let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(
-    await scopeFor(activeWorkspace),
-    sharedDeps,
+  const initialScope = await scopeFor(activeWorkspace);
+  let workspaceScoped: WorkspaceScopedServices = buildWorkspaceScopedServices(initialScope, sharedDeps);
+
+  // Built once and never rebuilt: live sessions outlive a switch between
+  // Global and workspaces, so they cannot live in the per-scope graph.
+  // `activate()` re-points it at whichever scope opens next.
+  const sessionService = new SessionService(
+    workspaceScoped.entityService,
+    sessionRuntimes,
+    embeddedBrowserAdapter,
+    initialScope?.dataDir ?? globalEntities.dataDir,
+    { workspaceService, activeWorkspace, homedir: home },
+    nodeFsAdapter,
+    { signals: sessionSignals },
   );
 
   const fileBrowserPort = new NodeFileBrowserAdapter([new NumbersConverterAdapter()]);
@@ -449,21 +460,21 @@ async function wireIpc(): Promise<void> {
     }
   }
 
-  const attachSessionBridges = (services: WorkspaceScopedServices): void => {
-    services.sessionService.onOutput((sessionId, chunk) => {
+  const attachSessionBridges = (): void => {
+    sessionService.onOutput((sessionId, chunk) => {
       mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
     });
-    services.sessionService.onActivity((sessionId) => {
+    sessionService.onActivity((sessionId) => {
       mainWindow?.webContents.send(SESSION_ACTIVITY_CHANNEL, { sessionId });
     });
-    services.sessionService.onExit((sessionId, _status, exitCode) => {
+    sessionService.onExit((sessionId, _status, exitCode) => {
       mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });
     });
   };
-  attachSessionBridges(workspaceScoped);
+  attachSessionBridges();
 
   // Cursor takes hooks only from its global hooks.json; best-effort, and only when the CLI exists.
-  if (await sharedDeps.sessionRuntimes.cursor.isAvailable()) {
+  if (await sessionRuntimes.cursor.isAvailable()) {
     new SessionSignalHooksInstaller(new MergeMaterializer(nodeFsAdapter, clock, workspacePath), join(home, '.cursor', 'hooks.json'))
       .install()
       .catch((error: unknown) => console.error('[session-signals] cursor hooks not installed:', error));
@@ -488,7 +499,7 @@ async function wireIpc(): Promise<void> {
   attachEntityWatch(workspaceScoped);
 
   app.on('before-quit', () => {
-    workspaceScoped.sessionService.killAll();
+    sessionService.killAll();
     workspaceScoped.terminalService.killAll();
     void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
@@ -515,7 +526,7 @@ async function wireIpc(): Promise<void> {
     agentService: workspaceScoped.agentService,
     hookService,
     instructionService: workspaceScoped.instructionService,
-    sessionService: workspaceScoped.sessionService,
+    sessionService,
     embeddedBrowserPort: embeddedBrowserAdapter,
     sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,
@@ -555,14 +566,21 @@ async function wireIpc(): Promise<void> {
   function activate<T extends Workspace | null>(select: () => Promise<T>): Promise<T> {
     return switchQueue(async () => {
       const target = await select();
-      workspaceScoped.sessionService.killAll();
+      // Workspace/Início sessions keep running across the switch; entity
+      // sessions belong to the editor that opened them, so they end with it.
+      sessionService.killEntitySessions();
       workspaceScoped.terminalService.killAll();
-      await embeddedBrowserAdapter.destroyAll();
+      await embeddedBrowserAdapter.closeManualTabs();
       await workspaceScoped.entityWatchService.stop();
       activeWorkspace = target;
-      workspaceScoped = buildWorkspaceScopedServices(await scopeFor(target), sharedDeps);
+      const scope = await scopeFor(target);
+      workspaceScoped = buildWorkspaceScopedServices(scope, sharedDeps);
       fileBrowserService = fileBrowserFor(target);
-      attachSessionBridges(workspaceScoped);
+      sessionService.rebind({
+        entityService: workspaceScoped.entityService,
+        workspacePath: scope?.dataDir ?? globalEntities.dataDir,
+        activeWorkspace: target,
+      });
       attachTerminalBridges(workspaceScoped);
       attachEntityWatch(workspaceScoped);
       dispatch = createDispatcher(buildHandlers(buildDeps()));
@@ -586,6 +604,9 @@ async function wireIpc(): Promise<void> {
   const edited = async (id: string, edit: () => Promise<Workspace>, rebuild: boolean): Promise<Workspace> => {
     const wasActive = activeWorkspace?.id === id;
     const updated = await edit();
+    // A session keeps the folders it started with, so a folder change ends the
+    // workspace's sessions — in the background ones too, not just the open one.
+    if (rebuild) sessionService.killScope(id);
     if (!wasActive) return updated;
     if (rebuild) return activate(async () => updated);
     activeWorkspace = updated;
@@ -600,6 +621,7 @@ async function wireIpc(): Promise<void> {
     open: (path) => activate(() => workspaceService.open(path)),
     goHome,
     delete: async (id) => {
+      sessionService.killScope(id);
       if (activeWorkspace?.id === id) await goHome();
       await workspaceService.delete(id);
     },

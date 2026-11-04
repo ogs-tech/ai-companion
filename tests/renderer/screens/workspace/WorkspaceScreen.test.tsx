@@ -957,7 +957,7 @@ describe('WorkspaceScreen', () => {
         if (method === 'workspace.getActive') return projectWorkspace;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
+          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, scopeId: 'w1', cwd: '/repos/acme', label: 'Acme', status: 'running' }];
         }
         if (method === 'session.spawn') {
           return { sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
@@ -997,7 +997,7 @@ describe('WorkspaceScreen', () => {
         if (method === 'workspace.getActive') return projectWorkspace;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
+          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, scopeId: 'w1', cwd: '/repos/acme', label: 'Acme', status: 'running' }];
         }
         return undefined;
       });
@@ -1008,13 +1008,29 @@ describe('WorkspaceScreen', () => {
       expect(ipc.callIpc).not.toHaveBeenCalledWith('session.spawn', expect.anything());
     });
 
+    it('opening a running session of another scope switches to that scope first, then opens its tab', async () => {
+      const user = userEvent.setup();
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+        if (method === 'workspace.getActive') return projectWorkspace;
+        if (method === 'workspace.listDir') return [];
+        if (method === 'session.list') {
+          return [{ sessionId: 'personal', anchor: { kind: 'personal' }, scopeId: null, cwd: '/home/u', label: 'Início', status: 'running', harness: 'claude', conversationId: 'c-home' }];
+        }
+        return undefined;
+      });
+      renderScreen();
+      await user.click(await screen.findByTestId('tree-session-personal'));
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
+      expect(await screen.findByTestId('workbench-tab-session:personal')).toBeInTheDocument();
+    });
+
     it('clicking an exited session in the tree resumes it via session.resume and opens its Workbench tab', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'exited' }];
+          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, scopeId: 'w1', cwd: '/repos/acme', label: 'Acme', status: 'exited' }];
         }
         if (method === 'session.resume') {
           return { sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
@@ -1037,7 +1053,7 @@ describe('WorkspaceScreen', () => {
           if (method === 'workspace.getActive') return projectWorkspace;
           if (method === 'workspace.listDir') return [];
           if (method === 'session.list') {
-            return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status }];
+            return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, scopeId: 'w1', cwd: '/repos/acme', label: 'Acme', status }];
           }
           if (method === 'session.spawn') {
             return { sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running', outputBuffer: '' };
@@ -1603,7 +1619,7 @@ describe('WorkspaceScreen', () => {
         if (method === 'workspace.getActive') return projectWorkspace;
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') {
-          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme', label: 'Acme', status: 'running' }];
+          return [{ sessionId: 'workspace:w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, scopeId: 'w1', cwd: '/repos/acme', label: 'Acme', status: 'running' }];
         }
         return undefined;
       });

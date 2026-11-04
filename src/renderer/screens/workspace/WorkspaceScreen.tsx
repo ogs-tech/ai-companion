@@ -78,7 +78,7 @@ import { useHealthReport } from '../../hooks/use-health-report.js';
 import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
-import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
+import type { SessionAnchor, SessionOpenTarget, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 import type { TerminalSnapshot } from '../../../shared/terminal.js';
 import { callIpc } from '../../lib/ipc.js';
 import type { OpenEditorsState } from '../../../shared/open-editors.js';
@@ -642,6 +642,21 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(id);
   };
 
+  // A session keeps running when you leave its scope, so one listed from here
+  // may belong to another workspace (or Início): go there first — same discard
+  // guard as any switch — then open its tab. Its tab is saved with that scope's
+  // own editors, so it is restored there too.
+  const openSessionAnywhere = (session: SessionOpenTarget): void => {
+    const here = activeWorkspace?.id ?? null;
+    if (session.scopeId === undefined || session.scopeId === here) {
+      openSessionTab(session);
+      return;
+    }
+    if (!resetTabs()) return;
+    const switched = session.scopeId === null ? goHomeMutation.mutateAsync() : switchWorkspace.mutateAsync(session.scopeId);
+    switched.then(() => openSessionTab(session)).catch(showError);
+  };
+
   // The "+" in the Sessões panel header: always a fresh session (coexisting
   // with any already open for the same anchor) wherever the user currently is.
   const spawnSession = (anchor: SessionAnchor, harness: HarnessId = 'claude'): void => {
@@ -1115,7 +1130,7 @@ export function WorkspaceScreen(): React.ReactElement {
               onNewActionForInstruction={newActionForInstruction}
               onOpenInherited={openInheritedTab}
               sessionsScope={sessionsScope}
-              onOpenSession={openSessionTab}
+              onOpenSession={openSessionAnywhere}
               onSessionRemoved={removeSessionTab}
               onSeeAllSessions={openHistoryTab}
               canStartSession={activeWorkspace !== undefined}

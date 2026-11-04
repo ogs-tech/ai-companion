@@ -82,13 +82,13 @@ export class SessionService {
   private readonly restarting = new Set<string>();
 
   constructor(
-    private readonly entityService: EntityService,
+    private entityService: EntityService,
     private readonly runtimes: Readonly<Partial<Record<HarnessId, SessionRuntimePort>>>,
     private readonly embeddedBrowser: EmbeddedBrowserPort,
-    private readonly workspacePath: string,
+    private workspacePath: string,
     private readonly scopeDeps: {
       workspaceService: Pick<WorkspaceService, 'get'>;
-      /** The workspace this graph was built for — `null` at Início. */
+      /** The workspace currently open — `null` at Início. Swapped by {@link rebind}. */
       activeWorkspace: Workspace | null;
       homedir: string;
     },
@@ -121,6 +121,26 @@ export class SessionService {
         for (const listener of this.exitListeners) listener(sessionId, 'exited', exitCode);
       });
     }
+  }
+
+  /**
+   * Points the service at the scope that just became active. Live sessions
+   * outlive a workspace switch, so this service is built once; only what is
+   * resolved at `spawn`/`resume`/`stageAttachment` time (entity lookups, the
+   * attachments dir, which workspace a bare cwd belongs to) follows the open
+   * scope. Sessions already running never read any of it.
+   */
+  rebind(scope: { entityService: EntityService; workspacePath: string; activeWorkspace: Workspace | null }): void {
+    this.entityService = scope.entityService;
+    this.workspacePath = scope.workspacePath;
+    this.scopeDeps.activeWorkspace = scope.activeWorkspace;
+  }
+
+  /** The scope a session belongs to: its workspace's id, or `null` for Início. */
+  private scopeIdOf(anchor: SessionAnchor): string | null {
+    if (anchor.kind === 'workspace') return anchor.workspaceId;
+    if (anchor.kind === 'personal') return null;
+    return this.scopeDeps.activeWorkspace?.id ?? null;
   }
 
   /**
@@ -287,11 +307,13 @@ export class SessionService {
         mode: 'resume',
         conversationId: input.conversationId,
       });
+      const anchor = this.anchorForCwd(input.cwd);
       const session: SessionSnapshot = {
         sessionId,
         harness,
         conversationId: input.conversationId,
-        anchor: this.anchorForCwd(input.cwd),
+        anchor,
+        scopeId: this.scopeIdOf(anchor),
         cwd: input.cwd,
         label: input.label,
         status: 'running',
@@ -334,6 +356,7 @@ export class SessionService {
       harness,
       conversationId,
       anchor,
+      scopeId: previous?.scopeId ?? this.scopeIdOf(anchor),
       cwd,
       label: finalLabel,
       status: 'running',
@@ -537,9 +560,35 @@ export class SessionService {
     return session ? this.withOutput(session) : undefined;
   }
 
-  /** All sessions in this workspace's memory, running and exited alike — never persisted, never pruned. */
+  /** All sessions in memory — every scope, running and exited alike — never persisted, never pruned. */
   list(): SessionSnapshot[] {
     return Array.from(this.sessions.values());
+  }
+
+  /** Ends every running session of one scope (`null` = Início) — a workspace being deleted or re-folded. */
+  killScope(scopeId: string | null): void {
+    for (const [sessionId, session] of this.sessions) {
+      if (session.scopeId === scopeId && session.status === 'running') {
+        this.runtimeOf(sessionId)?.kill(sessionId);
+        session.status = 'exited';
+        this.clearActivity(session);
+      }
+    }
+  }
+
+  /**
+   * Ends every running entity-anchored session. Their id is the entity's urn,
+   * which two workspaces can share, so unlike workspace/Início sessions they
+   * cannot outlive a scope switch — they belong to the editor that opened them.
+   */
+  killEntitySessions(): void {
+    for (const [sessionId, session] of this.sessions) {
+      if (session.anchor.kind === 'entity' && session.status === 'running') {
+        this.runtimeOf(sessionId)?.kill(sessionId);
+        session.status = 'exited';
+        this.clearActivity(session);
+      }
+    }
   }
 
   killAll(): void {

@@ -8,12 +8,12 @@ import { ResizeHandle } from '../ds/ResizeHandle.js';
 import { CustomizationsList, type CustomizationsListProps } from './CustomizationsList.js';
 import { SessionsTreeGroup } from './SessionsTreeGroup.js';
 import type { HistoryScope } from '../../../shared/session-history.js';
-import type { SessionSnapshot } from '../../../shared/session.js';
+import type { SessionOpenTarget } from '../../../shared/session.js';
 
 interface ControlPanelContentProps extends CustomizationsListProps {
   /** This scope's own sessions — `personal` at Início, the workspace otherwise. */
   sessionsScope: HistoryScope;
-  onOpenSession: (session: Pick<SessionSnapshot, 'sessionId' | 'anchor' | 'label'>) => void;
+  onOpenSession: (session: SessionOpenTarget) => void;
   onSessionRemoved: (sessionId: string) => void;
   onSeeAllSessions: () => void;
   canStartSession: boolean;

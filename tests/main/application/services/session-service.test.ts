@@ -244,6 +244,64 @@ describe('SessionService', () => {
     expect(claudeSession.killed).toEqual([wsSession.sessionId]);
   });
 
+  describe('scopes', () => {
+    it('stamps each session with the scope it belongs to', async () => {
+      const { service, base } = setup();
+      await base.save({ entity: skill('foo'), isCreate: true });
+      const ws = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+      const home = await service.spawn({ kind: 'personal' });
+      const entity = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+      expect(ws.scopeId).toBe('w1');
+      expect(home.scopeId).toBeNull();
+      // An entity session belongs to the scope open when it was started.
+      expect(entity.scopeId).toBe('ws-1');
+    });
+
+    it('killScope ends only the running sessions of that scope', async () => {
+      const { service, claudeSession } = setup();
+      const w1 = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+      const w1b = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+      const w2 = await service.spawn({ kind: 'workspace', workspaceId: 'w2' });
+      const home = await service.spawn({ kind: 'personal' });
+      claudeSession.simulateExit(w1b.sessionId, 0);
+      service.killScope('w1');
+      expect(claudeSession.killed).toEqual([w1.sessionId]);
+      expect(service.status(w2.sessionId)?.status).toBe('running');
+      expect(service.status(home.sessionId)?.status).toBe('running');
+    });
+
+    it('killScope(null) ends Início sessions and leaves workspaces alone', async () => {
+      const { service, claudeSession } = setup();
+      await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+      const home = await service.spawn({ kind: 'personal' });
+      service.killScope(null);
+      expect(claudeSession.killed).toEqual([home.sessionId]);
+    });
+
+    it('killEntitySessions ends entity sessions only — workspace and Início ones keep running', async () => {
+      const { service, base, claudeSession } = setup();
+      await base.save({ entity: skill('foo'), isCreate: true });
+      const entity = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+      const ws = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+      const home = await service.spawn({ kind: 'personal' });
+      service.killEntitySessions();
+      expect(claudeSession.killed).toEqual([entity.sessionId]);
+      expect(service.status(ws.sessionId)?.status).toBe('running');
+      expect(service.status(home.sessionId)?.status).toBe('running');
+    });
+
+    it('rebind re-points the scope used by later spawns without touching live sessions', async () => {
+      const { service, base } = setup();
+      await base.save({ entity: skill('foo'), isCreate: true });
+      const before = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
+      service.rebind({ entityService: base, workspacePath: '/other', activeWorkspace: null });
+      const entity = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+      expect(entity.scopeId).toBeNull();
+      expect(service.list().map((s) => s.sessionId)).toContain(before.sessionId);
+      expect(service.status(before.sessionId)?.status).toBe('running');
+    });
+  });
+
   it('onOutput/onExit relay by sessionId regardless of anchor kind', async () => {
     const { service, claudeSession } = setup();
     const session = await service.spawn({ kind: 'personal' });

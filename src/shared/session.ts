@@ -45,6 +45,9 @@ export function sessionAnchorKey(anchor: SessionAnchor): string {
   return 'personal';
 }
 
+/** What the UI needs to open a session's tab — and, when it runs in another scope, to go there first. */
+export type SessionOpenTarget = Pick<SessionSnapshot, 'sessionId' | 'anchor' | 'label'> & { scopeId?: string | null };
+
 export interface SessionSnapshot {
   sessionId: string;
   /** The harness whose CLI runs this session. */
@@ -62,6 +65,12 @@ export interface SessionSnapshot {
    */
   conversationId: string;
   anchor: SessionAnchor;
+  /**
+   * The scope the session belongs to: its workspace's id, or `null` for Início.
+   * Sessions outlive a switch between scopes, so the UI needs this to tell the
+   * ones from elsewhere apart and to go to their scope when one is opened.
+   */
+  scopeId: string | null;
   cwd: string;
   /** Human-readable name of the anchor (entity/workspace name), for display in a session list. */
   label: string;

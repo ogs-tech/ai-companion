@@ -11,7 +11,7 @@ import {
 import type { SessionSnapshot } from '../../../src/shared/session.js';
 
 const live = (over: Partial<SessionSnapshot>): SessionSnapshot => ({
-  sessionId: 's', harness: 'claude', conversationId: 'c', anchor: { kind: 'personal' }, cwd: '/', label: 'l',
+  sessionId: 's', harness: 'claude', conversationId: 'c', anchor: { kind: 'personal' }, scopeId: null, cwd: '/', label: 'l',
   status: 'running', browserEnabled: false, ...over,
 });
 

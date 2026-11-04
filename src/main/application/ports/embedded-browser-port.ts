@@ -51,6 +51,8 @@ export interface EmbeddedBrowserPort {
   closeTab(tabId: string): Promise<void>;
   /** Tears down every tab, session and manual alike — used at app quit and workspace switch, where sessions are killed in bulk without going through `destroy` per session. */
   destroyAll(): Promise<void>;
+  /** Closes every manual tab and leaves session tabs alone — used on a workspace switch, which now keeps workspace/Início sessions (and their browsers) alive. */
+  closeManualTabs(): Promise<void>;
   navigate(tabId: string, url: string): Promise<void>;
   /** Positions the view within the app window. No-op if never created for that `tabId`. */
   setBounds(tabId: string, bounds: EmbeddedBrowserBounds): void;

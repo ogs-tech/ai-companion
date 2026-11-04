@@ -7,6 +7,7 @@ import { ContainerFooter, FooterLink } from '../ds/ContainerChrome.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { SessionRow } from './SessionRow.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
+import { useWorkspaces } from '../../hooks/use-workspaces.js';
 import {
   useInfiniteScrollSentinel,
   useSessionHistory,
@@ -29,6 +30,7 @@ import { closeSessionTab } from '../../lib/browser-tabs-store.js';
 import { formatCostUsd } from '../../lib/format-session-history.js';
 import type { HistoryScope, SessionHistoryEntry } from '../../../shared/session-history.js';
 import type { SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
+import type { Workspace } from '../../../shared/workspace.js';
 
 interface SessionsTreeGroupProps {
   /** Which conversations this panel covers — the open workspace's, or Global's (`personal`) at Início. */
@@ -107,6 +109,7 @@ export function SessionsTreeGroup({
   onSeeAll,
 }: SessionsTreeGroupProps): React.ReactElement {
   const { data: liveSessions } = useSessions();
+  const { data: workspaces } = useWorkspaces();
   // Same default period as the Histórico tab this panel links to.
   const filters = useMemo(() => defaultHistoryFilters(new Date()), []);
   const history = useSessionHistory(scope, filters);
@@ -375,6 +378,7 @@ export function SessionsTreeGroup({
               testId={`tree-session-${row.key}`}
               label={row.label}
               harness={row.live?.harness ?? row.history?.harness ?? 'claude'}
+              scopeName={scopeNameOf(row.live, scope, workspaces)}
               state={row.state}
               attention={row.live?.attention}
               waitingSince={row.waitingSince}
@@ -493,12 +497,19 @@ export function SessionsTreeGroup({
  * list, keyed on `conversationId` so a running session — which is in both —
  * appears once.
  */
-/** Global (Início) lists its own sessions only — never one anchored to a workspace. */
 export function liveInScope(
   live: readonly SessionSnapshot[],
   scope: HistoryScope,
 ): readonly SessionSnapshot[] {
-  return scope.kind === 'personal' ? live.filter((s) => s.anchor.kind !== 'workspace') : live;
+  // Running sessions outlive a switch of scope, so every one of them is listed
+  // wherever you are — that is how a session in another workspace asking for
+  // you stays visible. An ended one is only history, and belongs to its own scope.
+  return live.filter((s) => s.status === 'running' || scope.kind !== 'workspace' || s.scopeId === scope.workspaceId);
+}
+
+/** The scope a list is looking at: a workspace's id, or `null` at Início. */
+export function currentScopeId(scope: HistoryScope): string | null {
+  return scope.kind === 'workspace' ? scope.workspaceId : null;
 }
 
 function mergeRows(
@@ -548,4 +559,15 @@ function mergeRows(
   }
 
   return rows.sort(compareRows);
+}
+
+/** The scope a row belongs to when it is not the one being looked at, for the row's second line. */
+function scopeNameOf(
+  live: SessionSnapshot | null,
+  scope: HistoryScope,
+  workspaces: readonly Workspace[] | undefined,
+): string | undefined {
+  if (!live || live.scopeId === currentScopeId(scope)) return undefined;
+  if (live.scopeId === null) return 'Início';
+  return workspaces?.find((w) => w.id === live.scopeId)?.name ?? 'Workspace';
 }

@@ -11,7 +11,7 @@ const ACME: Workspace = { id: 'w1', name: 'Acme', rootPath: '/repos/acme', creat
 const BRAVO: Workspace = { id: 'w2', name: 'Bravo', rootPath: '/repos/bravo', createdAt: '', lastOpenedAt: '2026-10-11T10:00:00.000Z' };
 
 const RUNNING = {
-  sessionId: 'personal', conversationId: 'c1', anchor: { kind: 'personal' }, cwd: '/home/u',
+  sessionId: 'personal', conversationId: 'c1', anchor: { kind: 'personal' }, scopeId: null, cwd: '/home/u',
   label: 'Início', status: 'running', browserEnabled: false,
 };
 

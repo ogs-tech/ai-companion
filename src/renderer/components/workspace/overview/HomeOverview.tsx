@@ -45,7 +45,7 @@ export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics, 
   const { data: mcpServers } = useMcpList();
   const { data: settings } = useSettings();
 
-  const live = (sessions ?? []).filter((s) => s.status === 'running');
+  const live = (sessions ?? []).filter((s) => s.status === 'running' && s.scopeId === null);
   const recents = recentWorkspaces(workspaces ?? [], null);
   const problems = (health?.checks ?? [])
     .filter((c) => c.severity !== 'ok')

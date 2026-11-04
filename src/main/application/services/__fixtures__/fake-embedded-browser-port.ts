@@ -59,6 +59,12 @@ export class FakeEmbeddedBrowserPort implements EmbeddedBrowserPort {
     this.statuses.delete(tabId);
   }
 
+  closeManualTabsCalls = 0;
+
+  async closeManualTabs(): Promise<void> {
+    this.closeManualTabsCalls += 1;
+  }
+
   async destroyAll(): Promise<void> {
     this.destroyAllCalls += 1;
     this.created.clear();

@@ -21,6 +21,7 @@ const runningSession = {
   harness: 'claude',
   conversationId: 'conv-running',
   anchor: { kind: 'workspace' as const, workspaceId: 'w1' },
+  scopeId: 'ws-1',
   cwd: '/repos/ws',
   label: 'Acme',
   status: 'running' as const,
@@ -30,6 +31,7 @@ const exitedSession = {
   sessionId: 'entity:urn:skill:foo',
   conversationId: 'conv-exited',
   anchor: { kind: 'entity' as const, urn: 'urn:skill:foo' },
+  scopeId: 'ws-1',
   cwd: '/repos/ws',
   label: 'foo',
   status: 'exited' as const,
@@ -497,6 +499,31 @@ describe('SessionsTreeGroup', () => {
       render();
 
       expect(await screen.findByTestId('tree-session-workspace:w1')).toBeInTheDocument();
+    });
+  });
+
+  describe('sessions of other scopes', () => {
+    const elsewhere = { ...runningSession, sessionId: 'workspace:other', conversationId: 'conv-other', scopeId: 'ws-2', label: 'Beta' };
+    const home = { ...runningSession, sessionId: 'personal', conversationId: 'conv-home', anchor: { kind: 'personal' as const }, scopeId: null, label: 'Início' };
+
+    it('lists a running session from another workspace and from Início, naming where it runs', async () => {
+      route({
+        'session.list': ok([runningSession, elsewhere, home]),
+        'workspace.list': ok([{ id: 'ws-2', name: 'Beta', rootPath: '/repos/beta', createdAt: '' }]),
+      });
+      render();
+      expect(await screen.findByTestId('tree-session-workspace:other')).toHaveTextContent('Beta · claude');
+      expect(screen.getByTestId('tree-session-personal')).toHaveTextContent('Início · claude');
+      // Its own scope's row carries no tag.
+      expect(screen.getByTestId('tree-session-workspace:w1')).not.toHaveTextContent('Início');
+    });
+
+    it('does not list an exited session that belongs to another scope', async () => {
+      route({ 'session.list': ok([runningSession, exitedSession, { ...elsewhere, status: 'exited' }]) });
+      render();
+      await showExited();
+      await screen.findByTestId('tree-session-entity:urn:skill:foo');
+      expect(screen.queryByTestId('tree-session-workspace:other')).toBeNull();
     });
   });
 

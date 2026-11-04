@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Sessões persistentes entre escopos: opções</title>
+<style>
+body{background:#0b0e14;color:#d7dbe3;font-family:Inter,system-ui,sans-serif;max-width:1180px;margin:24px auto;padding:0 16px}
+h2{margin:0 0 4px}.subtitle{color:#9aa3b2;font-size:13px;margin:0 0 18px}
+.pn{background:#10141c;border:1px solid #262c38;border-radius:10px;padding:10px 0;font-size:12px}
+.hd{display:flex;justify-content:space-between;padding:2px 14px 8px;font-weight:600;font-size:13px}
+.scope{padding:0 14px 8px;font-size:10.5px;color:#7d8696}
+.y{color:#f5c542}.g{color:#3ecf8e}.b2{color:#6b8afd}.m{color:#7d8696}
+.chips{display:flex;gap:5px;padding:0 14px 8px;flex-wrap:wrap}
+.chip{border:1px solid #262c38;border-radius:12px;padding:2px 8px;font-size:10.5px;color:#9aa3b2}
+.chip.ya{color:#f5c542;border-color:rgba(245,197,66,.45)}
+.row{display:flex;gap:8px;padding:7px 14px;border-left:3px solid transparent}
+.ic{width:14px;text-align:center;font-weight:700}
+.t{white-space:nowrap}.s{font-size:10.5px;color:#7d8696;margin-top:2px}
+.need{border-left-color:#f5c542;background:rgba(245,197,66,.07)}.work{border-left-color:#3ecf8e}
+.tag{display:inline-block;border:1px solid #3a4356;border-radius:8px;padding:0 6px;font-size:9.5px;color:#9aa3b2;margin-right:4px}
+.sep{padding:6px 14px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#5d6676}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.cap{font-size:12px;color:#d7dbe3;margin-bottom:6px;font-weight:600}.rec{color:#3ecf8e}
+.sw{display:flex;gap:6px;padding:0 14px 8px}.sw span{border:1px solid #262c38;border-radius:6px;padding:2px 8px;font-size:10.5px;color:#9aa3b2}
+.sw .on{background:#1b2230;color:#d7dbe3;border-color:#3a4356}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#f5c542;margin-left:4px}
+.legend{margin-top:16px;font-size:12px;color:#9aa3b2;line-height:1.7}
+</style></head><body>
+<h2>Sessões vivas que sobrevivem à troca de escopo</h2>
+<p class="subtitle">Cenário: você está no workspace <b>Beta</b>. Em <b>Acme</b> há 1 sessão pedindo permissão e 1 trabalhando. Em <b>Início</b>, 1 ociosa. Em <b>Beta</b>, 1 trabalhando.</p>
+<div class="three">
+
+<div><div class="cap">A. Lista unificada <span class="rec">(recomendada)</span></div>
+<div class="pn">
+  <div class="hd"><span>Sessões</span><span>＋</span></div>
+  <div class="chips"><span class="chip ya">! 1</span><span class="chip">✻ 2</span><span class="chip">◉ 1</span></div>
+  <div class="row need"><span class="ic y">!</span><div><div class="t">Leitura de AWS via CLI</div><div class="s"><span class="tag">Acme</span>Permissão: aws s3 ls</div></div></div>
+  <div class="row work"><span class="ic g">✻</span><div><div class="t">Refatorar auth</div><div class="s">Beta (aqui)</div></div></div>
+  <div class="row work"><span class="ic g">✻</span><div><div class="t">Console WABA</div><div class="s"><span class="tag">Acme</span>claude</div></div></div>
+  <div class="row"><span class="ic b2">◉</span><div><div class="t">Notas de estudo</div><div class="s"><span class="tag">Início</span>claude</div></div></div>
+</div><div class="legend">Chips e lista contam tudo. Etiqueta do escopo só nas sessões de fora. Clicar numa de outro escopo troca para ele e abre a sessão.</div></div>
+
+<div><div class="cap">B. Só o escopo atual</div>
+<div class="pn">
+  <div class="hd"><span>Sessões</span><span>＋</span></div>
+  <div class="chips"><span class="chip">! 0</span><span class="chip">✻ 1</span><span class="chip">◉ 0</span></div>
+  <div class="row work"><span class="ic g">✻</span><div><div class="t">Refatorar auth</div><div class="s">claude</div></div></div>
+</div><div class="legend">Igual a hoje, mas as de fora seguem vivas e voltam ao retornar. <b>Risco:</b> a sessão do Acme pode ficar horas esperando permissão sem aviso nenhum.</div></div>
+
+<div><div class="cap">C. Escopo atual + aviso nos outros</div>
+<div class="pn">
+  <div class="hd"><span>Sessões</span><span>＋</span></div>
+  <div class="sw"><span>Início</span><span>Acme <b class="y">!1</b></span><span class="on">Beta</span></div>
+  <div class="chips"><span class="chip">! 0</span><span class="chip">✻ 1</span><span class="chip">◉ 0</span></div>
+  <div class="row work"><span class="ic g">✻</span><div><div class="t">Refatorar auth</div><div class="s">claude</div></div></div>
+  <div class="sep">Em outros escopos: 1 precisa de você</div>
+</div><div class="legend">Lista escopada, com um indicador de "precisa de você" no seletor de workspace e uma linha no rodapé. Uma sessão do Acme só aparece ao entrar nele.</div></div>
+
+</div></body></html>

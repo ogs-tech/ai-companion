@@ -152,7 +152,7 @@ describe('session-handlers', () => {
     const { service } = setup();
     const spy = vi.spyOn(service, 'resume').mockResolvedValue({
       sessionId: 'workspace:w1', harness: 'claude', conversationId: 'c-w1', anchor: { kind: 'workspace', workspaceId: 'w1' },
-      cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
+      scopeId: 'w1', cwd: '/workspace', label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
     });
     const h = buildSessionHandlers(service);
     const result = await h['session.resume']!({ sessionId: 'workspace:w1' });

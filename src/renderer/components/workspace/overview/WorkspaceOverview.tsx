@@ -57,7 +57,7 @@ export function WorkspaceOverview({
 
   // Activation kills every session of the context being left, so whatever is
   // live is this workspace's.
-  const live = (sessions ?? []).filter((s) => s.status === 'running');
+  const live = (sessions ?? []).filter((s) => s.status === 'running' && s.scopeId === workspace.id);
   const launchConfigs = launch?.configs ?? [];
 
   return (

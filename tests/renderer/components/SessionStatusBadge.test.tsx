@@ -10,6 +10,7 @@ function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
     harness: 'claude',
     conversationId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
     anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+    scopeId: null,
     cwd: '/repos/acme',
     label: 'foo',
     status: 'running',

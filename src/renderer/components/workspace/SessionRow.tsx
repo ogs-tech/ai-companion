@@ -24,6 +24,8 @@ export interface SessionRowProps {
   label: string;
   /** Which harness runs (or ran) the session — shown before the model. */
   harness: HarnessId;
+  /** Where a session from another scope runs ("Acme", "Início"); absent for the scope being looked at. */
+  scopeName?: string | undefined;
   /** One of the four attention states; drives the indicator, the left bar and the dimming. */
   state: SessionRowState;
   /** Why a `needs-input` row is blocked. */
@@ -76,6 +78,7 @@ const INDICATOR_COLORS: Record<
 export function SessionRow({
   label,
   harness,
+  scopeName,
   state,
   attention,
   waitingSince = null,
@@ -92,7 +95,7 @@ export function SessionRow({
   const dimmed = state === 'exited';
   const model =
     running && !history ? 'iniciando…' : history?.model ? formatModel(history.model) : null;
-  const harnessText = [harness, model].filter(Boolean).join(' · ');
+  const harnessText = [scopeName, harness, model].filter(Boolean).join(' · ');
   const costLabel = history ? formatCostUsd(history.costUsd) : null;
 
   return (

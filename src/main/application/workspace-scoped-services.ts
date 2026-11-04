@@ -6,10 +6,6 @@ import type { PluginProvenanceService } from './services/plugin-provenance.js';
 import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
 import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
-import type { HarnessId } from '../../shared/harness.js';
-import type { SessionSignalPort } from './ports/session-signal-port.js';
-import type { SessionRuntimePort } from './ports/session-runtime-port.js';
-import type { EmbeddedBrowserPort } from './ports/embedded-browser-port.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
@@ -23,7 +19,6 @@ import { EntityValidator } from './services/entity-validator.js';
 import { SkillService } from './services/skill-service.js';
 import { AgentService } from './services/agent-service.js';
 import { InstructionService } from './services/instruction-service.js';
-import { SessionService } from './services/session-service.js';
 import { SessionHistoryService } from './services/session-history-service.js';
 import type { SessionTranscriptPort } from './ports/session-transcript-port.js';
 import { HealthService } from './services/health/health-service.js';
@@ -64,10 +59,6 @@ export interface WorkspaceScopedSharedDeps {
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
   claudeSettingsFile: ClaudeSettingsFile;
-  sessionRuntimes: Readonly<Partial<Record<HarnessId, SessionRuntimePort>>>;
-  /** Channel through which injected CLI hooks report what a session is doing; absent = no activity states. */
-  sessionSignals?: SessionSignalPort;
-  embeddedBrowserPort: EmbeddedBrowserPort;
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
   launchConfigReaderPort: LaunchConfigReaderPort;
@@ -87,7 +78,6 @@ export interface WorkspaceScopedServices {
   skillService: SkillService;
   agentService: AgentService;
   instructionService: InstructionService;
-  sessionService: SessionService;
   sessionHistoryService: SessionHistoryService;
   healthService: HealthService;
   workspaceTeardownService: WorkspaceTeardownService;
@@ -120,7 +110,7 @@ export function buildWorkspaceScopedServices(
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService, globalEntities,
     pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
-    sessionRuntimes, sessionSignals, embeddedBrowserPort, sessionTranscriptPort, fileWatcherPort,
+    sessionTranscriptPort, fileWatcherPort,
     launchConfigReaderPort, terminalPort, repoGitPort,
     conventionSourcePort, commitMessageGeneratorFor,
   } = shared;
@@ -186,15 +176,6 @@ export function buildWorkspaceScopedServices(
   const skillService = new SkillService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const agentService = new AgentService(entityService, { provenance: pluginProvenance, fs: nodeFsAdapter });
   const instructionService = new InstructionService(entityService);
-  const sessionService = new SessionService(
-    entityService,
-    sessionRuntimes,
-    embeddedBrowserPort,
-    dataDir,
-    { workspaceService, activeWorkspace, homedir },
-    nodeFsAdapter,
-    sessionSignals ? { signals: sessionSignals } : undefined,
-  );
   // Reads the CLI's own transcripts, which live outside any workspace — but
   // the service is per-workspace because its default scope, and its warm
   // readings, belong to the workspace being looked at.
@@ -253,7 +234,7 @@ export function buildWorkspaceScopedServices(
 
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService, detectionService,
-    skillService, agentService, instructionService, sessionService, sessionHistoryService,
+    skillService, agentService, instructionService, sessionHistoryService,
     healthService, workspaceTeardownService, entityWatchService, launchConfigService, terminalService, openEditorsService,
     gitService, commitMessageService,
   };
