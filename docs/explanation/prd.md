@@ -5,7 +5,7 @@ codename: forge
 public_name: AI Companion
 status: Ready
 created_at: 2026-04-19
-updated_at: 2026-09-17
+updated_at: 2026-11-03
 ---
 
 # PRD — AI Companion
@@ -45,6 +45,11 @@ a CLI.
 Authored once, as Markdown + YAML, versioned in git. Adapted per harness by the
 app.
 
+**Direction:** the app is evolving into an AI-first IDE — *the IDE where you bring
+your own harness*. Claude Code and Cursor remain the suppliers of the agent loop;
+the app becomes the workbench around them, with an editor added. This is a
+direction, not shipped behaviour: see [ide-direction.md](ide-direction.md).
+
 ## 3. Audience
 
 **Engineering: developers and engineering teams who run more than one harness.**
@@ -77,6 +82,10 @@ Two things make the breadth real rather than aspirational:
 Depth, where it exists, is the second differentiator: for a CLI harness, the
 same app that owns its configuration also opens its sessions and reads back what
 they cost.
+
+Being **harness-agnostic** is also what sets the IDE direction apart from the
+agent-first IDEs that ship with their own agent: here the agent is the user's
+choice, and the workbench around it is the same whichever one runs.
 
 ## 5. Scope
 
@@ -118,12 +127,25 @@ not symmetric, and which harnesses have which today.
   phases ([spec](../superpowers/specs/2026-10-06-git-management-design.md));
   the working tree (review, stage, discard, commit) ships first.
 
+### Editor — direction, not yet shipped
+
+An editor to read and edit code and to review what a session changed, inside the
+app. It must work on top of today's PTY sessions (changes detected through git
+and the file watcher), and later consume a structured event channel from the
+harnesses. Layout, engine and depth are open — see
+[ide-direction.md](ide-direction.md). Nothing in this subsection is in the app
+today.
+
 ## 6. Non-goals
 
 - **Being a harness.** The app does not run an agent loop of its own, does not
   talk to a model API, and does not replace Claude Code or Cursor. It manages
   them. Every model call this product is responsible for happens inside a
-  harness the user already installed.
+  harness the user already installed. The IDE direction does not change this;
+  what would reopen it is recorded in [ide-direction.md](ide-direction.md#what-would-reopen-path-3).
+- **A general-purpose code editor.** The editor exists to read, edit in place and
+  review agent work. Competing with VS Code or Cursor as an editor in its own
+  right is not the goal.
 - **Collaboration, multi-user, team sync.** Single machine, single user. Sharing
   happens through git, like any other file in the repo.
 - **Cloud anything.** No backend, no API, no telemetry, no account.
@@ -158,6 +180,11 @@ not symmetric, and which harnesses have which today.
 
 ## Changelog
 
+- **2026-11-03** — Added the **IDE direction**: the app is positioned as an
+  AI-first IDE that brings the user's own harness, with an editor as the next
+  area of work. Non-goals gain "a general-purpose code editor"; "being a
+  harness" is unchanged. Direction only — nothing shipped. Decision and its
+  paths in [ide-direction.md](ide-direction.md).
 - **2026-10-25** — Organization now describes the folder-as-workspace model: **Project** is gone,
   a workspace is any opened folder, and **Início** is the Global context rather than a workspace.
   No scope change — the text caught up with the model shipped in PR #20.

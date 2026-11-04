@@ -70,6 +70,7 @@ Contributing:
 
 - [The harness model](explanation/harness-model.md) — what a harness is, the `manage`/`run` capabilities, how to add one.
 - [Product rationale (PRD)](explanation/prd.md) — problem, audience, scope, success metrics.
+- [IDE direction](explanation/ide-direction.md) — the move toward an AI-first IDE that brings your own harness, and the three paths for how the app relates to harnesses.
 - [Why symlinks](explanation/why-symlinks.md) — links instead of copies, and where the app writes files instead.
 
 ## Stack

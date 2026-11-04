@@ -3,6 +3,8 @@
 [![GitHub Repo](https://img.shields.io/badge/github-ogs--tech%2Fai--companion-blue)](https://github.com/ogs-tech/ai-companion)
 
 > Local desktop app that manages your AI **harnesses** — one source of truth for your customizations, materialized into each harness's own config surface.
+>
+> **Direction:** evolving into an AI-first IDE where you bring your own harness. The editor is not built yet — see [the direction](docs/explanation/ide-direction.md).
 
 ## What it does
 
@@ -63,12 +65,12 @@ Direct links:
 
 - **Tutorials** — [Getting started](docs/tutorials/getting-started.md)
 - **Reference** — [Architecture](docs/reference/architecture.md) · [Customization schema](docs/reference/customization-schema.md) · [IPC contract](docs/reference/ipc-contract.md)
-- **Explanation** — [Harness model](docs/explanation/harness-model.md) · [PRD](docs/explanation/prd.md)
+- **Explanation** — [Harness model](docs/explanation/harness-model.md) · [PRD](docs/explanation/prd.md) · [IDE direction](docs/explanation/ide-direction.md)
 
 ## Scope
 
 - **In:** everything under `manage` and `run` above, plus workspaces/projects, health checks and a workspace file browser. Full breakdown in the [PRD](docs/explanation/prd.md#5-scope).
-- **Out:** being a harness itself, collaboration and team sync, any cloud component, telemetry.
+- **Out:** being a harness itself, being a general-purpose code editor, collaboration and team sync, any cloud component, telemetry.
 - **Adding a harness:** a registry entry plus one adapter — see [the contract](docs/explanation/harness-model.md#adding-a-harness).
 
 ## Repository
