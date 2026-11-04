@@ -20,6 +20,7 @@ import { Icon } from '../../components/ds/Icon.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
+import type { RailItem } from '../../components/workspace/ExplorerRail.js';
 import type { ExplorerView } from '../../components/workspace/ExplorerRail.js';
 import { HomeOverview } from '../../components/workspace/overview/HomeOverview.js';
 import { WorkspaceOverview } from '../../components/workspace/overview/WorkspaceOverview.js';
@@ -35,7 +36,6 @@ import { TerminalsSection } from '../../components/workspace/TerminalsSection.js
 import { TerminalPanel } from '../../components/workspace/TerminalPanel.js';
 import { BrowserPane } from '../../components/BrowserPane.js';
 import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR, NAV_AREAS, type AreaDef } from '../../components/shell/nav.js';
-import { TreeRow } from '../../components/ds/TreeRow.js';
 import { WorkspacesScreen } from '../workspaces/WorkspacesScreen.js';
 import { StarterPackScreen } from '../starter-pack/StarterPackScreen.js';
 import { MarketplaceList } from '../marketplaces/MarketplaceList.js';
@@ -718,12 +718,6 @@ export function WorkspaceScreen(): React.ReactElement {
     }
   };
 
-  // The rail's Início button: same discard guard as any context switch.
-  const goHome = (): void => {
-    if (!resetTabs()) return;
-    goHomeMutation.mutate(undefined, { onError: showError });
-  };
-
   const focusOverviewTab = (): void => setActiveTabId(OVERVIEW_TAB_ID);
 
   // The TopNav (switcher, panel toggles) and ⌘K live above this screen.
@@ -967,48 +961,20 @@ export function WorkspaceScreen(): React.ReactElement {
     };
   });
 
-  // Starter Pack/Marketplaces/Diagnóstico are app-level destinations, not
-  // scoped to any one workspace — their entry rows sit below the divider in
-  // Início's menu (see HomeNavList); the tabs open in whichever context is
-  // current. Workspaces is the menu's own row, so it is left out here.
-  const appAreaRows = (
-    <>
-      {NAV_AREAS.filter(isAreaTabDef)
-        .filter((a) => a.area !== 'workspaces')
-        .map((a) => {
-          const active = activeTabId === a.area;
-          const showSeverity =
-            a.area === 'diagnostico' && healthReport && healthReport.worst !== 'ok';
-          return (
-            <TreeRow
-              key={a.area}
-              testId={`explorer-area-${a.area}`}
-              pl={1.5}
-              glyph={a.glyph}
-              primary={a.label}
-              onClick={() => openAreaTab(a.area)}
-              {...(active ? { accentColor: 'info.main' } : {})}
-              badge={
-                showSeverity && healthReport ? (
-                  <Box
-                    data-testid="explorer-area-diagnostico-severity"
-                    sx={(theme) => ({
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      bgcolor:
-                        healthReport.worst === 'error'
-                          ? theme.palette.error.main
-                          : theme.palette.warning.main,
-                    })}
-                  />
-                ) : undefined
-              }
-            />
-          );
-        })}
-    </>
-  );
+  // Workspaces, Starter Pack, Marketplaces and Diagnóstico are app-level
+  // destinations, not scoped to any one workspace: at Início they are the
+  // Explorer rail's items (the body is the workspaces list), and each opens
+  // its page as a tab in whichever context is current.
+  const homeRailItems: RailItem[] = NAV_AREAS.filter(isAreaTabDef).map((a) => ({
+    testId: `explorer-area-${a.area}`,
+    label: a.label,
+    glyph: a.glyph,
+    active: activeTabId === a.area,
+    onClick: () => openAreaTab(a.area),
+    ...(a.area === 'diagnostico' && healthReport && healthReport.worst !== 'ok'
+      ? { severity: healthReport.worst === 'error' ? ('error' as const) : ('warning' as const) }
+      : {}),
+  }));
 
   const openTerminalIds = new Set(openTabs.flatMap((t) => (t.kind === 'terminal' ? [t.terminalId] : [])));
   const terminalsSection = activeWorkspace ? (
@@ -1078,11 +1044,8 @@ export function WorkspaceScreen(): React.ReactElement {
               isHome={isHome}
               gitPolling={!explorerCollapsed}
               toolbarActions={explorerToolbarActions}
-              appAreaRows={appAreaRows}
-              homeNav={{
-                workspacesActive: activeTabId === 'workspaces',
-                onOpenWorkspaces: () => openAreaTab('workspaces'),
-              }}
+              homeRailItems={homeRailItems}
+              onOpenWorkspaces={() => openAreaTab('workspaces')}
               onSelectFile={openFileTab}
               onOpenAsWorkspace={(absolutePath) => void handleOpenAsWorkspace(absolutePath)}
               onPreviewFile={openFilePreviewTab}
@@ -1091,7 +1054,6 @@ export function WorkspaceScreen(): React.ReactElement {
               {...(terminalsSection !== undefined ? { terminalsSection } : {})}
               onOpenTerminalHere={openTerminalIn}
               onOpenGitDiff={openGitDiffTab}
-              onGoHome={goHome}
               view={explorerView}
               onViewChange={setExplorerView}
               onCollapse={toggleExplorerPanel}

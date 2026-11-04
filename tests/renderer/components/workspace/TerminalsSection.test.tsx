@@ -162,3 +162,38 @@ describe('TerminalsSection', () => {
     await vi.waitFor(() => expect(p.onError).toHaveBeenCalledWith('spawn failed'));
   });
 });
+
+describe('TerminalsSection — multi-folder workspace', () => {
+  const multi = { id: 'w1', name: 'x', rootPath: '/repos/web', extraFolders: ['/repos/api', '/repos/infra'] };
+
+  it('groups terminals by folder, collapsing the empty ones, with the status as the only colour', async () => {
+    answer({
+      'workspace.getActive': multi,
+      'terminal.list': [
+        term({ terminalId: 'a', folder: '/repos/web', name: 'dev server' }),
+        term({ terminalId: 'b', folder: '/repos/api', name: 'testes', relCwd: 'src' }),
+      ],
+      'launchConfig.list': null,
+    });
+    renderWithShell(<TerminalsSection {...props()} />);
+    const web = await screen.findByTestId('terminal-group-web');
+    expect(within(web).getByTestId('terminal-row-a')).toHaveTextContent('rodando');
+    expect(within(screen.getByTestId('terminal-group-api')).getByTestId('terminal-row-b')).toHaveTextContent('src');
+    // infra has no terminals: its header is there, dimmed and collapsed.
+    expect(screen.getByTestId('terminal-group-header-infra')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('terminal-folder-dot-a')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('terminal-group-header-web'));
+    expect(screen.queryByTestId('terminal-row-a')).not.toBeInTheDocument();
+  });
+
+  it('lists a terminal outside every folder under the workspace root', async () => {
+    answer({
+      'workspace.getActive': multi,
+      'terminal.list': [term({ terminalId: 'r', folder: '', name: 'zsh' })],
+      'launchConfig.list': null,
+    });
+    renderWithShell(<TerminalsSection {...props()} />);
+    expect(await screen.findByTestId('terminal-group-Raiz do workspace')).toContainElement(await screen.findByTestId('terminal-row-r'));
+  });
+});

@@ -1,54 +1,27 @@
 import { Badge, Box, Tooltip } from '@mui/material';
-import { FolderTree, GitBranch, House, SquareTerminal, type LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
 export type ExplorerView = 'files' | 'git' | 'terminals';
 
-interface ExplorerRailProps {
-  /** `null` at Início, where no view is active and the workspace views are unavailable. */
-  view: ExplorerView | null;
-  onSelect: (view: ExplorerView) => void;
-  /** Files with changes; hidden at 0 and outside a repository. */
-  gitCount?: number;
-  /** No repository: the Git icon dims but stays clickable, since that view offers "Inicializar git". */
-  gitDimmed?: boolean;
-  /** Running terminals. */
-  terminalCount?: number;
-  /** Início is the active context: Arquivos/Git/Terminais need an open workspace. */
-  isHome: boolean;
-  onGoHome: () => void;
-}
-
-interface RailItem {
-  view: ExplorerView;
-  label: string;
-  glyph: LucideIcon;
-  count?: number | undefined;
-  dimmed?: boolean | undefined;
-  badgeColor: 'warning' | 'success';
-}
-
-function RailButton({
-  testId,
-  label,
-  glyph,
-  active,
-  disabled,
-  dimmed = false,
-  count,
-  badgeColor,
-  onClick,
-}: {
+/** One destination on the rail — a view of the open workspace, or (at Início) an app area. */
+export interface RailItem {
+  /** Also the prefix of the badge/severity test ids. */
   testId: string;
   label: string;
   glyph: LucideIcon;
   active: boolean;
-  disabled: boolean;
-  dimmed?: boolean;
-  count?: number | undefined;
-  badgeColor: 'warning' | 'success';
   onClick: () => void;
-}): React.ReactElement {
+  /** Hidden at 0. */
+  count?: number | undefined;
+  /** The icon dims but stays clickable. */
+  dimmed?: boolean | undefined;
+  badgeColor?: 'warning' | 'success' | undefined;
+  /** A small status dot on the icon (e.g. Diagnóstico's worst severity). */
+  severity?: 'warning' | 'error' | undefined;
+}
+
+function RailButton({ testId, label, glyph, active, dimmed = false, count, badgeColor = 'warning', severity, onClick }: RailItem): React.ReactElement {
   return (
     <Tooltip title={label} placement="right">
       {/* The span keeps the tooltip working over a disabled button. */}
@@ -59,7 +32,6 @@ function RailButton({
           data-testid={testId}
           aria-label={label}
           aria-pressed={active}
-          disabled={disabled}
           onClick={onClick}
           sx={(theme) => ({
             position: 'relative',
@@ -72,9 +44,9 @@ function RailButton({
             borderRadius: `${theme.ogs.radius.sm}px`,
             bgcolor: active ? 'action.selected' : 'transparent',
             color: active ? 'info.main' : 'text.secondary',
-            cursor: disabled ? 'default' : 'pointer',
-            opacity: disabled ? 0.4 : dimmed ? 0.6 : 1,
-            '&:hover:not(:disabled)': { bgcolor: 'action.hover' },
+            cursor: 'pointer',
+            opacity: dimmed ? 0.6 : 1,
+            '&:hover': { bgcolor: 'action.hover' },
             '&:focus-visible': { outline: `2px solid ${theme.palette.info.main}`, outlineOffset: -2 },
             // Left-edge spine, same signature as the tab strip.
             '&::before': active
@@ -92,6 +64,12 @@ function RailButton({
           >
             <Icon glyph={glyph} size={16} />
           </Badge>
+          {severity !== undefined && (
+            <Box
+              data-testid={`${testId}-severity`}
+              sx={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', bgcolor: severity === 'error' ? 'error.main' : 'warning.main' }}
+            />
+          )}
         </Box>
       </span>
     </Tooltip>
@@ -99,16 +77,12 @@ function RailButton({
 }
 
 /**
- * The Explorer's menu: a thin rail that switches the panel between Arquivos,
- * Git and Terminais, with Início pinned at the bottom. Badges carry what needs
- * attention (changed files, running terminals) so it shows without opening a view.
+ * The Explorer's menu — "where I am": a thin rail whose active item decides
+ * what the panel shows. In a workspace it switches Arquivos / Git /
+ * Terminais; at Início it holds the app's destinations. Badges carry what
+ * needs attention (changed files, running terminals) without opening a view.
  */
-export function ExplorerRail({ view, onSelect, gitCount, gitDimmed, terminalCount, isHome, onGoHome }: ExplorerRailProps): React.ReactElement {
-  const items: RailItem[] = [
-    { view: 'files', label: 'Arquivos', glyph: FolderTree, badgeColor: 'warning' },
-    { view: 'git', label: 'Git', glyph: GitBranch, count: gitCount, dimmed: gitDimmed, badgeColor: 'warning' },
-    { view: 'terminals', label: 'Terminais', glyph: SquareTerminal, count: terminalCount, badgeColor: 'success' },
-  ];
+export function ExplorerRail({ items }: { items: readonly RailItem[] }): React.ReactElement {
   return (
     <Box
       component="nav"
@@ -127,21 +101,8 @@ export function ExplorerRail({ view, onSelect, gitCount, gitDimmed, terminalCoun
       }}
     >
       {items.map((item) => (
-        <RailButton
-          key={item.view}
-          testId={`explorer-view-${item.view}`}
-          label={item.label}
-          glyph={item.glyph}
-          active={!isHome && view === item.view}
-          disabled={isHome}
-          dimmed={item.dimmed === true}
-          count={item.count}
-          badgeColor={item.badgeColor}
-          onClick={() => onSelect(item.view)}
-        />
+        <RailButton key={item.testId} {...item} />
       ))}
-      <Box sx={{ flex: 1 }} />
-      <RailButton testId="explorer-view-home" label="Início" glyph={House} active={isHome} disabled={false} badgeColor="warning" onClick={onGoHome} />
     </Box>
   );
 }

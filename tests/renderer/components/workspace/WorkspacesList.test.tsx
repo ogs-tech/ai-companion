@@ -4,20 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { queryClient } from '../../../../src/renderer/lib/query-client.js';
 import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { registerUnsavedTabsGuard } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
-import { HomeNavList } from '../../../../src/renderer/components/workspace/HomeNavList.js';
+import { WorkspacesList } from '../../../../src/renderer/components/workspace/WorkspacesList.js';
 import { renderWithQuery } from '../../test-utils.js';
 
 const onOpenWorkspaces = vi.fn();
 
-const renderList = (props: { workspacesActive?: boolean } = {}) =>
-  renderWithQuery(
-    <HomeNavList
-      workspacesActive={props.workspacesActive ?? false}
-      onOpenWorkspaces={onOpenWorkspaces}
-      appAreaRows={<div data-testid="app-rows-slot">Diagnóstico</div>}
-    />,
-    { client: queryClient },
-  );
+const renderList = (limit?: number) =>
+  renderWithQuery(<WorkspacesList onOpenWorkspaces={onOpenWorkspaces} {...(limit !== undefined ? { limit } : {})} />, { client: queryClient });
 
 const workspaces = [
   { id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '', lastOpenedAt: '2026-10-01T10:00:00.000Z' },
@@ -40,42 +33,51 @@ afterEach(() => {
   registerUnsavedTabsGuard(null);
 });
 
-describe('HomeNavList', () => {
-  it('has no "App" or "Workspaces" section header — only menu rows', async () => {
-    renderList();
-    await screen.findByTestId('workspace-list-row-w2');
-    expect(screen.queryByText('App')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('workspace-list-open-folder')).not.toBeInTheDocument();
-    expect(screen.getByTestId('explorer-area-workspaces')).toHaveTextContent('Workspaces');
-  });
-
-  it('lists the 3 most recently opened workspaces, newest first', async () => {
+describe('WorkspacesList', () => {
+  it('lists workspaces newest first with their relative time', async () => {
     renderList();
     await screen.findByTestId('workspace-list-row-w2');
     const rows = screen.getAllByTestId(/^workspace-list-row-/);
-    expect(rows.map((r) => r.textContent)).toEqual(['Bravo', 'Charlie', 'Acme']);
+    ['Bravo', 'Charlie', 'Acme', 'Delta'].forEach((name, i) => expect(rows[i]).toHaveTextContent(name));
+    expect(screen.getByTestId('workspace-list-time-w2').textContent).not.toBe('');
   });
 
-  it('renders the app rows after the divider', async () => {
-    renderList();
-    expect(await screen.findByTestId('app-rows-slot')).toBeInTheDocument();
-    expect(screen.getByRole('separator')).toBeInTheDocument();
-  });
-
-  it('has no Início row — the overview is the pinned canvas tab', async () => {
-    renderList();
-    await screen.findByTestId('workspace-list-row-w2');
-    expect(screen.queryByTestId('explorer-area-overview')).not.toBeInTheDocument();
-  });
-
-  it('opens the Workspaces page from its row', async () => {
+  it('caps the list and offers "Ver todos (n)…" that opens the Workspaces page', async () => {
     const user = userEvent.setup();
-    renderList();
-    await user.click(await screen.findByTestId('explorer-area-workspaces'));
+    renderList(3);
+    await screen.findByTestId('workspace-list-row-w2');
+    expect(screen.getAllByTestId(/^workspace-list-row-/)).toHaveLength(3);
+    await user.click(screen.getByTestId('workspaces-see-all'));
+    expect(screen.getByTestId('workspaces-see-all')).toHaveTextContent('Ver todos (4)…');
     expect(onOpenWorkspaces).toHaveBeenCalledOnce();
   });
 
-  it('switches to a recent workspace on click', async () => {
+  it('searches across every workspace, past the cap', async () => {
+    const user = userEvent.setup();
+    renderList(2);
+    await screen.findByTestId('workspace-list-row-w2');
+    await user.type(screen.getByTestId('workspaces-search'), 'delt');
+    expect(screen.getAllByTestId(/^workspace-list-row-/)).toHaveLength(1);
+    expect(screen.getByTestId('workspace-list-row-w4')).toBeInTheDocument();
+    expect(screen.queryByTestId('workspaces-see-all')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty message when nothing matches', async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByTestId('workspace-list-row-w2');
+    await user.type(screen.getByTestId('workspaces-search'), 'zzz');
+    expect(screen.getByTestId('workspaces-empty')).toBeInTheDocument();
+  });
+
+  it('has no app destinations in the body — those live in the rail', async () => {
+    renderList();
+    await screen.findByTestId('workspace-list-row-w2');
+    expect(screen.queryByTestId('explorer-area-workspaces')).not.toBeInTheDocument();
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+  });
+
+  it('switches to a workspace on click', async () => {
     const user = userEvent.setup();
     renderList();
     await user.click(await screen.findByTestId('workspace-list-row-w2'));

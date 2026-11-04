@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, ChevronRight, X, XCircle } from 'lucide-react';
+import { X, XCircle } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { treeGroupLabelSx } from '../ds/TreeRow.js';
+import { SectionAction, SectionHeader } from '../ds/ContainerChrome.js';
 import type { WorkbenchTab } from './WorkbenchCanvas.js';
 
 interface OpenEditorsSectionProps {
@@ -23,39 +23,18 @@ export function OpenEditorsSection({ tabs, activeTabId, onSelect, onCloseAll }: 
 
   return (
     <Box data-testid="open-editors-section" sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0, maxHeight: '40%', display: 'flex', flexDirection: 'column' }}>
-      <Box
-        data-testid="open-editors-header"
-        onClick={() => setExpanded((v) => !v)}
-        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: 1, pr: 0.5, py: 0.25, cursor: 'pointer' }}
-      >
-        <Icon glyph={expanded ? ChevronDown : ChevronRight} size={14} />
-        <Typography component="span" sx={{ ...treeGroupLabelSx, flex: 1 }}>Editores abertos</Typography>
-        <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{tabs.length}</Typography>
-        {tabs.length > 0 && (
-          <Tooltip title="Fechar todos">
-            <Box
-              component="span"
-              role="button"
-              tabIndex={0}
-              aria-label="Editores abertos: fechar todos"
-              data-testid="open-editors-close-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseAll();
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                e.preventDefault();
-                e.stopPropagation();
-                onCloseAll();
-              }}
-              sx={{ display: 'inline-flex', p: 0.5, cursor: 'pointer' }}
-            >
-              <Icon glyph={XCircle} size={14} />
-            </Box>
-          </Tooltip>
-        )}
-      </Box>
+      <SectionHeader
+        title="Editores abertos"
+        testId="open-editors-header"
+        count={tabs.length}
+        collapsed={!expanded}
+        onToggle={() => setExpanded((v) => !v)}
+        actions={
+          tabs.length > 0 ? (
+            <SectionAction label="Editores abertos: fechar todos" testId="open-editors-close-all" glyph={XCircle} onClick={onCloseAll} />
+          ) : undefined
+        }
+      />
       {expanded && (
         <Box sx={{ overflowY: 'auto', pb: 0.5 }}>
           {tabs.length === 0 && (

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Folder } from 'lucide-react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExplorerPanelContent } from '../../../../src/renderer/components/workspace/ExplorerPanelContent.js';
@@ -41,30 +42,36 @@ function route(overrides: Partial<Record<string, unknown>> = {}): void {
   });
 }
 
+const homeRailItems = ['workspaces', 'starter-pack', 'marketplaces', 'diagnostico'].map((area) => ({
+  testId: `explorer-area-${area}`,
+  label: area,
+  glyph: Folder,
+  active: area === 'workspaces',
+  onClick: vi.fn(),
+}));
+
 function renderPanel(isHome = false, view: 'files' | 'git' | 'terminals' = 'files') {
   const onOpenGitDiff = vi.fn();
   const onSelectFile = vi.fn();
-  const onGoHome = vi.fn();
   const onCollapse = vi.fn();
   renderWithQuery(
     <ExplorerPanelContent
       activeWorkspace={isHome ? null : workspace}
       isHome={isHome}
       gitPolling
-      appAreaRows={<div data-testid="app-rows" />}
-      homeNav={{ workspacesActive: false, onOpenWorkspaces: vi.fn() }}
+      homeRailItems={homeRailItems}
+      onOpenWorkspaces={vi.fn()}
       onSelectFile={onSelectFile}
       onOpenAsWorkspace={vi.fn()}
       onPreviewFile={vi.fn()}
       onNewAction={vi.fn()}
       onOpenGitDiff={onOpenGitDiff}
-      onGoHome={onGoHome}
       onCollapse={onCollapse}
       terminalsSection={<div data-testid="terminals-body" />}
     />,
   );
   if (view !== 'files') fireEvent.click(screen.getByTestId(`explorer-view-${view}`));
-  return { onOpenGitDiff, onSelectFile, onGoHome, onCollapse };
+  return { onOpenGitDiff, onSelectFile, onCollapse };
 }
 
 beforeEach(() => {
@@ -74,18 +81,20 @@ beforeEach(() => {
 });
 
 describe('ExplorerPanelContent', () => {
-  it('never queries git at Início, where only the Início rail button is active', async () => {
+  it('at Início the rail holds the app destinations over the workspaces list, and never queries git', async () => {
     renderPanel(true);
-    expect(await screen.findByTestId('app-rows')).toBeInTheDocument();
+    expect(await screen.findByTestId('workspaces-list')).toBeInTheDocument();
     expect(call).not.toHaveBeenCalledWith('git.status', expect.anything());
-    expect(screen.getByTestId('explorer-view-home')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('explorer-view-files')).toBeDisabled();
-    expect(screen.getByTestId('explorer-view-git')).toBeDisabled();
-    expect(screen.getByTestId('explorer-view-terminals')).toBeDisabled();
+    for (const area of ['workspaces', 'starter-pack', 'marketplaces', 'diagnostico']) {
+      expect(screen.getByTestId(`explorer-area-${area}`)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId('explorer-area-workspaces')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('explorer-view-files')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('explorer-view-home')).not.toBeInTheDocument();
   });
 
   it('starts on Arquivos, switches views from the rail, and keeps git out of the file view', async () => {
-    const { onGoHome, onCollapse } = renderPanel();
+    const { onCollapse } = renderPanel();
     expect(await screen.findByText('b.md')).toBeInTheDocument();
     expect(screen.getByTestId('explorer-view-files')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('explorer-toolbar')).not.toBeInTheDocument();
@@ -99,8 +108,6 @@ describe('ExplorerPanelContent', () => {
     expect(await screen.findByTestId('terminals-body')).toBeInTheDocument();
     expect(screen.queryByTestId('explorer-toolbar')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByTestId('explorer-view-home'));
-    expect(onGoHome).toHaveBeenCalledTimes(1);
     expect(onCollapse).not.toHaveBeenCalled();
   });
 
@@ -203,21 +210,21 @@ describe('ExplorerPanelContent', () => {
     renderPanel(false, 'git');
 
     expect(await screen.findByTestId('git-init-card')).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId('git-init-trigger'));
-    await userEvent.click(screen.getByTestId('git-init-btn'));
+    await userEvent.click(screen.getByTestId('git-init-card-btn'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('git.init', {}));
   });
 });
 
 describe('ExplorerToolbar', () => {
-  it('shows ahead/behind and disables Stage all without worktree changes', async () => {
+  it('shows ahead/behind, and offers no Stage all without worktree changes', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified')], { head: { name: 'feat/x', oid: 'abc', ahead: 2, behind: 1 } })) });
     renderPanel(false, 'git');
 
     const chip = await screen.findByTestId('git-head');
     expect(chip).toHaveTextContent('feat/x');
     expect(chip).toHaveTextContent('↑2 ↓1');
-    expect(screen.getByTestId('git-stage-all')).toBeDisabled();
+    expect(screen.queryByTestId('git-stage-all')).not.toBeInTheDocument();
+    expect(screen.getByTestId('git-commit-open')).toHaveTextContent('Commit (1)');
   });
 
   it('stages all worktree changes', async () => {
@@ -259,19 +266,22 @@ describe('ExplorerToolbar', () => {
 });
 
 describe('Explorer status actions', () => {
-  it('shows staged/changes chips and hides a chip whose count is 0', async () => {
+  it('counts each section and pins "Commit (n)" with the staged count', async () => {
     route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified'), file('b.md', 'unmodified', 'modified'), file('c.md', 'untracked', 'untracked')])) });
     renderPanel(false, 'git');
-    expect(await screen.findByTestId('git-chip-staged')).toHaveTextContent('1 staged');
-    expect(screen.getByTestId('git-chip-changes')).toHaveTextContent('2 changes');
+    expect(await screen.findByTestId('git-group-staged-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('git-group-changes-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('git-commit-open')).toHaveTextContent('Commit (1)');
+    expect(screen.queryByTestId('git-chip-staged')).not.toBeInTheDocument();
   });
 
-  it('omits the chips and disables Unstage all on a clean tree', async () => {
+  it('shows no sections and disables Commit on a clean tree', async () => {
     renderPanel(false, 'git');
     await screen.findByTestId('git-head');
-    expect(screen.queryByTestId('git-chip-staged')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('git-chip-changes')).not.toBeInTheDocument();
-    expect(screen.getByTestId('git-unstage-all')).toBeDisabled();
+    expect(screen.queryByTestId('git-group-staged')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('git-group-changes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('git-unstage-all')).not.toBeInTheDocument();
+    expect(screen.getByTestId('git-commit-open')).toBeDisabled();
   });
 
   it('unstages every staged file from the toolbar', async () => {
@@ -401,12 +411,11 @@ describe('AI commit message', () => {
     expect(screen.getByTestId('git-generate-btn')).toBeEnabled();
   });
 
-  it('disables Gerar with a hint when nothing is staged', async () => {
+  it('keeps Commit disabled until something is staged', async () => {
     route({ 'git.status': ok(repo([file('b.md', 'unmodified', 'modified')])) });
     renderPanel(false, 'git');
-    await openPopover();
-    expect(screen.getByTestId('git-generate-btn')).toBeDisabled();
-    expect(screen.getByTestId('git-generate-hint')).toHaveTextContent('Faça stage');
+    expect(await screen.findByTestId('git-commit-open')).toBeDisabled();
+    expect(screen.getByTestId('git-commit-open')).toHaveTextContent('Commit (0)');
   });
 
   it('disables Gerar while Amend is ticked', async () => {
@@ -527,5 +536,107 @@ describe('Git view — grouped changes', () => {
   it('says so when the tree is clean', async () => {
     renderPanel(false, 'git');
     expect(await screen.findByTestId('git-clean')).toHaveTextContent('Nenhuma alteração');
+  });
+});
+
+describe('Git sections', () => {
+  it('discards every worktree change from the Changes header, after a confirmation', async () => {
+    route({ 'git.status': ok(repo([file('a.ts', 'added', 'unmodified'), file('b.md', 'unmodified', 'modified'), file('c.md', 'untracked', 'untracked')])) });
+    renderPanel(false, 'git');
+    await userEvent.click(await screen.findByTestId('git-discard-all'));
+    expect(call).not.toHaveBeenCalledWith('git.discard', expect.anything());
+    await userEvent.click(screen.getByTestId('git-discard-confirm-btn'));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('git.discard', { paths: ['b.md', 'c.md'] }));
+  });
+});
+
+describe('Multi-folder workspace', () => {
+  const multiWorkspace = { id: 'w1', name: 'proj', rootPath: '/r/web', extraFolders: ['/r/api', '/r/infra', '/r/notes'] } as Workspace;
+
+  function routeMulti(statuses: Record<string, unknown>): void {
+    call.mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'git.status') return ok(statuses[(params as { folder?: string }).folder ?? ''] ?? { isRepo: false });
+      if (method === 'workspace.listDir') {
+        return ok((params as { path: string }).path === '' ? ['web', 'api', 'infra', 'notes'].map((name) => ({ name, kind: 'dir' })) : []);
+      }
+      if (method === 'workspace.list') return ok([]);
+      return ok(undefined);
+    });
+  }
+
+  const statuses = {
+    '': repo([file('index.ts', 'unmodified', 'modified'), file('App.tsx', 'unmodified', 'modified')]),
+    '/r/web': repo([file('index.ts', 'unmodified', 'modified'), file('App.tsx', 'unmodified', 'modified')]),
+    '/r/api': repo([file('x.ts', 'added', 'unmodified')], { head: { name: 'feat/x', oid: 'abc', ahead: 0, behind: 0 } }),
+    '/r/infra': repo([]),
+    '/r/notes': { isRepo: false },
+  };
+
+  function renderMulti(view: 'files' | 'git' = 'files') {
+    renderWithQuery(
+      <ExplorerPanelContent
+        activeWorkspace={multiWorkspace}
+        isHome={false}
+        gitPolling
+        homeRailItems={homeRailItems}
+        onOpenWorkspaces={vi.fn()}
+        onSelectFile={vi.fn()}
+        onOpenAsWorkspace={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onNewAction={vi.fn()}
+        onOpenGitDiff={vi.fn()}
+        terminalsSection={<div data-testid="terminals-body" />}
+      />,
+    );
+    if (view !== 'files') fireEvent.click(screen.getByTestId(`explorer-view-${view}`));
+  }
+
+  it('tree folder rows carry branch and changes pill — no colour dot — and dim the clean ones', async () => {
+    routeMulti(statuses);
+    renderMulti();
+    await waitFor(() => expect(screen.getByTestId('folder-meta-web')).toHaveTextContent('main'));
+    expect(screen.getByTestId('folder-meta-web')).toHaveTextContent('M 2');
+    expect(screen.getByTestId('folder-meta-api')).toHaveTextContent('feat/x');
+    expect(screen.getByTestId('folder-meta-api')).toHaveTextContent('M 1');
+    expect(screen.getByTestId('folder-meta-infra')).not.toHaveTextContent('M ');
+    expect(screen.queryByTestId('folder-dot-web')).not.toBeInTheDocument();
+    expect(screen.getByTestId('explorer-view-git-count')).toHaveTextContent('3');
+  });
+
+  it('lists repositories: dirty folders open, clean ones collapsed, no-git as one muted line', async () => {
+    routeMulti(statuses);
+    renderMulti('git');
+    expect(await screen.findByTestId('git-repositories-header')).toHaveTextContent('Repositórios');
+    await screen.findByTestId('git-change-changes-index.ts');
+    expect(within(screen.getByTestId('folder-git-web')).getByTestId('git-change-changes-App.tsx')).toBeInTheDocument();
+    expect(within(screen.getByTestId('folder-git-api')).getByTestId('git-change-staged-x.ts')).toBeInTheDocument();
+    // A clean folder stays collapsed until opened.
+    const infra = screen.getByTestId('folder-git-infra');
+    expect(infra).toHaveTextContent('limpo');
+    expect(within(infra).queryByTestId('git-clean')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('folder-git-infra-header'));
+    expect(within(infra).getByTestId('git-clean')).toBeInTheDocument();
+    // No init card in a multi-folder workspace.
+    expect(screen.queryByTestId('git-init-card')).not.toBeInTheDocument();
+  });
+
+  it('commits per folder: "Commit (folder)…" is enabled only where something is staged', async () => {
+    routeMulti(statuses);
+    renderMulti('git');
+    await screen.findByTestId('git-change-changes-index.ts');
+    const web = within(screen.getByTestId('folder-git-web')).getByTestId('git-commit-open');
+    const api = within(screen.getByTestId('folder-git-api')).getByTestId('git-commit-open');
+    expect(web).toHaveTextContent('Commit (web)…');
+    expect(web).toBeDisabled();
+    expect(api).toHaveTextContent('Commit (api)…');
+    expect(api).toBeEnabled();
+  });
+
+  it('initialises a folder without git from its muted line', async () => {
+    routeMulti(statuses);
+    renderMulti('git');
+    await waitFor(() => expect(screen.getByTestId('folder-git-notes')).toHaveTextContent('sem git · iniciar'));
+    await userEvent.click(screen.getByTestId('folder-git-notes'));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('git.init', { folder: '/r/notes' }));
   });
 });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, Button, IconButton, Popover, Tooltip, Typography } from '@mui/material';
-import { GitBranch, X } from 'lucide-react';
+import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
+import { X } from 'lucide-react';
 import { Icon } from '../../ds/Icon.js';
 
 const DISMISS_KEY_PREFIX = 'ai-companion.git-init-card-dismissed.';
@@ -24,43 +24,6 @@ function writeDismissed(workspaceId: string): void {
 interface GitInitProps {
   busy: boolean;
   onInit: () => void;
-}
-
-/** The toolbar's ⎇ icon when the folder is not a repo — always available, unlike the dismissible card. */
-export function GitInitPopoverButton({ busy, onInit }: GitInitProps): React.ReactElement {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  return (
-    <>
-      <Tooltip title="Inicializar git">
-        <IconButton size="small" aria-label="Inicializar git" data-testid="git-init-trigger" onClick={(e) => setAnchor(e.currentTarget)}>
-          <Icon glyph={GitBranch} size={14} />
-        </IconButton>
-      </Tooltip>
-      <Popover
-        open={anchor !== null}
-        anchorEl={anchor}
-        onClose={() => setAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { width: 260, p: 1.5, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' } } }}
-      >
-        <Typography variant="body2" color="text.secondary">
-          Esta pasta não é um repositório git.
-        </Typography>
-        <Button
-          size="small"
-          variant="outlined"
-          disabled={busy}
-          data-testid="git-init-btn"
-          onClick={() => {
-            setAnchor(null);
-            onInit();
-          }}
-        >
-          Inicializar
-        </Button>
-      </Popover>
-    </>
-  );
 }
 
 interface GitInitCardProps extends GitInitProps {

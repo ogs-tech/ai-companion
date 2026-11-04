@@ -13,7 +13,6 @@ import { McpTreeGroup } from './McpTreeGroup.js';
 import { MINE_KEY, OriginSection, PersistedGroup, sortOriginKeys, type OriginView } from './OriginGroups.js';
 import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { useFolderRouting } from '../../hooks/use-folder-routing.js';
-import { folderColor } from '../../lib/folder-identity.js';
 import { useCustomizationList } from '../../hooks/use-customization-list.js';
 import { PluginsTreeGroup } from './PluginsTreeGroup.js';
 import { ScopeSection } from './ScopeSection.js';
@@ -363,18 +362,17 @@ export function CustomizationsList({
     ).length;
   const originGroups = (): React.ReactNode => {
     if (!localScope || !routing.multi) return null;
-    const origins: Array<{ folder: string | null; label: string; color: string }> = [
-      { folder: null, label: 'Workspace', color: folderColor(routing.folders, undefined) },
-      ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string, color: folderColor(routing.folders, folder) })),
+    const origins: Array<{ folder: string | null; label: string }> = [
+      { folder: null, label: 'Workspace' },
+      ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string })),
     ];
-    return origins.map(({ folder, label, color }) => {
+    return origins.map(({ folder, label }) => {
       const scoped = { ...localScope, folder };
       return (
         <PersistedGroup
           key={folder ?? '__shared'}
           glyph={Folder}
           label={label}
-          accent={color}
           count={originCount(folder)}
           storageKey={groupKey('local', `folder:${folder ?? 'shared'}`)}
           testId={`origin-folder-${label}`}

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Box, Menu, MenuItem, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, ChevronRight, Play, Plus, RotateCw, Square, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, Play, Plus, RotateCw, Square, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
-import { treeGroupLabelSx } from '../ds/TreeRow.js';
+import { SectionAction, SectionHeader } from '../ds/ContainerChrome.js';
 import { FolderPickerDialog } from './FolderPickerDialog.js';
 import { useLaunchConfigs, useRunLaunchConfig } from '../../hooks/use-launch-configs.js';
 import {
@@ -14,7 +14,6 @@ import {
 } from '../../hooks/use-terminals.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { useFolderRouting } from '../../hooks/use-folder-routing.js';
-import { folderColor } from '../../lib/folder-identity.js';
 import { WORKSPACE_ROOT_FOLDER, type TerminalSnapshot } from '../../../shared/terminal.js';
 
 interface TerminalsSectionProps {
@@ -80,7 +79,8 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
   const killTerminal = useKillTerminal();
   const restartTerminal = useRestartTerminal();
   const removeTerminal = useRemoveTerminal();
-  const [expanded, setExpanded] = useState(true);
+  // Per-view: a group follows its content (open when it has terminals) until clicked.
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -95,122 +95,128 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
     );
   };
 
+  const renderRow = (terminal: TerminalSnapshot): React.ReactElement => (
+    <Box
+      key={terminal.terminalId}
+      data-testid={`terminal-row-${terminal.terminalId}`}
+      onClick={() => onOpen(terminal)}
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: routing.multi ? 3.5 : 1.5, pr: 0.5, py: 0.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+    >
+      <Box
+        data-testid={`terminal-dot-${terminal.terminalId}`}
+        sx={(theme) => ({
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          ...(terminal.status === 'exited' && terminal.exitCode === 0
+            ? { border: `1.5px solid ${theme.palette.text.disabled}` }
+            : { bgcolor: statusDotColor(terminal) }),
+        })}
+      />
+      <Typography component="span" sx={{ fontSize: '0.8rem', fontFamily: (t) => t.ogs.fonts.mono }} noWrap>{terminal.name}</Typography>
+      <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', flex: 1, minWidth: 0 }} noWrap>
+        {/* In a multi-folder workspace the group header already names the folder. */}
+        {routing.multi ? terminal.relCwd : terminal.relCwd === '' ? 'raiz' : terminal.relCwd}
+      </Typography>
+      {terminal.kind === 'launch' && <Typography component="span" sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>launch</Typography>}
+      {!openTerminalIds.has(terminal.terminalId) && (
+        <Typography component="span" sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>sem aba</Typography>
+      )}
+      {terminal.status === 'running' && <Typography component="span" sx={{ fontSize: '0.65rem', color: 'success.main' }}>rodando</Typography>}
+      {terminal.status === 'exited' && terminal.exitCode !== null && (
+        <Typography component="span" data-testid={`terminal-exit-${terminal.terminalId}`} sx={{ fontSize: '0.65rem', color: terminal.exitCode === 0 ? 'text.secondary' : 'error.main' }}>
+          {terminal.exitCode}
+        </Typography>
+      )}
+      {terminal.status === 'running' ? (
+        <RowAction
+          label={`Parar ${terminal.name}`}
+          testId={`terminal-stop-${terminal.terminalId}`}
+          glyph={Square}
+          onClick={() => killTerminal.mutate(terminal.terminalId, { onError: fail })}
+        />
+      ) : (
+        <>
+          <RowAction
+            label={`Reiniciar ${terminal.name}`}
+            testId={`terminal-restart-${terminal.terminalId}`}
+            glyph={RotateCw}
+            onClick={() => restartTerminal.mutate(terminal.terminalId, { onSuccess: (terminal) => onOpen(terminal), onError: fail })}
+          />
+          <RowAction
+            label={`Remover ${terminal.name}`}
+            testId={`terminal-remove-${terminal.terminalId}`}
+            glyph={X}
+            onClick={() =>
+              removeTerminal.mutate(terminal.terminalId, {
+                onSuccess: () => onRemoved(terminal.terminalId),
+                onError: fail,
+              })
+            }
+          />
+        </>
+      )}
+    </Box>
+  );
+
+  // Multi-folder: one collapsible group per folder (a terminal outside every folder goes under the workspace root).
+  const inFolder = (terminal: TerminalSnapshot): string => (routing.folders.includes(terminal.folder) ? terminal.folder : WORKSPACE_ROOT_FOLDER);
+  const groups = routing.multi
+    ? [
+        ...(terminals.some((t) => inFolder(t) === WORKSPACE_ROOT_FOLDER) ? [{ key: WORKSPACE_ROOT_FOLDER, label: 'Raiz do workspace', isFolder: false }] : []),
+        ...routing.folders.map((folder) => ({ key: folder, label: routing.aliases[folder] as string, isFolder: true })),
+      ]
+    : [];
+
   return (
     <Box data-testid="terminals-section" sx={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : { borderTop: 1, borderColor: 'divider', flexShrink: 0, maxHeight: '45%', display: 'flex', flexDirection: 'column' }}>
-      <Box
-        data-testid="terminals-header"
-        onClick={() => setExpanded((v) => !v)}
-        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: 1, pr: 0.5, py: 0.25, cursor: 'pointer' }}
-      >
-        <Icon glyph={expanded ? ChevronDown : ChevronRight} size={14} />
-        <Typography component="span" sx={{ ...treeGroupLabelSx, flex: 1 }}>Terminais</Typography>
-        <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{terminals.length}</Typography>
-        <Tooltip title="Novo terminal">
-          <Box
-            component="span"
-            role="button"
-            tabIndex={0}
-            aria-label="Novo terminal"
-            aria-haspopup="menu"
-            data-testid="terminals-new-menu"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuAnchor(e.currentTarget);
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              e.preventDefault();
-              e.stopPropagation();
-              setMenuAnchor(e.currentTarget);
-            }}
-            sx={{ display: 'inline-flex', alignItems: 'center', p: 0.5, cursor: 'pointer' }}
-          >
-            <Icon glyph={Plus} size={14} />
-            <Icon glyph={ChevronDown} size={11} />
-          </Box>
-        </Tooltip>
+      <SectionHeader
+        title="Terminais"
+        testId="terminals-header"
+        count={terminals.length}
+        actions={
+          <SectionAction label="Novo terminal" testId="terminals-new-menu" glyph={Plus} hasPopup onClick={(anchor) => setMenuAnchor(anchor)} />
+        }
+      />
+      <Box sx={{ overflowY: 'auto', pb: 0.5 }}>
+        {terminals.length === 0 && (
+          <Typography variant="caption" color="text.secondary" data-testid="terminals-empty" sx={{ display: 'block', px: 1.5, py: 0.75 }}>
+            Nenhum terminal aberto
+          </Typography>
+        )}
+        {!routing.multi && terminals.map(renderRow)}
+        {routing.multi &&
+          terminals.length > 0 &&
+          groups.map(({ key, label, isFolder }) => {
+            const members = terminals.filter((t) => inFolder(t) === key);
+            const open = groupOverrides[key] ?? members.length > 0;
+            return (
+              <Box key={key} data-testid={`terminal-group-${label}`}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={open}
+                  data-testid={`terminal-group-header-${label}`}
+                  onClick={() => setGroupOverrides((prev) => ({ ...prev, [key]: !open }))}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setGroupOverrides((prev) => ({ ...prev, [key]: !open }));
+                  }}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 1, pr: 1, py: 0.5, cursor: 'pointer', opacity: members.length > 0 ? 1 : 0.6, '&:hover': { bgcolor: 'action.hover' } }}
+                >
+                  <Icon glyph={open ? ChevronDown : ChevronRight} size={14} />
+                  {isFolder && <Icon glyph={Folder} size={14} />}
+                  <Typography component="span" noWrap sx={{ fontSize: '0.8rem' }}>{label}</Typography>
+                </Box>
+                {open && members.map(renderRow)}
+              </Box>
+            );
+          })}
       </Box>
-      {expanded && (
-        <Box sx={{ overflowY: 'auto', pb: 0.5 }}>
-          {terminals.length === 0 && (
-            <Typography variant="caption" color="text.secondary" data-testid="terminals-empty" sx={{ display: 'block', px: 1.5, py: 0.75 }}>
-              Nenhum terminal aberto
-            </Typography>
-          )}
-          {terminals.map((terminal) => (
-            <Box
-              key={terminal.terminalId}
-              data-testid={`terminal-row-${terminal.terminalId}`}
-              onClick={() => onOpen(terminal)}
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 1.5, pr: 0.5, py: 0.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-            >
-              <Box
-                data-testid={`terminal-dot-${terminal.terminalId}`}
-                sx={(theme) => ({
-                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  ...(terminal.status === 'exited' && terminal.exitCode === 0
-                    ? { border: `1.5px solid ${theme.palette.text.disabled}` }
-                    : { bgcolor: statusDotColor(terminal) }),
-                })}
-              />
-              <Typography component="span" sx={{ fontSize: '0.8rem', fontFamily: (t) => t.ogs.fonts.mono }} noWrap>{terminal.name}</Typography>
-              <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', flex: 1, minWidth: 0 }} noWrap>
-                {routing.multi && routing.aliases[terminal.folder] !== undefined && (
-                  <Box
-                    component="span"
-                    data-testid={`terminal-folder-dot-${terminal.terminalId}`}
-                    sx={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', mr: 0.5, bgcolor: folderColor(routing.folders, terminal.folder) }}
-                  />
-                )}
-                {routing.multi ? `${routing.aliases[terminal.folder] ?? 'raiz do workspace'}${terminal.relCwd === '' ? '' : `/${terminal.relCwd}`}` : terminal.relCwd === '' ? 'raiz' : terminal.relCwd}
-              </Typography>
-              {terminal.kind === 'launch' && <Typography component="span" sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>launch</Typography>}
-              {!openTerminalIds.has(terminal.terminalId) && (
-                <Typography component="span" sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>sem aba</Typography>
-              )}
-              {terminal.status === 'exited' && terminal.exitCode !== null && (
-                <Typography component="span" data-testid={`terminal-exit-${terminal.terminalId}`} sx={{ fontSize: '0.65rem', color: terminal.exitCode === 0 ? 'text.secondary' : 'error.main' }}>
-                  {terminal.exitCode}
-                </Typography>
-              )}
-              {terminal.status === 'running' ? (
-                <RowAction
-                  label={`Parar ${terminal.name}`}
-                  testId={`terminal-stop-${terminal.terminalId}`}
-                  glyph={Square}
-                  onClick={() => killTerminal.mutate(terminal.terminalId, { onError: fail })}
-                />
-              ) : (
-                <>
-                  <RowAction
-                    label={`Reiniciar ${terminal.name}`}
-                    testId={`terminal-restart-${terminal.terminalId}`}
-                    glyph={RotateCw}
-                    onClick={() => restartTerminal.mutate(terminal.terminalId, { onSuccess: (terminal) => onOpen(terminal), onError: fail })}
-                  />
-                  <RowAction
-                    label={`Remover ${terminal.name}`}
-                    testId={`terminal-remove-${terminal.terminalId}`}
-                    glyph={X}
-                    onClick={() =>
-                      removeTerminal.mutate(terminal.terminalId, {
-                        onSuccess: () => onRemoved(terminal.terminalId),
-                        onError: fail,
-                      })
-                    }
-                  />
-                </>
-              )}
-            </Box>
-          ))}
-        </Box>
-      )}
       <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeMenu}>
         {routing.multi ? (
           [
             ...routing.folders.map((folder) => (
               <MenuItem key={folder} data-testid={`terminals-menu-folder-${routing.aliases[folder]}`} onClick={() => { closeMenu(); openShell('', folder); }}>
-                <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', mr: 1, bgcolor: folderColor(routing.folders, folder) }} />
                 Novo terminal em {routing.aliases[folder]}
               </MenuItem>
             )),

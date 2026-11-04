@@ -120,16 +120,14 @@ interface PersistedGroupProps {
   depth: number;
   /** Whether the group starts open when the user has not toggled it yet. */
   defaultOpen: boolean;
-  /** Colour dot before the label (a folder origin). */
-  accent?: string;
   children: React.ReactNode;
 }
 
 /** A collapsible group whose open state is remembered: a type ("Skills") or the "Plugins" block of the flat Control Panel list. */
-export function PersistedGroup({ glyph, label, count, storageKey, testId, forceOpen, depth, defaultOpen, accent, children }: PersistedGroupProps): React.ReactElement {
+export function PersistedGroup({ glyph, label, count, storageKey, testId, forceOpen, depth, defaultOpen, children }: PersistedGroupProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);
   return (
-    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)} {...(accent !== undefined ? { accent } : {})}>
+    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)}>
       {children}
     </TreeSubGroup>
   );

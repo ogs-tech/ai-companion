@@ -326,7 +326,7 @@ Same shell in both contexts; the content changes, the positions don't:
 | Region | Role | Início | Workspace |
 |---|---|---|---|
 | TopNav | context switcher (`ContextSwitcher`) | `🏠 Início ▾` | `📁 <name> ▾` (root path in the tooltip) |
-| Left panel (`ExplorerPanelContent`) | **where** | Flat menu (`HomeNavList`): Início, Workspaces + 3 recents, then Starter Pack / Marketplaces / Diagnóstico | File tree decorated with git status, plus a git toolbar |
+| Left panel (`ExplorerPanelContent`) | **where** | Rail: Workspaces · Starter Pack · Marketplaces · Diagnóstico; body is the workspaces list (`WorkspacesList`) | Rail: Arquivos · Git · Terminais; body is that view over the workspace's 1..N folders |
 | Workbench (`WorkbenchCanvas`) | **work** | pinned Visão geral (`HomeOverview`) + tabs | pinned Visão geral (`WorkspaceOverview`) + tabs |
 | Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Sessões + Workspace customizations, with "Do Global" |
 
@@ -335,6 +335,15 @@ prepended to the canvas tabs on every render, icon-only, with no close control. 
 ever touches `openTabs`, so the overview survives them by construction; closing the last tab or any context
 switch (`resetTabs`) falls back to it, and ⌘0 activates it. Its cards are read-only summaries that link out
 (open a tab, switch context, switch the left panel to Git) — nothing is edited inside the overview.
+
+#### Left panel anatomy
+
+One shell in every scope — **rail = where I am · section header = what I see · body = content**; only the body changes with the scope.
+
+- **Rail** (`ExplorerRail`, a list of `RailItem`s the caller builds). Início: the four app destinations, which open their page on the canvas (Diagnóstico carries a severity dot). Workspace: Arquivos · Git (changed-file count) · Terminais (running count). There is no Início button — the TopNav switcher is the way back. Clicking the active workspace item collapses the panel.
+- **Section header** (`SectionHeader` / `SectionAction` in `components/ds/ContainerChrome.tsx`): kicker title, quiet count, right-aligned actions, optional collapse chevron — the left panel's counterpart of the right panel's `ContainerHeader`.
+- **Body.** A single-folder workspace is the N=1 case of a multi-folder one (`WorkspaceExplorer` in `ExplorerPanelContent.tsx`, parameterised by `folderRoutingFor`). Arquivos: *Editores abertos* + *Arquivos* (👁 ⟳); with several folders the top-level rows are the folders with `⎇ branch` and a changes pill (`RepoMeta`), clean ones dimmed. Git, one folder (`SingleRepoGitView`): header `⎇ branch ⟳ ⋯`, **Staged** (unstage all) and **Changes** (stage all, discard all) sections, and one pinned **Commit (n)** (`CommitBar`, disabled until something is staged). Git, several folders (`RepositoriesView`): one list, dirty folders open with their files and a per-folder "Commit (folder)…", clean ones collapsed, folders without git one muted line that runs `git init` on click. Terminais: grouped by folder in a multi-folder workspace.
+- Folders have no colour anywhere in the UI: identity is the folder name (and a neutral folder icon). The only colour left on a folder row is the changes pill; terminals keep their status colour.
 
 ### Workspace switching navigation
 
@@ -396,11 +405,11 @@ A workspace holds 1..N folders (`Workspace.rootPath` = the primary, `extraFolder
 src/renderer/
 ├── App.tsx                 # View union: loading | main | settings | io-error
 ├── main.tsx
-├── screens/                # Main.tsx routes by Nav
+├── screens/                # Main.tsx wraps WorkspaceScreen in the shell
 │   ├── workspace/ marketplaces/ health/ starter-pack/ settings/
 │   ├── plugins/            # PluginDetail/PluginImportDialog/PublishPluginDialog — reused by
 │   │                       # PluginsTreeGroup; no longer a routed screen of its own (no PluginList.tsx)
-│   ├── Main.tsx            # root screen — maps Nav state to a screen component
+│   ├── Main.tsx            # root screen — AppShell + WorkspaceScreen, health notifications
 │   ├── Settings.tsx
 │   └── IoError.tsx         # generic retry screen for I/O failures
 ├── components/             # ds/ (design system), shell/ (TopNav, CommandPalette),
@@ -450,7 +459,7 @@ scope is matched against the open workspace's `rootPath`; `isProjectContext` kee
 `onlyGlobal` prop selects the Global half).
 
 Navigation is state-driven via a `Nav` discriminated union in `components/shell/nav.ts` (areas: `workspace`,
-`starter-pack`, `marketplaces`, `diagnostico`); `Main.tsx` maps `Nav` to a screen. No `react-router`, and no
+`starter-pack`, `marketplaces`, `diagnostico`); `Main.tsx` only wraps `WorkspaceScreen` in the shell; the area tabs open on the Workbench canvas. No `react-router`, and no
 area carries a `sub` anymore — Skills/Agents/Hooks/MCP/Plugins all moved from standalone screens into the
 tree nodes described above, so there is only ever one Workspace screen, and `SubRail` (which used to render
 a Plugins/Marketplaces sub-list) has been deleted entirely along with the `sub` field on `Nav`. Marketplaces

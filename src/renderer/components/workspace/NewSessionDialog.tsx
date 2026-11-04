@@ -1,9 +1,9 @@
 import { useState } from 'react';
+import { Folder } from 'lucide-react';
 import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import { HARNESSES, type HarnessId } from '../../../shared/harness.js';
 import type { RunHarnessOption } from '../../hooks/use-run-harnesses.js';
 import { HarnessMark } from '../HarnessMark.js';
-import { folderColor } from '../../lib/folder-identity.js';
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -94,7 +94,7 @@ function NewSessionForm({ folders, aliases, defaultFolder, harnesses = CLAUDE_ON
             <FormControlLabel
               label={
                 <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: folderColor(folders, folder) }} />
+                  <Folder size={14} aria-hidden />
                   <Typography component="span" variant="body2">{aliases[folder]}</Typography>
                 </Box>
               }

@@ -54,9 +54,14 @@ interface FolderTreeProps {
   onOpenTerminalHere?: (relDir: string) => void;
   /** Whether a folder (by its root-relative path) is itself a registered workspace's root — gets a small badge. */
   isWorkspaceRoot?: (relPath: string) => boolean;
-  /** Multi-folder workspaces: each top-level row is a folder (by alias) and gets its colour dot. */
-  rootColors?: Record<string, string>;
+  /** Multi-folder workspaces: what a top-level folder row shows after its name (branch, changes pill), keyed by the row's alias; `muted` dims a clean one. */
+  rootInfo?: Record<string, RootInfo>;
   git?: FolderTreeGit;
+}
+
+export interface RootInfo {
+  meta: React.ReactNode;
+  muted: boolean;
 }
 
 interface TreeNodeProps {
@@ -68,7 +73,8 @@ interface TreeNodeProps {
   isWorkspaceRoot: (relPath: string) => boolean;
   decorations: GitDecorations;
   git: FolderTreeGit | undefined;
-  rootColor?: string;
+  /** Top-level folder rows of a multi-folder workspace only. */
+  rootInfo?: RootInfo | undefined;
 }
 
 function GitBadge({ letters, color, testId }: { letters: string; color: string; testId: string }): React.ReactElement {
@@ -141,17 +147,6 @@ function rowGitActions(
   ];
 }
 
-/** A multi-folder root row leads with its folder's colour dot. */
-function withRootDot(label: React.ReactNode, color: string | undefined, name: string): React.ReactNode {
-  if (color === undefined) return label;
-  return (
-    <>
-      <Box component="span" data-testid={`folder-dot-${name}`} sx={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', bgcolor: color, mr: 0.75 }} />
-      {label}
-    </>
-  );
-}
-
 function TreeNode({
   entry,
   relPath,
@@ -161,7 +156,7 @@ function TreeNode({
   isWorkspaceRoot,
   decorations,
   git,
-  rootColor,
+  rootInfo,
 }: TreeNodeProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
   const isDir = entry.kind === 'dir';
@@ -175,16 +170,18 @@ function TreeNode({
         pl={1.5 + depth * 2}
         chevron={isDir ? (expanded ? 'expanded' : 'collapsed') : 'spacer'}
         glyph={isDir ? Folder : FileIcon}
-        primary={withRootDot(change ? <Box component="span" sx={{ color: change.color }}>{entry.name}</Box> : entry.name, rootColor, entry.name)}
+        primary={change ? <Box component="span" sx={{ color: change.color }}>{entry.name}</Box> : entry.name}
         onClick={() => {
           if (isDir) setExpanded((v) => !v);
           else onSelectFile(relPath);
         }}
         onContextMenu={(e) => onOpenRowMenu(e, { relPath, kind: entry.kind })}
-        {...(isDir && (isWorkspaceRoot(relPath) || dirty)
+        {...(rootInfo?.muted ? { muted: true } : {})}
+        {...(isDir && (isWorkspaceRoot(relPath) || dirty || rootInfo)
           ? {
               badge: (
                 <>
+                  {rootInfo?.meta}
                   {isWorkspaceRoot(relPath) && (
                     <Tooltip title="Workspace">
                       <Box component="span" data-testid={`tree-node-workspace-badge-${entry.name}`} sx={{ display: 'inline-flex', color: 'secondary.main' }}>
@@ -192,7 +189,7 @@ function TreeNode({
                       </Box>
                     </Tooltip>
                   )}
-                  {dirty && (
+                  {dirty && !rootInfo && (
                     <Tooltip title="Contém alterações">
                       <Box
                         component="span"
@@ -254,7 +251,7 @@ export function FolderTree({
   onNewAction,
   onOpenTerminalHere,
   isWorkspaceRoot = () => false,
-  rootColors,
+  rootInfo,
   git,
 }: FolderTreeProps): React.ReactElement {
   const { data: rootEntries, isError } = useDirListing('');
@@ -393,7 +390,7 @@ export function FolderTree({
             isWorkspaceRoot={isWorkspaceRoot}
             decorations={decorations}
             git={git}
-            {...(rootColors?.[entry.name] !== undefined ? { rootColor: rootColors[entry.name] as string } : {})}
+            rootInfo={rootInfo?.[entry.name]}
           />
         ))}
         {decorations.deleted.length > 0 && (

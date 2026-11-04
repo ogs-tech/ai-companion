@@ -1,48 +1,47 @@
 import { useMemo, useState } from 'react';
-import { Alert, Box, Typography } from '@mui/material';
-import { FolderTree } from './FolderTree.js';
-import { HomeNavList } from './HomeNavList.js';
-import { ExplorerToolbar } from './ExplorerToolbar.js';
-import { ExplorerFrame, ExplorerRail, type ExplorerView } from './ExplorerRail.js';
-import { GitChangesList } from './git/GitChangesList.js';
+import { Box } from '@mui/material';
+import { useQueries } from '@tanstack/react-query';
+import { FolderTree as FilesGlyph, GitBranch, SquareTerminal } from 'lucide-react';
+import { SectionHeader } from '../ds/ContainerChrome.js';
+import { FolderTree, type RootInfo } from './FolderTree.js';
+import { WorkspacesList } from './WorkspacesList.js';
+import { ExplorerFrame, ExplorerRail, type ExplorerView, type RailItem } from './ExplorerRail.js';
 import { useTerminals } from '../../hooks/use-terminals.js';
 import { DiscardConfirmDialog } from './git/DiscardConfirmDialog.js';
-import { GitErrorAlert } from './git/GitErrorAlert.js';
-import { GitInitCard } from './git/GitInit.js';
+import { RepositoriesView, SingleRepoGitView } from './git/GitViews.js';
+import { RepoMeta } from './git/RepoMeta.js';
 import { buildGitDecorations } from './git/git-decorations.js';
 import { useGitActions } from './git/use-git-actions.js';
-import { useGitStatus } from '../../hooks/use-git.js';
-import type { GitDiffSource } from '../../../shared/git.js';
-import { workspaceFolders, type Workspace } from '../../../shared/workspace.js';
-import { MultiFolderExplorer } from './MultiFolderExplorer.js';
+import { gitStatusOptions } from '../../hooks/use-git.js';
+import { folderRoutingFor } from '../../hooks/use-folder-routing.js';
 import { useWorkspaces } from '../../hooks/use-workspaces.js';
+import type { GitDiffSource, GitFileChange } from '../../../shared/git.js';
+import type { Workspace } from '../../../shared/workspace.js';
 
 interface ExplorerPanelContentProps {
   /** `null` at Início; `undefined` while loading. */
   activeWorkspace: Workspace | null | undefined;
-  /** True at Início (no workspace open) — shows the navigation menu instead of a file tree. */
+  /** True at Início (no workspace open) — the rail holds the app's destinations and the body is the workspaces list. */
   isHome: boolean;
   /** Git status polls only while the panel is on screen. */
   gitPolling: boolean;
-  /** Trailing actions on the Arquivos header, e.g. the "Reler do disco" refresh button. */
+  /** Trailing actions on the Arquivos section header, e.g. hidden files and the "Reler do disco" refresh. */
   toolbarActions?: React.ReactNode;
-  /** Início only: Starter Pack/Marketplaces/Diagnóstico's own rows. */
-  appAreaRows: React.ReactNode;
-  /** Início only: whether the menu's Workspaces row is the tab on screen, and how to open it. */
-  homeNav: Pick<React.ComponentProps<typeof HomeNavList>, 'workspacesActive' | 'onOpenWorkspaces'>;
+  /** Início only: the rail's destinations — Workspaces, Starter Pack, Marketplaces, Diagnóstico. */
+  homeRailItems: readonly RailItem[];
+  /** Início only: "Ver todos (n)…" in the workspaces list. */
+  onOpenWorkspaces: () => void;
   onSelectFile: (relPath: string) => void;
   onOpenAsWorkspace: (absolutePath: string) => void;
   onPreviewFile: (relPath: string) => void;
   onNewAction: (relPath: string) => void;
-  /** The Editores abertos section, pinned at the top of the Arquivos view (and of Início). */
+  /** The Editores abertos section, pinned at the top of the Arquivos view. */
   openEditorsSection?: React.ReactNode;
   /** The Terminais view's body (rendered with `fill`). */
   terminalsSection?: React.ReactNode;
   /** Right-click a folder/file → "Abrir terminal aqui". */
   onOpenTerminalHere?: (relDir: string) => void;
   onOpenGitDiff: (args: { path: string; source: GitDiffSource }) => void;
-  /** The rail's Início button: leaves the workspace. */
-  onGoHome?: () => void;
   /** Clicking the active rail icon again collapses the panel. */
   onCollapse?: () => void;
   /** Controlled view, so the screen can open Git ("Ver alterações"); uncontrolled when omitted. */
@@ -50,37 +49,16 @@ interface ExplorerPanelContentProps {
   onViewChange?: (view: ExplorerView) => void;
 }
 
-/** What the rail needs from whichever explorer is mounted. */
-interface RailProps {
-  view: ExplorerView;
-  onSelectView: (view: ExplorerView) => void;
-  onGoHome: () => void;
-}
-
-const noop = (): void => undefined;
-
-/** The Arquivos view's slim header: holds the hidden-files and refresh actions. */
-function FilesHeader({ trailing }: { trailing: React.ReactNode }): React.ReactElement | null {
-  if (!trailing) return null;
-  return (
-    <Box
-      data-testid="explorer-files-header"
-      sx={{ flexShrink: 0, px: 1.25, py: 0.25, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}
-    >
-      {trailing}
-    </Box>
-  );
-}
-
 /**
- * The left panel — "where": a rail (Arquivos · Git · Terminais, Início at the
- * bottom) that switches what the panel shows. At Início the rail has only
- * Início active and the panel is the navigation menu. The context itself
- * (name, path, switch, remove) lives in the TopNav's context switcher.
+ * The left panel, one anatomy in every scope: the rail says where you are, a
+ * section header says what you see, the body is the content. Início's rail
+ * holds the app's destinations over the workspaces list; a workspace's rail
+ * is Arquivos · Git · Terminais, over one or several folders. The context
+ * itself (name, path, switch, remove) lives in the TopNav's switcher.
  */
 export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.ReactElement {
   const { data: workspaces } = useWorkspaces();
-  const { activeWorkspace, isHome, appAreaRows, homeNav, onOpenAsWorkspace } = props;
+  const { activeWorkspace, isHome } = props;
   const [localView, setLocalView] = useState<ExplorerView>('files');
   const view = props.view ?? localView;
   const setView = props.onViewChange ?? setLocalView;
@@ -89,51 +67,37 @@ export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.Re
   // path under this root is one of them.
   const registeredRoots = new Set((workspaces ?? []).map((w) => w.rootPath));
   const isWorkspaceRoot = (relPath: string): boolean => root !== undefined && registeredRoots.has(`${root}/${relPath}`);
-  const onGoHome = props.onGoHome ?? noop;
   const onSelectView = (next: ExplorerView): void => {
     if (next === view) props.onCollapse?.();
     else setView(next);
   };
-  const railProps: RailProps = { view, onSelectView, onGoHome };
 
   if (isHome) {
     return (
-      <ExplorerFrame rail={<ExplorerRail view={null} isHome onSelect={noop} onGoHome={noop} />}>
-        {props.openEditorsSection}
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <HomeNavList {...homeNav} appAreaRows={appAreaRows} />
-        </Box>
+      <ExplorerFrame rail={<ExplorerRail items={props.homeRailItems} />}>
+        <WorkspacesList onOpenWorkspaces={props.onOpenWorkspaces} />
       </ExplorerFrame>
     );
   }
 
-  if (activeWorkspace && workspaceFolders(activeWorkspace).length > 1) {
-    const { gitPolling, toolbarActions, onSelectFile, onPreviewFile, onNewAction, openEditorsSection, terminalsSection, onOpenTerminalHere, onOpenGitDiff } = props;
-    return (
-      <MultiFolderExplorer
-        workspace={activeWorkspace}
-        gitPolling={gitPolling}
-        {...(toolbarActions !== undefined ? { toolbarActions } : {})}
-        onSelectFile={onSelectFile}
-        onOpenAsWorkspace={onOpenAsWorkspace}
-        onPreviewFile={onPreviewFile}
-        onNewAction={onNewAction}
-        {...(openEditorsSection !== undefined ? { openEditorsSection } : {})}
-        {...(terminalsSection !== undefined ? { terminalsSection } : {})}
-        {...(onOpenTerminalHere !== undefined ? { onOpenTerminalHere } : {})}
-        onOpenGitDiff={onOpenGitDiff}
-        isWorkspaceRoot={isWorkspaceRoot}
-        {...railProps}
-      />
-    );
-  }
-
-  return <WorkspaceExplorer {...props} {...railProps} onOpenAsWorkspace={onOpenAsWorkspace} isWorkspaceRoot={isWorkspaceRoot} />;
+  return <WorkspaceExplorer {...props} workspace={activeWorkspace ?? undefined} view={view} onSelectView={onSelectView} isWorkspaceRoot={isWorkspaceRoot} />;
 }
 
-/** Split out so Início never mounts the git hooks (there is no repo to query there). */
+interface WorkspaceExplorerProps extends Omit<ExplorerPanelContentProps, 'activeWorkspace' | 'isHome' | 'view' | 'onViewChange'> {
+  workspace: Workspace | undefined;
+  view: ExplorerView;
+  onSelectView: (view: ExplorerView) => void;
+  isWorkspaceRoot: (relPath: string) => boolean;
+}
+
+/**
+ * A workspace's panel — one folder is just the N=1 case of several. Split
+ * out so Início never mounts the git hooks (there is no repo to query there).
+ * With several folders the tree's paths start with the folder's alias and git
+ * calls are routed back to the folder by that first segment.
+ */
 function WorkspaceExplorer({
-  activeWorkspace,
+  workspace,
   gitPolling,
   toolbarActions,
   onSelectFile,
@@ -147,34 +111,79 @@ function WorkspaceExplorer({
   isWorkspaceRoot,
   view,
   onSelectView,
-  onGoHome,
-}: ExplorerPanelContentProps & RailProps & { isWorkspaceRoot: (relPath: string) => boolean }): React.ReactElement {
-  const status = useGitStatus({ visible: gitPolling });
+}: WorkspaceExplorerProps): React.ReactElement {
+  const routing = useMemo(() => folderRoutingFor(workspace), [workspace]);
+  const { multi, aliases } = routing;
+  // A single folder is the workspace itself: its git calls carry no folder.
+  const targets = useMemo<Array<string | undefined>>(() => (multi ? routing.folders : [undefined]), [multi, routing.folders]);
   const actions = useGitActions();
   const { data: terminals = [] } = useTerminals();
-  const data = status.data;
-  const repo = data?.isRepo ? data : null;
-  const decorations = useMemo(() => buildGitDecorations(repo?.files ?? []), [repo?.files]);
-  const runningTerminals = terminals.filter((t) => t.status === 'running').length;
 
-  const rail = (
-    <ExplorerRail
-      view={view}
-      onSelect={onSelectView}
-      isHome={false}
-      onGoHome={onGoHome}
-      {...(repo ? { gitCount: repo.files.length } : {})}
-      gitDimmed={data !== undefined && !data.isRepo}
-      terminalCount={runningTerminals}
-    />
+  // Same query keys as each Git view's own status, so this adds no requests.
+  const statuses = useQueries({ queries: targets.map((folder) => gitStatusOptions(folder, gitPolling)) });
+  const statusSignature = statuses.map((q) => q.dataUpdatedAt).join(',');
+  const files = useMemo(
+    () => statuses.flatMap((q, i) => (q.data?.isRepo ? q.data.files.map((f) => ({ ...f, path: routing.join(targets[i], f.path) })) : [])),
+    // `statusSignature` stands for the query results, which change identity on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [statusSignature, targets, routing],
   );
+  const decorations = useMemo(() => buildGitDecorations(files), [files]);
+  const reposKnown = statuses.every((q) => q.data !== undefined);
+  const anyRepo = statuses.some((q) => q.data?.isRepo);
+
+  /** Groups workspace-relative paths by the folder they belong to, with folder-relative paths. */
+  const byFolder = (paths: string[]): Map<string | undefined, string[]> => {
+    const groups = new Map<string | undefined, string[]>();
+    for (const path of paths) {
+      const { folder, rel } = routing.split(path);
+      groups.set(folder, [...(groups.get(folder) ?? []), rel]);
+    }
+    return groups;
+  };
+
+  const rootInfo = useMemo<Record<string, RootInfo> | undefined>(() => {
+    if (!multi) return undefined;
+    return Object.fromEntries(
+      routing.folders.map((folder, i) => {
+        const alias = aliases[folder] as string;
+        const data = statuses[i]?.data;
+        const clean = data !== undefined && !(data.isRepo && data.files.length > 0);
+        return [alias, { meta: <RepoMeta status={data} testId={`folder-meta-${alias}`} />, muted: clean }];
+      }),
+    );
+    // `statusSignature` stands for the query results, which change identity on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multi, routing, aliases, statusSignature]);
+
+  const items: RailItem[] = [
+    { testId: 'explorer-view-files', label: 'Arquivos', glyph: FilesGlyph, active: view === 'files', onClick: () => onSelectView('files') },
+    {
+      testId: 'explorer-view-git',
+      label: 'Git',
+      glyph: GitBranch,
+      active: view === 'git',
+      onClick: () => onSelectView('git'),
+      ...(anyRepo ? { count: files.length } : {}),
+      dimmed: reposKnown && !anyRepo,
+    },
+    {
+      testId: 'explorer-view-terminals',
+      label: 'Terminais',
+      glyph: SquareTerminal,
+      active: view === 'terminals',
+      onClick: () => onSelectView('terminals'),
+      count: terminals.filter((t) => t.status === 'running').length,
+      badgeColor: 'success',
+    },
+  ];
 
   return (
-    <ExplorerFrame rail={rail}>
+    <ExplorerFrame rail={<ExplorerRail items={items} />}>
       {view === 'files' && (
         <>
           {openEditorsSection}
-          <FilesHeader trailing={toolbarActions} />
+          <SectionHeader title="Arquivos" testId="explorer-files-header" actions={toolbarActions} />
           <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             <FolderTree
               onSelectFile={onSelectFile}
@@ -183,15 +192,26 @@ function WorkspaceExplorer({
               onNewAction={onNewAction}
               isWorkspaceRoot={isWorkspaceRoot}
               {...(onOpenTerminalHere !== undefined ? { onOpenTerminalHere } : {})}
-              {...(repo
+              {...(rootInfo !== undefined ? { rootInfo } : {})}
+              {...(anyRepo
                 ? {
                     git: {
                       decorations,
                       busy: actions.busy,
                       onOpenDiff: onOpenGitDiff,
-                      onStage: actions.stage,
-                      onUnstage: actions.unstage,
-                      onDiscard: actions.requestDiscard,
+                      onStage: (paths: string[]) => byFolder(paths).forEach((rels, folder) => actions.stage(rels, folder)),
+                      onUnstage: (paths: string[]) => byFolder(paths).forEach((rels, folder) => actions.unstage(rels, folder)),
+                      onDiscard: (changes: GitFileChange[]) => {
+                        // One confirmation per folder keeps each discard targeted at a single repository.
+                        const first = changes[0];
+                        if (!first) return;
+                        const { folder } = routing.split(first.path);
+                        const sameFolder = changes.filter((c) => routing.split(c.path).folder === folder);
+                        actions.requestDiscard(
+                          sameFolder.map((c) => ({ ...c, path: routing.split(c.path).rel })),
+                          folder,
+                        );
+                      },
                     },
                   }
                 : {})}
@@ -199,37 +219,12 @@ function WorkspaceExplorer({
           </Box>
         </>
       )}
-      {view === 'git' && (
-        <>
-          <ExplorerToolbar status={{ isPending: status.isPending, error: status.error, data }} actions={actions} />
-          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            {actions.error && <GitErrorAlert report={actions.error} onClose={actions.clearError} onPullAndRetry={actions.sync} />}
-            {repo && repo.state !== 'clean' && (
-              <Alert severity="warning" sx={{ mx: 1.5, mt: 1, mb: 1 }} data-testid="git-state-banner">
-                Operação em andamento ({repo.state}). Resolva ou aborte pelo terminal.
-              </Alert>
-            )}
-            {repo && (
-              <GitChangesList
-                files={repo.files}
-                busy={actions.busy}
-                onStage={actions.stage}
-                onUnstage={actions.unstage}
-                onDiscard={actions.requestDiscard}
-                onOpenDiff={(path, source) => onOpenGitDiff({ path, source })}
-              />
-            )}
-            {repo?.truncated && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.5, py: 0.5 }} data-testid="git-truncated">
-                Mostrando os primeiros {repo.files.length} arquivos.
-              </Typography>
-            )}
-            {data && !data.isRepo && activeWorkspace && (
-              <GitInitCard workspaceId={activeWorkspace.id} busy={actions.busy} onInit={actions.init} />
-            )}
-          </Box>
-        </>
-      )}
+      {view === 'git' &&
+        (multi ? (
+          <RepositoriesView routing={routing} gitPolling={gitPolling} onOpenGitDiff={onOpenGitDiff} />
+        ) : (
+          <SingleRepoGitView workspaceId={workspace?.id} gitPolling={gitPolling} onOpenGitDiff={onOpenGitDiff} />
+        ))}
       {view === 'terminals' && terminalsSection}
       <DiscardConfirmDialog files={actions.pendingDiscard} onCancel={actions.cancelDiscard} onConfirm={actions.confirmDiscard} />
     </ExplorerFrame>

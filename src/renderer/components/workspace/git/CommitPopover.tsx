@@ -3,6 +3,8 @@ import { CommitBox } from './CommitBox.js';
 
 interface CommitPopoverProps {
   anchorEl: HTMLElement | null;
+  /** Which side of the anchor the popover opens on; `above` for a button pinned to the bottom. */
+  placement?: 'above' | 'below';
   stagedCount: number;
   busy: boolean;
   onClose: () => void;
@@ -11,13 +13,14 @@ interface CommitPopoverProps {
   onGenerate: () => Promise<string>;
 }
 
-export function CommitPopover({ anchorEl, stagedCount, busy, onClose, onCommit, onGenerate }: CommitPopoverProps): React.ReactElement {
+export function CommitPopover({ anchorEl, placement = 'below', stagedCount, busy, onClose, onCommit, onGenerate }: CommitPopoverProps): React.ReactElement {
   return (
     <Popover
       open={anchorEl !== null}
       anchorEl={anchorEl}
       onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      anchorOrigin={{ vertical: placement === 'above' ? 'top' : 'bottom', horizontal: 'left' }}
+      transformOrigin={{ vertical: placement === 'above' ? 'bottom' : 'top', horizontal: 'left' }}
       slotProps={{ paper: { sx: { width: 340 } } }}
     >
       <CommitBox

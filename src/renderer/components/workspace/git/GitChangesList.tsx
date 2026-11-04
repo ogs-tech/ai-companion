@@ -1,7 +1,7 @@
 import { Box, Tooltip, Typography } from '@mui/material';
 import { Minus, Plus, Undo2, type LucideIcon } from 'lucide-react';
 import { Icon } from '../../ds/Icon.js';
-import { treeGroupLabelSx } from '../../ds/TreeRow.js';
+import { SectionAction, SectionHeader } from '../../ds/ContainerChrome.js';
 import { COLOR, LETTER, groupChanges } from './git-decorations.js';
 import type { GitDiffSource, GitFileChange } from '../../../../shared/git.js';
 
@@ -104,19 +104,6 @@ function ChangeRow({ file, side, busy, onStage, onUnstage, onDiscard, onOpenDiff
   );
 }
 
-function GroupHeader({ label, count, testId }: { label: string; count: number; testId: string }): React.ReactElement {
-  return (
-    <Box data-testid={testId} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, pt: 1, pb: 0.25 }}>
-      <Typography component="span" sx={{ ...treeGroupLabelSx, flex: 1 }}>
-        {label}
-      </Typography>
-      <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>
-        {count}
-      </Typography>
-    </Box>
-  );
-}
-
 /**
  * A repository's working state as two groups: Staged (index side, opens the
  * HEAD → index diff) and Alterações (worktree side and conflicts, opens
@@ -131,12 +118,21 @@ export function GitChangesList({ files, busy, onStage, onUnstage, onDiscard, onO
       </Typography>
     );
   }
+  // Conflicted files can't be discarded in one click — same rule as the per-row button.
+  const discardable = changes.filter((f) => !f.conflicted);
   const rowProps = { busy, onStage, onUnstage, onDiscard, onOpenDiff };
   return (
     <Box data-testid="git-changes-list">
       {staged.length > 0 && (
         <>
-          <GroupHeader label="Staged" count={staged.length} testId="git-group-staged" />
+          <SectionHeader
+            title="Staged"
+            testId="git-group-staged"
+            count={staged.length}
+            actions={
+              <SectionAction label="Unstage all" testId="git-unstage-all" glyph={Minus} disabled={busy} onClick={() => onUnstage(staged.map((f) => f.path))} />
+            }
+          />
           {staged.map((f) => (
             <ChangeRow key={`s:${f.path}`} file={f} side="staged" {...rowProps} />
           ))}
@@ -144,7 +140,23 @@ export function GitChangesList({ files, busy, onStage, onUnstage, onDiscard, onO
       )}
       {changes.length > 0 && (
         <>
-          <GroupHeader label="Alterações" count={changes.length} testId="git-group-changes" />
+          <SectionHeader
+            title="Changes"
+            testId="git-group-changes"
+            count={changes.length}
+            actions={
+              <>
+                <SectionAction label="Stage all" testId="git-stage-all" glyph={Plus} disabled={busy} onClick={() => onStage(changes.map((f) => f.path))} />
+                <SectionAction
+                  label="Descartar tudo…"
+                  testId="git-discard-all"
+                  glyph={Undo2}
+                  disabled={busy || discardable.length === 0}
+                  onClick={() => onDiscard(discardable)}
+                />
+              </>
+            }
+          />
           {changes.map((f) => (
             <ChangeRow key={`c:${f.path}`} file={f} side="changes" {...rowProps} />
           ))}

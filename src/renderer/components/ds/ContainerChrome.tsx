@@ -1,6 +1,7 @@
-import { Box, IconButton, Stack, Typography } from '@mui/material';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Box, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from './Icon.js';
+import { treeGroupLabelSx } from './TreeRow.js';
 
 interface ContainerHeaderProps {
   title: string;
@@ -77,6 +78,90 @@ export function FooterLink({ children, onClick, testId }: { children: React.Reac
       }}
     >
       {children}
+    </Box>
+  );
+}
+
+interface SectionActionProps {
+  label: string;
+  testId: string;
+  glyph: LucideIcon;
+  /** Receives the button, so an action can anchor a menu to it. */
+  onClick: (anchor: HTMLElement) => void;
+  disabled?: boolean;
+  /** Set when the action opens a menu. */
+  hasPopup?: boolean;
+}
+
+/** One quiet icon button in a {@link SectionHeader}; never toggles the section. */
+export function SectionAction({ label, testId, glyph, onClick, disabled = false, hasPopup = false }: SectionActionProps): React.ReactElement {
+  return (
+    <Tooltip title={label}>
+      <span>
+        <IconButton
+          size="small"
+          aria-label={label}
+          data-testid={testId}
+          disabled={disabled}
+          {...(hasPopup ? { 'aria-haspopup': 'menu' as const } : {})}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick(e.currentTarget);
+          }}
+          sx={{ p: 0.5 }}
+        >
+          <Icon glyph={glyph} size={13} />
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+}
+
+interface SectionHeaderProps {
+  title: string;
+  testId: string;
+  /** Quiet total after the title. */
+  count?: number;
+  /** Set to make the header a toggle: `true` shows a closed chevron. Omit for a static header. */
+  collapsed?: boolean;
+  onToggle?: () => void;
+  /** Right-aligned {@link SectionAction}s. */
+  actions?: React.ReactNode;
+}
+
+/**
+ * The compact header every Explorer Panel section shares — kicker-style
+ * title, quiet count, right-aligned actions, optional collapse chevron. The
+ * left panel's counterpart of {@link ContainerHeader} (which the right
+ * panel's containers use).
+ */
+export function SectionHeader({ title, testId, count, collapsed, onToggle, actions }: SectionHeaderProps): React.ReactElement {
+  const toggles = collapsed !== undefined && onToggle !== undefined;
+  return (
+    <Box
+      data-testid={testId}
+      {...(toggles ? { role: 'button', tabIndex: 0, 'aria-expanded': !collapsed, onClick: onToggle } : {})}
+      {...(toggles
+        ? {
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              onToggle();
+            },
+          }
+        : {})}
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minHeight: 28, flexShrink: 0, pl: 1, pr: 0.5, cursor: toggles ? 'pointer' : 'default' }}
+    >
+      {collapsed !== undefined && <Icon glyph={collapsed ? ChevronRight : ChevronDown} size={14} />}
+      <Typography component="span" sx={{ ...treeGroupLabelSx, flex: 1, minWidth: 0 }} noWrap>
+        {title}
+      </Typography>
+      {count !== undefined && (
+        <Typography component="span" data-testid={`${testId}-count`} sx={{ fontSize: '0.6875rem', color: 'text.disabled', fontVariantNumeric: 'tabular-nums' }}>
+          {count}
+        </Typography>
+      )}
+      {actions}
     </Box>
   );
 }

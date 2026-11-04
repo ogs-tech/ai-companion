@@ -706,9 +706,11 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      const managementList = await screen.findByTestId('home-nav-list');
-      expect(managementList).toContainElement(await screen.findByTestId('explorer-area-diagnostico'));
-      expect(managementList).not.toContainElement(screen.getByTestId('personal-instruction-row'));
+      const workspacesList = await screen.findByTestId('workspaces-list');
+      // The app's destinations live in the rail, not in the list body.
+      expect(screen.getByTestId('explorer-rail')).toContainElement(await screen.findByTestId('explorer-area-diagnostico'));
+      expect(workspacesList).not.toContainElement(screen.getByTestId('explorer-area-diagnostico'));
+      expect(workspacesList).not.toContainElement(screen.getByTestId('personal-instruction-row'));
       expect(screen.getByTestId('workspace-customizations')).toContainElement(screen.getByTestId('personal-instruction-row'));
       expect(screen.queryByTestId('folder-tree')).not.toBeInTheDocument();
     });
@@ -776,7 +778,7 @@ describe('WorkspaceScreen', () => {
       // file tree and overview show up and the Início-only list is gone.
       expect(await screen.findByTestId('workspace-overview')).toBeInTheDocument();
       expect(await screen.findByTestId('folder-tree')).toBeInTheDocument();
-      expect(screen.queryByTestId('home-nav-list')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('workspaces-list')).not.toBeInTheDocument();
     });
 
     it('shows the Personal Instruction row, empty, and opens the editor on click', async () => {
@@ -800,7 +802,7 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       const panel = await screen.findByTestId('workspace-files-panel');
-      expect(panel).toContainElement(await screen.findByTestId('home-nav-list'));
+      expect(panel).toContainElement(await screen.findByTestId('workspaces-list'));
       // The panel is collapsible, not unmounted, so it stays in the DOM
       // (react-resizable-panels shrinks it to 0 rather than removing it).
       togglePanel('explorer');
@@ -840,7 +842,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await screen.findByTestId('home-nav-list');
+      await screen.findByTestId('workspaces-list');
       expect(screen.queryByTestId('control-panel-kicker')).not.toBeInTheDocument();
       expect(screen.queryByTestId('control-panel-origin')).not.toBeInTheDocument();
       expect(screen.queryByTestId('control-panel-chip-all')).not.toBeInTheDocument();
