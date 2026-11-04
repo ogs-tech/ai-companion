@@ -46,10 +46,12 @@ vi.mock('@xterm/xterm', () => {
   return { Terminal };
 });
 
+let mockFitDimensions = { cols: 80, rows: 24 };
+
 vi.mock('@xterm/addon-fit', () => {
   class FitAddon {
     fit = vi.fn();
-    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+    proposeDimensions = vi.fn(() => mockFitDimensions);
   }
   return { FitAddon };
 });
@@ -72,6 +74,7 @@ let onOutput: ReturnType<typeof vi.fn>;
 let onExit: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  mockFitDimensions = { cols: 80, rows: 24 };
   mockTerminalInstances.length = 0;
   mockResizeObserverInstances.length = 0;
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -164,7 +167,7 @@ describe('<SessionPanel>', () => {
     chunkListener('hello');
 
     const terminal = mockTerminalInstances[0]!;
-    expect(terminal.write).toHaveBeenCalledWith('hello');
+    await waitFor(() => expect(terminal.write).toHaveBeenCalledWith('hello'));
   });
 
   it('forwards keystrokes typed into the terminal as session.write calls', async () => {
@@ -455,6 +458,8 @@ describe('<SessionPanel>', () => {
       expect(observer.observe).toHaveBeenCalledWith(screen.getByTestId('session-terminal'));
 
       call.mockClear();
+      // A same-size callback is deduped; the container must actually change the grid.
+      mockFitDimensions = { cols: 120, rows: 40 };
       observer.callback();
 
       await waitFor(() =>

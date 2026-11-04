@@ -68,7 +68,27 @@ describe('TerminalPanel', () => {
     outputListener?.('dropped-before-replay');
     await waitFor(() => expect(term.write).toHaveBeenCalledWith('replayed '));
     outputListener?.('live');
-    expect(term.write.mock.calls.map((c) => c[0])).toEqual(['replayed ', 'live']);
+    await waitFor(() => expect(term.write.mock.calls.map((c) => c[0])).toEqual(['replayed ', 'live']));
+  });
+
+  it('coalesces live chunks that arrive within one frame into a single write', async () => {
+    render(<TerminalPanel terminalId="t1" />);
+    const term = xterm.instances[0]!;
+    await waitFor(() => expect(term.write).toHaveBeenCalledWith('replayed '));
+    outputListener?.('a');
+    outputListener?.('b');
+    outputListener?.('c');
+    await waitFor(() => expect(term.write).toHaveBeenCalledWith('abc'));
+    expect(term.write).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resend the PTY size when the container reports the same grid', async () => {
+    render(<TerminalPanel terminalId="t1" />);
+    await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('terminal.resize', expect.anything()));
+    window.dispatchEvent(new Event('resize'));
+    window.dispatchEvent(new Event('resize'));
+    const resizes = vi.mocked(ipc.callIpc).mock.calls.filter(([m]) => m === 'terminal.resize');
+    expect(resizes).toHaveLength(1);
   });
 
   it('sends keystrokes to the terminal and reports the fitted size', async () => {

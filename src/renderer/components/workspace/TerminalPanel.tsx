@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { attachEmbeddedBrowserLinks, embeddedBrowserLinkHandler } from '../../lib/terminal-links.js';
 import { callIpc } from '../../lib/ipc.js';
+import { createTerminalWriteBatcher } from '../../lib/terminal-write-batcher.js';
 import { ogs } from '../../tokens.js';
 import type { TerminalSnapshotWithOutput } from '../../../shared/terminal.js';
 
@@ -51,10 +52,12 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
     // before the reply is already inside its buffer, and anything after it is
     // new. Subscribing first means nothing falls in between.
     let live = false;
+    const batcher = createTerminalWriteBatcher((data) => terminal.write(data));
     const unsubOutput = window.api.terminal.onOutput(terminalId, (chunk) => {
-      if (live) terminal.write(chunk);
+      if (live) batcher.push(chunk);
     });
     const unsubExit = window.api.terminal.onExit(terminalId, (exitCode) => {
+      batcher.flush();
       terminal.write(`\r\n\x1b[2m[processo encerrado${exitCode === null ? '' : ` — código ${exitCode}`}]\x1b[0m\r\n`);
     });
     let disposed = false;
@@ -73,16 +76,24 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
       inputDisposable.dispose();
       unsubOutput();
       unsubExit();
+      batcher.cancel();
       terminal.dispose();
     };
   }, [terminalId]);
 
   useEffect(() => {
+    // Each resize makes the PTY raise SIGWINCH, and many CLIs redraw their whole
+    // screen on it — so only tell the PTY when the grid really changed.
+    let lastSent = '';
     const syncSize = (): void => {
       if (!visible) return;
       fitAddonRef.current?.fit();
       const dims = fitAddonRef.current?.proposeDimensions();
-      if (dims) void callIpc('terminal.resize', { terminalId, cols: dims.cols, rows: dims.rows });
+      if (!dims) return;
+      const key = `${dims.cols}x${dims.rows}`;
+      if (key === lastSent) return;
+      lastSent = key;
+      void callIpc('terminal.resize', { terminalId, cols: dims.cols, rows: dims.rows });
     };
     syncSize();
     window.addEventListener('resize', syncSize);

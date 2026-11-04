@@ -7,6 +7,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { attachEmbeddedBrowserLinks, embeddedBrowserLinkHandler } from '../lib/terminal-links.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
+import { createTerminalWriteBatcher } from '../lib/terminal-write-batcher.js';
 import { sessionsQueryKey } from '../hooks/use-sessions.js';
 import {
   MAX_SESSION_ATTACHMENT_BYTES,
@@ -276,8 +277,9 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     const dataDisposable = terminalRef.current?.onData((data) => {
       void callIpc('session.write', { sessionId, data });
     });
+    const batcher = createTerminalWriteBatcher((data) => terminalRef.current?.write(data));
     const unsubOutput = window.api.session.onOutput(sessionId, (chunk) => {
-      terminalRef.current?.write(chunk);
+      batcher.push(chunk);
     });
     const unsubExit = window.api.session.onExit(sessionId, () => {
       setStatus('exited');
@@ -286,6 +288,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       dataDisposable?.dispose();
       unsubOutput();
       unsubExit();
+      batcher.cancel();
     };
   }, [sessionId]);
 
@@ -293,13 +296,18 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     // A hidden container (kept mounted in the background so its scrollback
     // survives) reports zero size — fitting against that would shrink the
     // terminal to nothing, so skip until it's visible again, then re-fit.
+    // Each resize makes the PTY raise SIGWINCH, and the CLI redraws its whole
+    // screen on it — so only tell the PTY when the grid really changed.
+    let lastSent = '';
     const syncSize = (): void => {
       if (!visible) return;
       fitAddonRef.current?.fit();
       const dims = fitAddonRef.current?.proposeDimensions();
-      if (dims && sessionId) {
-        void callIpc('session.resize', { sessionId, cols: dims.cols, rows: dims.rows });
-      }
+      if (!dims || !sessionId) return;
+      const key = `${dims.cols}x${dims.rows}`;
+      if (key === lastSent) return;
+      lastSent = key;
+      void callIpc('session.resize', { sessionId, cols: dims.cols, rows: dims.rows });
     };
     syncSize();
     window.addEventListener('resize', syncSize);
