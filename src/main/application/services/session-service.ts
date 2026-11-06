@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { basename, join, sep } from 'node:path';
 import type { HarnessId } from '../../../shared/harness.js';
 import { harnessSupports, HARNESSES } from '../../../shared/harness.js';
-import type { SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
+import type { PermissionDecision, SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
+import type { SessionMetrics } from '../../../shared/session-metrics.js';
 import { MAX_SESSION_ATTACHMENT_BYTES, sessionAnchorKey } from '../../../shared/session.js';
 import type { EntityService } from './entity-service.js';
 import type { SessionSignalPort } from '../ports/session-signal-port.js';
-import { detectCursorApprovalPrompt, interpretSignal, isAnswerInput, type ActivityChange } from '../session-activity.js';
+import { applyActivityChange, detectCursorApprovalPrompt, interpretSignal, isAnswerInput, type ActivityChange } from '../session-activity.js';
 import type { ConversationTarget, SessionRuntimePort } from '../ports/session-runtime-port.js';
 import type { EmbeddedBrowserPort } from '../ports/embedded-browser-port.js';
 import type { WorkspaceService } from './workspace-service.js';
@@ -161,27 +162,18 @@ export class SessionService {
     delete session.activitySince;
     delete session.attention;
     delete session.activityDetail;
+    delete session.editingFile;
+    delete session.permissionRequest;
     this.outputTails.delete(session.sessionId);
     for (const listener of this.activityListeners) listener(session.sessionId);
   }
 
-  private setActivity(sessionId: string, incoming: ActivityChange): void {
-    let change = incoming;
+  private setActivity(sessionId: string, change: ActivityChange): void {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
-    // A bare `working` (PostToolUse) while already working keeps the last tool until the next PreToolUse names a new one.
-    if (change.activity === 'working' && change.detail === undefined && session.activity === 'working' && session.activityDetail) {
-      change = { ...change, detail: session.activityDetail };
+    if (applyActivityChange(session, change, Date.now())) {
+      for (const listener of this.activityListeners) listener(sessionId);
     }
-    const sameAttention = session.attention?.kind === change.attention?.kind && session.attention?.detail === change.attention?.detail;
-    if (session.activity === change.activity && sameAttention && session.activityDetail === change.detail) return;
-    if (session.activity !== change.activity) session.activitySince = Date.now();
-    session.activity = change.activity;
-    if (change.detail) session.activityDetail = change.detail;
-    else delete session.activityDetail;
-    if (change.attention) session.attention = change.attention;
-    else delete session.attention;
-    for (const listener of this.activityListeners) listener(sessionId);
   }
 
   /** Cursor exposes no hook for its approval prompt, so the PTY tail is read for it. */
@@ -572,6 +564,33 @@ export class SessionService {
   /** All sessions in memory — every scope, running and exited alike — never persisted, never pruned. */
   list(): SessionSnapshot[] {
     return Array.from(this.sessions.values());
+  }
+
+  /** Live cost / context / rate limit for one running session; emits only when a number actually moved. */
+  setMetrics(sessionId: string, metrics: SessionMetrics): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    if (JSON.stringify(session.metrics ?? null) === JSON.stringify(metrics)) return;
+    session.metrics = metrics;
+    for (const listener of this.activityListeners) listener(sessionId);
+  }
+
+  /**
+   * Answers the permission prompt a `PermissionRequest` hook is waiting on. Only a request that
+   * hook itself raised can be answered here — a prompt the CLI drew in the terminal has no hook
+   * waiting, so this refuses rather than typing into the PTY. The session leaves Pergunta at once;
+   * the next hook signal says what really happened.
+   */
+  async answerPermission(sessionId: string, decision: PermissionDecision): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.status !== 'running') {
+      throw new DomainError('not_found', `Unknown or ended session '${sessionId}'`, { sessionId });
+    }
+    if (session.activity !== 'needs-input' || !session.permissionRequest || !this.signals) {
+      throw new DomainError('validation', 'Não há um pedido de permissão aguardando resposta nesta sessão.');
+    }
+    await this.signals.answer(sessionId, decision);
+    this.setActivity(sessionId, { activity: 'working' });
   }
 
   /** Ends every running session of one scope (`null` = Início) — a workspace being deleted or re-folded. */

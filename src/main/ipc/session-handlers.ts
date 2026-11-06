@@ -83,6 +83,13 @@ export function buildSessionHandlers(service: SessionService): IpcHandlers {
       const raw = asObject(params, 'session.status');
       return service.status(asString(raw['sessionId'], 'sessionId')) ?? null;
     },
+    'session.answerPermission': async (params) => {
+      const raw = asObject(params, 'session.answerPermission');
+      const decision = raw['decision'];
+      if (decision !== 'allow' && decision !== 'deny') throw new DomainError('validation', "Invalid 'decision': expected 'allow' | 'deny'");
+      await service.answerPermission(asString(raw['sessionId'], 'sessionId'), decision);
+      return null;
+    },
     'session.list': async () => service.list(),
     'session.availableHarnesses': async () => service.availableHarnesses(),
   };

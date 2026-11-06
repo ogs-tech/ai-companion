@@ -3,11 +3,16 @@ import type { SessionSignal, SessionSignalListener, SessionSignalPort } from '..
 export class FakeSessionSignalPort implements SessionSignalPort {
   prepared: string[] = [];
   released: string[] = [];
+  answers: Array<{ sessionId: string; decision: 'allow' | 'deny' }> = [];
   private listener: SessionSignalListener | null = null;
 
   async prepare(sessionId: string): Promise<string> {
     this.prepared.push(sessionId);
     return `/signals/${sessionId}.jsonl`;
+  }
+
+  async answer(sessionId: string, decision: 'allow' | 'deny'): Promise<void> {
+    this.answers.push({ sessionId, decision });
   }
 
   async release(sessionId: string): Promise<void> {

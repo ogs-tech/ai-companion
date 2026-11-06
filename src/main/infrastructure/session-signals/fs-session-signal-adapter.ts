@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { mkdir, open, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionSignalListener, SessionSignalPort } from '../../application/ports/session-signal-port.js';
 import { parseSignalLine } from '../../application/session-activity.js';
@@ -43,12 +43,22 @@ export class FsSessionSignalAdapter implements SessionSignalPort {
     return file;
   }
 
+  /** The waiting hook polls for `<channel>.decision` and prints the verdict; writing atomically (temp + rename) means it never reads a half-written word. */
+  async answer(sessionId: string, decision: 'allow' | 'deny'): Promise<void> {
+    const channel = this.channels.get(sessionId);
+    if (!channel) return;
+    const temp = `${channel.file}.decision.tmp`;
+    await writeFile(temp, decision);
+    await rename(temp, `${channel.file}.decision`);
+  }
+
   async release(sessionId: string): Promise<void> {
     const channel = this.channels.get(sessionId);
     if (!channel) return;
     this.channels.delete(sessionId);
     channel.watcher.close();
     await rm(channel.file, { force: true });
+    await rm(`${channel.file}.decision`, { force: true });
   }
 
   private schedule(sessionId: string): void {

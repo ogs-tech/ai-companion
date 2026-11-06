@@ -22,6 +22,42 @@ export interface ModelRateSettings {
   output: number;
 }
 
+/** Session-status preferences. Every field is optional; the defaults live in {@link resolveSessionSettings}. */
+export interface SessionSettings {
+  /** Native notification when a session goes Trabalhando → Pergunta. Default on. */
+  notifyAsk?: boolean;
+  /** Notification when a turn longer than 2 minutes finishes. Default off. */
+  notifyLongTurn?: boolean;
+  /** Include sessions running outside the app in notifications and the Dock badge. Default on. */
+  notifyExternal?: boolean;
+  /** No notification for the session whose tab is focused in the focused window. Default on. */
+  silenceFocused?: boolean;
+  /** Dock badge counts sessions in Pergunta. Default on. */
+  dockBadge?: boolean;
+  /** Notification when a session's cost crosses US$ 5 and US$ 10. Default off. */
+  notifyCost?: boolean;
+  /** Notification once per session when its context passes 90%. Default on. */
+  notifyContext?: boolean;
+  /** Let a permission prompt be answered from the sessions list (app-spawned Claude only). Default off. */
+  inlineAnswer?: boolean;
+}
+
+export const SESSION_SETTING_KEYS = ['notifyAsk', 'notifyLongTurn', 'notifyExternal', 'silenceFocused', 'dockBadge', 'notifyCost', 'notifyContext', 'inlineAnswer'] as const;
+
+export function resolveSessionSettings(settings: Settings | null | undefined): Required<SessionSettings> {
+  const s = settings?.sessions ?? {};
+  return {
+    notifyAsk: s.notifyAsk ?? true,
+    notifyLongTurn: s.notifyLongTurn ?? false,
+    notifyExternal: s.notifyExternal ?? true,
+    silenceFocused: s.silenceFocused ?? true,
+    dockBadge: s.dockBadge ?? true,
+    notifyCost: s.notifyCost ?? false,
+    notifyContext: s.notifyContext ?? true,
+    inlineAnswer: s.inlineAnswer ?? false,
+  };
+}
+
 export interface Settings {
   /** One entry per known harness — see `harness.ts` for the registry. */
   adapters: Record<HarnessId, AdapterSettings>;
@@ -49,6 +85,8 @@ export interface Settings {
    * the key written into their settings.json.
    */
   openWith?: Record<string, string>;
+  /** Session-status preferences; absent = all defaults. */
+  sessions?: SessionSettings;
 }
 
 export const WorkspacePaths = [

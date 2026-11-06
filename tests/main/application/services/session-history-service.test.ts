@@ -14,6 +14,10 @@ interface FakeTranscript {
 
 /** Records what it was asked to read, so a test can prove a reading was reused rather than repeated. */
 class FakeTranscriptPort implements SessionTranscriptPort {
+  async readLiveMetrics(): Promise<null> {
+    return null;
+  }
+
   readUsageCalls: string[] = [];
 
   constructor(public transcripts: FakeTranscript[]) {}

@@ -3,8 +3,8 @@
  * parsed but not yet interpreted (see `session-activity.ts`).
  */
 export interface SessionSignal {
-  event: 'working' | 'idle' | 'notification' | 'tool';
-  /** Hook stdin JSON for `notification` and `tool`; absent otherwise. */
+  event: 'working' | 'idle' | 'notification' | 'tool' | 'permission';
+  /** Hook stdin JSON for `notification`, `tool` and `permission`; absent otherwise. */
   payload?: Record<string, unknown>;
 }
 
@@ -20,6 +20,8 @@ export interface SessionSignalPort {
   prepare(sessionId: string): Promise<string>;
   /** Stops watching and deletes the channel. */
   release(sessionId: string): Promise<void>;
+  /** Hands a decision to the `PermissionRequest` hook that is waiting on this session's channel. */
+  answer(sessionId: string, decision: 'allow' | 'deny'): Promise<void>;
   /** Single listener, replaced on every call (same convention as `SessionRuntimePort.onData`). */
   onSignal(listener: SessionSignalListener): void;
 }

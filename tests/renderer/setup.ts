@@ -69,7 +69,9 @@ if (typeof (window as unknown as { api?: unknown }).api === 'undefined') {
       onExit: () => () => {},
       onAnyExit: () => () => {},
       onAnyActivity: () => () => {},
+      onOpenRequest: () => () => {},
     },
+    externalSession: { onChanged: () => () => {} },
     externalLink: { onOpen: () => () => {} },
     desktop: {
       onMenuCommand: () => () => {},

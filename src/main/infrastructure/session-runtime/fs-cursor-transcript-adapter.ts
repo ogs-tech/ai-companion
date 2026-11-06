@@ -52,6 +52,11 @@ function parseMeta(raw: string): CursorChatMeta | null {
  * says `unpriced` instead of reporting zeros when that is not possible.
  */
 export class FsCursorTranscriptAdapter implements SessionTranscriptPort {
+  /** Cursor records no usage a live reader could trust (cost and context are estimates elsewhere); no live metrics. */
+  async readLiveMetrics(): Promise<null> {
+    return null;
+  }
+
   constructor(
     private readonly chatsDir: string,
     private readonly store: CursorChatStorePort,

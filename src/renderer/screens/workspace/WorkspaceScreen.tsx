@@ -64,6 +64,9 @@ import { seedFolderInstruction, seedWorkspaceInstruction } from '../../lib/instr
 import { entityBody } from '../../lib/entity-body.js';
 import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
+import { requestObserve } from '../../lib/external-observe-store.js';
+import { SessionFileBanner } from '../../components/workspace/SessionFileBanner.js';
+import { rowStateOf } from '../../lib/session-attention.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
 import { useRunHarnesses } from '../../hooks/use-run-harnesses.js';
@@ -303,6 +306,24 @@ export function WorkspaceScreen(): React.ReactElement {
     );
     setActiveTabId(id);
   };
+
+  // A clicked notification: bring up that session's tab, or the read-only view of an external one.
+  const onNotificationOpen = useEffectEvent((target: { id: string; external: boolean }): void => {
+    if (target.external) {
+      requestObserve(target.id);
+      return;
+    }
+    const session = sessions?.find((s) => s.sessionId === target.id);
+    if (session) openSessionTab(session);
+  });
+  useEffect(() => window.api.session.onOpenRequest((target) => onNotificationOpen(target)), []);
+
+  // Main silences a notification for the session whose tab is in front; it needs to know which one that is.
+  const focusedSessionId = openTabs.find((t) => t.id === activeTabId && t.kind === 'session');
+  const focusedId = focusedSessionId?.kind === 'session' ? focusedSessionId.sessionId : null;
+  useEffect(() => {
+    void callIpc('session.setFocused', { sessionId: focusedId }).catch(() => {});
+  }, [focusedId]);
 
   // Closing the tab only hides the view — the terminal itself lives in the main process until stopped and removed.
   const openTerminalTab = (terminal: Pick<TerminalSnapshot, 'terminalId'>): void => {
@@ -980,6 +1001,7 @@ export function WorkspaceScreen(): React.ReactElement {
 
   // Pinned tabs always sit left of the others, in their own relative order.
   const orderedTabs = pinnedFirst(openTabs);
+  const dirtyFilePaths = new Set(openTabs.flatMap((t) => (t.kind === 'file' && t.dirty === true ? [t.relPath] : [])));
   const canvasTabs: WorkbenchTab[] = orderedTabs.map((tab): WorkbenchTab => {
     if (tab.kind === 'file') {
       const name = tab.relPath.split('/').pop() || tab.relPath;
@@ -995,15 +1017,22 @@ export function WorkspaceScreen(): React.ReactElement {
         dirty: tab.dirty ?? false,
         onClose: () => closeTab(tab.id),
         render: (hidden) => (
-          <EditorPanel
-            subject="file"
-            path={tab.relPath}
-            external={tab.external === true}
-            removed={tab.removed === true}
-            active={!hidden}
-            onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
-            registerSave={registerTabSave(tab.id)}
-          />
+          <>
+            <SessionFileBanner
+              relPath={tab.relPath}
+              dirty={tab.dirty === true}
+              onViewDiff={() => openGitDiffTab({ path: tab.relPath, source: { kind: 'worktree' } })}
+            />
+            <EditorPanel
+              subject="file"
+              path={tab.relPath}
+              external={tab.external === true}
+              removed={tab.removed === true}
+              active={!hidden}
+              onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
+              registerSave={registerTabSave(tab.id)}
+            />
+          </>
         ),
       };
     }
@@ -1085,9 +1114,11 @@ export function WorkspaceScreen(): React.ReactElement {
       // process is still 'running' is a minimize, not a real close, so the
       // action reads that way instead of implying the session is gone.
       const running = sessions?.some((s) => s.sessionId === tab.sessionId && s.status === 'running') ?? false;
-      const tabHarness = sessions?.find((s) => s.sessionId === tab.sessionId)?.harness;
+      const tabSession = sessions?.find((s) => s.sessionId === tab.sessionId);
+      const tabHarness = tabSession?.harness;
       return {
         id: tab.id,
+        ...(tabSession ? { sessionState: rowStateOf(tabSession) } : {}),
         glyph: tabHarness ? harnessGlyph(tabHarness) : SquareTerminal,
         label: tab.label,
         closeLabel: running ? 'Minimizar' : 'Fechar',
@@ -1391,6 +1422,7 @@ export function WorkspaceScreen(): React.ReactElement {
             cardTestId="workspace-explorer-panel-label"
           >
             <ExplorerPanelContent
+              dirtyFiles={dirtyFilePaths}
               activeWorkspace={activeWorkspace}
               isHome={isHome}
               gitPolling={!explorerCollapsed}

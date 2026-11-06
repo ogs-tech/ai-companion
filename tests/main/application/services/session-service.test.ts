@@ -1188,6 +1188,28 @@ describe('SessionService activity', () => {
     expect(changes).toHaveLength(2);
   });
 
+  it('tracks the file being edited, the turn\'s changed files and used customizations', async () => {
+    const { service, signals } = withSignals();
+    const { sessionId } = await service.spawn(anchor);
+    const tool = (payload: Record<string, unknown>) => signals.emit(sessionId, { event: 'tool', payload });
+
+    tool({ tool_name: 'Edit', tool_input: { file_path: '/w/a.ts' } });
+    expect(service.status(sessionId)).toMatchObject({ activity: 'working', editingFile: '/w/a.ts' });
+
+    signals.emit(sessionId, { event: 'working' }); // PostToolUse: the edit finished
+    tool({ tool_name: 'Skill', tool_input: { skill: 'deploy' } });
+    const mid = service.status(sessionId);
+    expect(mid?.editingFile).toBeUndefined();
+    expect(mid?.changedFiles).toEqual(['/w/a.ts']);
+    expect(mid?.usedAt?.['skill:deploy']).toEqual(expect.any(Number));
+
+    signals.emit(sessionId, { event: 'idle' });
+    expect(service.status(sessionId)?.changedFiles).toEqual(['/w/a.ts']);
+
+    tool({ tool_name: 'Edit', tool_input: { file_path: '/w/b.ts' } }); // a new turn starts clean
+    expect(service.status(sessionId)?.changedFiles).toBeUndefined();
+  });
+
   it('does not re-emit when a signal changes nothing', async () => {
     const { service, signals, changes } = withSignals();
     const { sessionId } = await service.spawn(anchor);
@@ -1280,5 +1302,53 @@ describe('SessionService activity', () => {
       signals.emit(sessionId, { event: 'idle' });
       expect(service.status(sessionId)?.activity).toBe('idle');
     });
+  });
+});
+
+describe('SessionService permission answers and metrics', () => {
+  const anchor = { kind: 'personal' } as const;
+  const request = {
+    event: 'permission',
+    payload: { tool_name: 'Bash', cwd: '/w', tool_input: { command: 'rm -rf dist' } },
+  } as const;
+
+  it('shows the full request from the permission hook, and an answer reaches the hook and frees the session', async () => {
+    const signals = new FakeSessionSignalPort();
+    const { service } = setup({ signals });
+    const { sessionId } = await service.spawn(anchor);
+
+    signals.emit(sessionId, request);
+    expect(service.status(sessionId)).toMatchObject({
+      activity: 'needs-input',
+      attention: { kind: 'permission', detail: 'Bash' },
+      permissionRequest: { tool: 'Bash', command: 'rm -rf dist', cwd: '/w' },
+    });
+
+    await service.answerPermission(sessionId, 'deny');
+    expect(signals.answers).toEqual([{ sessionId, decision: 'deny' }]);
+    const after = service.status(sessionId);
+    expect(after?.activity).toBe('working');
+    expect(after?.permissionRequest).toBeUndefined();
+  });
+
+  it('refuses to answer when no hook raised the request (a prompt drawn in the terminal)', async () => {
+    const signals = new FakeSessionSignalPort();
+    const { service } = setup({ signals });
+    const { sessionId } = await service.spawn(anchor);
+    signals.emit(sessionId, { event: 'notification', payload: { notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' } });
+    await expect(service.answerPermission(sessionId, 'allow')).rejects.toThrow(/permissão/);
+    expect(signals.answers).toEqual([]);
+  });
+
+  it('stores metrics and emits only when they change', async () => {
+    const { service } = setup({ signals: new FakeSessionSignalPort() });
+    const { sessionId } = await service.spawn(anchor);
+    const changes: string[] = [];
+    service.onActivity((id) => changes.push(id));
+    service.setMetrics(sessionId, { costUsd: 1 });
+    service.setMetrics(sessionId, { costUsd: 1 });
+    service.setMetrics(sessionId, { costUsd: 2 });
+    expect(service.status(sessionId)?.metrics).toEqual({ costUsd: 2 });
+    expect(changes).toHaveLength(2);
   });
 });

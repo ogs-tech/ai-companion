@@ -26,6 +26,7 @@ import { queryClient } from '../lib/query-client.js';
 import { settingsQueryKey } from '../hooks/use-settings.js';
 import { SyncReportModal } from '../components/SyncReportModal.js';
 import { ConfirmDisableModal } from './settings/ConfirmDisableModal.js';
+import { SessionsSettingsSection } from './settings/SessionsSettingsSection.js';
 import { RestoreConfirmDialog } from './settings/RestoreConfirmDialog.js';
 import type { SyncResult } from '../../shared/sync-result.js';
 import type { LanguagePreference, Settings as SettingsModel } from '../../shared/settings.js';
@@ -270,6 +271,8 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
           />
         </FormGroup>
       </Paper>
+
+      <SessionsSettingsSection settings={settings} onSaved={setSettings} />
 
       <Paper component="section" variant="outlined" sx={{ p: 3, mb: 3 }}>
         <Kicker component="h2">Language</Kicker>

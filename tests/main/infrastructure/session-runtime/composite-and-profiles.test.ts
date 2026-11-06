@@ -13,8 +13,10 @@ const ref = (harness: 'claude' | 'cursor', id: string): TranscriptRef => ({
 const usage = (title: string) => ({ title, models: [], reportedCostUsd: null, startedAt: '', endedAt: '', durationMs: null });
 
 describe('CompositeTranscriptAdapter', () => {
-  const claude: SessionTranscriptPort = { listRefs: async () => [ref('claude', 'a')], readUsage: vi.fn(async () => usage('claude')) };
-  const cursor: SessionTranscriptPort = { listRefs: async () => [ref('cursor', 'b')], readUsage: vi.fn(async () => usage('cursor')) };
+  const claude: SessionTranscriptPort = { readLiveMetrics: async () => null,
+    listRefs: async () => [ref('claude', 'a')], readUsage: vi.fn(async () => usage('claude')) };
+  const cursor: SessionTranscriptPort = { readLiveMetrics: async () => null,
+    listRefs: async () => [ref('cursor', 'b')], readUsage: vi.fn(async () => usage('cursor')) };
   const composite = new CompositeTranscriptAdapter({ claude, cursor });
 
   it('lists the conversations of every harness together', async () => {

@@ -3,6 +3,7 @@ import { Stack } from '@mui/material';
 import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { OriginMeta } from './OriginMeta.js';
+import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { SyncDot } from '../ds/SyncDot.js';
 import { useEntitySyncStates } from '../../hooks/use-entity-sync-states.js';
 import { DetectedRows, useDetectedItems } from './DetectedTreeGroup.js';
@@ -146,6 +147,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
       onContextMenu={(e) => rowMenu.openMenu(e, item as Skill | Agent)}
       badge={
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <SessionsUsingBadge usage={{ kind: kind === 'skill' ? 'skill' : 'agent', name: item.name }} testId={`tree-${groupTestId}-using-${item.name}`} />
           <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
           {syncStates[item.urn] && <SyncDot state={syncStates[item.urn]!} />}
           <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />

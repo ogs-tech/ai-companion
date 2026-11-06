@@ -20,6 +20,8 @@ import type { GitDiffSource, GitFileChange } from '../../../shared/git.js';
 import type { Workspace } from '../../../shared/workspace.js';
 
 interface ExplorerPanelContentProps {
+  /** Root-relative paths of open file tabs with unsaved changes (conflict marks in the tree). */
+  dirtyFiles?: ReadonlySet<string>;
   /** `null` at Início; `undefined` while loading. */
   activeWorkspace: Workspace | null | undefined;
   /** True at Início (no workspace open) — the rail holds the app's destinations and the body is the workspaces list. */
@@ -118,6 +120,7 @@ function WorkspaceExplorer({
   onOpenTerminalHere,
   onOpenGitDiff,
   isWorkspaceRoot,
+  dirtyFiles,
   view,
   onSelectView,
   onRetarget,
@@ -206,6 +209,7 @@ function WorkspaceExplorer({
               onPreviewFile={onPreviewFile}
               onNewAction={onNewAction}
               isWorkspaceRoot={isWorkspaceRoot}
+              {...(dirtyFiles !== undefined ? { dirtyFiles } : {})}
               multi={multi}
               {...(onRetarget !== undefined ? { onRetarget } : {})}
               {...(onRemoved !== undefined ? { onRemoved } : {})}

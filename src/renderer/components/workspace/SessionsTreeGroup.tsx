@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Stack, Tooltip, Typography, type Theme } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Square, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, FooterLink } from '../ds/ContainerChrome.js';
 import { Toast, type ToastMessage } from '../Toast.js';
+import { InlinePermission } from './InlinePermission.js';
+import { useSettings } from '../../hooks/use-settings.js';
+import { resolveSessionSettings } from '../../../shared/settings.js';
+import { ExternalConsentBanner, ExternalSessionRows, externalStateOf } from './ExternalSessionsBlock.js';
+import { useExternalSessions } from '../../hooks/use-external-sessions.js';
 import { SessionRow } from './SessionRow.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useWorkspaces } from '../../hooks/use-workspaces.js';
@@ -111,6 +116,10 @@ export function SessionsTreeGroup({
 }: SessionsTreeGroupProps): React.ReactElement {
   const { data: liveSessions } = useSessions();
   const { data: workspaces } = useWorkspaces();
+  const { data: external } = useExternalSessions();
+  const { data: settings } = useSettings();
+  const inlineAnswerEnabled = resolveSessionSettings(settings ?? null).inlineAnswer;
+  const externalList = useMemo(() => external?.sessions ?? [], [external]);
   // Same default period as the Histórico tab this panel links to.
   const filters = useMemo(() => defaultHistoryFilters(new Date()), []);
   const history = useSessionHistory(scope, filters);
@@ -136,14 +145,14 @@ export function SessionsTreeGroup({
   const rows = useMemo(() => mergeRows(liveScoped, historyEntries), [liveScoped, historyEntries]);
   const [filter, setFilter] = useState<SessionFilter | null>(null);
   const counts = useMemo(() => {
-    const loaded = countByFilter(rows.map((r) => r.state));
+    const loaded = countByFilter([...rows.map((r) => r.state), ...externalList.map(externalStateOf)]);
     // History arrives page by page, so the loaded rows undercount. Every
     // session not loaded yet is a past one, i.e. encerrada — add the gap so the
     // chip stays put while the list scrolls in.
     const claimed = rows.filter((r) => r.live && r.history).length;
     const total = liveScoped.length + (stats.data?.sessionCount ?? 0) - claimed;
     return { ...loaded, exited: loaded.exited + Math.max(0, total - rows.length) };
-  }, [rows, liveScoped, stats.data?.sessionCount]);
+  }, [rows, liveScoped, externalList, stats.data?.sessionCount]);
   const visibleRows = useMemo(
     () => rows.filter((r) => matchesFilter(r.state, filter)),
     [rows, filter],
@@ -151,7 +160,7 @@ export function SessionsTreeGroup({
   // Ticks only while a live row shows a duration ("espera 4min", "há 3min"), so
   // those stay honest without a global timer.
   const [now, setNow] = useState(() => Date.now());
-  const hasDurations = rows.some((r) => r.live && r.state !== 'working' && r.state !== 'exited');
+  const hasDurations = rows.some((r) => r.live && r.state !== 'exited') || externalList.some((e) => !e.closed);
   useEffect(() => {
     if (!hasDurations) return;
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -296,7 +305,7 @@ export function SessionsTreeGroup({
     );
   }
 
-  if (rows.length === 0 && !history.isLoading) {
+  if (rows.length === 0 && externalList.length === 0 && !history.isLoading) {
     return (
       <>
         <Typography
@@ -372,10 +381,22 @@ export function SessionsTreeGroup({
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {external?.consent === 'unset' && <ExternalConsentBanner />}
         <Stack spacing={0.25} sx={{ px: 0.75, pb: 0.5 }}>
+          <ExternalSessionRows
+            sessions={externalList}
+            filter={filter}
+            now={now}
+            onAssumed={(snapshot) => {
+              setFilter(null);
+              void invalidate();
+              onOpen(snapshot);
+            }}
+            onError={(message) => setToast({ variant: 'error', message })}
+          />
           {visibleRows.map((row) => (
+            <Fragment key={row.key}>
             <SessionRow
-              key={row.key}
               testId={`tree-session-${row.key}`}
               label={row.label}
               harness={row.live?.harness ?? row.history?.harness ?? 'claude'}
@@ -386,6 +407,7 @@ export function SessionsTreeGroup({
               idleSince={row.idleSince}
               workingSince={row.workingSince}
               activityDetail={row.live?.activityDetail}
+              metrics={row.live?.metrics}
               now={now}
               history={row.history}
               onOpen={() => void handleOpen(row)}
@@ -443,6 +465,10 @@ export function SessionsTreeGroup({
                 ) : null
               }
             />
+            {inlineAnswerEnabled && row.live?.permissionRequest && row.live.harness === 'claude' && (
+              <InlinePermission session={row.live} onOpenSession={() => void handleOpen(row)} />
+            )}
+            </Fragment>
           ))}
 
           {/*

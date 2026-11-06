@@ -7,6 +7,8 @@ import {
   parseSignalLine,
   SIGNAL_HOOK_COMMANDS,
   toolDetail,
+  editedFile,
+  toolUsage,
 } from '../../../src/main/application/session-activity.js';
 
 describe('parseSignalLine', () => {
@@ -74,7 +76,7 @@ describe('isAnswerInput', () => {
 describe('claudeSignalSettings', () => {
   it('subscribes to the activity hooks but not to idle_prompt', () => {
     const settings = JSON.parse(claudeSignalSettings()) as { hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>> };
-    expect(Object.keys(settings.hooks).sort()).toEqual(['Notification', 'PostToolUse', 'PreToolUse', 'Stop', 'UserPromptSubmit']);
+    expect(Object.keys(settings.hooks).sort()).toEqual(['Notification', 'PermissionRequest', 'PostToolUse', 'PreToolUse', 'Stop', 'UserPromptSubmit']);
     expect(settings.hooks['Notification']?.[0]?.matcher).toBe('permission_prompt|elicitation_dialog');
     expect(settings.hooks['Stop']?.[0]?.hooks[0]?.command).toBe(SIGNAL_HOOK_COMMANDS.idle);
   });
@@ -87,7 +89,7 @@ describe('claudeSignalSettings', () => {
 describe('tool signals', () => {
   it('turns a PreToolUse payload into a working change with a detail line', () => {
     const signal = parseSignalLine('{"event":"tool","payload":{"tool_name":"Edit","tool_input":{"file_path":"/a/b/CartService.ts"}}}');
-    expect(interpretSignal(signal!)).toEqual({ activity: 'working', detail: 'Edit CartService.ts' });
+    expect(interpretSignal(signal!)).toMatchObject({ activity: 'working', detail: 'Edit CartService.ts' });
   });
 
   it('shows the command for shell tools and degrades to the bare tool name', () => {
@@ -99,5 +101,21 @@ describe('tool signals', () => {
   it('wires PreToolUse into the injected settings', () => {
     const settings = JSON.parse(claudeSignalSettings()) as { hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>> };
     expect(settings.hooks['PreToolUse']?.[0]?.hooks[0]?.command).toBe(SIGNAL_HOOK_COMMANDS.tool);
+  });
+});
+
+describe('file and customization signals', () => {
+  it('reports the absolute file an editing tool touches', () => {
+    const signal = parseSignalLine('{"event":"tool","payload":{"tool_name":"MultiEdit","tool_input":{"file_path":"/w/src/a.ts"}}}');
+    expect(interpretSignal(signal!)).toMatchObject({ editingFile: '/w/src/a.ts' });
+    expect(editedFile({ tool_name: 'Read', tool_input: { file_path: '/w/a.ts' } })).toBeUndefined();
+    expect(editedFile({ tool_name: 'Edit', tool_input: { file_path: 'rel.ts' } })).toBeUndefined();
+  });
+
+  it('maps Skill, Task and mcp__ tools to customizations', () => {
+    expect(toolUsage({ tool_name: 'Skill', tool_input: { skill: 'deploy' } })).toEqual({ kind: 'skill', name: 'deploy' });
+    expect(toolUsage({ tool_name: 'Task', tool_input: { subagent_type: 'reviewer' } })).toEqual({ kind: 'agent', name: 'reviewer' });
+    expect(toolUsage({ tool_name: 'mcp__github__create_issue' })).toEqual({ kind: 'mcp', name: 'github' });
+    expect(toolUsage({ tool_name: 'Bash' })).toBeUndefined();
   });
 });

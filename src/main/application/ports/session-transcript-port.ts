@@ -1,4 +1,5 @@
 import type { HarnessId } from '../../../shared/harness.js';
+import type { SessionMetrics } from '../../../shared/session-metrics.js';
 
 /**
  * One `claude` conversation as it exists on disk, located and dated without
@@ -74,4 +75,6 @@ export interface SessionTranscriptPort {
   listRefs(): Promise<TranscriptRef[]>;
   /** One conversation's own summary of itself. */
   readUsage(ref: TranscriptRef): Promise<TranscriptUsage>;
+  /** Live numbers (cost, context, rate limit) from the tail of one conversation; `null` when this adapter has none for that id. Cheap: reads only the tail. */
+  readLiveMetrics(conversationId: string): Promise<SessionMetrics | null>;
 }

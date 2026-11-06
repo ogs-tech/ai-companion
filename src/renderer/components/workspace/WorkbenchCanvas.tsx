@@ -1,3 +1,5 @@
+import { SessionStateMark } from '../SessionStateMark.js';
+import type { SessionRowState } from '../../lib/session-attention.js';
 import { Fragment, useRef } from 'react';
 import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import { TREE_DRAG_TYPE, readTreeDrag } from '../../lib/tree-drag.js';
@@ -26,6 +28,8 @@ export interface WorkbenchTab {
   accentColor?: string;
   /** Skips the canvas's own content padding — for tabs (like the entity editor) that manage their own internal spacing edge-to-edge. */
   dense?: boolean;
+  /** A session tab's live state: shown as the four-state mark beside the label. */
+  sessionState?: SessionRowState;
   /** Unsaved-changes indicator — a small dot next to the label, same signal a `closeTab`/scope-switch discard guard reads to decide whether to confirm. */
   dirty?: boolean;
   /**
@@ -46,8 +50,9 @@ export interface WorkbenchTab {
 
 function TabGlyph({ tab }: { tab: WorkbenchTab }): React.ReactElement {
   return (
-    <Box component="span" sx={(theme) => ({ display: 'inline-flex', color: toneColor(theme, tab.glyphTone) ?? 'inherit' })}>
+    <Box component="span" sx={(theme) => ({ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: toneColor(theme, tab.glyphTone) ?? 'inherit' })}>
       <Icon glyph={tab.glyph} size={14} />
+      {tab.sessionState && <SessionStateMark state={tab.sessionState} testId={`workbench-tab-state-${tab.id}`} />}
     </Box>
   );
 }

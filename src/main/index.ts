@@ -77,7 +77,7 @@ import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-c
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
-import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL, SESSION_ACTIVITY_BATCH_MS } from '../shared/session.js';
+import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL, SESSION_ACTIVITY_BATCH_MS, SESSION_OPEN_REQUEST_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
 import { TERMINAL_OUTPUT_CHANNEL, TERMINAL_EXIT_CHANNEL } from '../shared/terminal.js';
 import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
@@ -92,7 +92,18 @@ import { McpService } from './application/services/mcp-service.js';
 import { UnixSocketLinkRouter } from './infrastructure/link-routing/unix-socket-link-router.js';
 import { EXTERNAL_LINK_CHANNEL } from '../shared/external-link.js';
 import { ElectronShell } from './infrastructure/shell/electron-shell.js';
-import { ElectronNotificationAdapter } from './infrastructure/notification/electron-notification-adapter.js';
+import { ElectronBadgeAdapter, ElectronNotificationAdapter } from './infrastructure/notification/electron-notification-adapter.js';
+import { ExternalSessionService } from './application/services/external-session-service.js';
+import { ExternalHooksInstaller } from './application/services/external-hooks-installer.js';
+import { INLINE_ANSWER_MARKER } from './application/session-activity.js';
+import { resolveSessionSettings, type Settings } from '../shared/settings.js';
+import { SessionMetricsService } from './application/services/session-metrics-service.js';
+import { SessionNotifier } from './application/services/session-notifier.js';
+import { FsExternalSignalAdapter } from './infrastructure/external-sessions/fs-external-signal-adapter.js';
+import { FsClaudeTranscriptWatch } from './infrastructure/external-sessions/fs-claude-transcript-watch.js';
+import { PsProcessScanAdapter } from './infrastructure/external-sessions/ps-process-scan-adapter.js';
+import { EXTERNAL_SESSIONS_CHANNEL } from '../shared/external-session.js';
+import type { HarnessId } from '../shared/harness.js';
 import { buildHandlers } from './ipc/registry.js';
 import { createDispatcher } from './ipc/dispatcher.js';
 
@@ -560,6 +571,8 @@ async function wireIpc(): Promise<void> {
   app.on('before-quit', (event) => {
     if (event.defaultPrevented) return; // Quit not approved yet — see desktop-shell.
     sessionService.killAll();
+    externalSessions.dispose();
+    sessionMetrics.dispose();
     workspaceScoped.terminalService.killAll();
     void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
@@ -575,6 +588,87 @@ async function wireIpc(): Promise<void> {
     settingsService,
   );
 
+
+  // The inline-answer hook checks this marker at run time, so the setting takes effect without restarting any session.
+  const inlineMarker = join(home, '.ai-companion', INLINE_ANSWER_MARKER);
+  const syncInlineMarker = async (settings: Settings | null): Promise<void> => {
+    if (resolveSessionSettings(settings).inlineAnswer) {
+      await nodeFsAdapter.mkdir(join(home, '.ai-companion', 'signals'), { recursive: true });
+      await nodeFsAdapter.writeFile(inlineMarker, '');
+    } else {
+      await nodeFsAdapter.remove(inlineMarker);
+    }
+  };
+  settingsService.onSaved((settings) => void syncInlineMarker(settings).catch(() => {}));
+  void settingsService.load().then(syncInlineMarker).catch(() => {});
+
+  // Cost / context / rate limit of app-spawned sessions, refreshed when their transcript can have grown.
+  const sessionMetrics = new SessionMetricsService({
+    transcripts: new FsClaudeTranscriptAdapter(join(home, '.claude', 'projects')),
+    sessions: sessionService,
+  });
+  sessionService.onActivity((id) => sessionMetrics.request(id));
+  sessionService.onExit((id) => sessionMetrics.request(id));
+
+  // Sessions running outside the app (Claude / Cursor in other terminals): observed, never controlled.
+  const externalSessions = new ExternalSessionService({
+    signals: new FsExternalSignalAdapter(join(home, '.ai-companion', 'signals', 'external')),
+    transcripts: new FsClaudeTranscriptWatch(join(home, '.claude', 'projects')),
+    processes: new PsProcessScanAdapter(),
+    now: () => Date.now(),
+    isOwnConversation: (id) => sessionService.list().some((s) => s.conversationId === id),
+  });
+  const externalHooksInstaller = new ExternalHooksInstaller(new MergeMaterializer(nodeFsAdapter, clock, workspacePath), nodeFsAdapter, home);
+  let focusedSessionId: string | null = null;
+  const sessionNotifier = new SessionNotifier({
+    notification: notificationPort,
+    badge: new ElectronBadgeAdapter(),
+    settings: () => settingsService.load(),
+    appSessions: () => sessionService.list(),
+    externalSessions: () => externalSessions.list(),
+    isFocused: (id) => (mainWindow?.isFocused() ?? false) && focusedSessionId === id,
+    open: (target) => {
+      mainWindow?.show();
+      mainWindow?.focus();
+      mainWindow?.webContents.send(SESSION_OPEN_REQUEST_CHANNEL, target);
+    },
+    now: () => Date.now(),
+  });
+  let externalPush: NodeJS.Timeout | undefined;
+  externalSessions.onChange(() => {
+    void sessionNotifier.evaluate();
+    externalPush ??= setTimeout(() => {
+      externalPush = undefined;
+      mainWindow?.webContents.send(EXTERNAL_SESSIONS_CHANNEL, null);
+    }, SESSION_ACTIVITY_BATCH_MS);
+  });
+  sessionService.onActivity(() => void sessionNotifier.evaluate());
+  sessionService.onExit(() => void sessionNotifier.evaluate());
+  app.on('browser-window-focus', () => externalSessions.setVisible(true));
+  app.on('browser-window-blur', () => externalSessions.setVisible(false));
+  externalHooksInstaller
+    .consent()
+    .then((consent) => (consent === 'unset' ? undefined : externalSessions.setMode(consent)))
+    .catch((error: unknown) => console.error('[external-sessions] not started:', error));
+  const externalSessionHandlers = {
+    external: externalSessions,
+    installer: externalHooksInstaller,
+    sessions: sessionService,
+    presentHarnesses: async () => {
+      const present: HarnessId[] = [];
+      if (await sessionRuntimes.claude.isAvailable()) present.push('claude');
+      if (await sessionRuntimes.cursor.isAvailable()) present.push('cursor');
+      return present;
+    },
+    setFocusedSession: (id: string | null) => {
+      focusedSessionId = id;
+    },
+    onChanged: () => {
+      void sessionNotifier.evaluate();
+      mainWindow?.webContents.send(EXTERNAL_SESSIONS_CHANNEL, null);
+    },
+  };
+
   const buildDeps = () => ({
     settingsService,
     gitService: workspaceScoped.gitService,
@@ -588,6 +682,7 @@ async function wireIpc(): Promise<void> {
     hookService,
     instructionService: workspaceScoped.instructionService,
     sessionService,
+    externalSessions: externalSessionHandlers,
     embeddedBrowserPort: embeddedBrowserAdapter,
     sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,

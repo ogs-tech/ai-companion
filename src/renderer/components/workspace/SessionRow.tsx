@@ -1,5 +1,7 @@
 import { Box, Skeleton, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
 import type { HarnessId } from '../../../shared/harness.js';
+import { ContextBar } from '../ContextBar.js';
+import type { SessionMetrics } from '../../../shared/session-metrics.js';
 import type { SessionAttention } from '../../../shared/session.js';
 import {
   attentionLabel,
@@ -17,6 +19,13 @@ import {
   formatModel,
   formatWhen,
 } from '../../lib/format-session-history.js';
+
+/** "Limite de uso · volta em 14 min" — a detail of Ocioso, never a state of its own. */
+export function rateLimitText(limit: NonNullable<SessionMetrics['rateLimit']>, now: number | undefined): string {
+  if (limit.resetsAt === undefined || now === undefined) return 'Limite de uso';
+  const minutes = Math.max(1, Math.ceil((limit.resetsAt - now) / 60_000));
+  return `Limite de uso · volta em ${minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`}`;
+}
 
 const pulse = keyframes`50% { opacity: 0.35; }`;
 const shimmer = keyframes`50% { opacity: 0.45; }`;
@@ -39,6 +48,12 @@ export interface SessionRowProps {
   workingSince?: number | null;
   /** What a `working` row is doing right now ("Edit CartService.ts"), when a hook said. */
   activityDetail?: string | undefined;
+  /** Replaces the harness/model line (external rows: "externa · iTerm2"). */
+  subtitle?: string;
+  /** Live metrics: the context bar, and the rate-limit note on an Ocioso row. */
+  metrics?: SessionMetrics | undefined;
+  /** State inferred rather than measured: the indicator gets a dashed border. */
+  estimated?: boolean;
   /** Epoch ms "now", injected so waiting time ticks and tests stay deterministic. */
   now?: number;
   /** The transcript's reading of this conversation; absent while a just-spawned session has yet to write one. */
@@ -85,6 +100,9 @@ export function SessionRow({
   idleSince = null,
   workingSince = null,
   activityDetail,
+  subtitle,
+  metrics,
+  estimated = false,
   now,
   history,
   onOpen,
@@ -160,6 +178,7 @@ export function SessionRow({
           sx={{
             width: 14,
             flexShrink: 0,
+            ...(estimated ? { border: '1px dashed currentColor', borderRadius: '50%' } : {}),
             textAlign: 'center',
             fontWeight: 700,
             fontSize: '0.8125rem',
@@ -242,8 +261,9 @@ export function SessionRow({
               noWrap
               sx={{ fontSize: '0.625rem', color: 'text.secondary', flexGrow: 1, minWidth: 0 }}
             >
-              {working && activityDetail ? activityDetail : harnessText}
+              {working && activityDetail ? activityDetail : state === 'idle' && metrics?.rateLimit ? rateLimitText(metrics.rateLimit, now) : (subtitle ?? harnessText)}
             </Typography>
+            <ContextBar metrics={metrics} testId={`${testId}-context`} />
             <Typography
               component="span"
               noWrap

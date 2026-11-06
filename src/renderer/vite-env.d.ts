@@ -16,6 +16,10 @@ declare global {
         onExit(sessionId: string, listener: (exitCode: number) => void): () => void;
         onAnyExit(listener: (sessionId: string, exitCode: number) => void): () => void;
         onAnyActivity(listener: (sessionId: string) => void): () => void;
+        onOpenRequest(listener: (target: { id: string; external: boolean }) => void): () => void;
+      };
+      externalSession: {
+        onChanged(listener: () => void): () => void;
       };
       externalLink: {
         onOpen(listener: (url: string) => void): () => void;

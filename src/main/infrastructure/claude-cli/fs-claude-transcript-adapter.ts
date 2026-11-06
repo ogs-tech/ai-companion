@@ -1,5 +1,7 @@
 import { open, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { SessionMetrics } from '../../../shared/session-metrics.js';
+import { metricsFromLines } from '../../application/transcript-metrics.js';
 import type {
   SessionTranscriptPort,
   TranscriptModelUsage,
@@ -101,6 +103,43 @@ function hasCode(err: unknown, code: string): boolean {
  */
 export class FsClaudeTranscriptAdapter implements SessionTranscriptPort {
   constructor(private readonly projectsDir: string) {}
+  private readonly livePaths = new Map<string, string>();
+
+  async readLiveMetrics(conversationId: string): Promise<SessionMetrics | null> {
+    const file = await this.locate(conversationId);
+    if (!file) return null;
+    let size: number;
+    try {
+      size = (await stat(file)).size;
+    } catch {
+      this.livePaths.delete(conversationId);
+      return null;
+    }
+    const start = Math.max(0, size - TAIL_BUDGET_BYTES);
+    const tail = await readSlice(file, start, size - start);
+    return metricsFromLines(tail === null ? [] : parseJsonl(tail), 'claude', Date.now());
+  }
+
+  /** `<projects>/<slug>/<id>.jsonl` — the slug is lossy, so the id is looked up by directory listing and remembered. */
+  private async locate(conversationId: string): Promise<string | null> {
+    const known = this.livePaths.get(conversationId);
+    if (known) return known;
+    let dirs: string[];
+    try {
+      dirs = (await readdir(this.projectsDir, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
+    } catch {
+      return null;
+    }
+    for (const dir of dirs) {
+      const candidate = join(this.projectsDir, dir, `${conversationId}.jsonl`);
+      if (await stat(candidate).then(() => true, () => false)) {
+        this.livePaths.set(conversationId, candidate);
+        return candidate;
+      }
+    }
+    return null;
+  }
+
 
   async listRefs(): Promise<TranscriptRef[]> {
     let projectDirs: string[];

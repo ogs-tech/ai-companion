@@ -1,5 +1,6 @@
 import {
   getDefaults,
+  SESSION_SETTING_KEYS,
   type AdapterSettings,
   type Settings,
   type ThemeMode,
@@ -79,7 +80,7 @@ const LANGUAGE_PREFERENCES: readonly LanguagePreference[] = [
   'en',
   'es',
 ];
-const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing', 'openWith'];
+const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing', 'openWith', 'sessions'];
 
 const invalid = (message: string): never => {
   throw new DomainError('validation', message);
@@ -147,6 +148,12 @@ function assertValidSettings(value: unknown): asserts value is Settings {
 
   // Optional, free-form in its keys (any extension) and strict in its values:
   // a non-string here would be handed to the launcher as a bundle id.
+  const sessions = s['sessions'] === undefined ? {} : asRecord(s['sessions'], "Invalid 'sessions'");
+  for (const [key, flag] of Object.entries(sessions)) {
+    if (!(SESSION_SETTING_KEYS as readonly string[]).includes(key)) invalid(`Unknown settings field 'sessions.${key}'`);
+    if (typeof flag !== 'boolean') invalid(`'sessions.${key}' must be a boolean`);
+  }
+
   const openWith = s['openWith'] === undefined ? {} : asRecord(s['openWith'], "Invalid 'openWith'");
   for (const [key, appId] of Object.entries(openWith)) {
     if (typeof appId !== 'string' || appId.length === 0) {
@@ -156,7 +163,14 @@ function assertValidSettings(value: unknown): asserts value is Settings {
 }
 
 export class SettingsService {
+  private readonly savedListeners: Array<(settings: Settings) => void> = [];
+
   constructor(private readonly repository: SettingsRepository) {}
+
+  /** Runs after every successful `save`/`merge` — for side effects that mirror a setting outside settings.json (e.g. a marker file a hook checks). */
+  onSaved(listener: (settings: Settings) => void): void {
+    this.savedListeners.push(listener);
+  }
 
   async load(): Promise<Settings | null> {
     const loaded = await this.repository.load();
@@ -166,6 +180,7 @@ export class SettingsService {
   async save(settings: Settings): Promise<void> {
     assertValidSettings(settings);
     await this.repository.save(settings);
+    for (const listener of this.savedListeners) listener(settings);
   }
 
   async merge(partial: DeepPartial<Settings>): Promise<Settings> {
@@ -177,6 +192,7 @@ export class SettingsService {
     const next = deepMerge(current as unknown as Record<string, unknown>, partial as DeepPartial<Record<string, unknown>>) as unknown as Settings;
     assertValidSettings(next);
     await this.repository.save(next);
+    for (const listener of this.savedListeners) listener(next);
     return next;
   }
 

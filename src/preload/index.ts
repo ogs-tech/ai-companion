@@ -4,10 +4,13 @@ import {
   SESSION_OUTPUT_CHANNEL,
   SESSION_EXIT_CHANNEL,
   SESSION_ACTIVITY_CHANNEL,
+  SESSION_OPEN_REQUEST_CHANNEL,
+  type SessionOpenRequestEvent,
   type SessionOutputEvent,
   type SessionExitEvent,
   type SessionActivityEvent,
 } from '../shared/session.js';
+import { EXTERNAL_SESSIONS_CHANNEL } from '../shared/external-session.js';
 import { EXTERNAL_LINK_CHANNEL, type ExternalLinkEvent } from '../shared/external-link.js';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedEvent } from '../shared/entity.js';
 import { WORKSPACE_TREE_CHANGED_CHANNEL, type WorkspaceTreeChangedEvent } from '../shared/file-ops.js';
@@ -58,11 +61,25 @@ const api = {
       ipcRenderer.on(SESSION_ACTIVITY_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_ACTIVITY_CHANNEL, wrapped);
     },
+    /** A notification was clicked: open that session (or observe the external one). */
+    onOpenRequest: (listener: (target: SessionOpenRequestEvent) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: SessionOpenRequestEvent): void => listener(payload);
+      ipcRenderer.on(SESSION_OPEN_REQUEST_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(SESSION_OPEN_REQUEST_CHANNEL, wrapped);
+    },
     /** Unfiltered exit listener — for a consolidated session list, which doesn't know every sessionId up front. */
     onAnyExit: (listener: (sessionId: string, exitCode: number) => void): (() => void) => {
       const wrapped = (_event: IpcRendererEvent, payload: SessionExitEvent): void => listener(payload.sessionId, payload.exitCode);
       ipcRenderer.on(SESSION_EXIT_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_EXIT_CHANNEL, wrapped);
+    },
+  },
+  externalSession: {
+    /** Sessions running outside the app, or the consent, changed; refetch `externalSession.state`. */
+    onChanged: (listener: () => void): (() => void) => {
+      const wrapped = (): void => listener();
+      ipcRenderer.on(EXTERNAL_SESSIONS_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(EXTERNAL_SESSIONS_CHANNEL, wrapped);
     },
   },
   externalLink: {

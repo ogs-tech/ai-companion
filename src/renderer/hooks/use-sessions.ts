@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
-import { sessionAnchorKey, type SessionAnchor, type SessionSnapshot, type SessionStatus } from '../../shared/session.js';
+import { buildFileMarks, sessionsUsing, type FileMark, type UsingSession } from '../lib/session-usage.js';
+import { sessionAnchorKey, type SessionAnchor, type SessionSnapshot, type SessionStatus, type SessionUsage } from '../../shared/session.js';
 
 export const sessionsQueryKey = ['sessions'] as const;
 
@@ -53,4 +54,22 @@ export function useSessionSnapshot(sessionId: string | null): SessionSnapshot | 
   const { data } = useSessions();
   if (!sessionId) return undefined;
   return data?.find((session) => session.sessionId === sessionId);
+}
+
+/** File → sessions map for the explorer's marks; recomputed only when the sessions list changes. */
+export function useFileMarks(): Map<string, FileMark> {
+  const { data } = useSessions();
+  return useMemo(() => buildFileMarks(data ?? []), [data]);
+}
+
+/** Sessions currently using one skill / agent / MCP server (hook-reported, 10-minute window). */
+export function useSessionsUsing(usage: SessionUsage): UsingSession[] {
+  const { data } = useSessions();
+  // A stale `now` only delays an entry leaving the 10-minute window; a fresh use is always inside it.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return sessionsUsing(data ?? [], usage, now);
 }

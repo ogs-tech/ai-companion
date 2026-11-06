@@ -16,7 +16,9 @@ export function mockApi(): CallSpy {
     onExit: vi.fn(() => () => {}),
     onAnyExit: vi.fn(() => () => {}),
     onAnyActivity: vi.fn(() => () => {}),
+    onOpenRequest: vi.fn(() => () => {}),
   };
+  const externalSession = { onChanged: vi.fn(() => () => {}) };
   const entity = {
     onChanged: vi.fn(() => () => {}),
   };
@@ -36,7 +38,7 @@ export function mockApi(): CallSpy {
   };
   const getPathForFile = vi.fn((file: File) => `/mock/dropped/${file.name}`);
   Object.defineProperty(window, 'api', {
-    value: { call, session, entity, terminal, externalLink, desktop, getPathForFile },
+    value: { call, session, externalSession, entity, terminal, externalLink, desktop, getPathForFile },
     writable: true,
     configurable: true,
   });

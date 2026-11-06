@@ -29,6 +29,8 @@ import {
 } from '../lib/browser-tabs-store.js';
 import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
+import { ContextBar } from './ContextBar.js';
+import type { SessionMetrics } from '../../shared/session-metrics.js';
 import { FILTER_LABELS } from '../lib/session-attention.js';
 import { SESSION_STATUS_PILL } from '../lib/session-status-pill.js';
 
@@ -148,11 +150,13 @@ interface SessionHeaderProps {
   pill: { variant: StatusPillVariant; label: string };
   /** Current tool while working ("Edit CartService.ts"). */
   detail?: string;
+  /** Live cost / context. */
+  metrics?: SessionMetrics | undefined;
   action?: React.ReactNode;
   browserToggle?: React.ReactNode;
 }
 
-function SessionHeader({ pill, detail, action, browserToggle }: SessionHeaderProps): React.ReactElement {
+function SessionHeader({ pill, detail, metrics, action, browserToggle }: SessionHeaderProps): React.ReactElement {
   return (
     <Stack
       direction="row"
@@ -167,6 +171,12 @@ function SessionHeader({ pill, detail, action, browserToggle }: SessionHeaderPro
         {detail && (
           <Typography component="span" noWrap data-testid="session-detail" sx={{ fontSize: '0.75rem', color: 'text.secondary', maxWidth: 260 }}>
             {detail}
+          </Typography>
+        )}
+        <ContextBar metrics={metrics} testId="session-context" />
+        {metrics?.costUsd !== undefined && (
+          <Typography component="span" data-testid="session-cost" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            {`US$ ${metrics.costUsd.toFixed(2)}`}
           </Typography>
         )}
         {browserToggle}
@@ -555,7 +565,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {showHeader && (
         <Box sx={{ px: 2, pt: 2 }}>
-          <SessionHeader pill={pillFor(stored ? stored.status : status, stored ? stored.activity : activity)} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
+          <SessionHeader pill={pillFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
         </Box>
       )}
       {error && (

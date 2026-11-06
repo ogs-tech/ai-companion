@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
 import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
 import { OriginMeta } from './OriginMeta.js';
+import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
@@ -166,6 +167,7 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
                         {HARNESS_LABEL[server.source.harness]}
                       </Typography>
                     )}
+                    <SessionsUsingBadge usage={{ kind: 'mcp', name: server.name }} testId={`tree-mcp-using-${server.id}`} />
                     <HealthDot server={server} />
                     <OriginMeta {...(server.source.kind === 'plugin' ? { pluginId: server.source.pluginId } : {})} />
                   </>

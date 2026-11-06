@@ -9,6 +9,7 @@ import type { InstructionService } from '../application/services/instruction-ser
 import type { SessionService } from '../application/services/session-service.js';
 import type { FileBrowserService } from '../application/services/file-browser-service.js';
 import { buildSessionHandlers } from './session-handlers.js';
+import { buildExternalSessionHandlers, type ExternalSessionHandlerDeps } from './external-session-handlers.js';
 import { buildBrowserHandlers } from './browser-handlers.js';
 import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-port.js';
 import { buildSessionHistoryHandlers } from './session-history-handlers.js';
@@ -67,6 +68,8 @@ export interface IpcDeps {
   hookService: HookService;
   instructionService: InstructionService;
   sessionService: SessionService;
+  /** Sessions running outside the app + consent; omitted where the feature is not wired (tests). */
+  externalSessions?: ExternalSessionHandlerDeps;
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
@@ -118,6 +121,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     hookService,
     instructionService,
     sessionService,
+    externalSessions,
     embeddedBrowserPort,
     sessionHistoryService,
     workspaceService,
@@ -245,6 +249,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildHookHandlers(hookService),
     ...buildInstructionHandlers(instructionService),
     ...buildSessionHandlers(sessionService),
+    ...(externalSessions ? buildExternalSessionHandlers(externalSessions) : {}),
     ...buildBrowserHandlers(sessionService, embeddedBrowserPort),
     ...buildSessionHistoryHandlers(sessionHistoryService, sessionService),
     ...buildWorkspaceHandlers(workspaceService, workspaceActivation, fileBrowserService, {

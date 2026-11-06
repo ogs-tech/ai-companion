@@ -14,6 +14,9 @@ import { isMac } from '../../lib/shortcut-labels.js';
 import { TREE_DRAG_TYPE, isExternalFileDrag } from '../../lib/tree-drag.js';
 import { isInside, parentOf, topLevelOnly, useExplorerActions, type ExplorerActions, type PathChange } from './use-explorer-actions.js';
 import { OpenWithMenu } from './OpenWithMenu.js';
+import { SessionFileBadge } from './SessionFileBadge.js';
+import { useFileMarks } from '../../hooks/use-sessions.js';
+import type { FileMark } from '../../lib/session-usage.js';
 import { focusManualTab } from '../../lib/browser-tabs-store.js';
 import { EMPTY_GIT_DECORATIONS, type GitDecoration, type GitDecorations } from './git/git-decorations.js';
 import type { FileBrowserEntry } from '../../../shared/file-browser.js';
@@ -62,6 +65,8 @@ interface FolderTreeProps {
   /** Multi-folder workspaces: what a top-level folder row shows after its name (branch, changes pill), keyed by the row's alias; `muted` dims a clean one. */
   rootInfo?: Record<string, RootInfo>;
   git?: FolderTreeGit;
+  /** Root-relative paths of open file tabs with unsaved changes. */
+  dirtyFiles?: ReadonlySet<string>;
   /** A single-folder workspace: the root node shown on top of the tree. Omitted with several folders (their alias nodes are the roots). */
   root?: { label: string; absolutePath: string; meta?: React.ReactNode };
   /** Several folders: a drag between two of them copies, and the folder aliases can't be renamed or trashed. */
@@ -87,10 +92,16 @@ interface DragApi {
   end: () => void;
 }
 
+const NO_DIRTY_FILES: ReadonlySet<string> = new Set();
+
 interface TreeContextValue {
   actions: ExplorerActions;
   drag: DragApi;
   multi: boolean;
+  /** Files sessions are editing / changed this turn, from the sessions store (computed once for the whole tree). */
+  sessionMarks: Map<string, FileMark>;
+  /** Open file tabs with unsaved changes — an editing mark on one of them is a conflict. */
+  dirtyFiles: ReadonlySet<string>;
 }
 
 const TreeContext = createContext<TreeContextValue | null>(null);
@@ -270,7 +281,7 @@ function TreeNode({
   git,
   rootInfo,
 }: TreeNodeProps): React.ReactElement {
-  const { actions, drag } = useTreeContext();
+  const { actions, drag, sessionMarks, dirtyFiles } = useTreeContext();
   const [expandedState, setExpanded] = useState(false);
   const isDir = entry.kind === 'dir';
   const change = isDir ? undefined : decorations.byPath.get(relPath);
@@ -283,6 +294,8 @@ function TreeNode({
   const renamingHere = editing?.kind === 'rename' && editing.path === relPath;
   const isDropTarget = isDir && drag.dropTarget === relPath;
   const fileIcon = isDir ? undefined : fileIconFor(entry.name);
+  const sessionMark = isDir ? undefined : sessionMarks.get(relPath);
+  const conflict = sessionMark !== undefined && sessionMark.editing.length > 0 && dirtyFiles.has(relPath);
 
   // A closed folder opens after ~500 ms of drag hover.
   useEffect(() => {
@@ -361,7 +374,16 @@ function TreeNode({
             ? { actions: <RowGitActions actions={rowActions} busy={git?.busy ?? false} testIdBase={relPath} /> }
             : {};
         })()}
-        {...(change ? { badge: <GitBadge letters={change.letters} color={change.color} testId={`git-badge-${relPath}`} /> } : {})}
+        {...(change || sessionMark
+          ? {
+              badge: (
+                <>
+                  {sessionMark && <SessionFileBadge mark={sessionMark} conflict={conflict} testId={`session-mark-${relPath}`} />}
+                  {change && <GitBadge letters={change.letters} color={change.color} testId={`git-badge-${relPath}`} />}
+                </>
+              ),
+            }
+          : {})}
       />
       {isDir && (
         <Collapse in={expanded} unmountOnExit>
@@ -422,12 +444,14 @@ export function FolderTree({
   isWorkspaceRoot = () => false,
   rootInfo,
   git,
+  dirtyFiles = NO_DIRTY_FILES,
   root,
   multi = false,
   onRetarget = () => undefined,
   onRemoved = () => undefined,
   onActions,
 }: FolderTreeProps): React.ReactElement {
+  const sessionMarks = useFileMarks();
   const { data: rootEntries, isError } = useDirListing('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const rowMenu = useRowContextMenu<RowMenuTarget>();
@@ -737,7 +761,7 @@ export function FolderTree({
     ));
 
   return (
-    <TreeContext.Provider value={{ actions, drag, multi }}>
+    <TreeContext.Provider value={{ actions, drag, multi, sessionMarks, dirtyFiles }}>
       <Box
         ref={containerRef}
         tabIndex={0}

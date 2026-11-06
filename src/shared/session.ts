@@ -1,4 +1,5 @@
 import type { HarnessId } from './harness.js';
+import type { SessionMetrics } from './session-metrics.js';
 
 export type SessionStatus = 'running' | 'exited';
 
@@ -48,6 +49,22 @@ export function sessionAnchorKey(anchor: SessionAnchor): string {
 /** What the UI needs to open a session's tab — and, when it runs in another scope, to go there first. */
 export type SessionOpenTarget = Pick<SessionSnapshot, 'sessionId' | 'anchor' | 'label'> & { scopeId?: string | null };
 
+/** A permission prompt as the `PermissionRequest` hook reported it — what the inline answer shows in full before anyone approves. */
+export interface SessionPermissionRequest {
+  tool: string;
+  /** The exact command (Bash) or a one-line rendering of the tool input. */
+  command: string;
+  cwd?: string;
+}
+
+export type PermissionDecision = 'allow' | 'deny';
+
+/** A customization a session used: skill / subagent / MCP server, by name. */
+export interface SessionUsage {
+  kind: 'skill' | 'agent' | 'mcp';
+  name: string;
+}
+
 export interface SessionSnapshot {
   sessionId: string;
   /** The harness whose CLI runs this session. */
@@ -91,6 +108,20 @@ export interface SessionSnapshot {
   attention?: SessionAttention;
   /** Set only while `activity === 'working'` and a hook reported the tool: `Edit CartService.ts`. */
   activityDetail?: string;
+  /** Absolute path of the file an editing tool is changing right now (hook-reported; no hook = no mark). */
+  editingFile?: string;
+  /** Absolute paths changed during the current/last turn, in order, de-duplicated. */
+  changedFiles?: string[];
+  /** Epoch ms of the last use per customization, keyed `skill:<name>` / `agent:<name>` / `mcp:<name>`. */
+  usedAt?: Record<string, number>;
+  /** Live cost / context / rate limit, read from the transcript on growth. */
+  metrics?: SessionMetrics;
+  /** Set only while `needs-input` was raised by the `PermissionRequest` hook (app-spawned Claude with inline answer on). */
+  permissionRequest?: SessionPermissionRequest;
+}
+
+export function usageKey(usage: SessionUsage): string {
+  return `${usage.kind}:${usage.name}`;
 }
 
 /**
@@ -128,3 +159,11 @@ export interface SessionActivityEvent {
 
 /** Coalescing window for `SESSION_ACTIVITY_CHANNEL`. */
 export const SESSION_ACTIVITY_BATCH_MS = 250;
+
+/** Push channel main→renderer: a notification was clicked; open that session (or observe the external one). */
+export const SESSION_OPEN_REQUEST_CHANNEL = 'session:open-request' as const;
+
+export interface SessionOpenRequestEvent {
+  id: string;
+  external: boolean;
+}
