@@ -1,10 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Box } from '@mui/material';
 import { TopNav } from './TopNav.js';
-import { AppFooter } from './AppFooter.js';
+import { StatusBar } from './StatusBar.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { openManualTab } from '../../lib/browser-tabs-store.js';
+import { useWorkspaces } from '../../hooks/use-workspaces.js';
+import { useThemeMode } from '../../lib/theme-mode-context.js';
+import { useMenuCommand } from '../../lib/menu-commands.js';
+import { ShortcutsDialog } from './ShortcutsDialog.js';
 import { useContextNavigation } from '../../hooks/use-context-navigation.js';
 
 interface AppShellProps {
@@ -16,7 +20,10 @@ interface AppShellProps {
 export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellProps): React.ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const { openFolder } = useContextNavigation();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const { openFolder, goHome, switchTo, activeWorkspace } = useContextNavigation();
+  const { data: workspaces } = useWorkspaces();
+  const { setTheme } = useThemeMode();
 
   // Links the session's CLI opened itself (`/login`, MCP OAuth) arrive from main.
   // Same http(s)-only rule as terminal links; main already filtered, this is defense in depth.
@@ -28,25 +35,39 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
     [],
   );
 
-  // Re-registered every render so ⌘O always calls the current `openFolder`
-  // (it closes over the active workspace).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      const key = e.key.toLowerCase();
-      if (key === 'k') {
-        e.preventDefault();
-        setPaletteOpen(true);
-      } else if (key === 'o') {
-        e.preventDefault();
-        openFolder().catch((err: unknown) =>
+  // The native menu owns every shortcut (see src/shared/desktop.ts); these run when its items are clicked.
+  useMenuCommand('command-palette', () => setPaletteOpen(true));
+  useMenuCommand('open-settings', onOpenSettings);
+  useMenuCommand('show-shortcuts', () => setShortcutsOpen(true));
+  useMenuCommand('theme-system', () => setTheme('system'));
+  useMenuCommand('theme-light', () => setTheme('light'));
+  useMenuCommand('theme-dark', () => setTheme('dark'));
+  useMenuCommand('open-folder', () => {
+    openFolder().catch((err: unknown) =>
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) }),
+    );
+  });
+  useMenuCommand('go-home', () => {
+    goHome().catch((err: unknown) =>
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) }),
+    );
+  });
+  // Cycles Início → each workspace in list order → Início.
+  useMenuCommand('next-workspace', () => {
+    const ids = (workspaces ?? []).map((w) => w.id);
+    const next = ids.length === 0 ? null : activeWorkspace ? ids[ids.indexOf(activeWorkspace.id) + 1] : ids[0];
+    (next === undefined || next === null ? goHome() : switchTo(next)).catch((err: unknown) =>
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) }),
+    );
+  });
+  useEffect(
+    () =>
+      window.api.desktop.onOpenWorkspace((workspaceId) => {
+        switchTo(workspaceId).catch((err: unknown) =>
           setToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) }),
         );
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+      }),
+  );
 
   return (
     <Box
@@ -59,7 +80,8 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
           {children}
         </Box>
       </Box>
-      <AppFooter {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
+      <StatusBar {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>

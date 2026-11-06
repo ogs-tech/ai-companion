@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desktop basics mockup</title>
+<style>
+  body{background:#0b0e14;color:#d7dbe3;font-family:Inter,system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px}
+  h2{font-size:18px;margin:0 0 6px}.subtitle{color:#9aa3b2;font-size:13px;line-height:1.5;margin:0 0 14px}
+  code{background:#1b2230;border-radius:4px;padding:1px 5px;font-size:12px}
+  .approved{border:1px solid #3ecf8e;background:rgba(62,207,142,.08);color:#3ecf8e;border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:16px}
+  .options{display:flex;flex-direction:column;gap:8px}
+  .option{display:flex;gap:12px;border:1px solid #262c38;border-radius:8px;padding:10px 14px;background:#10141c}
+  .option .letter{font-weight:700;color:#6aa5ff;min-width:22px}
+  .option h3{margin:0 0 3px;font-size:13.5px}.option p{margin:0;color:#9aa3b2;font-size:12.5px;line-height:1.5}
+  .split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  @media(max-width:760px){.split{grid-template-columns:1fr}}
+</style></head><body>
+<div class="approved">Aprovado: opção A, diálogo clássico Salvar / Não salvar / Cancelar. A opção B (rascunho com Desfazer) foi descartada e aparece só como referência. Normativo para a UI; desvios visuais precisam de aprovação.</div>
+<h2>Fechar uma aba com alterações não salvas</h2>
+<p class="subtitle">Hoje o editor sabe que a aba está "suja" (<code>onDirtyChange</code>), mas fechar descarta tudo sem avisar. Qual comportamento você quer?</p>
+
+<style>
+  .app{background:#0b0e14;border:1px solid #262c38;border-radius:10px;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#d7dbe3;font-size:12px;position:relative;height:330px}
+  .tabs{display:flex;background:#10141c;border-bottom:1px solid #262c38}
+  .tab{padding:8px 14px;color:#7d8696;border-right:1px solid #262c38;display:flex;gap:8px;align-items:center}
+  .tab.on{color:#d7dbe3;background:#0b0e14}
+  .dot{width:7px;height:7px;border-radius:50%;background:#f5c542;display:inline-block}
+  .x{color:#7d8696}
+  .code{padding:14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.7;color:#9aa3b2}
+  .code b{color:#d7dbe3;font-weight:500}
+  .status{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;padding:5px 12px;background:#10141c;border-top:1px solid #262c38;color:#7d8696;font-size:11px}
+  .scrim{position:absolute;inset:0;background:rgba(5,7,11,.62);display:flex;align-items:center;justify-content:center}
+  .dlg{background:#151a24;border:1px solid #3a4356;border-radius:10px;padding:18px 20px;width:330px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .dlg h4{margin:0 0 6px;font-size:14px}
+  .dlg p{margin:0 0 16px;color:#9aa3b2;line-height:1.5}
+  .btns{display:flex;gap:8px;justify-content:flex-end}
+  .btn{border:1px solid #3a4356;border-radius:6px;padding:5px 12px;color:#d7dbe3}
+  .btn.pri{background:#3b82f6;border-color:#3b82f6;color:#fff}
+  .btn.danger{color:#f0707a;border-color:rgba(240,112,122,.4)}
+  .toast{position:absolute;left:14px;bottom:36px;background:#151a24;border:1px solid #3a4356;border-radius:8px;padding:9px 12px;display:flex;gap:14px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  .toast u{color:#6aa5ff;text-decoration:none;font-weight:600}
+  .cap{font-size:11px;color:#7d8696;margin:2px 0 6px}
+  .note{font-size:12px;color:#9aa3b2;line-height:1.6;margin-top:10px}
+</style>
+
+<div class="options" style="margin-bottom:14px">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Diálogo clássico: Salvar / Não salvar / Cancelar</h3><p>O padrão do checklist. Bloqueia até você decidir. Três botões, <b>Enter</b> = Salvar, <b>Esc</b> = Cancelar.</p></div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Fecha na hora + rascunho com Desfazer (recomendado)</h3><p>Sem diálogo. A aba fecha, o conteúdo vai para um rascunho local e um aviso oferece "Reabrir". Segue sua preferência por ação reversível em vez de confirmação.</p></div>
+  </div>
+</div>
+
+<div class="split">
+  <div>
+    <div class="cap">A: diálogo ao fechar a aba</div>
+    <div class="app">
+      <div class="tabs"><div class="tab">README.md <span class="x">×</span></div><div class="tab on"><span class="dot"></span> code-review.md <span class="x">×</span></div></div>
+      <div class="code"><b>---</b><br>name: code-review<br>description: Revisa o diff atual<br><b>---</b><br>Revise o diff e liste só bugs reais…</div>
+      <div class="scrim"><div class="dlg">
+        <h4>Salvar alterações em code-review.md?</h4>
+        <p>Se você não salvar, as alterações desta aba serão perdidas.</p>
+        <div class="btns"><span class="btn danger">Não salvar</span><span class="btn">Cancelar</span><span class="btn pri">Salvar</span></div>
+      </div></div>
+      <div class="status"><span>code-review.md · alterações não salvas</span><span>UTF-8</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap">B: aba fecha, rascunho guardado</div>
+    <div class="app">
+      <div class="tabs"><div class="tab">README.md <span class="x">×</span></div></div>
+      <div class="code"><b># README</b><br>AI Companion gerencia seus harnesses…</div>
+      <div class="toast"><span>code-review.md fechado com alterações guardadas como rascunho</span><u>Reabrir</u></div>
+      <div class="status"><span>Rascunho salvo às 12:30</span><span>UTF-8</span></div>
+    </div>
+  </div>
+</div>
+
+<p class="note"><b>Em ambas:</b> a barra de status mostra "alterações não salvas" na aba suja, o título da janela ganha <code>*</code> e ⌘W/⌘Q passam pelo mesmo fluxo. <b>Ponto fraco de B:</b> rascunhos precisam de um lugar para viver (<code>~/.ai-companion/drafts</code>) e de limpeza; o app precisa ser claro de que o arquivo em disco <i>não</i> mudou.</p>
+
+</body></html>

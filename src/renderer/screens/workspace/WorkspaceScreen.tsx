@@ -41,7 +41,11 @@ import { StarterPackScreen } from '../starter-pack/StarterPackScreen.js';
 import { MarketplaceList } from '../marketplaces/MarketplaceList.js';
 import { HealthScreen } from '../health/HealthScreen.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
-import { registerUnsavedTabsGuard } from '../../lib/workspace-tabs-guard.js';
+import { useMenuCommand } from '../../lib/menu-commands.js';
+import { openEditorFind } from '../../lib/editor-find.js';
+import { publishShellStatus } from '../../lib/shell-status-store.js';
+import { askConfirm, askUnsaved } from '../../lib/dialog-host.js';
+import { registerQuitGuard, registerUnsavedTabsGuard } from '../../lib/workspace-tabs-guard.js';
 import {
   pushWorkspaceHistoryEntry,
   registerWorkspaceHistoryApplier,
@@ -121,6 +125,18 @@ const OVERVIEW_TAB_ID = 'overview';
 /** Tabs that can hold unsaved work, and so need a discard guard before closing. */
 function isDirty(tab: OpenTab): boolean {
   return (tab.kind === 'file' || tab.kind === 'skill' || tab.kind === 'agent' || tab.kind === 'instruction') && tab.dirty === true;
+}
+
+/** What the unsaved-changes dialog calls a tab: the file name, or the entity's name. */
+function dirtyTabName(tab: OpenTab): string {
+  if (tab.kind === 'file') return tab.relPath.split('/').pop() || tab.relPath;
+  if (tab.kind === 'skill' || tab.kind === 'agent' || tab.kind === 'instruction') return tab.entity.name || 'Sem nome';
+  return 'Sem nome';
+}
+
+/** Tabs that hold a draft the user can save. */
+function isEditableTab(tab: OpenTab): boolean {
+  return tab.kind === 'file' || tab.kind === 'skill' || tab.kind === 'agent' || tab.kind === 'instruction';
 }
 
 function entityTabGlyph(tab: Extract<OpenTab, { kind: EntityKind | 'instruction' }>): LucideIcon {
@@ -226,14 +242,16 @@ export function WorkspaceScreen(): React.ReactElement {
   // "Editar no Início": leave the workspace (same discard guard as any
   // switch), then open the entity's real, editable tab there.
   const editAtHome = (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction'): void => {
-    if (!resetTabs()) return;
-    goHomeMutation
-      .mutateAsync()
-      .then(() => {
-        if (kind === 'instruction') openInstructionTab(entity as Instruction, false);
-        else openEntityTab(kind, entity as Skill | Agent, false);
-      })
-      .catch(showError);
+    void resetTabs().then((ok) => {
+      if (!ok) return;
+      goHomeMutation
+        .mutateAsync()
+        .then(() => {
+          if (kind === 'instruction') openInstructionTab(entity as Instruction, false);
+          else openEntityTab(kind, entity as Skill | Agent, false);
+        })
+        .catch(showError);
+    });
   };
 
   // Tab identity is keyed by the concrete sessionId (not the anchor), so a
@@ -414,18 +432,32 @@ export function WorkspaceScreen(): React.ReactElement {
     return () => clearTimeout(timer);
   }, [openTabs, activeTabId, workspaceKey, hydratedKey]);
 
-  // Closes every tab at once, behind the same discard guard as closing one.
-  const closeAllTabs = (): void => {
-    const dirtyCount = openTabs.filter(isDirty).length;
-    if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return;
-    for (const tab of openTabs) if (tab.kind === 'browser') void closeBrowserTab(tab.tabId);
-    setOpenTabs([]);
-    setActiveTabId(OVERVIEW_TAB_ID);
+  // Each mounted editor registers how to save itself (it owns its draft), so the
+  // unsaved-changes dialog's Salvar / Salvar tudo and the menu's ⌘S can reach it.
+  const saveFnsRef = useRef(new Map<string, () => Promise<boolean>>());
+  const registerTabSave =
+    (tabId: string) =>
+    (save: (() => Promise<boolean>) | null): void => {
+      if (save) saveFnsRef.current.set(tabId, save);
+      else saveFnsRef.current.delete(tabId);
+    };
+
+  // Asks what to do with the unsaved work in `tabs`. True = safe to drop them
+  // (saved, or the user chose Não salvar); false = the user cancelled, or a save failed.
+  const settleDirtyTabs = async (tabs: readonly OpenTab[]): Promise<boolean> => {
+    const dirty = tabs.filter(isDirty);
+    if (dirty.length === 0) return true;
+    const decision = await askUnsaved(dirty.map(dirtyTabName));
+    if (decision === 'cancel') return false;
+    if (decision === 'discard') return true;
+    for (const tab of dirty) {
+      const save = saveFnsRef.current.get(tab.id);
+      if (!save || !(await save())) return false;
+    }
+    return true;
   };
 
-  const closeTab = (id: string): void => {
-    const target = openTabs.find((t) => t.id === id);
-    if (target && isDirty(target) && !window.confirm('Descartar alterações não salvas?')) return;
+  const removeTab = (id: string): void => {
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
       setActiveTabId((cur) => (cur === id ? (next[next.length - 1]?.id ?? OVERVIEW_TAB_ID) : cur));
@@ -433,15 +465,44 @@ export function WorkspaceScreen(): React.ReactElement {
     });
   };
 
+  // Closes every tab at once, behind the same unsaved-changes dialog as closing one.
+  const closeAllTabs = (): void => {
+    void settleDirtyTabs(openTabs).then((ok) => {
+      if (!ok) return;
+      for (const tab of openTabs) if (tab.kind === 'browser') void closeBrowserTab(tab.tabId);
+      setOpenTabs([]);
+      setActiveTabId(OVERVIEW_TAB_ID);
+    });
+  };
+
+  const closeTab = (id: string): void => {
+    const target = openTabs.find((t) => t.id === id);
+    if (target && isDirty(target)) {
+      void settleDirtyTabs([target]).then((ok) => {
+        if (ok) removeTab(id);
+      });
+      return;
+    }
+    removeTab(id);
+  };
+
   // Returns whether the reset actually happened — false means the caller
-  // asked to discard unsaved tabs and the user declined, so the caller's own
-  // state change (switching workspace) must not proceed either.
-  const resetTabs = (): boolean => {
-    const dirtyCount = openTabs.filter(isDirty).length;
-    if (dirtyCount > 0 && !window.confirm(`${dirtyCount} aba(s) com alterações não salvas. Descartar tudo?`)) return false;
+  // asked to leave unsaved tabs behind and the user declined (or a save
+  // failed), so the caller's own state change (switching workspace) must not
+  // proceed either.
+  const resetTabs = async (): Promise<boolean> => {
+    if (!(await settleDirtyTabs(openTabs))) return false;
     // Leaving the workspace ends its terminals (main does it on activation); exited ones don't count.
     const runningCount = (terminals ?? []).filter((t) => t.status === 'running').length;
-    if (runningCount > 0 && !window.confirm(`${runningCount} terminal(is) em execução serão encerrados ao trocar. Encerrar e trocar?`)) return false;
+    if (
+      runningCount > 0 &&
+      !(await askConfirm({
+        title: 'Encerrar terminais?',
+        message: `${runningCount} terminal(is) em execução serão encerrados ao trocar.`,
+        confirmLabel: 'Encerrar e trocar',
+      }))
+    )
+      return false;
     skipSaveRef.current = true;
     setOpenTabs([]);
     setActiveTabId(OVERVIEW_TAB_ID);
@@ -454,7 +515,12 @@ export function WorkspaceScreen(): React.ReactElement {
   // uses for every switch reachable from inside this screen.
   useEffect(() => {
     registerUnsavedTabsGuard(resetTabs);
-    return () => registerUnsavedTabsGuard(null);
+    // Quitting only needs the unsaved-changes question: terminals live in main and are not ours to end here.
+    registerQuitGuard(() => settleDirtyTabs(openTabs));
+    return () => {
+      registerUnsavedTabsGuard(null);
+      registerQuitGuard(null);
+    };
   });
 
   // Records the open workspace (or Início) + active tab as a Workbench
@@ -474,7 +540,7 @@ export function WorkspaceScreen(): React.ReactElement {
   const applyWorkspaceHistoryEntry = async (entry: WorkspaceHistoryEntry): Promise<ApplyWorkspaceHistoryResult> => {
     const workspaceChanged = entry.workspaceId !== (activeWorkspace?.id ?? null);
     if (workspaceChanged) {
-      if (!resetTabs()) return 'declined';
+      if (!(await resetTabs())) return 'declined';
       try {
         if (entry.workspaceId === null) await goHomeMutation.mutateAsync();
         else await switchWorkspace.mutateAsync(entry.workspaceId);
@@ -652,9 +718,12 @@ export function WorkspaceScreen(): React.ReactElement {
       openSessionTab(session);
       return;
     }
-    if (!resetTabs()) return;
-    const switched = session.scopeId === null ? goHomeMutation.mutateAsync() : switchWorkspace.mutateAsync(session.scopeId);
-    switched.then(() => openSessionTab(session)).catch(showError);
+    const targetScope = session.scopeId;
+    void resetTabs().then((ok) => {
+      if (!ok) return;
+      const switched = targetScope === null ? goHomeMutation.mutateAsync() : switchWorkspace.mutateAsync(targetScope);
+      switched.then(() => openSessionTab(session)).catch(showError);
+    });
   };
 
   // The "+" in the Sessões panel header: always a fresh session (coexisting
@@ -709,7 +778,7 @@ export function WorkspaceScreen(): React.ReactElement {
   // A folder row's "Abrir como workspace": leaves this workspace for that
   // folder's own (existing or new) — a real switch, so the same discard guard.
   const handleOpenAsWorkspace = async (absolutePath: string): Promise<void> => {
-    if (!resetTabs()) return;
+    if (!(await resetTabs())) return;
     try {
       const opened = await openWorkspace.mutateAsync(absolutePath);
       setToast({ variant: 'success', message: `Workspace aberto: ${opened.name}` });
@@ -795,6 +864,7 @@ export function WorkspaceScreen(): React.ReactElement {
             path={tab.relPath}
             active={!hidden}
             onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
+            registerSave={registerTabSave(tab.id)}
           />
         ),
       };
@@ -953,6 +1023,7 @@ export function WorkspaceScreen(): React.ReactElement {
             }
           }}
           onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
+          registerSave={registerTabSave(tab.id)}
           openPropertiesRequest={tab.id === propertiesRequestTabId}
           onPropertiesRequestHandled={() => setPropertiesRequestTabId(null)}
           {...(tab.inherited ? { inherited: { onEditAtHome: () => editAtHome(tab.entity, tab.kind) } } : {})}
@@ -1018,6 +1089,76 @@ export function WorkspaceScreen(): React.ReactElement {
       </Tooltip>
     </>
   );
+
+  // ── Desktop shell ──────────────────────────────────────────────────────
+  // What the title bar and status bar show about the tab in front, and the
+  // native-menu commands this screen owns (the rest live in AppShell).
+  const dirtyBeforeRef = useRef(new Map<string, boolean>());
+  const savedAtRef = useRef(new Map<string, number>());
+  const activeTab = openTabs.find((t) => t.id === activeTabId);
+  const activeLabel = canvasTabs.find((t) => t.id === activeTabId)?.label;
+  const activeDirty = activeTab !== undefined && isDirty(activeTab);
+  useEffect(() => {
+    // A tab that was dirty and no longer is has just been saved.
+    for (const tab of openTabs) {
+      const nowDirty = isDirty(tab);
+      if (dirtyBeforeRef.current.get(tab.id) === true && !nowDirty) savedAtRef.current.set(tab.id, Date.now());
+      dirtyBeforeRef.current.set(tab.id, nowDirty);
+    }
+    publishShellStatus({
+      workspaceName: activeWorkspace?.name ?? null,
+      tab:
+        activeTab === undefined || activeLabel === undefined
+          ? null
+          : {
+              title: activeTab.kind === 'git-diff' ? `${activeTab.path} (diff)` : activeLabel,
+              dirty: activeDirty,
+              editable: isEditableTab(activeTab),
+              savedAt: savedAtRef.current.get(activeTab.id) ?? null,
+            },
+    });
+  }, [openTabs, activeTab, activeLabel, activeDirty, activeWorkspace]);
+  useEffect(() => {
+    publishShellStatus({ cursor: null });
+  }, [activeTabId]);
+  useEffect(
+    () => () => publishShellStatus({ workspaceName: null, tab: null, cursor: null }),
+    [],
+  );
+
+  useMenuCommand('save', () => void saveFnsRef.current.get(activeTabId)?.());
+  useMenuCommand('save-all', () => {
+    for (const tab of openTabs.filter(isDirty)) void saveFnsRef.current.get(tab.id)?.();
+  });
+  // ⌘W with no tab to close closes the window (main then asks about unsaved work).
+  useMenuCommand('close-tab', () => {
+    if (activeTabId === OVERVIEW_TAB_ID) window.close();
+    else closeTab(activeTabId);
+  });
+  useMenuCommand('close-workspace', () => {
+    if (!activeWorkspace) return;
+    void resetTabs().then((ok) => (ok ? goHomeMutation.mutateAsync().catch(showError) : undefined));
+  });
+  useMenuCommand('find', openEditorFind);
+  const showExplorerView = (view: ExplorerView): void => {
+    if (!activeWorkspace) return;
+    setExplorerView(view);
+    if (explorerCollapsed) toggleExplorerPanel();
+  };
+  useMenuCommand('view-files', () => showExplorerView('files'));
+  useMenuCommand('view-git', () => showExplorerView('git'));
+  useMenuCommand('view-terminals', () => showExplorerView('terminals'));
+  useMenuCommand('new-session', handleNewSession);
+  useMenuCommand('go-needs-attention', () => {
+    const waiting = (sessions ?? []).find((s) => s.status === 'running' && s.activity === 'needs-input');
+    if (waiting) openSessionAnywhere(waiting);
+  });
+  useMenuCommand('end-session', () => {
+    if (activeTab?.kind !== 'session') return;
+    callIpc('session.kill', { sessionId: activeTab.sessionId })
+      .then(() => queryClient.invalidateQueries({ queryKey: sessionsQueryKey }))
+      .catch(showError);
+  });
 
   return (
     <Box component="main" data-testid="workspace-screen" sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>

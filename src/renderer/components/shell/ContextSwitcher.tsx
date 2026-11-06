@@ -61,7 +61,7 @@ export function ContextSwitcher(): React.ReactElement {
   const handleRemove = async (): Promise<void> => {
     const target = pendingRemoval;
     setPendingRemoval(null);
-    if (!target || !confirmDiscardUnsavedTabs()) return;
+    if (!target || !(await confirmDiscardUnsavedTabs())) return;
     try {
       // Deleting the open workspace goes home server-side.
       await deleteWorkspace.mutateAsync(target.id);

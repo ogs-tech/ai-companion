@@ -1,4 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { createDesktopShell } from './desktop-shell.js';
+import { FileLogger } from './infrastructure/logging/file-logger.js';
+import { FsWindowStateStore } from './infrastructure/window/fs-window-state-store.js';
 import { createServer, type Server } from 'node:http';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -110,6 +113,15 @@ const EMBEDDED_BROWSER_CDP_PORT = 9333;
 app.commandLine.appendSwitch('remote-debugging-port', String(EMBEDDED_BROWSER_CDP_PORT));
 
 let mainWindow: BrowserWindow | null = null;
+
+const globalDataDir = workspaceDataDir(homedir());
+const logger = new FileLogger({ directory: join(globalDataDir, 'logs'), version: app.getVersion() });
+const desktopShell = createDesktopShell({
+  logger,
+  windowState: new FsWindowStateStore(join(globalDataDir, 'window-state.json')),
+  isDev,
+  getMainWindow: () => mainWindow,
+});
 let devFocusServer: Server | null = null;
 /** Set once `wireIpc` constructs the real adapter — read by `createWindow`'s reload listener, see `hideAll`. */
 let embeddedBrowserPortForReload: EmbeddedBrowserPort | null = null;
@@ -195,7 +207,10 @@ async function wireIpc(): Promise<void> {
   });
   // Best-effort: without the socket, sessions spawn with the plain env and links keep going to the default browser.
   await linkRouter.start().catch((error: unknown) => console.error('[link-routing] disabled:', error));
-  app.on('before-quit', () => void linkRouter.stop());
+  app.on('before-quit', (event) => {
+    if (event.defaultPrevented) return; // Quit not approved yet — see desktop-shell.
+    void linkRouter.stop();
+  });
 
   const clock = new SystemClock();
   const workspaceRegistry = new FsWorkspaceRegistry(join(workspacePath, 'workspaces.json'));
@@ -498,7 +513,8 @@ async function wireIpc(): Promise<void> {
   };
   attachEntityWatch(workspaceScoped);
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
+    if (event.defaultPrevented) return; // Quit not approved yet — see desktop-shell.
     sessionService.killAll();
     workspaceScoped.terminalService.killAll();
     void embeddedBrowserAdapter.destroyAll();
@@ -543,6 +559,12 @@ async function wireIpc(): Promise<void> {
     terminalService: workspaceScoped.terminalService,
     openEditorsService: workspaceScoped.openEditorsService,
     appQuit: () => app.quit(),
+    desktop: {
+      logger,
+      setWindowTitle: desktopShell.setWindowTitle,
+      respondToQuit: desktopShell.respondToQuit,
+      openLogsFolder: desktopShell.openLogsFolder,
+    },
   });
 
   const switchQueue = createTaskQueue();
@@ -613,7 +635,7 @@ async function wireIpc(): Promise<void> {
     return updated;
   };
 
-  const workspaceActivation: WorkspaceActivation = {
+  const baseActivation: WorkspaceActivation = {
     addFolder: (id, path) => edited(id, () => workspaceService.addFolder(id, path), true),
     removeFolder: (id, path) => edited(id, () => workspaceService.removeFolder(id, path), true),
     rename: (id, name) => edited(id, () => workspaceService.rename(id, name), false),
@@ -626,6 +648,34 @@ async function wireIpc(): Promise<void> {
       await workspaceService.delete(id);
     },
   };
+
+  /** The "Abrir recente" menu lists workspaces, so any operation that can change that list refreshes it. */
+  const refreshMenu = async (): Promise<void> => {
+    try {
+      desktopShell.setRecentWorkspaces(await workspaceService.list());
+    } catch (error) {
+      logger.error({ process: 'main', message: 'Could not refresh the application menu', stack: error instanceof Error ? error.stack : undefined });
+    }
+  };
+  const refreshing =
+    <A extends unknown[], R>(operation: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      try {
+        return await operation(...args);
+      } finally {
+        void refreshMenu();
+      }
+    };
+  const workspaceActivation: WorkspaceActivation = {
+    addFolder: refreshing(baseActivation.addFolder),
+    removeFolder: refreshing(baseActivation.removeFolder),
+    rename: refreshing(baseActivation.rename),
+    switchTo: refreshing(baseActivation.switchTo),
+    open: refreshing(baseActivation.open),
+    goHome: refreshing(baseActivation.goHome),
+    delete: refreshing(baseActivation.delete),
+  };
+  void refreshMenu();
 
   dispatch = createDispatcher(buildHandlers(buildDeps()));
 
@@ -654,8 +704,7 @@ function wireMigrationFailure(error: unknown): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 768,
+    ...desktopShell.windowOptions(),
     show: false,
     title: brand.documentTitle,
     webPreferences: {
@@ -665,6 +714,8 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  desktopShell.attachWindow(mainWindow);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -725,6 +776,8 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
+  desktopShell.registerProcessHandlers();
+
   app.on('second-instance', () => {
     focusMainWindow();
   });

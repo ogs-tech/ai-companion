@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Barra de status + AppFooter: fundir ou empilhar</title>
+<style>
+  :root { --bg:#14161a; --panel:#1b1e24; --line:#2a2e36; --fg:#e6e8ec; --mut:#8b92a0; --ok:#3fb27f; --warn:#e0a63a; --acc:#6ea8ff; }
+  body { margin:0; padding:24px; background:#0d0f12; color:var(--fg); font:14px/1.4 -apple-system, Roboto, sans-serif; }
+  h1 { font-size:18px; margin:0 0 4px; } p.sub { color:var(--mut); margin:0 0 24px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  @media (max-width:1100px){ .grid{ grid-template-columns:1fr; } }
+  .card { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel); }
+  .card h2 { margin:0; padding:10px 14px; font-size:14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:10px; background:#24402f; color:#8fe0b4; }
+  .tag.alt { background:#33363e; color:var(--mut); }
+  .win { margin:14px; border:1px solid var(--line); border-radius:6px; background:var(--bg); height:220px; display:flex; flex-direction:column; }
+  .body { flex:1; display:flex; align-items:center; justify-content:center; color:var(--mut); font-size:12px; }
+  .bar { display:flex; align-items:center; gap:14px; padding:0 12px; color:var(--mut); border-top:1px solid var(--line); }
+  .bar.s { height:24px; font-size:11px; background:var(--panel); }
+  .bar.f { height:22px; font-size:10px; background:var(--bg); }
+  .sp { margin-left:auto; display:flex; gap:14px; align-items:center; }
+  .warn { color:var(--warn); } .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ok); margin-right:5px; }
+  .need { color:var(--acc); cursor:pointer; }
+  ul { margin:0; padding:0 14px 14px 30px; color:var(--mut); font-size:13px; } li { margin:3px 0; }
+</style>
+</head>
+<body>
+<h1>Barra de status global × AppFooter atual</h1>
+<p class="sub">Mesmo estado nas duas: workspace <b>ogs-tech</b>, branch <b>main</b>, arquivo com alterações não salvas, 1 sessão precisa de você, sync ok, Claude ✓ / Cursor —.</p>
+<div class="grid">
+
+  <div class="card">
+    <h2>A · Fundir numa só barra (24px) <span class="tag">Recomendada</span></h2>
+    <div class="win">
+      <div class="body">conteúdo da tela</div>
+      <div class="bar s">
+        <span>ogs-tech · ⎇ main</span>
+        <span class="sp">
+          <span class="warn">Alterações não salvas</span>
+          <span class="need">! 1 sessão precisa de você</span>
+          <span>Ln 42, Col 7</span>
+          <span><span class="dot"></span>sincronizado</span>
+          <span>Claude ✓ · Cursor —</span>
+        </span>
+      </div>
+    </div>
+    <ul>
+      <li>46px → 24px: não gasta altura extra.</li>
+      <li>Sync e adapters passam para a direita, mantendo clique → Diagnóstico.</li>
+      <li>A linha da empresa sai da barra; fica em <i>Ajuda › Sobre</i>.</li>
+      <li>Risco: a direita fica cheia em janelas de 800px (adapters colapsam primeiro).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>B · Nova barra sobre o AppFooter <span class="tag alt">Alternativa</span></h2>
+    <div class="win">
+      <div class="body">conteúdo da tela</div>
+      <div class="bar s">
+        <span>ogs-tech · ⎇ main</span>
+        <span class="sp">
+          <span class="warn">Alterações não salvas</span>
+          <span class="need">! 1 sessão precisa de você</span>
+          <span>Ln 42, Col 7</span>
+        </span>
+      </div>
+      <div class="bar f">
+        <span><span class="dot"></span>sincronizado</span>
+        <span>Claude ✓</span><span>Cursor —</span>
+        <span class="sp">OGS TECH</span>
+      </div>
+    </div>
+    <ul>
+      <li>Nada migra: AppFooter fica intocado, barra nova é aditiva.</li>
+      <li>46px de rodapé permanente (6% de uma janela de 768px).</li>
+      <li>Duas barras de status no mesmo lugar; o olho não sabe onde procurar.</li>
+      <li>Vantagem: diff menor e mantém a linha da empresa.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

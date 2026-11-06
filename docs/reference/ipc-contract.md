@@ -92,6 +92,24 @@ A `scope?: 'personal' | 'project'` param (on `skill.list`/`agent.list`, `hook.*`
 
 > **Destructive (scoped).** `app.restore` restores the app to its initial state: it removes the app-created symlinks and generated files under adapter targets (`AdapterManager.removeAllAdapterSymlinks`/`removeAllGeneratedFiles`), deletes Global's data directory `~/.ai-companion/`, and clears the app's marketplace/plugin registry in `~/.claude/settings.json`, then quits. Each workspace's own `<root>/.ai-companion/` is left in its folder. It does **not** delete the rest of `~/.claude/` or any `.env.local` — only this app's own footprint. Orchestrated by `WorkspaceTeardownService`; no raw filesystem access lives in the IPC layer.
 
+### `desktop`
+
+Desktop shell (window title, quit confirmation, error log). Contract types in [`src/shared/desktop.ts`](../../src/shared/desktop.ts); handlers in `src/main/ipc/desktop-handlers.ts`.
+
+| Method | Params | Result |
+|---|---|---|
+| `desktop.setWindowTitle` | `{ title: string, edited: boolean }` | `void` |
+| `desktop.respondToQuit` | `{ requestId: string, proceed: boolean }` | `void` |
+| `desktop.reportError` | `{ source: 'renderer', message: string, stack?: string }` | `void` |
+| `desktop.openLogsFolder` | — | `void` |
+
+- `setWindowTitle` sets the native window title; on macOS `edited` also toggles the unsaved dot (`setDocumentEdited`).
+- `respondToQuit` answers a `desktop:quit-request` push. `proceed: true` lets the close/quit continue; `false` cancels it. An unknown or stale `requestId` is ignored. If the renderer does not answer within ~3 s (or is gone), main proceeds without asking.
+- `reportError` appends a line to `~/.ai-companion/logs/app.log` (rotated: 5 files x 1 MB).
+- `openLogsFolder` opens that folder in the OS file manager.
+
+Push channels (main to renderer, preload `window.api.desktop.*`, each returning an unsubscribe): `desktop:menu-command` `{ command }` (`onMenuCommand`), `desktop:open-workspace` `{ workspaceId }` (`onOpenWorkspace`), `desktop:quit-request` `{ requestId }` (`onQuitRequest`), `desktop:recovery` `{ details }` (`onRecovery`, sent after main reloaded the window following a renderer crash or hang).
+
 ### `settings`
 
 | Method | Params | Result |

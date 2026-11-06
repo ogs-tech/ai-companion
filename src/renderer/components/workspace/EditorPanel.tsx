@@ -24,6 +24,7 @@ import { EmptyState } from '../ds/EmptyState.js';
 import { MarkdownBody } from '../ds/MarkdownBodyView.js';
 import { PropertiesForm, type EditableEntity, type EditorHiddenField } from './PropertiesForm.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
+import { describeFailure } from '../../lib/operation-error.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { SyncReportModal } from '../SyncReportModal.js';
 import { ReadOnlyNotice } from '../ReadOnlyNotice.js';
@@ -71,26 +72,26 @@ function propertiesSnapshot(e: EditableEntity): string {
 }
 
 /**
- * Ctrl/Cmd+S triggers `onSave`, but only while this tab is the one currently
- * visible — every open Workbench tab's `EditorPanel` stays mounted the whole
- * time (WorkbenchCanvas only toggles CSS `display`), so an unscoped listener
- * would fire the shortcut on every open tab at once. `useEffectEvent` keeps
- * the effect itself only dependent on `active`, so the listener isn't torn
- * down and rebuilt on every keystroke.
+ * Hands the owner (WorkspaceScreen) a way to save this tab: the unsaved-changes
+ * dialog's Salvar / Salvar tudo and the native menu's Salvar all go through it.
+ * Resolves true when nothing is left unsaved (saved, or nothing to save), false
+ * when the save failed. Refs keep the registration stable across renders, so the
+ * owner never sees a null gap between two renders.
  */
-function useSaveShortcut(active: boolean, onSave: () => void): void {
-  const triggerSave = useEffectEvent(onSave);
+function useRegisterSave(
+  registerSave: ((save: (() => Promise<boolean>) | null) => void) | undefined,
+  save: () => Promise<boolean>,
+): void {
+  const latestSave = useRef(save);
+  const latestRegister = useRef(registerSave);
   useEffect(() => {
-    if (!active) return;
-    const onKeyDown = (e: KeyboardEvent): void => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod || e.key.toLowerCase() !== 's') return;
-      e.preventDefault();
-      triggerSave();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active]);
+    latestSave.current = save;
+    latestRegister.current = registerSave;
+  });
+  useEffect(() => {
+    latestRegister.current?.(() => latestSave.current());
+    return () => latestRegister.current?.(null);
+  }, []);
 }
 
 /**
@@ -119,6 +120,8 @@ export type EditorPanelProps =
       active?: boolean;
       onSaved: (saved: EditableEntity) => void | Promise<void>;
       onDirtyChange: (dirty: boolean) => void;
+      /** See `useRegisterSave`. */
+      registerSave?: (save: (() => Promise<boolean>) | null) => void;
       hiddenFields?: ReadonlySet<EditorHiddenField>;
       /** Flips to `true` to open the Properties modal from outside (e.g. a tree row's right-click "Properties" action) — a one-shot signal, consumed via `onPropertiesRequestHandled`. */
       openPropertiesRequest?: boolean;
@@ -136,6 +139,8 @@ export type EditorPanelProps =
       /** See the `entity` variant's `active`. */
       active?: boolean;
       onDirtyChange: (dirty: boolean) => void;
+      /** See `useRegisterSave`. */
+      registerSave?: (save: (() => Promise<boolean>) | null) => void;
     }
   | {
       subject: 'preview';
@@ -155,9 +160,9 @@ type EntitySubjectProps = Extract<EditorPanelProps, { subject: 'entity' }>;
 function EntitySubject({
   initial,
   isCreate,
-  active = true,
   onSaved,
   onDirtyChange,
+  registerSave,
   hiddenFields,
   openPropertiesRequest,
   onPropertiesRequestHandled,
@@ -213,7 +218,7 @@ function EntitySubject({
     notifyDirtyChange(isDirty);
   }, [isDirty]);
 
-  const handleSave = async (): Promise<void> => {
+  const handleSave = async (): Promise<boolean> => {
     setSaving(true);
     try {
       // Preserve the original URN on edit so EntityService detects a name change
@@ -236,6 +241,7 @@ function EntitySubject({
       setToast({ variant: 'success', message: `${saved.name} salvo` });
       if (report.some((entry) => entry.status !== 'ok')) setSyncReport(report);
       await onSaved(saved);
+      return true;
     } catch (err) {
       if (
         err instanceof IpcCallError &&
@@ -246,20 +252,21 @@ function EntitySubject({
         const list = errors.map((e) => `${e.path}: ${e.message}`).join('\n');
         setToast({ variant: 'error', message: `${errors.length} validation error(s)\n${list}` });
       } else {
+        const failure = describeFailure(err, `Não foi possível salvar ${entity.name || 'a aba'}`);
         setToast({
           variant: 'error',
-          message: err instanceof IpcCallError ? err.message : String(err),
+          message: failure.message,
+          details: failure.details,
+          action: { label: 'Tentar de novo', onClick: () => void handleSave() },
         });
       }
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  useSaveShortcut(active, () => {
-    if (readOnly || saving) return;
-    void handleSave();
-  });
+  useRegisterSave(registerSave, async () => (readOnly || saving ? true : handleSave()));
 
   const isHidden = (field: EditorHiddenField): boolean => hiddenFields?.has(field) ?? false;
   const showFrontmatter =
@@ -340,6 +347,7 @@ function FileSubject({
   path,
   active = true,
   onDirtyChange,
+  registerSave,
 }: FileSubjectProps): React.ReactElement {
   const {
     data: preview,
@@ -388,27 +396,29 @@ function FileSubject({
   const editable =
     preview?.previewable === true && preview.kind === 'text' && preview.truncated === false;
 
-  const handleSave = async (): Promise<void> => {
-    if (draft === null) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (draft === null) return true;
     setSaving(true);
     try {
       await writeFile.mutateAsync({ path, content: draft });
       setBaseline(draft);
       setToast({ variant: 'success', message: `${fileTitle(path)} salvo` });
+      return true;
     } catch (err) {
+      const failure = describeFailure(err, `Não foi possível salvar ${fileTitle(path)}`);
       setToast({
         variant: 'error',
-        message: err instanceof IpcCallError ? err.message : String(err),
+        message: failure.message,
+        details: failure.details,
+        action: { label: 'Tentar de novo', onClick: () => void handleSave() },
       });
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  useSaveShortcut(active, () => {
-    if (!editable || saving) return;
-    void handleSave();
-  });
+  useRegisterSave(registerSave, async () => (!editable || saving ? true : handleSave()));
 
   let body: React.ReactNode;
   if (isError) {

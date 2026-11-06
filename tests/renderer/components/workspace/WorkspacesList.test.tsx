@@ -86,7 +86,7 @@ describe('WorkspacesList', () => {
 
   it('does not switch when the unsaved-tabs guard declines', async () => {
     const user = userEvent.setup();
-    registerUnsavedTabsGuard(() => false);
+    registerUnsavedTabsGuard(async () => false);
     renderList();
     await user.click(await screen.findByTestId('workspace-list-row-w2'));
     expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());

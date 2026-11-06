@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desktop basics mockup</title>
+<style>
+  body{background:#0b0e14;color:#d7dbe3;font-family:Inter,system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px}
+  h2{font-size:18px;margin:0 0 6px}.subtitle{color:#9aa3b2;font-size:13px;line-height:1.5;margin:0 0 14px}
+  code{background:#1b2230;border-radius:4px;padding:1px 5px;font-size:12px}
+  .approved{border:1px solid #3ecf8e;background:rgba(62,207,142,.08);color:#3ecf8e;border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:16px}
+  .options{display:flex;flex-direction:column;gap:8px}
+  .option{display:flex;gap:12px;border:1px solid #262c38;border-radius:8px;padding:10px 14px;background:#10141c}
+  .option .letter{font-weight:700;color:#6aa5ff;min-width:22px}
+  .option h3{margin:0 0 3px;font-size:13.5px}.option p{margin:0;color:#9aa3b2;font-size:12.5px;line-height:1.5}
+  .split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  @media(max-width:760px){.split{grid-template-columns:1fr}}
+</style></head><body>
+<div class="approved">Aprovado: opção A2, barra nativa mantida e cabeçalho enxuto (4 ícones em 2 grupos, sem logo, sem nome, sem botão de tema). As opções C e B de estrutura foram descartadas; A1 foi descartada em favor de A2.</div>
+<h2>Opção A refinada: barra nativa + cabeçalho enxuto</h2>
+<p class="subtitle">Ficamos com a barra nativa em cada sistema, então o Windows mostra o que o usuário já conhece: ícone, título à esquerda, menu logo abaixo e os botões de janela à direita. Sem ☰, sem área arrastável custom. O trabalho agora é o cabeçalho de 40px. Quanto simplificar?</p>
+
+<style>
+  .win{background:#0b0e14;border:1px solid #262c38;border-radius:8px;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#d7dbe3;font-size:12px;margin-bottom:4px}
+  .nat{height:30px;background:#1a1f2b;border-bottom:1px solid #262c38;display:flex;align-items:center;position:relative;color:#9aa3b2}
+  .nat.mac{justify-content:center}
+  .tl{position:absolute;left:12px;display:flex;gap:7px}
+  .tl i{width:12px;height:12px;border-radius:50%;display:block}
+  .tl i:nth-child(1){background:#ff5f57}.tl i:nth-child(2){background:#febc2e}.tl i:nth-child(3){background:#28c840}
+  .nat.w{padding-left:10px;gap:8px;color:#d7dbe3}
+  .nat.w .ico{width:14px;height:14px;border-radius:3px;background:linear-gradient(135deg,#6aa5ff,#3ecf8e)}
+  .nat.w .wc{margin-left:auto;display:flex;height:100%}
+  .nat.w .wc span{width:44px;display:flex;align-items:center;justify-content:center;color:#9aa3b2}
+  .menu{height:24px;background:#151a24;border-bottom:1px solid #262c38;display:flex;align-items:center;gap:14px;padding:0 10px;color:#c3c9d4;font-size:12px}
+  .dirty{color:#f5c542}
+  .hdr{height:40px;background:#0b0e14;border-bottom:1px solid #262c38;display:flex;align-items:center;gap:8px;padding:0 12px}
+  .ib{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#7d8696;font-size:13px}
+  .ib.dis{opacity:.35}
+  .ws{border:1px solid #262c38;border-radius:6px;padding:3px 9px;display:flex;gap:6px;align-items:center}
+  .ws small{color:#7d8696}
+  .srch{margin:0 auto;width:260px;height:26px;border:1px solid #262c38;border-radius:6px;background:#10141c;display:flex;justify-content:space-between;align-items:center;padding:0 10px;color:#7d8696;font-size:11.5px}
+  .srch kbd{font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
+  .right{display:flex;gap:2px;align-items:center}
+  .sep{width:1px;height:16px;background:#262c38;margin:0 4px}
+  .cap{font-size:11px;color:#7d8696;margin:10px 0 5px}
+  .gone{font-size:12px;color:#9aa3b2;line-height:1.7;margin:4px 0 0 14px}
+  .note{font-size:12px;color:#9aa3b2;line-height:1.6;margin-top:12px}
+</style>
+
+<div class="options" style="margin-bottom:12px">
+  <div class="option" data-choice="a1" onclick="toggleSelect(this)">
+    <div class="letter">A1</div>
+    <div class="content"><h3>Só tirar a repetição</h3><p>Remove logo e nome do cabeçalho (o título nativo já diz). Todo o resto fica onde está: mesmos 6 ícones, mesmo campo de busca.</p></div>
+  </div>
+  <div class="option" data-choice="a2" onclick="toggleSelect(this)">
+    <div class="letter">A2</div>
+    <div class="content"><h3>Enxugar para o essencial (recomendada)</h3><p>Além de A1: o tema sai do cabeçalho (já está em Exibir &gt; Tema e em Configurações), e os dois botões de painel viram um grupo separado, para a ação "ocultar painel" não se misturar com "abrir navegador" e "configurações". São 4 ícones em vez de 6, em dois grupos.</p></div>
+  </div>
+</div>
+
+<div class="cap">Hoje (macOS)</div>
+<div class="win">
+  <div class="nat mac"><div class="tl"><i></i><i></i><i></i></div>AI Companion</div>
+  <div class="hdr"><b>◆ AI Companion</b>
+    <div class="ib">‹</div><div class="ib dis">›</div><div class="ws">ai-companion <small>▾</small></div>
+    <div class="srch"><span>⌕ Buscar ou ir para…</span><kbd>⌘K</kbd></div>
+    <div class="right"><div class="ib">▯</div><div class="ib">▯</div><div class="ib">◍</div><div class="ib">☾</div><div class="ib">⚙</div></div></div>
+</div>
+
+<div class="cap">A1 · macOS</div>
+<div class="win">
+  <div class="nat mac"><div class="tl"><i></i><i></i><i></i></div>code-review.md <span class="dirty">&nbsp;●&nbsp;</span> — ai-companion</div>
+  <div class="hdr">
+    <div class="ib">‹</div><div class="ib dis">›</div><div class="ws">ai-companion <small>▾</small></div>
+    <div class="srch"><span>⌕ Buscar ou ir para…</span><kbd>⌘K</kbd></div>
+    <div class="right"><div class="ib">▯</div><div class="ib">▯</div><div class="ib">◍</div><div class="ib">☾</div><div class="ib">⚙</div></div></div>
+</div>
+
+<div class="cap" style="color:#6aa5ff">A2 · macOS</div>
+<div class="win" style="border-color:#3b82f6">
+  <div class="nat mac"><div class="tl"><i></i><i></i><i></i></div>code-review.md <span class="dirty">&nbsp;●&nbsp;</span> — ai-companion</div>
+  <div class="hdr">
+    <div class="ib">‹</div><div class="ib dis">›</div><div class="ws">ai-companion <small>▾</small></div>
+    <div class="srch"><span>⌕ Buscar ou ir para…</span><kbd>⌘K</kbd></div>
+    <div class="right"><div class="ib">▯</div><div class="ib">▯</div><div class="sep"></div><div class="ib">◍</div><div class="ib">⚙</div></div></div>
+</div>
+
+<div class="cap" style="color:#6aa5ff">A2 · Windows (barra nativa com menu embutido)</div>
+<div class="win" style="border-color:#3b82f6">
+  <div class="nat w"><div class="ico"></div>code-review.md <span class="dirty">●</span> — ai-companion<div class="wc"><span>–</span><span>▢</span><span>✕</span></div></div>
+  <div class="menu"><span>Arquivo</span><span>Editar</span><span>Exibir</span><span>Sessões</span><span>Janela</span><span>Ajuda</span></div>
+  <div class="hdr">
+    <div class="ib">‹</div><div class="ib dis">›</div><div class="ws">ai-companion <small>▾</small></div>
+    <div class="srch"><span>⌕ Buscar ou ir para…</span><kbd>Ctrl K</kbd></div>
+    <div class="right"><div class="ib">▯</div><div class="ib">▯</div><div class="sep"></div><div class="ib">◍</div><div class="ib">⚙</div></div></div>
+</div>
+
+<p class="gone">Ícones de A2, da esquerda para a direita: ocultar painel esquerdo, ocultar painel direito | abrir navegador, configurações.</p>
+
+<p class="note"><b>Windows e Linux:</b> o menu (Arquivo … Ajuda) aparece como no resto do sistema, logo abaixo do título, e os atalhos usam <code>Ctrl</code> no lugar de <code>⌘</code>. O app mostra o atalho certo conforme o sistema. <b>Título:</b> mesma regra de antes (Início, workspace, arquivo, arquivo com ●, sessão). No Windows o ● vai junto do nome, porque não existe o ponto do botão vermelho. <b>Não verificado:</b> a aparência real no Windows; o mockup acima imita o padrão do sistema, não foi visto num Windows de verdade.</p>
+
+</body></html>

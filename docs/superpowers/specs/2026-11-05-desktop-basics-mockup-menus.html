@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desktop basics mockup</title>
+<style>
+  body{background:#0b0e14;color:#d7dbe3;font-family:Inter,system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px}
+  h2{font-size:18px;margin:0 0 6px}.subtitle{color:#9aa3b2;font-size:13px;line-height:1.5;margin:0 0 14px}
+  code{background:#1b2230;border-radius:4px;padding:1px 5px;font-size:12px}
+  .approved{border:1px solid #3ecf8e;background:rgba(62,207,142,.08);color:#3ecf8e;border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:16px}
+  .options{display:flex;flex-direction:column;gap:8px}
+  .option{display:flex;gap:12px;border:1px solid #262c38;border-radius:8px;padding:10px 14px;background:#10141c}
+  .option .letter{font-weight:700;color:#6aa5ff;min-width:22px}
+  .option h3{margin:0 0 3px;font-size:13.5px}.option p{margin:0;color:#9aa3b2;font-size:12.5px;line-height:1.5}
+  .split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  @media(max-width:760px){.split{grid-template-columns:1fr}}
+</style></head><body>
+<div class="approved">Aprovado: opção B, menus padrão mais o menu Sessões. Os atalhos de Sessões são provisórios e serão definidos no plano.</div>
+<h2>Menu nativo</h2>
+<p class="subtitle">Decidido: barra de status global (A). Hoje não há menu nativo, então ⌘Q, ⌘, e Copiar/Colar dependem de atalhos soltos no código. O menu vira também o registro central de atalhos. Quanto o app deve ter de seu?</p>
+
+<style>
+  .mb{background:#10141c;border:1px solid #262c38;border-radius:8px 8px 0 0;font-family:Inter,system-ui,sans-serif;font-size:12px;color:#d7dbe3;display:flex;gap:18px;padding:7px 14px}
+  .mb .on{background:#2a3040;border-radius:4px;padding:0 7px;margin:-1px -7px}
+  .mn{background:#151a24;border:1px solid #3a4356;border-radius:0 0 8px 8px;font-family:Inter,system-ui,sans-serif;font-size:12px;color:#d7dbe3;padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);margin-bottom:10px}
+  .mn div{display:flex;justify-content:space-between;padding:4px 14px;gap:30px}
+  .mn div.s{border-top:1px solid #262c38;margin:4px 0;padding:0}
+  .mn kbd{color:#7d8696;font-family:inherit}
+  .mn .off{color:#5b6372}
+  .mn .new{color:#6aa5ff}
+  .cap{font-size:11px;color:#7d8696;margin:4px 0 6px}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .note{font-size:12px;color:#9aa3b2;line-height:1.6;margin-top:10px}
+</style>
+
+<div class="options" style="margin-bottom:14px">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Menus padrão, adaptados ao app</h3><p>Arquivo, Editar, Exibir, Janela, Ajuda. Itens do checklist que não se aplicam (Novo documento, Imprimir, Salvar como) ficam de fora. Tudo o resto vem com atalho.</p></div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>A + menu "Sessões" (recomendado)</h3><p>Um menu próprio para o que o app tem de único: nova sessão, alternar para a que precisa de você, encerrar, alternar entre Início e workspaces. Dá atalho e descoberta a ações que hoje só existem por clique.</p></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="cap">Arquivo</div>
+    <div class="mb"><span class="on">Arquivo</span><span>Editar</span><span>Exibir</span><span>Janela</span><span>Ajuda</span></div>
+    <div class="mn">
+      <div><span>Abrir pasta…</span><kbd>⌘O</kbd></div>
+      <div><span>Abrir recente</span><kbd>▸</kbd></div>
+      <div class="s"></div>
+      <div><span>Salvar</span><kbd>⌘S</kbd></div>
+      <div><span>Salvar tudo</span><kbd>⌥⌘S</kbd></div>
+      <div class="s"></div>
+      <div><span>Fechar aba</span><kbd>⌘W</kbd></div>
+      <div><span>Fechar workspace</span><kbd>⇧⌘W</kbd></div>
+      <div class="s"></div>
+      <div><span>Configurações…</span><kbd>⌘,</kbd></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap">Editar</div>
+    <div class="mb"><span>Arquivo</span><span class="on">Editar</span><span>Exibir</span><span>Janela</span><span>Ajuda</span></div>
+    <div class="mn">
+      <div><span>Desfazer</span><kbd>⌘Z</kbd></div>
+      <div><span>Refazer</span><kbd>⇧⌘Z</kbd></div>
+      <div class="s"></div>
+      <div><span>Recortar</span><kbd>⌘X</kbd></div>
+      <div><span>Copiar</span><kbd>⌘C</kbd></div>
+      <div><span>Colar</span><kbd>⌘V</kbd></div>
+      <div><span>Selecionar tudo</span><kbd>⌘A</kbd></div>
+      <div class="s"></div>
+      <div><span>Buscar no arquivo</span><kbd>⌘F</kbd></div>
+      <div><span>Paleta de comandos…</span><kbd>⌘K</kbd></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap">Exibir</div>
+    <div class="mb"><span>Arquivo</span><span>Editar</span><span class="on">Exibir</span><span>Janela</span><span>Ajuda</span></div>
+    <div class="mn">
+      <div><span>Painel de arquivos</span><kbd>⌘1</kbd></div>
+      <div><span>Painel Git</span><kbd>⌘2</kbd></div>
+      <div><span>Terminais</span><kbd>⌘3</kbd></div>
+      <div class="s"></div>
+      <div><span>Tema</span><kbd>▸ Sistema / Claro / Escuro</kbd></div>
+      <div class="s"></div>
+      <div><span>Aumentar zoom</span><kbd>⌘+</kbd></div>
+      <div><span>Diminuir zoom</span><kbd>⌘−</kbd></div>
+      <div><span>Tamanho real</span><kbd>⌘0</kbd></div>
+      <div class="s"></div>
+      <div><span>Tela cheia</span><kbd>⌃⌘F</kbd></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="cap new">Só na opção B: Sessões</div>
+    <div class="mb"><span>Arquivo</span><span>Editar</span><span>Exibir</span><span class="on new">Sessões</span><span>Janela</span><span>Ajuda</span></div>
+    <div class="mn">
+      <div><span>Nova sessão</span><kbd>⌘T</kbd></div>
+      <div><span>Ir para a que precisa de você</span><kbd>⌥⌘J</kbd></div>
+      <div><span>Encerrar sessão</span><kbd>⇧⌘K</kbd></div>
+      <div class="s"></div>
+      <div><span>Ir para Início</span><kbd>⌘H</kbd></div>
+      <div><span>Próximo workspace</span><kbd>⌃Tab</kbd></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap">Janela</div>
+    <div class="mb"><span>Arquivo</span><span>Editar</span><span>Exibir</span><span class="on">Janela</span><span>Ajuda</span></div>
+    <div class="mn">
+      <div><span>Minimizar</span><kbd>⌘M</kbd></div>
+      <div><span>Ampliar</span><kbd></kbd></div>
+      <div class="s"></div>
+      <div><span>Trazer tudo para a frente</span><kbd></kbd></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap">Ajuda</div>
+    <div class="mb"><span>Arquivo</span><span>Editar</span><span>Exibir</span><span>Janela</span><span class="on">Ajuda</span></div>
+    <div class="mn">
+      <div><span>Documentação</span><kbd>F1</kbd></div>
+      <div><span>Atalhos de teclado</span><kbd>⌘/</kbd></div>
+      <div><span>Abrir pasta de logs</span><kbd></kbd></div>
+      <div class="s"></div>
+      <div><span>Verificar atualizações…</span><kbd></kbd></div>
+      <div><span>Sobre o AI Companion</span><kbd></kbd></div>
+    </div>
+  </div>
+</div>
+
+<p class="note"><b>Nas duas:</b> no macOS o menu do app (Sobre, Configurações ⌘, e Sair ⌘Q) fica no primeiro menu, com o nome do app, como o sistema espera. <b>Conflito a resolver:</b> ⌘T, ⌘H e ⌘1–3 já têm significado no sistema ou no terminal embutido (⌘H esconde a janela no macOS). Os atalhos de Sessões acima são provisórios e a escolha final vai para a seção de atalhos do spec.</p>
+
+</body></html>

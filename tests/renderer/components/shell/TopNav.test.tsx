@@ -33,7 +33,7 @@ const noop = () => undefined;
 describe('TopNav', () => {
   it('renders the context switcher', async () => {
     renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
-    expect(await screen.findByTestId('context-switcher')).toHaveTextContent('Início');
+    await waitFor(() => expect(screen.getByTestId('context-switcher')).toHaveTextContent('Início'));
   });
 
   it('toggles the side panels through the registered shell commands and reflects their state', async () => {
@@ -70,12 +70,12 @@ describe('TopNav', () => {
   });
   it('renders the ⌘K trigger as a search field', () => {
     renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
-    expect(screen.getByTestId('command-palette-trigger')).toHaveTextContent('Buscar ou ir para…⌘K');
+    expect(screen.getByTestId('command-palette-trigger')).toHaveTextContent(/Buscar ou ir para…(⌘|Ctrl\+)K/);
   });
-  it('toggles the theme through useThemeMode', async () => {
+  it('keeps the header slim: no theme toggle, no repeated app name', () => {
     renderWithShell(<TopNav onOpenSettings={noop} onOpenCommandPalette={noop} />);
-    await userEvent.click(screen.getByTestId('theme-toggle'));
-    expect(call).toHaveBeenCalledWith('settings.merge', expect.objectContaining({ ui: expect.any(Object) }));
+    expect(screen.queryByTestId('theme-toggle')).not.toBeInTheDocument();
+    expect(screen.queryByText('AI Companion')).not.toBeInTheDocument();
   });
 
   describe('global browser button', () => {

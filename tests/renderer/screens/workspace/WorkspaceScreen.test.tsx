@@ -12,6 +12,8 @@ import { openManualTab, resetBrowserTabsForTests } from '../../../../src/rendere
 import { toggleWorkspacePanel, type WorkspacePanelSide } from '../../../../src/renderer/lib/workspace-shell-store.js';
 import { setShowHiddenFiles } from '../../../../src/renderer/lib/show-hidden-files-store.js';
 import { mockApi } from '../../test-utils.js';
+import { dispatchMenuCommand } from '../../../../src/renderer/lib/menu-commands.js';
+import { DialogHost } from '../../../../src/renderer/components/DialogHost.js';
 import { confirmDiscardUnsavedTabs } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
 
 // A session opens as a Workbench canvas tab (SessionPanel), which opens a
@@ -65,6 +67,7 @@ const renderScreen = () =>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={createAppTheme('light')}>
         <WorkspaceScreen />
+        <DialogHost />
       </ThemeProvider>
     </QueryClientProvider>,
   );
@@ -168,8 +171,8 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       await openFolderFile(user, 'a.md');
       await screen.findByTestId('workbench-tab-file:apps/a.md');
-      act(() => {
-        expect(confirmDiscardUnsavedTabs()).toBe(true);
+      await act(async () => {
+        await expect(confirmDiscardUnsavedTabs()).resolves.toBe(true);
       });
       await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
       expect(screen.getByTestId('workbench-tab-overview')).toHaveAttribute('aria-pressed', 'true');
@@ -478,7 +481,7 @@ describe('WorkspaceScreen', () => {
 
     // `useAreaNavigation`'s "Início" branch (AppShell/CommandPalette) reaches
     // this screen only through the registered guard, then goes home on its own.
-    expect(confirmDiscardUnsavedTabs()).toBe(true);
+    await expect(confirmDiscardUnsavedTabs()).resolves.toBe(true);
     await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
   });
 
@@ -643,7 +646,6 @@ describe('WorkspaceScreen', () => {
     });
 
     it('asks before leaving the workspace while a terminal runs, and not when all have exited', async () => {
-      const running = vi.spyOn(window, 'confirm');
       const answerList = (list: unknown[]): void => {
         (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
           if (method === 'workspace.getActive') return projectWorkspace;
@@ -656,22 +658,24 @@ describe('WorkspaceScreen', () => {
       const view = renderScreen();
       await userEvent.click(await screen.findByTestId('explorer-view-terminals'));
       await screen.findByTestId('terminal-row-t1');
-      running.mockReturnValue(false);
-      expect(confirmDiscardUnsavedTabs()).toBe(false);
-      expect(running).toHaveBeenCalledWith(expect.stringContaining('1 terminal(is) em execução'));
-      running.mockReturnValue(true);
-      expect(confirmDiscardUnsavedTabs()).toBe(true);
+
+      const declined = confirmDiscardUnsavedTabs();
+      expect(await screen.findByTestId('confirm-dialog')).toHaveTextContent('1 terminal(is) em execução');
+      await userEvent.click(screen.getByTestId('confirm-cancel-btn'));
+      await expect(declined).resolves.toBe(false);
+
+      const accepted = confirmDiscardUnsavedTabs();
+      await userEvent.click(await screen.findByTestId('confirm-ok-btn'));
+      await expect(accepted).resolves.toBe(true);
 
       view.unmount();
       queryClient.clear();
-      running.mockClear();
       answerList([{ ...shell, status: 'exited', exitCode: 0 }]);
       renderScreen();
       await userEvent.click(await screen.findByTestId('explorer-view-terminals'));
       await screen.findByTestId('terminal-exit-t1');
-      expect(confirmDiscardUnsavedTabs()).toBe(true);
-      expect(running).not.toHaveBeenCalled();
-      running.mockRestore();
+      await expect(confirmDiscardUnsavedTabs()).resolves.toBe(true);
+      expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
     });
 
     it('"Abrir terminal aqui" on a folder row opens a shell in that folder', async () => {
@@ -1394,37 +1398,65 @@ describe('WorkspaceScreen', () => {
     it('asks for confirmation before closing a tab with unsaved edits, and keeps it open when declined', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
       await user.click(screen.getByLabelText(/^Fechar /));
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(await screen.findByTestId('unsaved-dialog')).toHaveTextContent('a.md');
+      await user.click(screen.getByTestId('unsaved-cancel-btn'));
+      expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
+    });
+
+    it('Não salvar closes the tab without writing the file', async () => {
+      const user = userEvent.setup();
+      await openDirtyFileTab(user);
+      await user.click(screen.getByLabelText(/^Fechar /));
+      await user.click(await screen.findByTestId('unsaved-discard-btn'));
+      await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('workspace.writeFile', expect.anything());
+    });
+
+    it('Salvar writes the file, then closes the tab', async () => {
+      const user = userEvent.setup();
+      await openDirtyFileTab(user);
+      await user.click(screen.getByLabelText(/^Fechar /));
+      await user.click(await screen.findByTestId('unsaved-save-btn'));
+      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.writeFile', { path: 'apps/a.md', content: expect.stringMatching(/x/) }));
+      await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
+    });
+
+    it('keeps the tab open when Salvar fails', async () => {
+      const user = userEvent.setup();
+      await openDirtyFileTab(user);
+      const base = (ipc.callIpc as ReturnType<typeof vi.fn>).getMockImplementation() as (m: string, p: unknown) => Promise<unknown>;
+      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'workspace.writeFile') throw new Error('EACCES: permission denied');
+        return base(method, params);
+      });
+      await user.click(screen.getByLabelText(/^Fechar /));
+      await user.click(await screen.findByTestId('unsaved-save-btn'));
+      expect(await screen.findByTestId('toast')).toHaveTextContent('Não foi possível salvar a.md');
       expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
     });
 
     it('closes a tab with unsaved edits once the user confirms discarding them', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
       await user.click(screen.getByLabelText(/^Fechar /));
-      expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument();
+      await user.click(await screen.findByTestId('unsaved-discard-btn'));
+      await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
     });
 
     it('clears the dirty dot once the edit is saved', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
-      await user.keyboard('{Control>}s{/Control}');
+      act(() => dispatchMenuCommand('save'));
       await waitFor(() => expect(screen.queryByTestId('workbench-tab-dirty-file:apps/a.md')).not.toBeInTheDocument());
     });
 
     it('a context switch with unsaved edits asks for confirmation first, and declining changes nothing', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-      let allowed = true;
-      act(() => {
-        allowed = confirmDiscardUnsavedTabs();
-      });
-      expect(allowed).toBe(false);
-      expect(confirmSpy).toHaveBeenCalled();
+      const allowed = confirmDiscardUnsavedTabs();
+      await user.click(await screen.findByTestId('unsaved-cancel-btn'));
+      await expect(allowed).resolves.toBe(false);
       expect(screen.getByTestId('workbench-tab-file:apps/a.md')).toBeInTheDocument();
       expect(screen.getByTestId('workbench-tab-dirty-file:apps/a.md')).toBeInTheDocument();
     });
@@ -1432,10 +1464,9 @@ describe('WorkspaceScreen', () => {
     it('confirming the discard on a context switch clears the tabs', async () => {
       const user = userEvent.setup();
       await openDirtyFileTab(user);
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
-      act(() => {
-        expect(confirmDiscardUnsavedTabs()).toBe(true);
-      });
+      const allowed = confirmDiscardUnsavedTabs();
+      await user.click(await screen.findByTestId('unsaved-discard-btn'));
+      await expect(allowed).resolves.toBe(true);
       await waitFor(() => expect(screen.queryByTestId('workbench-tab-file:apps/a.md')).not.toBeInTheDocument());
     });
 
@@ -1461,9 +1492,8 @@ describe('WorkspaceScreen', () => {
     it('shows a dirty dot on a new skill tab once it has unsaved content, and asks for confirmation before closing it', async () => {
       const user = userEvent.setup();
       await openDirtyEntityTab(user);
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
       await user.click(screen.getByLabelText(/^Fechar /));
-      expect(confirmSpy).toHaveBeenCalled();
+      await user.click(await screen.findByTestId('unsaved-cancel-btn'));
       expect(screen.getByTestId('workbench-tab-entity-new:skill:1')).toBeInTheDocument();
     });
 
@@ -1489,7 +1519,7 @@ describe('WorkspaceScreen', () => {
       editor.focus();
       await user.type(editor, 'x', { skipClick: true });
       await waitFor(() => expect(screen.getByTestId('workbench-tab-dirty-entity-new:skill:1')).toBeInTheDocument());
-      await user.keyboard('{Control>}s{/Control}');
+      act(() => dispatchMenuCommand('save'));
       await waitFor(() => expect(document.querySelector('[data-testid^="workbench-tab-dirty-"]')).toBeNull());
     });
 

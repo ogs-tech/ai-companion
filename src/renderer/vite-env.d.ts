@@ -2,6 +2,7 @@
 
 import type { IpcResult } from '../shared/ipc-contract.js';
 import type { EntityChangedEvent } from '../shared/entity.js';
+import type { MenuCommand } from '../shared/desktop.js';
 
 declare global {
   interface Window {
@@ -20,6 +21,12 @@ declare global {
       };
       entity: {
         onChanged(listener: (event: EntityChangedEvent) => void): () => void;
+      };
+      desktop: {
+        onMenuCommand(listener: (command: MenuCommand) => void): () => void;
+        onOpenWorkspace(listener: (workspaceId: string) => void): () => void;
+        onQuitRequest(listener: (requestId: string) => void): () => void;
+        onRecovery(listener: (details: string) => void): () => void;
       };
       terminal: {
         onOutput(terminalId: string, listener: (chunk: string) => void): () => void;

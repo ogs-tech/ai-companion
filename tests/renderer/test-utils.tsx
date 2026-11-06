@@ -28,9 +28,15 @@ export function mockApi(): CallSpy {
   const externalLink = {
     onOpen: vi.fn((_listener: (url: string) => void) => () => {}),
   };
+  const desktop = {
+    onMenuCommand: vi.fn((_listener: (command: string) => void) => () => {}),
+    onOpenWorkspace: vi.fn((_listener: (workspaceId: string) => void) => () => {}),
+    onQuitRequest: vi.fn((_listener: (requestId: string) => void) => () => {}),
+    onRecovery: vi.fn((_listener: (details: string) => void) => () => {}),
+  };
   const getPathForFile = vi.fn((file: File) => `/mock/dropped/${file.name}`);
   Object.defineProperty(window, 'api', {
-    value: { call, session, entity, terminal, externalLink, getPathForFile },
+    value: { call, session, entity, terminal, externalLink, desktop, getPathForFile },
     writable: true,
     configurable: true,
   });

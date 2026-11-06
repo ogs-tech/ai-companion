@@ -56,6 +56,7 @@ const baseDeps = (): IpcDeps => {
     terminalService: {} as IpcDeps['terminalService'],
     openEditorsService: {} as IpcDeps['openEditorsService'],
     appQuit: vi.fn(),
+    desktop: {} as IpcDeps['desktop'],
   };
 };
 

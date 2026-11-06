@@ -70,7 +70,7 @@ describe('ContextSwitcher', () => {
 
   it('switches to a recent workspace through the unsaved-tabs guard', async () => {
     const user = userEvent.setup();
-    const guard = vi.fn(() => true);
+    const guard = vi.fn(async () => true);
     registerUnsavedTabsGuard(guard);
     setup(null, { 'workspace.switchTo': BRAVO });
     await openMenu(user, /Contexto: Início/);
@@ -81,7 +81,7 @@ describe('ContextSwitcher', () => {
 
   it('does not switch when the guard declines', async () => {
     const user = userEvent.setup();
-    registerUnsavedTabsGuard(() => false);
+    registerUnsavedTabsGuard(async () => false);
     setup(null);
     await openMenu(user, /Contexto: Início/);
     await user.click(await screen.findByTestId('context-switcher-recent-w2'));

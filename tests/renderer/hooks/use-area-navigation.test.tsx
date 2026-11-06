@@ -42,6 +42,7 @@ describe('useAreaNavigation', () => {
     await waitFor(() => expect(result.current.workspace.data).toBeNull());
 
     result.current.navigate('workspace');
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(call).not.toHaveBeenCalledWith('workspace.goHome', expect.anything());
   });
@@ -62,11 +63,12 @@ describe('useAreaNavigation', () => {
 
   it("'workspace' does nothing when a registered unsaved-tabs guard declines", async () => {
     call.mockImplementation(async (method: string) => (method === 'workspace.getActive' ? ok(OTHER_WORKSPACE) : ok(undefined)));
-    registerUnsavedTabsGuard(() => false);
+    registerUnsavedTabsGuard(async () => false);
     const { result } = setup();
     await waitFor(() => expect(result.current.workspace.data).toEqual(OTHER_WORKSPACE));
 
     result.current.navigate('workspace');
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(call).not.toHaveBeenCalledWith('workspace.goHome', expect.anything());
   });

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppShell } from '../../../../src/renderer/components/shell/AppShell.js';
+import { dispatchMenuCommand } from '../../../../src/renderer/lib/menu-commands.js';
 import { openManualTab } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
@@ -21,7 +22,7 @@ beforeEach(() => {
 });
 
 describe('AppShell', () => {
-  it('renders TopNav, the given children, and the global footer', () => {
+  it('renders TopNav, the given children, and the global status bar', () => {
     renderWithShell(
       <AppShell onOpenSettings={() => undefined}>
         <div data-testid="screen" />
@@ -30,8 +31,7 @@ describe('AppShell', () => {
     expect(screen.getByTestId('app-shell')).toBeInTheDocument();
     expect(screen.getByTestId('screen')).toBeInTheDocument();
     expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
-    expect(screen.getByTestId('app-footer')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /OGS Tech/i })).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar')).toBeInTheDocument();
   });
 
   it('opens settings via TopNav', async () => {
@@ -45,13 +45,13 @@ describe('AppShell', () => {
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
-  it('opens the command palette on ⌘K', async () => {
+  it('opens the command palette when the menu asks for it', async () => {
     renderWithShell(
       <AppShell onOpenSettings={() => undefined}>
         <div data-testid="screen" />
       </AppShell>,
     );
-    await userEvent.keyboard('{Meta>}k{/Meta}');
+    act(() => dispatchMenuCommand('command-palette'));
     expect(screen.getByTestId('command-palette')).toBeInTheDocument();
   });
 });

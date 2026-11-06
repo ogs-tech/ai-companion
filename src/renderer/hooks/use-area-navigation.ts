@@ -20,7 +20,6 @@ export function useAreaNavigation(): (area: Area) => void {
     }
     const inWorkspace = activeWorkspace !== undefined && activeWorkspace !== null;
     if (!inWorkspace) return;
-    if (!confirmDiscardUnsavedTabs()) return;
-    void goHome.mutateAsync();
+    void confirmDiscardUnsavedTabs().then((ok) => (ok ? goHome.mutateAsync() : undefined));
   };
 }

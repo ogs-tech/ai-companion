@@ -40,6 +40,7 @@ import { buildTerminalHandlers } from './terminal-handlers.js';
 import { buildOpenEditorsHandlers } from './open-editors-handlers.js';
 import type { OpenEditorsService } from '../application/services/open-editors-service.js';
 import { buildGitHandlers } from './git-handlers.js';
+import { buildDesktopHandlers, type DesktopDeps } from './desktop-handlers.js';
 import type { CommitMessageService } from '../application/services/commit-message-service.js';
 import type { LaunchConfigService } from '../application/services/launch-config-service.js';
 import type { TerminalService } from '../application/services/terminal-service.js';
@@ -79,6 +80,7 @@ export interface IpcDeps {
   terminalService: TerminalService;
   openEditorsService: OpenEditorsService;
   appQuit: () => void;
+  desktop: DesktopDeps;
 }
 
 const asString = (value: unknown, field: string): string => {
@@ -125,6 +127,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     terminalService,
     openEditorsService,
     appQuit,
+    desktop,
   } = deps;
 
   return {
@@ -248,5 +251,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildTerminalHandlers(terminalService),
     ...buildOpenEditorsHandlers(openEditorsService),
     ...buildGitHandlers(gitService, commitMessageService),
+    ...buildDesktopHandlers(desktop),
   };
 }

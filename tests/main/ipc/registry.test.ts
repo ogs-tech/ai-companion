@@ -1,6 +1,6 @@
 import type { DetectionService } from '../../../src/main/application/services/detection-service.js';
 import { describe, expect, it, vi } from 'vitest';
-import { buildHandlers } from '../../../src/main/ipc/registry.js';
+import { buildHandlers, type IpcDeps } from '../../../src/main/ipc/registry.js';
 import { SettingsService } from '../../../src/main/application/services/settings-service.js';
 import type { GitService } from '../../../src/main/application/services/git-service.js';
 import type { CommitMessageService } from '../../../src/main/application/services/commit-message-service.js';
@@ -69,6 +69,7 @@ interface Deps {
   terminalService: TerminalService;
   openEditorsService: OpenEditorsService;
   appQuit: () => void;
+  desktop: IpcDeps['desktop'];
   settingsRepoSpy: {
     load: ReturnType<typeof vi.fn>;
     save: ReturnType<typeof vi.fn>;
@@ -168,6 +169,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     terminalService,
     openEditorsService,
     appQuit: () => undefined,
+    desktop: {} as IpcDeps['desktop'],
     settingsRepoSpy,
     dialogSpy,
   };

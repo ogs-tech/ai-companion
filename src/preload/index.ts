@@ -16,6 +16,17 @@ import {
   type TerminalOutputEvent,
   type TerminalExitEvent,
 } from '../shared/terminal.js';
+import {
+  MENU_COMMAND_CHANNEL,
+  OPEN_WORKSPACE_CHANNEL,
+  QUIT_REQUEST_CHANNEL,
+  RECOVERY_CHANNEL,
+  type MenuCommand,
+  type MenuCommandEvent,
+  type OpenWorkspaceEvent,
+  type QuitRequestEvent,
+  type RecoveryEvent,
+} from '../shared/desktop.js';
 
 const api = {
   call: <T>(method: string, params: unknown): Promise<IpcResult<T>> =>
@@ -65,6 +76,32 @@ const api = {
       const wrapped = (_event: IpcRendererEvent, payload: EntityChangedEvent): void => listener(payload);
       ipcRenderer.on(ENTITY_CHANGED_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(ENTITY_CHANGED_CHANNEL, wrapped);
+    },
+  },
+  desktop: {
+    /** A native menu item was clicked (or its accelerator pressed). */
+    onMenuCommand: (listener: (command: MenuCommand) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: MenuCommandEvent): void => listener(payload.command);
+      ipcRenderer.on(MENU_COMMAND_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(MENU_COMMAND_CHANNEL, wrapped);
+    },
+    /** "Abrir recente" picked a workspace. */
+    onOpenWorkspace: (listener: (workspaceId: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: OpenWorkspaceEvent): void => listener(payload.workspaceId);
+      ipcRenderer.on(OPEN_WORKSPACE_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(OPEN_WORKSPACE_CHANNEL, wrapped);
+    },
+    /** Main wants to close/quit; answer with IPC `desktop.respondToQuit`. */
+    onQuitRequest: (listener: (requestId: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: QuitRequestEvent): void => listener(payload.requestId);
+      ipcRenderer.on(QUIT_REQUEST_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(QUIT_REQUEST_CHANNEL, wrapped);
+    },
+    /** The window was reloaded after a crash or hang. */
+    onRecovery: (listener: (details: string) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: RecoveryEvent): void => listener(payload.details);
+      ipcRenderer.on(RECOVERY_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(RECOVERY_CHANNEL, wrapped);
     },
   },
   terminal: {

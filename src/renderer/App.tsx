@@ -6,6 +6,11 @@ import { queryClient } from './lib/query-client.js';
 import { IoError } from './screens/IoError.js';
 import { Main } from './screens/Main.js';
 import { Settings as SettingsScreen } from './screens/Settings.js';
+import { AppErrorBoundary } from './components/AppErrorBoundary.js';
+import { DialogHost } from './components/DialogHost.js';
+import { RecoveryScreen } from './components/RecoveryScreen.js';
+import { useDesktopBridge } from './hooks/use-desktop-bridge.js';
+import { publishShellStatus } from './lib/shell-status-store.js';
 import type { Settings } from '../shared/settings.js';
 
 type View =
@@ -16,14 +21,22 @@ type View =
 
 export function App(): React.ReactElement {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppRoot />
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AppRoot />
+        <DialogHost />
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }
 
 function AppRoot(): React.ReactElement {
   const [view, setView] = useState<View>({ kind: 'loading' });
+  const recovery = useDesktopBridge();
+  const settingsOpen = view.kind === 'settings';
+  useEffect(() => {
+    publishShellStatus({ settingsOpen });
+  }, [settingsOpen]);
 
   const bootstrap = useCallback(async (): Promise<void> => {
     try {
@@ -41,6 +54,10 @@ function AppRoot(): React.ReactElement {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  if (recovery !== null) {
+    return <RecoveryScreen details={recovery} onReload={() => window.location.reload()} />;
+  }
 
   if (view.kind === 'loading') {
     return (

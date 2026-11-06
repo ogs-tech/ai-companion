@@ -1,12 +1,10 @@
 import { useSyncExternalStore } from 'react';
-import { AppBar, ButtonBase, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
+import { AppBar, ButtonBase, Divider, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
 import {
-  ChevronLeft, ChevronRight, Globe, Moon, PanelLeft, PanelRight, Search, Sun, Settings as SettingsGlyph,
+  ChevronLeft, ChevronRight, Globe, PanelLeft, PanelRight, Search, Settings as SettingsGlyph,
 } from 'lucide-react';
-import { Logo } from '../../assets/Logo.js';
-import { brand } from '../../../shared/brand.js';
 import { Icon } from '../ds/Icon.js';
-import { useThemeMode } from '../../lib/theme-mode-context.js';
+import { shortcutFor } from '../../lib/shortcut-labels.js';
 import {
   getWorkspaceHistorySnapshot,
   navigateWorkspaceHistory,
@@ -26,8 +24,7 @@ interface TopNavProps {
 }
 
 export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): React.ReactElement {
-  const { resolved, setTheme } = useThemeMode();
-  const isDark = resolved === 'dark';
+  const paletteShortcut = shortcutFor('command-palette') ?? '';
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
   const { explorerCollapsed, controlCollapsed } = useSyncExternalStore(subscribeWorkspacePanels, getWorkspacePanelsSnapshot);
   const explorerLabel = explorerCollapsed ? 'Mostrar painel esquerdo' : 'Ocultar painel esquerdo';
@@ -40,15 +37,7 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
     <AppBar position="sticky" elevation={0} color="default" sx={{ bgcolor: 'background.default', border: 0 }}>
       {/* Local 40px override — the global MuiToolbar 56 still serves EntityDataGrid. */}
       <Toolbar sx={{ gap: 1, minHeight: { xs: 40, sm: 40 }, px: { xs: 1.5, sm: 1.5 } }}>
-        {/* Brand — the "OGS · TECNOLOGIA BRASIL" line now lives in AppFooter. */}
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', color: 'text.primary' }}>
-          <Logo />
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1 }}>
-            {brand.displayName}
-          </Typography>
-        </Stack>
-
-        <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', ml: 1 }}>
+        <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
           <Tooltip title="Voltar">
             {/* span wrapper keeps the tooltip working while the button is disabled */}
             <span>
@@ -85,7 +74,7 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
         <ButtonBase
           data-testid="command-palette-trigger"
           onClick={onOpenCommandPalette}
-          aria-label="Buscar e navegar (⌘K)"
+          aria-label={`Buscar e navegar (${paletteShortcut})`}
           sx={(theme) => ({
             mx: 'auto',
             width: 260,
@@ -109,7 +98,7 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
             </Typography>
           </Stack>
           <Typography component="span" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem' })}>
-            ⌘K
+            {paletteShortcut}
           </Typography>
         </ButtonBase>
 
@@ -138,7 +127,11 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
               <Icon glyph={PanelRight} size={18} />
             </IconButton>
           </Tooltip>
+        </Stack>
 
+        <Divider orientation="vertical" flexItem sx={{ my: 1 }} />
+
+        <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
           <Tooltip title="Abrir navegador">
             <IconButton
               data-testid="nav-browser-toggle"
@@ -148,18 +141,6 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
               aria-label="Abrir navegador"
             >
               <Icon glyph={Globe} size={18} />
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title={isDark ? 'Tema claro' : 'Tema escuro'}>
-            <IconButton
-              data-testid="theme-toggle"
-              onClick={() => setTheme(isDark ? 'light' : 'dark')}
-              size="small"
-              sx={{ color: 'text.secondary' }}
-              aria-label={isDark ? 'Ativar tema claro' : 'Ativar tema escuro'}
-            >
-              <Icon glyph={isDark ? Sun : Moon} size={18} />
             </IconButton>
           </Tooltip>
 

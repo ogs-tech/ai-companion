@@ -1,5 +1,5 @@
 import CodeMirror from '@uiw/react-codemirror';
-import { EditorView } from '@codemirror/view';
+import { EditorView, type ViewUpdate } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { javascript } from '@codemirror/lang-javascript';
@@ -8,6 +8,7 @@ import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { useTheme } from '@mui/material/styles';
 import { fonts } from '../../tokens.js';
+import { publishShellStatus } from '../../lib/shell-status-store.js';
 import type { CodeLanguage } from '../../lib/code-language.js';
 
 const LANGUAGE_EXTENSIONS: Partial<Record<CodeLanguage, Extension>> = {
@@ -17,6 +18,14 @@ const LANGUAGE_EXTENSIONS: Partial<Record<CodeLanguage, Extension>> = {
   css: css(),
   html: html(),
 };
+
+/** The focused editor tells the status bar where its cursor is; unfocused (hidden-tab) editors stay silent. */
+function publishCursor(update: ViewUpdate): void {
+  if (!update.view.hasFocus || !(update.selectionSet || update.focusChanged)) return;
+  const head = update.state.selection.main.head;
+  const line = update.state.doc.lineAt(head);
+  publishShellStatus({ cursor: { line: line.number, column: head - line.from + 1 } });
+}
 
 const fontTheme = EditorView.theme({
   '&': { fontSize: '0.85rem' },
@@ -53,6 +62,7 @@ export function CodeEditorView({
         editable={!readOnly}
         readOnly={readOnly}
         extensions={extensions}
+        onUpdate={publishCursor}
         minHeight="240px"
         basicSetup={{ foldGutter: false }}
       />

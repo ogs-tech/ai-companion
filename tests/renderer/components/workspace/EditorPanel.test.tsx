@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { EditorPanel } from '../../../../src/renderer/components/workspace/EditorPanel.js';
+import { EditorPanel as BaseEditorPanel, type EditorPanelProps } from '../../../../src/renderer/components/workspace/EditorPanel.js';
 import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../../test-utils.js';
 import type { Agent, Instruction, Skill } from '../../../../src/shared/entity.js';
 import type { SpreadsheetCell, SpreadsheetSheet } from '../../../../src/shared/file-browser.js';
@@ -70,17 +70,63 @@ function instruction(overrides: Partial<Instruction> = {}): Instruction {
 const cmContent = (container: HTMLElement): HTMLElement =>
   container.querySelector('[data-testid="body-editor"] .cm-content') as HTMLElement;
 
-/** Fires the Ctrl+S save shortcut `EditorPanel` listens for on `window`. */
-const pressSave = (user: ReturnType<typeof userEvent.setup>): Promise<void> =>
-  user.keyboard('{Control>}s{/Control}');
+/** The save the panel registered with its owner — what the menu's Salvar and the unsaved-changes dialog call. */
+let registeredSave: (() => Promise<boolean>) | null = null;
+
+function EditorPanel(props: EditorPanelProps): React.ReactElement {
+  return props.subject === 'preview' ? (
+    <BaseEditorPanel {...props} />
+  ) : (
+    <BaseEditorPanel {...props} registerSave={(save) => { registeredSave = save; }} />
+  );
+}
+
+/** Triggers the registered save, as the menu's Salvar does. */
+const pressSave = async (_user?: ReturnType<typeof userEvent.setup>): Promise<void> => {
+  await act(async () => {
+    await registeredSave?.();
+  });
+};
 
 let call: CallSpy;
 beforeEach(() => {
+  registeredSave = null;
   call = mockApi();
   call.mockImplementation(async (method: string) => {
     if (method === 'workspace.getActive')
       return ok({ id: 'w1', name: 'Acme', rootPath: '/repos/acme', createdAt: '' });
     return ok(undefined);
+  });
+});
+
+describe('EditorPanel — save registration and failures', () => {
+  it('registers its save with the owner and unregisters on unmount', () => {
+    const { unmount } = renderWithQuery(
+      <EditorPanel subject="entity" initial={skill()} isCreate={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+    );
+    expect(registeredSave).not.toBeNull();
+    unmount();
+    expect(registeredSave).toBeNull();
+  });
+
+  it('resolves the registered save to false and keeps a persistent toast with details when saving fails', async () => {
+    call.mockImplementation(async (method: string) =>
+      method === 'skill.save' ? fail('io', 'EACCES: permission denied, open /x/SKILL.md') : ok(undefined),
+    );
+    renderWithQuery(
+      <EditorPanel subject="entity" initial={skill()} isCreate={false} onSaved={vi.fn()} onDirtyChange={vi.fn()} />,
+    );
+    let result: boolean | undefined;
+    await act(async () => {
+      result = await registeredSave?.();
+    });
+    expect(result).toBe(false);
+    const toast = await screen.findByTestId('toast');
+    expect(toast).toHaveTextContent('Não foi possível salvar');
+    expect(toast).toHaveTextContent('Verifique a permissão da pasta');
+    expect(screen.getByTestId('toast-action')).toHaveTextContent('Tentar de novo');
+    fireEvent.click(screen.getByTestId('toast-details-toggle'));
+    expect(screen.getByTestId('toast-details')).toHaveTextContent('EACCES');
   });
 });
 
@@ -320,34 +366,6 @@ describe('EditorPanel — entity subject', () => {
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });
 
-  it('ignores Ctrl/Cmd+S while active is false — only the visible Workbench tab responds to the shortcut', async () => {
-    const user = userEvent.setup();
-    call.mockImplementation(async (method: string, params: unknown) => {
-      if (method === 'skill.save') {
-        const p = params as { skill: Skill };
-        return ok({ skill: p.skill, syncReport: [] });
-      }
-      return ok(undefined);
-    });
-    const { container } = renderWithQuery(
-      <EditorPanel
-        subject="entity"
-        initial={skill({ content: '' })}
-        isCreate={false}
-        active={false}
-        onSaved={vi.fn()}
-        onDirtyChange={vi.fn()}
-      />,
-    );
-    const editor = cmContent(container);
-    editor.focus();
-    await user.type(editor, 'x', { skipClick: true });
-    await pressSave(user);
-    expect(call.mock.calls.some(([method]) => method === 'skill.save')).toBe(false);
-  });
-});
-
-describe('EditorPanel — file subject', () => {
   it('loads content via workspace.readFile', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.readFile')

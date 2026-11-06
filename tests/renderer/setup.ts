@@ -71,6 +71,12 @@ if (typeof (window as unknown as { api?: unknown }).api === 'undefined') {
       onAnyActivity: () => () => {},
     },
     externalLink: { onOpen: () => () => {} },
+    desktop: {
+      onMenuCommand: () => () => {},
+      onOpenWorkspace: () => () => {},
+      onQuitRequest: () => () => {},
+      onRecovery: () => () => {},
+    },
     terminal: {
       onOutput: () => () => {},
       onExit: () => () => {},

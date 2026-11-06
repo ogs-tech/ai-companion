@@ -47,7 +47,7 @@ export function useContextNavigation(): ContextNavigation {
       focusOverview();
       return;
     }
-    if (!confirmDiscardUnsavedTabs()) return;
+    if (!(await confirmDiscardUnsavedTabs())) return;
     await goHomeMutation.mutateAsync();
   };
 
@@ -56,14 +56,14 @@ export function useContextNavigation(): ContextNavigation {
       focusOverview();
       return;
     }
-    if (!confirmDiscardUnsavedTabs()) return;
+    if (!(await confirmDiscardUnsavedTabs())) return;
     await switchMutation.mutateAsync(id);
   };
 
   const openFolder = async (): Promise<Workspace | null> => {
     const picked = await callIpc<{ canceled: boolean; path?: string }>('dialog.selectFolder', {});
     if (picked.canceled || !picked.path) return null;
-    if (!confirmDiscardUnsavedTabs()) return null;
+    if (!(await confirmDiscardUnsavedTabs())) return null;
     return openMutation.mutateAsync(picked.path);
   };
 
