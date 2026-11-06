@@ -22,7 +22,9 @@ function parseTab(raw: unknown): PersistedTab | null {
   switch (raw['kind']) {
     case 'file':
     case 'file-preview':
-      return isNonEmptyString(raw['relPath']) ? { id, kind: raw['kind'], relPath: raw['relPath'] } : null;
+      return isNonEmptyString(raw['relPath'])
+        ? { id, kind: raw['kind'], relPath: raw['relPath'], ...(raw['pinned'] === true ? { pinned: true } : {}) }
+        : null;
     case 'entity':
       return typeof raw['entityKind'] === 'string' && ENTITY_KINDS.has(raw['entityKind']) && isNonEmptyString(raw['urn'])
         ? { id, kind: 'entity', entityKind: raw['entityKind'] as 'skill' | 'agent' | 'instruction', urn: raw['urn'], inherited: raw['inherited'] === true }

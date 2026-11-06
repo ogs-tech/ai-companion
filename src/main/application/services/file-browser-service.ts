@@ -7,6 +7,17 @@ function withSep(p: string): string {
   return p.endsWith(sep) ? p : `${p}${sep}`;
 }
 
+/** A workspace-relative path resolved to disk. */
+export interface LocatedPath {
+  abs: string;
+  /** The workspace folder it lives in. */
+  root: string;
+  /** The folder alias with several folders, `''` otherwise. */
+  prefix: string;
+  /** Path inside `root`; `''` is the folder itself. */
+  rel: string;
+}
+
 const LIST_FOLDERS_MAX_DEPTH = 4;
 const LIST_FOLDERS_MAX = 1000;
 
@@ -96,6 +107,23 @@ export class FileBrowserService {
       level = next;
     }
     return folders;
+  }
+
+  /** Every workspace folder as `{prefix, root}` — `prefix` is the alias with several folders, `''` otherwise. */
+  roots(): { prefix: string; root: string }[] {
+    if (!this.isVirtual) return [{ prefix: '', root: this.rootPath }];
+    return [...this.aliasToFolder].map(([prefix, root]) => ({ prefix, root }));
+  }
+
+  /** Same routing and containment guard as every other call, exposing the pieces file operations need. */
+  async locate(relPath: string): Promise<LocatedPath> {
+    if (this.isVirtual) {
+      const { browser, rel } = this.route(relPath);
+      const located = await browser.locate(rel);
+      return { ...located, prefix: relPath.split('/').filter((seg) => seg !== '')[0] ?? '' };
+    }
+    const rel = relPath.split('/').filter((seg) => seg !== '').join('/');
+    return { abs: await this.resolveSafe(relPath), root: this.rootPath, prefix: '', rel };
   }
 
   async readFile(relPath: string): Promise<FilePreview> {

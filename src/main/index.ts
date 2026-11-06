@@ -32,6 +32,14 @@ import { FsWorkspaceRegistry } from './infrastructure/workspace/fs-workspace-reg
 import { SystemClock } from './infrastructure/clock/system-clock.js';
 import { ElectronDialogAdapter } from './infrastructure/dialog/electron-dialog-adapter.js';
 import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
+import { NodeFileOperationsAdapter } from './infrastructure/filesystem/node-file-operations-adapter.js';
+import { ElectronTrash } from './infrastructure/shell/electron-trash.js';
+import { ChokidarTreeWatcher } from './infrastructure/file-watcher/chokidar-tree-watcher.js';
+import { FileOperationsService } from './application/services/file-operations-service.js';
+import { ProjectSearchService } from './application/services/project-search-service.js';
+import { ExternalFileService } from './application/services/external-file-service.js';
+import { TreeWatchService } from './application/services/tree-watch-service.js';
+import { WORKSPACE_TREE_CHANGED_CHANNEL } from '../shared/file-ops.js';
 import { NodeFileBrowserAdapter } from './infrastructure/filesystem/node-file-browser-adapter.js';
 import { NumbersConverterAdapter } from './infrastructure/spreadsheet/numbers-converter-adapter.js';
 import { FileBrowserService } from './application/services/file-browser-service.js';
@@ -454,6 +462,33 @@ async function wireIpc(): Promise<void> {
     workspace === null ? null : new FileBrowserService(fileBrowserPort, workspace.rootPath, workspaceFolders(workspace));
   let fileBrowserService = fileBrowserFor(activeWorkspace);
 
+  // File operations, search and the tree watcher follow the open workspace; the
+  // external-file grant list is app-wide and survives every switch.
+  const fileOperationsPort = new NodeFileOperationsAdapter();
+  const trashPort = new ElectronTrash();
+  const treeWatcherPort = new ChokidarTreeWatcher();
+  const externalFileService = new ExternalFileService(dialogPort, fileBrowserPort, fileOperationsPort);
+  let fileOperationsService: FileOperationsService | null = null;
+  let projectSearchService: ProjectSearchService | null = null;
+  let treeWatchService: TreeWatchService | null = null;
+  const rebuildFileServices = async (): Promise<void> => {
+    await treeWatchService?.stop();
+    treeWatchService = null;
+    if (fileBrowserService === null) {
+      fileOperationsService = null;
+      projectSearchService = null;
+      return;
+    }
+    fileOperationsService = new FileOperationsService(fileBrowserService, fileOperationsPort, trashPort, externalFileService);
+    projectSearchService = new ProjectSearchService(fileBrowserService, fileOperationsPort);
+    treeWatchService = new TreeWatchService(treeWatcherPort, fileBrowserService);
+    treeWatchService.onTreeChanged((event) => {
+      mainWindow?.webContents.send(WORKSPACE_TREE_CHANGED_CHANNEL, event);
+    });
+    treeWatchService.start();
+  };
+  await rebuildFileServices();
+
   /**
    * Re-points every adapter destination at the canonical files the migration
    * moved — Global first, then each touched workspace (whose graph also
@@ -519,6 +554,7 @@ async function wireIpc(): Promise<void> {
     workspaceScoped.terminalService.killAll();
     void embeddedBrowserAdapter.destroyAll();
     void workspaceScoped.entityWatchService.stop();
+    void treeWatchService?.stop();
   });
 
   const notificationPort = new ElectronNotificationAdapter();
@@ -548,6 +584,9 @@ async function wireIpc(): Promise<void> {
     workspaceService,
     workspaceActivation,
     fileBrowserService,
+    fileOperationsService,
+    projectSearchService,
+    externalFileService,
     marketplaceService,
     healthService: workspaceScoped.healthService,
     mcpService,
@@ -598,6 +637,7 @@ async function wireIpc(): Promise<void> {
       const scope = await scopeFor(target);
       workspaceScoped = buildWorkspaceScopedServices(scope, sharedDeps);
       fileBrowserService = fileBrowserFor(target);
+      await rebuildFileServices();
       sessionService.rebind({
         entityService: workspaceScoped.entityService,
         workspacePath: scope?.dataDir ?? globalEntities.dataDir,
@@ -744,7 +784,8 @@ function createWindow(): void {
 function configureDevDock(): void {
   if (!isDev || process.platform !== 'darwin') return;
   app.setName(brand.devAppName);
-  app.dock?.hide();
+  // The Dock icon stays visible: hiding it makes macOS treat the app as an
+  // accessory process, which has no menu bar — the native menu would never show.
 }
 
 function focusMainWindow(): void {

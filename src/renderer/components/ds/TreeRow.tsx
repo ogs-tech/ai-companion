@@ -1,6 +1,7 @@
 import { Box, ListItemButton, ListItemText, Stack, alpha, type SxProps, type Theme } from '@mui/material';
 import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from './Icon.js';
+import { toneColor, type FileTone } from '../../lib/file-icon.js';
 
 export interface TreeRowProps {
   testId?: string;
@@ -15,12 +16,14 @@ export interface TreeRowProps {
    */
   chevron?: 'expanded' | 'collapsed' | 'spacer';
   glyph: LucideIcon;
+  /** Colours the glyph with a design-system role — file-type icons only; omitted keeps the inherited colour. */
+  glyphTone?: FileTone | undefined;
   primary: React.ReactNode;
   /** Trailing chip/badge inside the label row, e.g. a count, a plugin origin badge, or a "Global" tag. */
   badge?: React.ReactNode;
   /** Left-edge color spine marking this row's kind — the same signature used by WorkbenchCanvas's tab strip, so a session row here and a tab there read as one visual system. */
   accentColor?: string;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   /** Trailing content after the label row, e.g. hover actions or a fixed-width create-action slot. */
   actions?: React.ReactNode;
@@ -30,6 +33,12 @@ export interface TreeRowProps {
   disabled?: boolean;
   /** 'mono' for entity names (skills/agents); 'group' for a group-header row, in the same Kicker style as every other group header in the side panels. */
   labelVariant?: 'default' | 'mono' | 'group';
+  /** Marks the row as the current selection (Explorer multi-select). */
+  selected?: boolean;
+  /** Drag-and-drop feedback: 'valid' highlights the row as the drop target, 'invalid' dims it with a not-allowed cursor. */
+  dropState?: 'valid' | 'invalid' | undefined;
+  /** Extra DOM props for the row (drag handlers, `draggable`, ARIA, `data-*`). */
+  rowProps?: Record<string, unknown>;
 }
 
 /** Kicker-style label for a tree group header (TreeGroup rows, the Sessões header) — one definition so every group header in the side panels reads the same. */
@@ -74,11 +83,17 @@ export function TreeRow({
   muted,
   disabled,
   labelVariant = 'default',
+  glyphTone,
+  selected,
+  dropState,
+  rowProps,
 }: TreeRowProps): React.ReactElement {
   return (
     <ListItemButton
       dense
       disabled={disabled}
+      {...(selected !== undefined ? { selected } : {})}
+      {...rowProps}
       {...(testId ? { 'data-testid': testId } : {})}
       onClick={onClick}
       onContextMenu={onContextMenu}
@@ -88,7 +103,11 @@ export function TreeRow({
         py: 0,
         mx: 0.75,
         borderRadius: `${theme.ogs.radius.xs}px`,
-        opacity: muted ? 0.65 : 1,
+        opacity: muted || dropState === 'invalid' ? 0.45 : 1,
+        ...(dropState === 'invalid' ? { cursor: 'not-allowed' } : {}),
+        ...(dropState === 'valid'
+          ? { bgcolor: alpha(theme.palette.secondary.main, 0.16), outline: `1px solid ${theme.palette.secondary.main}` }
+          : {}),
         position: 'relative',
         '&:hover .tree-row-actions, &:focus-within .tree-row-actions, .tree-row-actions:has([aria-expanded="true"])': { opacity: 1 },
         // Hover actions take the origin text's place instead of squeezing the name.
@@ -116,7 +135,15 @@ export function TreeRow({
         ) : chevron ? (
           <Icon glyph={chevron === 'expanded' ? ChevronDown : ChevronRight} size={14} />
         ) : null}
-        <Icon glyph={glyph} size={14} />
+        <Box
+          component="span"
+          sx={(theme) => {
+            const color = toneColor(theme, glyphTone);
+            return { display: 'inline-flex', ...(color ? { color } : {}) };
+          }}
+        >
+          <Icon glyph={glyph} size={14} />
+        </Box>
         <ListItemText primary={primary} sx={{ my: 0 }} slotProps={{ primary: { noWrap: true, sx: labelSx(labelVariant) } }} />
         {badge}
       </Stack>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDE basics: drag-drop-conflicts</title><style>
+  body{margin:0;background:#F7F4EE;color:#142036;font:14px/1.5 "Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px}
+  .banner{background:#119350;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:18px;font-weight:600}
+  h2{font-size:22px;margin:0 0 4px} h3{font-size:16px;margin:0 0 6px} .subtitle{color:#5A6573;margin:0 0 12px}
+  .section{margin-bottom:24px}
+  .options{display:flex;flex-direction:column;gap:12px}
+  .option{display:flex;gap:12px;background:#fff;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:14px}
+  .option .letter{width:28px;height:28px;border-radius:50%;background:#F2EEE5;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .option .content{flex:1;min-width:0} .option .content p{margin:0 0 8px;color:#5A6573}
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(20,32,54,.06);padding:1px 4px;border-radius:4px}
+</style></head><body><div class="wrap"><div class="banner">Aprovado: comportamento do arrasto como mostrado; conflito de nome = A (diálogo). B e C são referência rejeitada.</div>
+<style>
+  .t{--bg:#fff;--fg:#142036;--mut:#5A6573;--rail:#F2EEE5;--line:rgba(20,32,54,.11);--azul:#3D5CC2;--verde:#119350;--ambar:#D9A12C;--erro:#C0392B;--slate:#7A7E89;
+     background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:6px 0;font:12.5px/1 "Space Grotesk",-apple-system,sans-serif;position:relative}
+  .t.dark{--bg:#16223A;--fg:#F2EEE5;--mut:#9AA0A8;--rail:#1B2944;--line:rgba(255,255,255,.08);--azul:#5B79E0;--verde:#3FB97A;--ambar:#E5B547;--erro:#E2675A;--slate:#9AA0A8}
+  .t .r{display:flex;align-items:center;gap:6px;height:26px;padding-right:10px;white-space:nowrap;position:relative}
+  .t .r.sel{background:var(--rail)}
+  .t .r.drop{background:color-mix(in srgb,var(--azul) 12%,transparent);outline:1.5px solid var(--azul);outline-offset:-1.5px;border-radius:6px;margin:0 6px;padding-left:0}
+  .t .r.deny{opacity:.55}
+  .t .r .m{margin-left:auto;color:var(--mut);font-size:11px}
+  .t svg.i{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .t svg.ch{width:12px;height:12px;color:var(--mut)}
+  .t .k{font:600 10px/1 "Space Grotesk",sans-serif;letter-spacing:.08em;color:var(--mut);text-transform:uppercase;padding:6px 12px 4px}
+  .g-mut{color:var(--mut)} .c-azul{color:var(--azul)} .c-verde{color:var(--verde)} .c-ambar{color:var(--ambar)} .c-slate{color:var(--slate)} .c-erro{color:var(--erro)}
+  .ghost{position:absolute;right:14px;top:78px;background:var(--fg);color:var(--bg);border-radius:6px;padding:5px 9px;font-size:11.5px;box-shadow:0 4px 12px rgba(20,32,54,.25);display:flex;gap:6px;align-items:center}
+  .ghost .plus{background:var(--verde);color:#fff;border-radius:999px;padding:1px 6px;font-size:10px}
+  .hint{position:absolute;left:34px;bottom:-22px;font-size:10.5px;color:var(--mut)}
+  .callouts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 18px;margin-top:14px;font-size:13px}
+  .callouts div{display:flex;gap:8px;align-items:flex-start} .callouts b{color:#3D5CC2;min-width:18px}
+  .dlg{background:#fff;color:#142036;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:16px;width:300px;box-shadow:0 12px 32px rgba(20,32,54,.18);font:12.5px/1.4 "Space Grotesk",sans-serif}
+  .dlg h4{margin:0 0 6px;font-size:14px} .dlg p{margin:0 0 12px;color:#5A6573}
+  .dlg .row{display:flex;gap:6px;justify-content:flex-end;margin-top:12px}
+  .btn{border:1px solid rgba(20,32,54,.2);border-radius:999px;padding:6px 12px;font-size:12px;background:#fff;color:#142036}
+  .btn.pri{background:#3D5CC2;color:#fff;border-color:#3D5CC2}
+  .toast{background:#142036;color:#F2EEE5;border-radius:10px;padding:10px 12px;font:12.5px/1.35 "Space Grotesk",sans-serif;display:flex;gap:14px;align-items:center;width:380px;box-shadow:0 12px 32px rgba(20,32,54,.25)}
+  .toast span{flex:1} .toast a{color:#8FA6F0;font-weight:600;white-space:nowrap}
+  .tag{display:inline-block;background:#3D5CC2;color:#fff;border-radius:999px;font-size:11px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  .stage{background:#F7F4EE;border-radius:10px;padding:16px;display:flex;justify-content:center;margin-top:10px}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-root" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><circle cx="12" cy="13" r="2" fill="currentColor"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></symbol>
+  <symbol id="i-json" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
+</defs></svg>
+
+<h2>Explorer: arrastar e soltar</h2>
+<p class="subtitle">Primeiro como o arrasto se comporta (para você reagir). Depois a decisão: o que acontece quando já existe um arquivo com o mesmo nome.</p>
+
+<div class="section">
+  <h3>Como o arrasto se comporta</h3>
+  <div class="stage" style="padding-bottom:34px">
+    <div class="t" style="width:320px">
+      <div class="r" style="padding-left:8px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i c-azul"><use href="#i-root"/></svg><b>ai-companion</b></div>
+      <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg>src</div>
+      <div class="r drop" style="margin-left:26px"><span style="width:6px"></span><svg class="i ch"><use href="#i-chev"/></svg><svg class="i c-azul"><use href="#i-folder"/></svg>assets<span class="m">solte para mover</span></div>
+      <div class="r deny" style="padding-left:26px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i c-erro"><use href="#i-ban"/></svg>docs <span class="m c-erro">pasta de origem</span></div>
+      <div class="r sel" style="padding-left:26px"><span style="width:12px"></span><svg class="i c-ambar"><use href="#i-json"/></svg>package.json</div>
+      <div class="r sel" style="padding-left:26px"><span style="width:12px"></span><svg class="i c-verde"><use href="#i-img"/></svg>logo.png</div>
+      <div class="ghost"><svg class="i" style="width:13px;height:13px"><use href="#i-img"/></svg>2 itens <span class="plus">+ copiar</span></div>
+      <div class="hint">Segurando ⌥ (macOS) / Ctrl (Windows) o ghost mostra “+ copiar”</div>
+    </div>
+  </div>
+  <div class="callouts">
+    <div><b>1</b>Pasta de destino destacada em azul enquanto o item está sobre ela.</div>
+    <div><b>2</b>Após ~500 ms sobre uma pasta fechada, ela expande sozinha.</div>
+    <div><b>3</b>Destino inválido (a própria pasta, uma subpasta dela) fica apagado, com 🚫.</div>
+    <div><b>4</b>Soltar no mesmo lugar não faz nada. Perto das bordas a árvore rola sozinha.</div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:28px">
+  <h3>E se já existir um arquivo com esse nome no destino?</h3>
+  <p class="subtitle">Cenário: mover <code>logo.png</code> para <code>assets/</code>, onde já há um <code>logo.png</code>.</p>
+  <div class="options">
+
+    <div class="option" data-choice="conflict-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Diálogo: Substituir / Manter ambos / Pular</h3>
+        <p>O formato do seu spec. Interrompe o gesto a cada conflito; com vários, vem a opção “aplicar a todos”. Substituir apaga o arquivo antigo de verdade.</p>
+        <div class="stage"><div class="dlg">
+          <h4>“logo.png” já existe em assets</h4>
+          <p>Deseja substituir o arquivo existente?</p>
+          <label style="display:flex;gap:6px;align-items:center;color:#5A6573"><input type="checkbox"> Aplicar a todos (3 conflitos)</label>
+          <div class="row"><span class="btn">Pular</span><span class="btn">Manter ambos</span><span class="btn pri">Substituir</span></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="conflict-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Sem diálogo: mantém ambos e avisa, com Desfazer <span class="tag">recomendado</span></h3>
+        <p>Nada é apagado nem pergunta nada. O arquivo que chega ganha um novo nome (<code>logo 2.png</code>) e um aviso permite desfazer toda a operação. Segue sua regra de preferir desfazer a confirmar. Não há “substituir”: quem quiser apaga o antigo depois.</p>
+        <div class="stage"><div class="toast"><span>Movido para <b>assets</b>. 1 já existia, então ficou como <b>logo 2.png</b>.</span><a>Desfazer</a></div></div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="conflict-c" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Mantém ambos, com atalho para Substituir</h3>
+        <p>Igual à B, mas o aviso traz uma segunda ação “Substituir” enquanto está na tela. Cobre o caso em que você queria sobrescrever, sem diálogo antes. Um botão a mais para tratar (e o Substituir também precisa de Desfazer).</p>
+        <div class="stage"><div class="toast"><span>1 já existia: mantive os dois (<b>logo 2.png</b>).</span><a>Substituir</a><a>Desfazer</a></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div></body></html>

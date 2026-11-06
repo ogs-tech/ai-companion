@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Tooltip, Typography } from '@mui/material';
+import { Stack, Tooltip, Typography } from '@mui/material';
+import { SyncDot } from '../ds/SyncDot.js';
 import { Download, ScanSearch } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
@@ -80,9 +81,12 @@ export function DetectedRows({ items, depth }: DetectedRowsProps): React.ReactEl
           primary={item.importable ? item.name : <Tooltip title={item.reason ?? 'Não pode ser importado'}><span>{item.name}</span></Tooltip>}
           {...(item.importable ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, item) } : {})}
           badge={
-            <Typography component="span" noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
-              detectado · {HARNESS_LABEL[item.harness]}{item.importable ? '' : ' · não importável'}
-            </Typography>
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+              <SyncDot state="detected" />
+              <Typography component="span" noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+                detectado · {HARNESS_LABEL[item.harness]}{item.importable ? '' : ' · não importável'}
+              </Typography>
+            </Stack>
           }
           actions={item.importable ? <RowMenuButton testId={`tree-detected-menu-${item.id}`} label={`Ações de ${item.name}`} onOpen={(e) => rowMenu.openMenu(e, item)} /> : undefined}
         />

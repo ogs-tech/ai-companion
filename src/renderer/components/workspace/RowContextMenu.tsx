@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Divider, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Divider, Menu, MenuItem, ListItemIcon, ListItemText, Typography } from '@mui/material';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
@@ -50,6 +50,10 @@ export interface RowContextMenuAction {
   keepOpen?: boolean;
   /** Draws the affordance that says "this opens another menu". */
   hasSubmenu?: boolean;
+  /** Shortcut hint drawn at the right edge, e.g. `F2`. Display only — the key is handled elsewhere. */
+  shortcut?: string;
+  /** Draws a divider above this item. */
+  separatorBefore?: boolean;
   /** A destructive action — drawn in the error color and set apart from the others by a divider. */
   danger?: boolean;
 }
@@ -71,7 +75,7 @@ export function RowContextMenu({ state, onClose, actions }: RowContextMenuProps)
       anchorPosition={state ? { top: state.mouseY, left: state.mouseX } : undefined}
     >
       {actions.flatMap((action, i) => [
-        ...(action.danger === true && i > 0 ? [<Divider key={`${action.key}-divider`} />] : []),
+        ...((action.danger === true || action.separatorBefore === true) && i > 0 ? [<Divider key={`${action.key}-divider`} />] : []),
         <MenuItem
           key={action.key}
           data-testid={`row-context-menu-${action.key}`}
@@ -84,6 +88,9 @@ export function RowContextMenu({ state, onClose, actions }: RowContextMenuProps)
         >
           <ListItemIcon sx={action.danger === true ? { color: 'inherit' } : {}}><Icon glyph={action.glyph} size={16} /></ListItemIcon>
           <ListItemText>{action.label}</ListItemText>
+          {action.shortcut !== undefined && (
+            <Typography variant="caption" sx={{ ml: 3, color: 'text.secondary' }}>{action.shortcut}</Typography>
+          )}
           {action.hasSubmenu === true && <Icon glyph={ChevronRight} size={14} />}
         </MenuItem>,
       ])}

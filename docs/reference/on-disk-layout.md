@@ -26,7 +26,7 @@ Only ever read from `~/.ai-companion/`, whichever workspace is open.
 
 | Path | Owner | Contents |
 |---|---|---|
-| `settings.json` | `SettingsService` | `Settings` (`src/shared/settings.ts`): `adapters.<harness>.enabled`, `ui.theme`, `language`, optional `pricing` overrides, optional `openWith` memory. |
+| `settings.json` | `SettingsService` | `Settings` (`src/shared/settings.ts`): `adapters.<harness>.enabled`, `ui.theme`, optional `ui.wordWrap` and `ui.confirmTrash` (booleans, both read as `true` when absent), `language`, optional `pricing` overrides, optional `openWith` memory. |
 | `workspaces.json` | `WorkspaceService` | `{ schemaVersion: 2, workspaces, activeWorkspaceId }` — every `Workspace` (`id`, `name`, `rootPath` as a real path, `createdAt`); `activeWorkspaceId: null` means Início. Written empty on a fresh install, or by the boot migration from the project-era shape. |
 | `plugins/` | `PluginCacheFile` | Personal-scope plugins: imported clones and owned plugins, each with `_meta.json`. |
 | `marketplaces-cache/` | `MarketplaceService` | Personal-scope marketplace clones. |

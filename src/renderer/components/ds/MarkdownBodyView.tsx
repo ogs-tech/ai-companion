@@ -40,10 +40,14 @@ interface MarkdownBodyProps {
   disabled?: boolean;
   /** CodeMirror language for the edit-mode surface. Defaults to 'markdown' — every entity body is Markdown. */
   language?: CodeLanguage;
+  /** File identity and focus, forwarded to the editor so navigation (go to line, search hits) can reach it. */
+  path?: string | undefined;
+  active?: boolean | undefined;
+  wordWrap?: boolean | undefined;
 }
 
 /** The document itself — its editable source (CodeMirror), or its rendered form, never both at once. */
-export function MarkdownBody({ mode, body, onChangeBody, disabled, language }: MarkdownBodyProps): React.ReactElement {
+export function MarkdownBody({ mode, body, onChangeBody, disabled, language, path, active, wordWrap }: MarkdownBodyProps): React.ReactElement {
   if (mode === 'preview') {
     return (
       <Box
@@ -64,6 +68,9 @@ export function MarkdownBody({ mode, body, onChangeBody, disabled, language }: M
       onChange={onChangeBody}
       language={language ?? 'markdown'}
       readOnly={disabled}
+      path={path}
+      active={active}
+      wordWrap={wordWrap}
       testId="body-editor"
     />
   );

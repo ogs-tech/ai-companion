@@ -1,11 +1,19 @@
+import { Fragment, useRef } from 'react';
 import { Box, Stack, Tooltip, Typography } from '@mui/material';
+import { TREE_DRAG_TYPE, readTreeDrag } from '../../lib/tree-drag.js';
 import { X, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
+import { toneColor, type FileTone } from '../../lib/file-icon.js';
+import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 
 export interface WorkbenchTab {
   id: string;
   glyph: LucideIcon;
   label: string;
+  /** Colours the glyph (file-type icons). */
+  glyphTone?: FileTone | undefined;
+  /** Pinned: shown as its icon alone, on the left behind a divider; the label becomes the tooltip. */
+  pinned?: boolean;
   onClose?: () => void;
   /** Verb shown on the close control's tooltip/aria-label — e.g. "Minimizar" for a session tab whose process is still running, vs. "Fechar" once it isn't. Defaults to "Fechar". */
   closeLabel?: string;
@@ -36,10 +44,24 @@ export interface WorkbenchTab {
   render: (hidden: boolean) => React.ReactNode;
 }
 
+function TabGlyph({ tab }: { tab: WorkbenchTab }): React.ReactElement {
+  return (
+    <Box component="span" sx={(theme) => ({ display: 'inline-flex', color: toneColor(theme, tab.glyphTone) ?? 'inherit' })}>
+      <Icon glyph={tab.glyph} size={14} />
+    </Box>
+  );
+}
+
 interface WorkbenchCanvasProps {
   tabs: readonly WorkbenchTab[];
   activeTabId: string | null;
   onSelect: (id: string) => void;
+  /** Drag a tab onto another to reorder. */
+  onReorder?: (fromId: string, toId: string) => void;
+  /** Right-click menu for a tab; omitted or empty means no menu. */
+  tabMenu?: (tab: WorkbenchTab) => RowContextMenuAction[];
+  /** Files dropped on the editor area: OS files (absolute paths via `getPathForFile`) or tree paths. */
+  onDropFiles?: (drop: { files: File[]; treePaths: string[] }) => void;
 }
 
 /**
@@ -47,7 +69,9 @@ interface WorkbenchCanvasProps {
  * open file AND every open Skill/Agent/Instruction tab lives here, all
  * rendered through the same EditorPanel; sessions share the tab strip too.
  */
-export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvasProps): React.ReactElement {
+export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMenu, onDropFiles }: WorkbenchCanvasProps): React.ReactElement {
+  const menu = useRowContextMenu<WorkbenchTab>();
+  const dragId = useRef<string | null>(null);
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   return (
     <Box data-testid="workbench-canvas" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -59,8 +83,11 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvas
         >
           {tabs.map((tab) => {
             const active = tab.id === activeTabId;
+            const compact = tab.iconOnly === true || tab.pinned === true;
+            const lastPinned = tab.pinned === true && !tabs[tabs.indexOf(tab) + 1]?.pinned;
             return (
-              <Tooltip key={tab.id} title={tab.iconOnly ? tab.label : ''}>
+              <Fragment key={tab.id}>
+              <Tooltip title={tab.iconOnly || tab.pinned ? tab.label : ''}>
                 <Box
                   role="button"
                   tabIndex={0}
@@ -68,6 +95,33 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvas
                   aria-label={tab.dirty ? `${tab.label} (não salvo)` : tab.label}
                   data-testid={`workbench-tab-${tab.id}`}
                   onClick={() => onSelect(tab.id)}
+                  onAuxClick={(e) => {
+                    if (e.button === 1 && tab.onClose) {
+                      e.preventDefault();
+                      tab.onClose();
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    if ((tabMenu?.(tab).length ?? 0) > 0) menu.openMenu(e, tab);
+                  }}
+                  draggable={onReorder !== undefined && !tab.iconOnly}
+                  onDragStart={(e) => {
+                    dragId.current = tab.id;
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    if (dragId.current !== null && dragId.current !== tab.id) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    if (dragId.current === null) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onReorder?.(dragId.current, tab.id);
+                    dragId.current = null;
+                  }}
+                  onDragEnd={() => {
+                    dragId.current = null;
+                  }}
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter' && e.key !== ' ') return;
                     if (e.key === ' ') e.preventDefault();
@@ -82,33 +136,35 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvas
                     bgcolor: active ? theme.ogs.surfaces.rail : 'transparent',
                     flexShrink: 0,
                     '&:hover': active ? {} : { bgcolor: 'action.hover' },
-                    '&:hover .workbench-tab-close, &:focus-within .workbench-tab-close': { color: 'text.secondary' },
+                    '&:hover .workbench-tab-close, &:focus-within .workbench-tab-close': { color: 'text.secondary', display: 'inline-flex' },
+                    '&:hover .workbench-tab-dirty, &:focus-within .workbench-tab-dirty': { display: tab.onClose && !tab.pinned ? 'none' : undefined },
                   })}
                 >
-                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', pl: tab.iconOnly ? 1 : 1.25, pr: tab.onClose ? 0.5 : tab.iconOnly ? 1 : 1.25, py: 0.25, minHeight: 24 }}>
-                    {tab.iconOnly ? (
-                      <Icon glyph={tab.glyph} size={14} />
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', pl: compact ? 1 : 1.25, pr: tab.onClose && !tab.pinned ? 0.5 : compact ? 1 : 1.25, py: 0.25, minHeight: 24 }}>
+                    {compact ? (
+                      <TabGlyph tab={tab} />
                     ) : tab.accentColor ? (
                       <Box
                         aria-hidden
                         sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tab.accentColor, flexShrink: 0 }}
                       />
                     ) : (
-                      <Icon glyph={tab.glyph} size={14} />
+                      <TabGlyph tab={tab} />
                     )}
-                    {!tab.iconOnly && (
+                    {!compact && (
                       <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: active ? 500 : 400, maxWidth: 160 }}>
                         {tab.label}
                       </Typography>
                     )}
                     {tab.dirty && (
                       <Box
+                        className="workbench-tab-dirty"
                         data-testid={`workbench-tab-dirty-${tab.id}`}
                         aria-hidden
-                        sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }}
+                        sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0, mr: tab.pinned ? 0 : 0.5 }}
                       />
                     )}
-                    {tab.onClose && (
+                    {tab.onClose && !tab.pinned && (
                       <Box
                         component="span"
                         role="button"
@@ -127,7 +183,8 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvas
                         }}
                         className="workbench-tab-close"
                         sx={(theme) => ({
-                          display: 'inline-flex',
+                          // A dirty tab shows its dot in the close button's place until hovered.
+                          display: tab.dirty ? 'none' : 'inline-flex',
                           p: 0.5,
                           ml: 0.25,
                           borderRadius: `${theme.ogs.radius.pill}px`,
@@ -141,6 +198,8 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvas
                   </Stack>
                 </Box>
               </Tooltip>
+              {lastPinned && <Box aria-hidden data-testid="workbench-pinned-divider" sx={{ width: '1px', alignSelf: 'stretch', bgcolor: 'divider', mx: 0.5, flexShrink: 0 }} />}
+              </Fragment>
             );
           })}
         </Stack>
@@ -163,7 +222,21 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect }: WorkbenchCanvas
           {activeTab.breadcrumb}
         </Box>
       )}
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <RowContextMenu state={menu.state} onClose={menu.closeMenu} actions={menu.state ? (tabMenu?.(menu.state.target) ?? []) : []} />
+      <Box
+        sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}
+        onDragOver={(e) => {
+          if (onDropFiles && dragId.current === null && (Array.from(e.dataTransfer.types).includes('Files') || Array.from(e.dataTransfer.types).includes(TREE_DRAG_TYPE))) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (!onDropFiles || dragId.current !== null) return;
+          const treePaths = readTreeDrag(e.dataTransfer);
+          const files = Array.from(e.dataTransfer.files);
+          if (treePaths.length === 0 && files.length === 0) return;
+          e.preventDefault();
+          onDropFiles({ files, treePaths });
+        }}
+      >
         {tabs.map((tab) => (
           <Box
             key={tab.id}

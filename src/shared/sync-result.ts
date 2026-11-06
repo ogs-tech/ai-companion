@@ -15,3 +15,9 @@ export interface SyncResult {
   message?: string;
   details?: SyncResultDetails;
 }
+
+/**
+ * Whether an entity's files on disk match what the app would materialize for every enabled
+ * harness. `pending` = at least one destination is missing, stale or not ours.
+ */
+export type EntitySyncState = 'synced' | 'pending';

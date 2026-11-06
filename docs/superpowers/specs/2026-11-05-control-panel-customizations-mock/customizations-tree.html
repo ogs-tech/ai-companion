@@ -1,0 +1,167 @@
+<style>
+  .ct { --canvas:#0F1828; --paper:#16223A; --rail:#1B2944; --ink:#F2EEE5; --mute:#8D9AB3; --faint:#5C6A85; --line:rgba(242,238,229,.09);
+        --azul:#5B79E0; --verde:#3FB97A; --ambar:#E5B547;
+        font-family:"Space Grotesk",-apple-system,sans-serif; }
+  .ct-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; align-items:start; }
+  .ct-col > .cap { font-size:13px; margin:0 0 8px; color:#8a8f98; }
+  .ct-col.pick { cursor:pointer; }
+  .ct-col.pick .panel { outline:2px solid transparent; transition:outline-color .15s; }
+  .ct-col.pick.selected .panel, .ct-col.pick:hover .panel { outline-color:var(--azul); }
+  .panel { background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px 8px 14px; color:var(--ink); font-size:13px; }
+  .hd { display:flex; align-items:center; justify-content:space-between; padding:0 8px 10px; }
+  .hd b { font-size:15px; font-weight:600; letter-spacing:-.01em; } .hd i { font-style:normal; color:var(--mute); margin-left:6px; font-weight:400; }
+  .row { position:relative; display:flex; align-items:center; gap:8px; height:30px; padding:0 8px; border-radius:6px; white-space:nowrap; }
+  .row:hover { background:var(--rail); }
+  .row svg { width:15px; height:15px; flex:none; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .row .n { margin-left:auto; color:var(--mute); font-variant-numeric:tabular-nums; font-size:12px; }
+  .row .chev { width:12px; height:12px; color:var(--faint); }
+  .l1 { padding-left:8px; } .l2 { padding-left:26px; } .l3 { padding-left:44px; }
+  .dim { color:var(--mute); } .faint { color:var(--faint); }
+  .lvl { font-weight:600; letter-spacing:-.005em; }
+  .sep { height:1px; background:var(--line); margin:8px 8px; }
+  /* old spine */
+  .spine { position:absolute; left:2px; top:6px; bottom:6px; width:3px; border-radius:2px; background:var(--ambar); }
+  /* status dot: the only indicator in the new design */
+  .dot { width:7px; height:7px; border-radius:50%; flex:none; margin-left:auto; }
+  .dot.det { border:1.5px solid var(--azul); background:radial-gradient(circle,var(--azul) 35%,transparent 40%); }
+  .dot.on { background:var(--verde); } .dot.off { border:1.5px solid var(--faint); } .dot.warn { background:var(--ambar); }
+  .row .dot + .n, .row .n + .dot { margin-left:8px; }
+  .hx { display:inline-flex; gap:3px; margin-left:auto; }
+  .hx s { text-decoration:none; font-size:10px; line-height:1; padding:3px 5px; border-radius:4px; border:1px solid var(--line); color:var(--mute); }
+  .hx s.ok { color:var(--verde); border-color:rgba(63,185,122,.35); }
+  .hx + .dot { margin-left:8px; }
+  .tag { font-size:11px; color:var(--mute); border:1px solid var(--line); border-radius:4px; padding:1px 6px; margin-left:auto; }
+  .tag.az { color:var(--azul); border-color:rgba(91,121,224,.4); }
+  .note { margin-top:10px; font-size:12px; color:#8a8f98; line-height:1.5; }
+  .note li { margin-bottom:3px; }
+  .legend { display:flex; gap:14px; padding:10px 8px 0; font-size:11px; color:var(--mute); }
+  .legend span { display:inline-flex; align-items:center; gap:5px; } .legend .dot { margin:0; }
+  .casc { margin:2px 8px 8px 26px; padding-left:10px; border-left:1px dashed var(--line); font-size:11px; color:var(--mute); line-height:1.5; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 8.2v7.6M18 10.2c0 4-6 3-11 6.4"/></symbol>
+  <symbol id="i-scroll" viewBox="0 0 24 24"><path d="M6 4h12v14a2 2 0 0 0 2 2H8a2 2 0 0 1-2-2z"/><path d="M6 4a2 2 0 0 0-2 2v2h2M10 9h6M10 13h6"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 14h.01M15 14h.01"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
+  <symbol id="i-pkg" viewBox="0 0 24 24"><path d="M21 8v8l-9 5-9-5V8l9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<h2>Customizações: a árvore</h2>
+<p class="subtitle">Estado atual à esquerda; duas propostas ao lado. Clique em A ou B para escolher a direção.</p>
+
+<div class="ct ct-grid">
+
+  <!-- ATUAL -->
+  <div class="ct-col">
+    <p class="cap"><b>Hoje</b> (do seu print)</p>
+    <div class="panel">
+      <div class="hd"><b>Customizações<i>99</i></b></div>
+      <div class="row l1"><svg class="chev"><use href="#i-chevd"/></svg><svg><use href="#i-folder"/></svg>Neste workspace<span class="n">9</span></div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>Workspace<span class="n">0</span></div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>vendors-bees-adapter<span class="n">5</span></div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>ui-core<span class="n">4</span></div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>core-services<span class="n">0</span></div>
+      <div class="row l1"><svg class="chev"><use href="#i-chevd"/></svg><svg><use href="#i-lock"/></svg>Do Início<span class="n">90</span></div>
+      <div class="row l2"><span class="spine"></span><svg><use href="#i-scroll"/></svg>instructions</div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-sparkles"/></svg>Skills<span class="n">0</span></div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-bot"/></svg>Agents<span class="n">0</span></div>
+      <div class="row l2"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-plug"/></svg>Integrações<span class="n">10</span></div>
+    </div>
+    <ul class="note">
+      <li>Pasta e escopo usam o mesmo ícone; cadeado só no Global.</li>
+      <li>"Instructions" é uma folha solta; as demais são grupos com contagem.</li>
+      <li>A barra amarela não diz o que significa.</li>
+      <li>Nível de projeto não tem Instructions.</li>
+    </ul>
+  </div>
+
+  <!-- A: CAMADAS -->
+  <div class="ct-col pick" data-choice="a" onclick="toggleSelect(this)">
+    <p class="cap"><b>A · Por camada</b> — recomendada</p>
+    <div class="panel">
+      <div class="hd"><b>Customizações</b><svg style="width:15px;height:15px;stroke:var(--mute);fill:none;stroke-width:1.6"><use href="#i-plus"/></svg></div>
+
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chevd"/></svg><svg style="color:var(--azul)"><use href="#i-layers"/></svg>Workspace<span class="n">9</span></div>
+      <div class="row l2"><svg><use href="#i-scroll"/></svg>Instructions<span class="hx"><s class="ok">Claude</s><s>Cursor</s></span><span class="dot warn" title="Cursor desatualizado"></span></div>
+      <div class="row l2 dim"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">0</span></div>
+      <div class="row l2 dim"><svg><use href="#i-bot"/></svg>Agents<span class="n">0</span></div>
+      <div class="row l2 dim"><svg><use href="#i-plug"/></svg>Integrações<span class="n">0</span></div>
+
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chevd"/></svg><svg style="color:var(--azul)"><use href="#i-git"/></svg>ui-core<span class="n">4</span></div>
+      <div class="row l2"><svg><use href="#i-scroll"/></svg>Instructions<span class="hx"><s class="ok">Claude</s><s class="ok">Cursor</s></span><span class="dot on"></span></div>
+      <div class="row l2"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">3</span></div>
+      <div class="row l2"><svg><use href="#i-bot"/></svg>Agents<span class="n">1</span></div>
+      <div class="row l2 dim"><svg><use href="#i-plug"/></svg>Integrações<span class="n">0</span></div>
+
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chevd"/></svg><svg style="color:var(--azul)"><use href="#i-git"/></svg>vendors-bees-adapter<span class="n">5</span></div>
+      <div class="row l2"><svg><use href="#i-scroll"/></svg>Instructions<span class="tag az">Aplicar</span><span class="dot det" title="AGENTS.md detectado"></span></div>
+      <div class="row l2 dim"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">5</span></div>
+      <div class="row l1 lvl dim"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-git"/></svg>core-services<span class="n">0</span></div>
+      <div class="row l1 lvl dim"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-git"/></svg>vendors-integration<span class="n">0</span></div>
+
+      <div class="sep"></div>
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chev"/></svg><svg style="color:var(--azul)"><use href="#i-globe"/></svg>Global<span class="n">90</span></div>
+
+      <div class="legend"><span><i class="dot on"></i>sincronizado</span><span><i class="dot warn"></i>pendente</span><span><i class="dot off"></i>não criada</span><span><i class="dot det"></i>detectada</span></div>
+    </div>
+    <ul class="note">
+      <li><b>Mesma estrutura em todo nível:</b> Instructions, Skills, Agents, Integrações. Só o Global tem Plugins.</li>
+      <li><b>Ícones por significado:</b> camada (<i>layers</i>, <i>git</i>, <i>globe</i>) × tipo (<i>scroll</i>, <i>sparkles</i>, <i>bot</i>, <i>plug</i>). Sem pastas, sem cadeado.</li>
+      <li><b>Um só indicador:</b> a bolinha de estado de sincronização. A barra colorida some; o tipo já está no ícone.</li>
+      <li>Chips Claude/Cursor mostram para onde cada Instruction foi adaptada.</li>
+      <li>Zero vira linha apagada, não some: o lugar de criar continua no mesmo lugar.</li>
+      <li>Projetos sem nada ficam recolhidos e apagados.</li>
+    </ul>
+  </div>
+
+  <!-- B: POR TIPO -->
+  <div class="ct-col pick" data-choice="b" onclick="toggleSelect(this)">
+    <p class="cap"><b>B · Por tipo</b></p>
+    <div class="panel">
+      <div class="hd"><b>Customizações</b><svg style="width:15px;height:15px;stroke:var(--mute);fill:none;stroke-width:1.6"><use href="#i-plus"/></svg></div>
+
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chevd"/></svg><svg><use href="#i-scroll"/></svg>Instructions<span class="n">3</span></div>
+      <div class="row l2"><svg style="color:var(--mute)"><use href="#i-globe"/></svg>Global<span class="hx"><s class="ok">Claude</s><s class="ok">Cursor</s></span><span class="dot on"></span></div>
+      <div class="row l2"><svg style="color:var(--mute)"><use href="#i-layers"/></svg>Workspace<span class="hx"><s class="ok">Claude</s><s>Cursor</s></span><span class="dot warn"></span></div>
+      <div class="row l2"><svg style="color:var(--mute)"><use href="#i-git"/></svg>ui-core<span class="hx"><s class="ok">Claude</s><s class="ok">Cursor</s></span><span class="dot on"></span></div>
+      <div class="row l2 dim"><svg><use href="#i-plus"/></svg>Adicionar em outro projeto…</div>
+
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chevd"/></svg><svg><use href="#i-sparkles"/></svg>Skills<span class="n">12</span></div>
+      <div class="row l2">code-review<span class="tag">ui-core</span></div>
+      <div class="row l2">deploy-checklist<span class="tag">Workspace</span></div>
+      <div class="row l2">brainstorming<span class="tag">Global</span></div>
+
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-bot"/></svg>Agents<span class="n">1</span></div>
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-plug"/></svg>Integrações<span class="n">10</span></div>
+      <div class="row l1 lvl"><svg class="chev"><use href="#i-chev"/></svg><svg><use href="#i-pkg"/></svg>Plugins<span class="n">79</span></div>
+
+      <div class="legend"><span><i class="dot on"></i>sincronizado</span><span><i class="dot warn"></i>pendente</span></div>
+    </div>
+    <ul class="note">
+      <li>Tipo no primeiro nível; a origem aparece como etiqueta em cada item.</li>
+      <li>Instructions vira a "pilha": você vê as camadas lado a lado.</li>
+      <li>Bom para achar "tudo o que é skill". Ruim para ver "o que vale dentro do ui-core".</li>
+      <li>Com muitos projetos, a lista de Instructions cresce sem limite.</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:22px">
+  <h3>Como as camadas se combinam (vale para A e B)</h3>
+  <p class="subtitle">Trabalhando dentro do ui-core, a ferramenta enxerga as três Instructions, da mais geral para a mais específica. Em conflito, vale a mais específica.</p>
+  <div class="mockup"><div class="mockup-body" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;line-height:1.9">
+    Global <span style="opacity:.5">~/.claude/CLAUDE.md · plugin Cursor</span><br>
+    &nbsp;&nbsp;└ Workspace <span style="opacity:.5">&lt;raiz&gt;/AGENTS.md · .cursor/rules/&lt;nome&gt;.mdc</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└ Projeto ui-core <span style="opacity:.5">ui-core/CLAUDE.md · ui-core/.cursor/rules/&lt;nome&gt;.mdc</span>
+  </div></div>
+</div>

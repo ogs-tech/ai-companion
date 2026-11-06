@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { SyncResult, SyncResultDetails } from '../../../shared/sync-result.js';
+import type { EntitySyncState, SyncResult, SyncResultDetails } from '../../../shared/sync-result.js';
 import type { Entity } from '../../../shared/entity.js';
 import type { SettingsService } from './settings-service.js';
 import type { EntityRepository } from '../ports/entity-repository.js';
@@ -322,6 +322,63 @@ export class AdapterManager {
       }
     }
     return count;
+  }
+
+  /**
+   * Read-only per-entity sync state, checked against the disk (never a cached Sync report, so a
+   * file changed outside the app is noticed). An entity is `synced` only when every destination
+   * of every enabled harness is in place; `skip` destinations are ignored, and an entity with
+   * nothing to materialize is omitted.
+   */
+  async entitySyncStates(): Promise<Record<string, EntitySyncState>> {
+    const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
+    const enabledAdapters = this.enabledAdapters(settings);
+    const entities = await this.deps.entityRepository.list();
+    const states: Record<string, EntitySyncState> = {};
+
+    for (const entity of entities) {
+      const source = this.entitySourcePath(entity);
+      let checked = 0;
+      let inSync = true;
+      for (const adapter of enabledAdapters) {
+        let destinations: AdapterDestination[];
+        try {
+          destinations = await adapter.resolveEntityDestinations({ entity });
+        } catch {
+          // Unresolvable (e.g. its workspace is gone): it cannot be in sync, but must not hide the rest.
+          checked++;
+          inSync = false;
+          continue;
+        }
+        for (const dest of destinations) {
+          if (dest.strategy === 'skip') continue;
+          checked++;
+          if (!(await this.destinationInSync(dest, source))) inSync = false;
+        }
+      }
+      if (checked > 0) states[entity.urn] = inSync ? 'synced' : 'pending';
+    }
+    return states;
+  }
+
+  private async destinationInSync(dest: AdapterDestination, source: string): Promise<boolean> {
+    try {
+      if (dest.strategy === 'symlink') {
+        return (await this.deps.symlinkManager.validate({ destination: dest.destination, source })) === 'symlink-to-source';
+      }
+      if (dest.strategy === 'merge') {
+        return (await this.merger().validate({ file: dest.destination, target: dest.target })) === 'ok';
+      }
+      if (dest.strategy === 'write') {
+        const args: Parameters<typeof this.deps.fileMaterializer.validate>[0] = { destination: dest.destination, content: dest.content };
+        if (dest.ownershipMarker !== undefined) args.ownershipMarker = dest.ownershipMarker;
+        if (dest.ownershipCheck !== undefined) args.ownershipCheck = dest.ownershipCheck;
+        return (await this.deps.fileMaterializer.validate(args)) === 'ok';
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**

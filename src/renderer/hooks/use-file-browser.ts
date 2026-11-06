@@ -36,11 +36,12 @@ export function useDirListing(path: string, options: { enabled?: boolean } = {})
   });
 }
 
-export function useFilePreview(path: string | null) {
+export function useFilePreview(path: string | null, options: { external?: boolean; enabled?: boolean } = {}) {
+  const { external = false, enabled = true } = options;
   return useQuery<FilePreview>({
-    queryKey: ['workspace', 'readFile', path] as const,
-    queryFn: () => callIpc<FilePreview>('workspace.readFile', { path }),
-    enabled: path !== null,
+    queryKey: [external ? 'externalFile' : 'workspace', 'readFile', path] as const,
+    queryFn: () => callIpc<FilePreview>(external ? 'externalFile.read' : 'workspace.readFile', { path }),
+    enabled: path !== null && enabled,
     ...DISK_BACKED_QUERY_OPTIONS,
   });
 }
@@ -70,10 +71,13 @@ export function useRefreshFiles(): () => Promise<void> {
 export function useWriteFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { path: string; content: string }): Promise<void> =>
-      callIpc<void>('workspace.writeFile', { path: args.path, content: args.content }),
-    onSuccess: (_data, { path, content }) => {
-      queryClient.setQueryData<FilePreview>(['workspace', 'readFile', path] as const, { previewable: true, kind: 'text', content, truncated: false });
+    mutationFn: async (args: { path: string; content: string; external?: boolean; recreate?: boolean }): Promise<void> => {
+      // A tab whose file left the disk saves by putting the file back first.
+      if (args.recreate === true) await callIpc<void>('workspace.createFile', { path: args.path }).catch(() => undefined);
+      await callIpc<void>(args.external === true ? 'externalFile.write' : 'workspace.writeFile', { path: args.path, content: args.content });
+    },
+    onSuccess: (_data, { path, content, external }) => {
+      queryClient.setQueryData<FilePreview>([external === true ? 'externalFile' : 'workspace', 'readFile', path] as const, { previewable: true, kind: 'text', content, truncated: false });
     },
   });
 }

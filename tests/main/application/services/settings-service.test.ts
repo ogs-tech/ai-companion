@@ -283,3 +283,22 @@ describe('SettingsService openWith preferences', () => {
     expect(next).not.toHaveProperty('openWith');
   });
 });
+
+describe('SettingsService ui.wordWrap / ui.confirmTrash', () => {
+  it('persists both flags through merge and keeps the defaults untouched', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()), save }));
+
+    const result = await service.merge({ ui: { wordWrap: false, confirmTrash: false } });
+
+    expect(result.ui).toEqual({ theme: 'system', wordWrap: false, confirmTrash: false });
+    expect(save).toHaveBeenCalledWith(result);
+    expect(getDefaults().ui).toEqual({ theme: 'system' });
+  });
+
+  it('rejects a non-boolean flag', async () => {
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()) }));
+    await expect(service.merge({ ui: { wordWrap: 'yes' as unknown as boolean } })).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.save({ ...baseSettings(), ui: { theme: 'light', confirmTrash: 1 as unknown as boolean } })).rejects.toMatchObject({ kind: 'validation' });
+  });
+});

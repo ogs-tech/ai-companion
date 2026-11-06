@@ -75,6 +75,15 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [languageLoading, setLanguageLoading] = useState(false);
+  const setUiPref = async (key: 'wordWrap' | 'confirmTrash', value: boolean): Promise<void> => {
+    try {
+      const next = await callIpc<SettingsModel>('settings.merge', { ui: { [key]: value } });
+      setSettings(next);
+      await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+    } catch (err) {
+      console.warn('Could not save the preference', err);
+    }
+  };
 
   const handleLanguageChange = async (language: LanguagePreference): Promise<void> => {
     setLanguageLoading(true);
@@ -245,6 +254,20 @@ export function Settings({ onBack }: SettingsProps = {}): React.ReactElement {
               </Typography>
             </Box>
           ))}
+        </FormGroup>
+      </Paper>
+
+      <Paper component="section" variant="outlined" sx={{ p: 3, mb: 3 }}>
+        <Kicker component="h2">Editor e Explorer</Kicker>
+        <FormGroup sx={{ mt: 1 }}>
+          <FormControlLabel
+            control={<Checkbox checked={settings.ui?.wordWrap ?? true} onChange={(e) => void setUiPref('wordWrap', e.target.checked)} />}
+            label="Quebra de linha nos editores"
+          />
+          <FormControlLabel
+            control={<Checkbox checked={settings.ui?.confirmTrash ?? true} onChange={(e) => void setUiPref('confirmTrash', e.target.checked)} />}
+            label="Confirmar antes de mover para a lixeira"
+          />
         </FormGroup>
       </Paper>
 

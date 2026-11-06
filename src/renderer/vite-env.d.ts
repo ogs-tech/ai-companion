@@ -2,6 +2,7 @@
 
 import type { IpcResult } from '../shared/ipc-contract.js';
 import type { EntityChangedEvent } from '../shared/entity.js';
+import type { WorkspaceTreeChangedEvent } from '../shared/file-ops.js';
 import type { MenuCommand } from '../shared/desktop.js';
 
 declare global {
@@ -21,6 +22,9 @@ declare global {
       };
       entity: {
         onChanged(listener: (event: EntityChangedEvent) => void): () => void;
+      };
+      workspace: {
+        onTreeChanged(listener: (event: WorkspaceTreeChangedEvent) => void): () => void;
       };
       desktop: {
         onMenuCommand(listener: (command: MenuCommand) => void): () => void;

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDE basics: context-menu-delete</title><style>
+  body{margin:0;background:#F7F4EE;color:#142036;font:14px/1.5 "Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px}
+  .banner{background:#119350;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:18px;font-weight:600}
+  h2{font-size:22px;margin:0 0 4px} h3{font-size:16px;margin:0 0 6px} .subtitle{color:#5A6573;margin:0 0 12px}
+  .section{margin-bottom:24px}
+  .options{display:flex;flex-direction:column;gap:12px}
+  .option{display:flex;gap:12px;background:#fff;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:14px}
+  .option .letter{width:28px;height:28px;border-radius:50%;background:#F2EEE5;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .option .content{flex:1;min-width:0} .option .content p{margin:0 0 8px;color:#5A6573}
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(20,32,54,.06);padding:1px 4px;border-radius:4px}
+</style></head><body><div class="wrap"><div class="banner">Aprovado: menu e edição inline como mostrados; excluir = A (confirmação). B é referência rejeitada.</div>
+<style>
+  .t{--bg:#fff;--fg:#142036;--mut:#5A6573;--rail:#F2EEE5;--line:rgba(20,32,54,.11);--azul:#3D5CC2;--verde:#119350;--ambar:#D9A12C;--erro:#C0392B;--slate:#7A7E89;
+     background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:6px 0;font:12.5px/1 "Space Grotesk",-apple-system,sans-serif;position:relative}
+  .t .r{display:flex;align-items:center;gap:6px;height:26px;padding-right:10px;white-space:nowrap}
+  .t .r.sel{background:var(--rail)}
+  .t .r .m{margin-left:auto;color:var(--mut);font-size:11px}
+  .t svg.i,.menu svg.i{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .t svg.ch{width:12px;height:12px;color:var(--mut)}
+  .g-mut{color:#5A6573} .c-azul{color:#3D5CC2} .c-ambar{color:#D9A12C} .c-verde{color:#119350}
+  .inp{border:1.5px solid #3D5CC2;border-radius:5px;padding:3px 6px;background:#fff;min-width:110px;color:#142036}
+  .inp i{display:inline-block;width:1px;height:12px;background:#142036;vertical-align:-2px;margin-left:1px}
+  .menu{background:#fff;color:#142036;border:1px solid rgba(20,32,54,.11);border-radius:10px;box-shadow:0 12px 32px rgba(20,32,54,.18);padding:5px;width:250px;font:12.5px/1 "Space Grotesk",sans-serif}
+  .menu .mi{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px}
+  .menu .mi.hl{background:#F2EEE5}
+  .menu .mi kbd{margin-left:auto;font:11px "JetBrains Mono",monospace;color:#5A6573}
+  .menu .mi.danger{color:#C0392B}
+  .menu hr{border:0;border-top:1px solid rgba(20,32,54,.11);margin:4px 0}
+  .stage{background:#F7F4EE;border-radius:10px;padding:16px;display:flex;gap:16px;justify-content:center;align-items:flex-start;margin-top:10px;flex-wrap:wrap}
+  .dlg{background:#fff;color:#142036;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:16px;width:300px;box-shadow:0 12px 32px rgba(20,32,54,.18);font:12.5px/1.4 "Space Grotesk",sans-serif}
+  .dlg h4{margin:0 0 6px;font-size:14px} .dlg p{margin:0 0 12px;color:#5A6573}
+  .dlg .row{display:flex;gap:6px;justify-content:flex-end;margin-top:12px}
+  .btn{border:1px solid rgba(20,32,54,.2);border-radius:999px;padding:6px 12px;font-size:12px;background:#fff;color:#142036}
+  .btn.pri{background:#C0392B;color:#fff;border-color:#C0392B}
+  .toast{background:#142036;color:#F2EEE5;border-radius:10px;padding:10px 12px;font:12.5px/1.35 "Space Grotesk",sans-serif;display:flex;gap:14px;align-items:center;width:340px;box-shadow:0 12px 32px rgba(20,32,54,.25)}
+  .toast span{flex:1} .toast a{color:#8FA6F0;font-weight:600}
+  .tag{display:inline-block;background:#3D5CC2;color:#fff;border-radius:999px;font-size:11px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  .cap{font-size:11px;color:#5A6573;margin:0 0 6px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+</defs></svg>
+
+<h2>Explorer: menu de contexto, criar/renomear e excluir</h2>
+<p class="subtitle">Primeiro o menu e a edição inline (para reagir). Depois a decisão sobre excluir.</p>
+
+<div class="section">
+  <h3>Menu de contexto e edição inline</h3>
+  <div class="stage">
+    <div>
+      <p class="cap">Clique direito numa pasta</p>
+      <div class="menu">
+        <div class="mi hl">Novo arquivo</div>
+        <div class="mi">Nova pasta</div>
+        <hr>
+        <div class="mi">Renomear <kbd>F2</kbd></div>
+        <div class="mi">Duplicar</div>
+        <div class="mi">Copiar <kbd>⌘C</kbd></div>
+        <div class="mi">Recortar <kbd>⌘X</kbd></div>
+        <div class="mi">Colar <kbd>⌘V</kbd></div>
+        <hr>
+        <div class="mi">Copiar caminho</div>
+        <div class="mi">Revelar no Finder</div>
+        <div class="mi">Abrir no terminal</div>
+        <hr>
+        <div class="mi danger">Mover para a lixeira <kbd>⌘⌫</kbd></div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:260px">
+      <p class="cap">Novo arquivo e renomear: campo direto na árvore</p>
+      <div class="t">
+        <div class="r" style="padding-left:8px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg>src</div>
+        <div class="r" style="padding-left:30px"><span style="width:12px"></span><svg class="i c-azul"><use href="#i-code"/></svg><span class="inp">novo-arquivo.ts<i></i></span></div>
+        <div class="r" style="padding-left:30px"><span style="width:12px"></span><svg class="i c-azul"><use href="#i-code"/></svg>theme.ts</div>
+        <div class="r sel" style="padding-left:30px"><span style="width:12px"></span><svg class="i c-azul"><use href="#i-code"/></svg><span class="inp">tokens.ts<i></i></span><span class="m">F2</span></div>
+      </div>
+      <p style="font-size:12.5px;color:#5A6573;margin-top:10px">Enter confirma, Esc cancela. Ao renomear, só o nome (sem a extensão) vem selecionado. Nome inválido ou já usado mostra a mensagem logo abaixo do campo, sem diálogo. Abas abertas do arquivo seguem para o caminho novo, sem perder alterações.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:28px">
+  <h3>Como excluir?</h3>
+  <p class="subtitle">O spec manda o arquivo para a lixeira do sistema, então ele é sempre recuperável pelo Finder.</p>
+  <div class="options">
+    <div class="option" data-choice="delete-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Confirmação antes de excluir</h3>
+        <p>Diálogo “Mover para a lixeira?” a cada exclusão. Familiar, mas é um clique extra no gesto mais frequente, e já existe diálogo no conflito de nomes.</p>
+        <div class="stage"><div class="dlg"><h4>Mover “theme.ts” para a lixeira?</h4><p>Você poderá restaurá-lo pela lixeira do sistema.</p><div class="row"><span class="btn">Cancelar</span><span class="btn pri">Mover para a lixeira</span></div></div></div>
+      </div>
+    </div>
+    <div class="option" data-choice="delete-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Vai direto para a lixeira, com Desfazer <span class="tag">recomendado</span></h3>
+        <p>Some da árvore na hora e um aviso por ~8 s permite desfazer (restaura da lixeira, e o <code>⌘Z</code> também). Pasta com muitos itens ou com abas abertas segue a mesma regra, e as abas ganham o aviso “arquivo removido”.</p>
+        <div class="stage"><div class="toast"><span><b>theme.ts</b> movido para a lixeira.</span><a>Desfazer</a></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div></body></html>

@@ -14,6 +14,10 @@ import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-
 import { buildSessionHistoryHandlers } from './session-history-handlers.js';
 import type { SessionHistoryService } from '../application/services/session-history-service.js';
 import { buildWorkspaceHandlers, type WorkspaceActivation } from './workspace-handlers.js';
+import { buildExternalFileHandlers } from './external-file-handlers.js';
+import type { ExternalFileService } from '../application/services/external-file-service.js';
+import type { FileOperationsService } from '../application/services/file-operations-service.js';
+import type { ProjectSearchService } from '../application/services/project-search-service.js';
 import type { WorkspaceService } from '../application/services/workspace-service.js';
 import type { HookService } from '../application/services/hook-service.js';
 import type { MarketplaceService } from '../application/services/marketplace-service.js';
@@ -69,6 +73,9 @@ export interface IpcDeps {
   workspaceActivation: WorkspaceActivation;
   /** `null` at Início — no workspace is open, so there is no file tree. */
   fileBrowserService: FileBrowserService | null;
+  fileOperationsService: FileOperationsService | null;
+  projectSearchService: ProjectSearchService | null;
+  externalFileService: ExternalFileService;
   marketplaceService: MarketplaceService;
   healthService: HealthService;
   mcpService: McpService;
@@ -116,6 +123,9 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     workspaceService,
     workspaceActivation,
     fileBrowserService,
+    fileOperationsService,
+    projectSearchService,
+    externalFileService,
     marketplaceService,
     healthService,
     mcpService,
@@ -221,6 +231,8 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       return { count };
     },
 
+    'adapter.entitySyncStates': async () => adapterManager.entitySyncStates(),
+
     'app.restore': async () => {
       await workspaceTeardownService.restore();
       appQuit();
@@ -235,7 +247,11 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildSessionHandlers(sessionService),
     ...buildBrowserHandlers(sessionService, embeddedBrowserPort),
     ...buildSessionHistoryHandlers(sessionHistoryService, sessionService),
-    ...buildWorkspaceHandlers(workspaceService, workspaceActivation, fileBrowserService),
+    ...buildWorkspaceHandlers(workspaceService, workspaceActivation, fileBrowserService, {
+      operations: fileOperationsService,
+      search: projectSearchService,
+    }),
+    ...buildExternalFileHandlers(externalFileService),
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),

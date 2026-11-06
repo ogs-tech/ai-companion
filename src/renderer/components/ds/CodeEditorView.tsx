@@ -7,6 +7,8 @@ import { json } from '@codemirror/lang-json';
 import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { useTheme } from '@mui/material/styles';
+import { useEffect, useState } from 'react';
+import { registerEditorView, setActiveEditorPath } from '../../lib/editor-navigation.js';
 import { fonts } from '../../tokens.js';
 import { publishShellStatus } from '../../lib/shell-status-store.js';
 import type { CodeLanguage } from '../../lib/code-language.js';
@@ -39,6 +41,12 @@ interface CodeEditorViewProps {
   language?: CodeLanguage;
   readOnly?: boolean | undefined;
   testId?: string;
+  /** The file this surface edits — lets "go to line" and search hits find it. Omitted for entity bodies. */
+  path?: string | undefined;
+  /** Whether this editor's tab is the one in front. */
+  active?: boolean | undefined;
+  /** Soft-wrap long lines (the global word-wrap setting). Defaults on. */
+  wordWrap?: boolean | undefined;
 }
 
 /** Controlled CodeMirror 6 surface — the raw-editing half of every open tab's body, plain-file or entity. */
@@ -48,10 +56,21 @@ export function CodeEditorView({
   language = 'markdown',
   readOnly = false,
   testId = 'code-editor-view',
+  path,
+  active = true,
+  wordWrap = true,
 }: CodeEditorViewProps): React.ReactElement {
   const { palette } = useTheme();
   const langExtension = LANGUAGE_EXTENSIONS[language];
-  const extensions: Extension[] = [fontTheme, EditorView.lineWrapping, ...(langExtension ? [langExtension] : [])];
+  const extensions: Extension[] = [fontTheme, ...(wordWrap ? [EditorView.lineWrapping] : []), ...(langExtension ? [langExtension] : [])];
+  const [view, setView] = useState<EditorView | null>(null);
+
+  useEffect(() => (path !== undefined && view ? registerEditorView(path, view) : undefined), [path, view]);
+  useEffect(() => {
+    if (path === undefined || !active) return undefined;
+    setActiveEditorPath(path);
+    return () => setActiveEditorPath(null);
+  }, [path, active]);
 
   return (
     <div data-testid={testId}>
@@ -63,6 +82,7 @@ export function CodeEditorView({
         readOnly={readOnly}
         extensions={extensions}
         onUpdate={publishCursor}
+        onCreateEditor={setView}
         minHeight="240px"
         basicSetup={{ foldGutter: false }}
       />

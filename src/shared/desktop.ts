@@ -15,6 +15,12 @@ export type MenuCommand =
   | 'open-settings'
   | 'find'
   | 'command-palette'
+  | 'quick-open'
+  | 'command-mode'
+  | 'go-to-line'
+  | 'search-project'
+  | 'reopen-closed-tab'
+  | 'toggle-word-wrap'
   | 'view-files'
   | 'view-git'
   | 'view-terminals'
@@ -47,6 +53,11 @@ export const SHORTCUTS: Readonly<Partial<Record<MenuCommand, string>>> = {
   'open-settings': 'CmdOrCtrl+,',
   find: 'CmdOrCtrl+F',
   'command-palette': 'CmdOrCtrl+K',
+  'quick-open': 'CmdOrCtrl+P',
+  'command-mode': 'Shift+CmdOrCtrl+P',
+  'go-to-line': 'CmdOrCtrl+G',
+  'search-project': 'Shift+CmdOrCtrl+F',
+  'reopen-closed-tab': 'Shift+CmdOrCtrl+T',
   'new-session': 'Shift+CmdOrCtrl+N',
   'go-needs-attention': 'Shift+CmdOrCtrl+J',
   'end-session': 'Shift+CmdOrCtrl+K',

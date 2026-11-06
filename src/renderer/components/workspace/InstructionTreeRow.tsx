@@ -1,6 +1,9 @@
+import { Stack } from '@mui/material';
 import { useState } from 'react';
 import { Eye, ScrollText, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
+import { SyncDot } from '../ds/SyncDot.js';
+import { useEntitySyncStates } from '../../hooks/use-entity-sync-states.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
@@ -47,6 +50,7 @@ interface InstructionTreeRowProps {
  */
 export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
+  const syncStates = useEntitySyncStates();
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const menuTestId = testId ? `${testId}-menu` : `${kind}-instruction-menu`;
   const invalidate = useInvalidateInstructions();
@@ -92,7 +96,16 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
           if (!instruction) return;
           rowMenu.openMenu(e, instruction);
         }}
-        {...(instruction ? { badge: <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} /> } : {})}
+        {...(instruction
+          ? {
+              badge: (
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
+                  {syncStates[instruction.urn] && <SyncDot state={syncStates[instruction.urn]!} />}
+                </Stack>
+              ),
+            }
+          : {})}
         {...(instruction
           ? { actions: <RowMenuButton testId={menuTestId} label={`Ações de ${copy.label}`} onOpen={(e) => rowMenu.openMenu(e, instruction)} /> }
           : {})}

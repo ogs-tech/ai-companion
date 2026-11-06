@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import { useQueries } from '@tanstack/react-query';
-import { FolderTree as FilesGlyph, GitBranch, SquareTerminal } from 'lucide-react';
+import { FolderTree as FilesGlyph, GitBranch, Search, SquareTerminal } from 'lucide-react';
 import { SectionHeader } from '../ds/ContainerChrome.js';
 import { FolderTree, type RootInfo } from './FolderTree.js';
+import type { ExplorerActions, PathChange } from './use-explorer-actions.js';
 import { WorkspacesList } from './WorkspacesList.js';
 import { ExplorerFrame, ExplorerRail, type ExplorerView, type RailItem } from './ExplorerRail.js';
 import { useTerminals } from '../../hooks/use-terminals.js';
@@ -47,6 +48,14 @@ interface ExplorerPanelContentProps {
   /** Controlled view, so the screen can open Git ("Ver alterações"); uncontrolled when omitted. */
   view?: ExplorerView;
   onViewChange?: (view: ExplorerView) => void;
+  /** Open tabs follow a renamed or moved path. */
+  onRetarget?: (changes: PathChange[]) => void;
+  /** Open tabs under these paths were trashed. */
+  onRemoved?: (paths: string[]) => void;
+  /** Hands the screen the Explorer's controller (undo, paste) so menu commands can reach it. */
+  onExplorerActions?: (actions: ExplorerActions) => void;
+  /** The "Buscar no projeto" view's body (rendered with `fill`). */
+  searchSection?: React.ReactNode;
 }
 
 /**
@@ -111,6 +120,10 @@ function WorkspaceExplorer({
   isWorkspaceRoot,
   view,
   onSelectView,
+  onRetarget,
+  onRemoved,
+  onExplorerActions,
+  searchSection,
 }: WorkspaceExplorerProps): React.ReactElement {
   const routing = useMemo(() => folderRoutingFor(workspace), [workspace]);
   const { multi, aliases } = routing;
@@ -158,6 +171,7 @@ function WorkspaceExplorer({
 
   const items: RailItem[] = [
     { testId: 'explorer-view-files', label: 'Arquivos', glyph: FilesGlyph, active: view === 'files', onClick: () => onSelectView('files') },
+    { testId: 'explorer-view-search', label: 'Buscar', glyph: Search, active: view === 'search', onClick: () => onSelectView('search') },
     {
       testId: 'explorer-view-git',
       label: 'Git',
@@ -185,12 +199,26 @@ function WorkspaceExplorer({
           {openEditorsSection}
           <SectionHeader title="Arquivos" testId="explorer-files-header" actions={toolbarActions} />
           <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            <FolderTree
+            {/* Waits for the workspace so the root node is there from the first render — adding it later would remount every row. */}
+            {workspace !== undefined && <FolderTree
               onSelectFile={onSelectFile}
               onOpenAsWorkspace={onOpenAsWorkspace}
               onPreviewFile={onPreviewFile}
               onNewAction={onNewAction}
               isWorkspaceRoot={isWorkspaceRoot}
+              multi={multi}
+              {...(onRetarget !== undefined ? { onRetarget } : {})}
+              {...(onRemoved !== undefined ? { onRemoved } : {})}
+              {...(onExplorerActions !== undefined ? { onActions: onExplorerActions } : {})}
+              {...(!multi && workspace !== undefined
+                ? {
+                    root: {
+                      label: workspace.rootPath.split('/').filter(Boolean).pop() ?? workspace.name,
+                      absolutePath: workspace.rootPath,
+                      meta: <RepoMeta status={statuses[0]?.data} testId="folder-meta-root" />,
+                    },
+                  }
+                : {})}
               {...(onOpenTerminalHere !== undefined ? { onOpenTerminalHere } : {})}
               {...(rootInfo !== undefined ? { rootInfo } : {})}
               {...(anyRepo
@@ -215,10 +243,11 @@ function WorkspaceExplorer({
                     },
                   }
                 : {})}
-            />
+            />}
           </Box>
         </>
       )}
+      {view === 'search' && searchSection}
       {view === 'git' &&
         (multi ? (
           <RepositoriesView routing={routing} gitPolling={gitPolling} onOpenGitDiff={onOpenGitDiff} />

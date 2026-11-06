@@ -10,6 +10,7 @@ import {
 } from '../shared/session.js';
 import { EXTERNAL_LINK_CHANNEL, type ExternalLinkEvent } from '../shared/external-link.js';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedEvent } from '../shared/entity.js';
+import { WORKSPACE_TREE_CHANGED_CHANNEL, type WorkspaceTreeChangedEvent } from '../shared/file-ops.js';
 import {
   TERMINAL_OUTPUT_CHANNEL,
   TERMINAL_EXIT_CHANNEL,
@@ -76,6 +77,14 @@ const api = {
       const wrapped = (_event: IpcRendererEvent, payload: EntityChangedEvent): void => listener(payload);
       ipcRenderer.on(ENTITY_CHANGED_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(ENTITY_CHANGED_CHANNEL, wrapped);
+    },
+  },
+  workspace: {
+    /** Directories of the open workspace whose listing changed on disk (debounced). */
+    onTreeChanged: (listener: (event: WorkspaceTreeChangedEvent) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: WorkspaceTreeChangedEvent): void => listener(payload);
+      ipcRenderer.on(WORKSPACE_TREE_CHANGED_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(WORKSPACE_TREE_CHANGED_CHANNEL, wrapped);
     },
   },
   desktop: {

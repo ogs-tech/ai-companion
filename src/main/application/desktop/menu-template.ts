@@ -99,6 +99,7 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemTemplate[] {
       command('Salvar tudo', 'save-all'),
       SEPARATOR,
       command('Fechar aba', 'close-tab'),
+      command('Reabrir aba fechada', 'reopen-closed-tab'),
       command('Fechar workspace', 'close-workspace'),
       ...(isMac
         ? []
@@ -109,7 +110,8 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemTemplate[] {
   const edit: MenuItemTemplate = {
     label: 'Editar',
     submenu: [
-      { label: 'Desfazer', role: 'undo' },
+      // The accelerator stays off the native item so ⌘Z reaches the page: the Explorer undoes file operations with it, and text fields/CodeMirror keep their own undo.
+      { label: 'Desfazer', role: 'undo', registerAccelerator: false },
       { label: 'Refazer', role: 'redo' },
       SEPARATOR,
       { label: 'Recortar', role: 'cut' },
@@ -120,6 +122,12 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemTemplate[] {
       // The editor (CodeMirror) handles its own ⌘F/Ctrl+F; the label shows the shortcut but the menu must not also fire it.
       command('Buscar no arquivo', 'find', { registerAccelerator: false }),
       command('Paleta de comandos', 'command-palette'),
+      SEPARATOR,
+      command('Abrir arquivo por nome…', 'quick-open'),
+      command('Comandos…', 'command-mode'),
+      // ⌘G is "find next" inside CodeMirror; the renderer only handles it when an editor tab is active.
+      command('Ir para a linha…', 'go-to-line'),
+      command('Buscar no projeto', 'search-project'),
     ],
   };
 
@@ -129,6 +137,7 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemTemplate[] {
       command('Painel de arquivos', 'view-files'),
       command('Painel Git', 'view-git'),
       command('Terminais', 'view-terminals'),
+      command('Quebra de linha', 'toggle-word-wrap'),
       SEPARATOR,
       {
         label: 'Tema',

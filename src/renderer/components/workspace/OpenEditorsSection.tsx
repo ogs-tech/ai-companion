@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
 import { X, XCircle } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
+import { toneColor } from '../../lib/file-icon.js';
 import { SectionAction, SectionHeader } from '../ds/ContainerChrome.js';
 import type { WorkbenchTab } from './WorkbenchCanvas.js';
 
@@ -55,7 +56,9 @@ export function OpenEditorsSection({ tabs, activeTabId, onSelect, onCloseAll }: 
                 '&:hover .open-editor-close, &:focus-within .open-editor-close': { visibility: 'visible' },
               }}
             >
-              <Icon glyph={tab.glyph} size={14} />
+              <Box component="span" sx={(theme) => ({ display: 'inline-flex', color: toneColor(theme, tab.glyphTone) ?? 'inherit' })}>
+                <Icon glyph={tab.glyph} size={14} />
+              </Box>
               <Typography component="span" sx={{ fontSize: '0.8rem', flex: 1, minWidth: 0 }} noWrap>{tab.label}</Typography>
               {tab.breadcrumb !== undefined && (
                 <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', minWidth: 0, maxWidth: '45%' }} noWrap>

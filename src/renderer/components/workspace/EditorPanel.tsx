@@ -38,6 +38,7 @@ import type {
 } from '../../../shared/file-browser.js';
 import { entityBody, withEntityBody } from '../../lib/entity-body.js';
 import { useFilePreview, useWriteFile } from '../../hooks/use-file-browser.js';
+import { useUiPreferences } from '../../hooks/use-ui-settings.js';
 import { languageForPath } from '../../lib/code-language.js';
 import { fonts } from '../../tokens.js';
 
@@ -136,6 +137,10 @@ export type EditorPanelProps =
   | {
       subject: 'file';
       path: string;
+      /** `path` is absolute and outside the workspace roots (a dropped or picked file). */
+      external?: boolean;
+      /** The file left the disk: the tab keeps its text, stops re-reading, and saving puts the file back. */
+      removed?: boolean;
       /** See the `entity` variant's `active`. */
       active?: boolean;
       onDirtyChange: (dirty: boolean) => void;
@@ -345,6 +350,8 @@ type FileSubjectProps = Extract<EditorPanelProps, { subject: 'file' }>;
 
 function FileSubject({
   path,
+  external = false,
+  removed = false,
   active = true,
   onDirtyChange,
   registerSave,
@@ -355,8 +362,9 @@ function FileSubject({
     isError,
     error,
     refetch,
-  } = useFilePreview(path);
+  } = useFilePreview(path, { external, enabled: !removed });
   const writeFile = useWriteFile();
+  const { wordWrap } = useUiPreferences();
 
   const [draft, setDraft] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<string | null>(null);
@@ -394,13 +402,13 @@ function FileSubject({
   // silently discard its untruncated tail. Spreadsheets are view-only for
   // now — there's no write-back path for the parsed grid yet.
   const editable =
-    preview?.previewable === true && preview.kind === 'text' && preview.truncated === false;
+    (removed && draft !== null) || (preview?.previewable === true && preview.kind === 'text' && preview.truncated === false);
 
   const handleSave = async (): Promise<boolean> => {
     if (draft === null) return true;
     setSaving(true);
     try {
-      await writeFile.mutateAsync({ path, content: draft });
+      await writeFile.mutateAsync({ path, content: draft, external, recreate: removed });
       setBaseline(draft);
       setToast({ variant: 'success', message: `${fileTitle(path)} salvo` });
       return true;
@@ -421,7 +429,16 @@ function FileSubject({
   useRegisterSave(registerSave, async () => (!editable || saving ? true : handleSave()));
 
   let body: React.ReactNode;
-  if (isError) {
+  if (removed && draft !== null) {
+    body = (
+      <>
+        <Alert severity="warning" data-testid="file-removed-notice" sx={{ mb: 1.5 }}>
+          Este arquivo foi removido do disco. O texto continua aqui — salve para recriá-lo ou feche a aba.
+        </Alert>
+        <MarkdownBody mode="edit" body={draft} onChangeBody={setDraft} language={languageForPath(path)} path={path} active={active} wordWrap={wordWrap} />
+      </>
+    );
+  } else if (isError) {
     body = (
       <Box data-testid="file-preview-error">
         <EmptyState
@@ -465,6 +482,9 @@ function FileSubject({
           onChangeBody={setDraft}
           disabled={!editable}
           language={languageForPath(path)}
+          path={path}
+          active={active}
+          wordWrap={wordWrap}
         />
       </>
     );

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDE basics: tabs</title><style>
+  body{margin:0;background:#F7F4EE;color:#142036;font:14px/1.5 "Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px}
+  .banner{background:#119350;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:18px;font-weight:600}
+  h2{font-size:22px;margin:0 0 4px} h3{font-size:16px;margin:0 0 6px} .subtitle{color:#5A6573;margin:0 0 12px}
+  .section{margin-bottom:24px}
+  .options{display:flex;flex-direction:column;gap:12px}
+  .option{display:flex;gap:12px;background:#fff;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:14px}
+  .option .letter{width:28px;height:28px;border-radius:50%;background:#F2EEE5;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .option .content{flex:1;min-width:0} .option .content p{margin:0 0 8px;color:#5A6573}
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(20,32,54,.06);padding:1px 4px;border-radius:4px}
+</style></head><body><div class="wrap"><div class="banner">Aprovado: menu e regras como mostrados; aba fixada = A (compacta). B é referência rejeitada.</div>
+<style>
+  .bar{--bg:#F2EEE5;--tab:#fff;--fg:#142036;--mut:#5A6573;--line:rgba(20,32,54,.11);--azul:#3D5CC2;--ambar:#D9A12C;--verde:#119350;
+    display:flex;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:6px 6px 0;gap:2px;font:12.5px/1 "Space Grotesk",-apple-system,sans-serif;color:var(--fg);overflow:hidden}
+  .tab{display:flex;align-items:center;gap:7px;height:32px;padding:0 10px;border-radius:8px 8px 0 0;color:var(--mut);white-space:nowrap}
+  .tab.act{background:var(--tab);color:var(--fg);box-shadow:inset 0 2px 0 var(--azul)}
+  .tab .x{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px}
+  .tab .dot{width:8px;height:8px;border-radius:50%;background:var(--fg);opacity:.75;margin:0 4px}
+  .tab.pin{padding:0 9px;gap:0}
+  .tab.pin.act{box-shadow:inset 0 2px 0 var(--azul)}
+  .sep{width:1px;height:16px;background:var(--line);align-self:center;margin:0 4px}
+  svg.i{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .pinmark{width:10px;height:10px}
+  .c-azul{color:#3D5CC2} .c-ambar{color:#D9A12C}
+  .body{background:#fff;border:1px solid rgba(20,32,54,.11);border-top:0;border-radius:0 0 10px 10px;height:46px;font:12px "JetBrains Mono",monospace;color:#5A6573;padding:14px 14px;box-sizing:border-box}
+  .menu{background:#fff;color:#142036;border:1px solid rgba(20,32,54,.11);border-radius:10px;box-shadow:0 12px 32px rgba(20,32,54,.18);padding:5px;width:230px;font:12.5px/1 "Space Grotesk",sans-serif}
+  .menu .mi{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px}
+  .menu .mi.hl{background:#F2EEE5}
+  .menu .mi kbd{margin-left:auto;font:11px "JetBrains Mono",monospace;color:#5A6573}
+  .menu hr{border:0;border-top:1px solid rgba(20,32,54,.11);margin:4px 0}
+  .stage{background:#F7F4EE;border-radius:10px;padding:16px;margin-top:10px}
+  .cap{font-size:11px;color:#5A6573;margin:0 0 6px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .tag{display:inline-block;background:#3D5CC2;color:#fff;border-radius:999px;font-size:11px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  .toast{background:#142036;color:#F2EEE5;border-radius:10px;padding:10px 12px;font:12.5px/1.35 "Space Grotesk",sans-serif;display:inline-flex;gap:14px;align-items:center;box-shadow:0 12px 32px rgba(20,32,54,.25)}
+  .toast a{color:#8FA6F0;font-weight:600}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></symbol>
+  <symbol id="i-json" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
+</defs></svg>
+
+<h2>Abas: fixar, menu e reabrir</h2>
+<p class="subtitle">Primeiro o menu e o comportamento (para reagir). Depois a decisão de como uma aba fixada aparece.</p>
+
+<div class="section">
+  <h3>Menu da aba e comportamento</h3>
+  <div class="stage" style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <p class="cap">Clique direito numa aba</p>
+      <div class="menu">
+        <div class="mi">Fechar <kbd>⌘W</kbd></div>
+        <div class="mi hl">Fechar outras</div>
+        <div class="mi">Fechar à direita</div>
+        <div class="mi">Fechar salvas</div>
+        <hr>
+        <div class="mi">Fixar aba</div>
+        <div class="mi">Copiar caminho</div>
+        <div class="mi">Revelar no Explorer</div>
+        <hr>
+        <div class="mi">Reabrir aba fechada <kbd>⇧⌘T</kbd></div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:260px;font-size:13px;color:#142036;line-height:1.55">
+      <p class="cap">Regras</p>
+      <ul style="margin:0;padding-left:18px">
+        <li><b>●</b> no lugar do × quando há alteração não salva; o × volta ao passar o mouse.</li>
+        <li>Clique do meio ou <code>⌘W</code> fecha; aba com alteração pede para salvar (o diálogo que já existe).</li>
+        <li>Arrastar a aba reordena; abas fixadas ficam sempre à esquerda das demais.</li>
+        <li>“Fechar outras/direita/salvas” nunca fecha aba fixada nem aba suja sem perguntar.</li>
+        <li>Reabrir traz de volta as últimas fechadas, na ordem inversa, no mesmo ponto do cursor.</li>
+        <li>Ao reabrir o projeto, as abas abertas voltam, com a ativa selecionada.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:28px">
+  <h3>Como uma aba fixada aparece?</h3>
+  <div class="options">
+    <div class="option" data-choice="pin-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Compacta: só o ícone do arquivo <span class="tag">recomendado</span></h3>
+        <p>A aba encolhe para o ícone colorido, à esquerda, separada das outras por um fio. Libera espaço e dá para identificar pelo ícone (que você acabou de aprovar). O nome aparece no tooltip. Um ponto pequeno marca alteração não salva.</p>
+        <div class="stage" style="padding:12px"><div class="bar">
+          <div class="tab pin"><svg class="i c-azul"><use href="#i-code"/></svg></div>
+          <div class="tab pin act"><svg class="i c-ambar"><use href="#i-json"/></svg></div>
+          <span class="sep"></span>
+          <div class="tab"><svg class="i c-azul"><use href="#i-code"/></svg>EditorPanel.tsx<span class="x"><span class="dot"></span></span></div>
+          <div class="tab"><svg class="i" style="color:#7A7E89"><use href="#i-text"/></svg>README.md<span class="x">×</span></div>
+        </div><div class="body">1  import { useState } from 'react';</div></div>
+      </div>
+    </div>
+    <div class="option" data-choice="pin-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Largura normal, com alfinete</h3>
+        <p>A aba mantém o nome e ganha um alfinete no lugar do ×. Mais legível, mas fixar várias abas come a barra e rola.</p>
+        <div class="stage" style="padding:12px"><div class="bar">
+          <div class="tab"><svg class="i c-azul"><use href="#i-code"/></svg>theme.ts<svg class="i pinmark"><use href="#i-pin"/></svg></div>
+          <div class="tab act"><svg class="i c-ambar"><use href="#i-json"/></svg>package.json<svg class="i pinmark"><use href="#i-pin"/></svg></div>
+          <span class="sep"></span>
+          <div class="tab"><svg class="i c-azul"><use href="#i-code"/></svg>EditorPanel.tsx<span class="x"><span class="dot"></span></span></div>
+          <div class="tab"><svg class="i" style="color:#7A7E89"><use href="#i-text"/></svg>README.md<span class="x">×</span></div>
+        </div><div class="body">1  {</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div></body></html>

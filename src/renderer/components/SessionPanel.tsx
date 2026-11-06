@@ -12,6 +12,7 @@ import { sessionsQueryKey } from '../hooks/use-sessions.js';
 import {
   MAX_SESSION_ATTACHMENT_BYTES,
   sessionAnchorKey,
+  type SessionActivity,
   type SessionAnchor,
   type SessionSnapshotWithOutput,
 } from '../../shared/session.js';
@@ -55,7 +56,21 @@ const STATUS_PILL: Record<PanelStatus, { variant: StatusPillVariant; label: stri
   starting: { variant: 'starting', label: 'Iniciando' },
   error: { variant: 'error', label: 'Erro' },
   ...SESSION_STATUS_PILL,
+  // A live session with no activity signal (harness without hooks, or none yet) is
+  // truthfully "running", never stuck on "Iniciando".
+  running: { variant: 'running', label: 'Em execução' },
 };
+
+const ACTIVITY_PILL: Record<SessionActivity, { variant: StatusPillVariant; label: string }> = {
+  working: { variant: 'running', label: 'Trabalhando' },
+  idle: { variant: 'idle', label: 'Ociosa' },
+  'needs-input': { variant: 'warning', label: 'Aguardando você' },
+};
+
+function pillFor(status: PanelStatus, activity: SessionActivity | undefined): { variant: StatusPillVariant; label: string } {
+  if (status === 'running' && activity) return ACTIVITY_PILL[activity];
+  return STATUS_PILL[status];
+}
 
 // A real terminal reads as its own environment, not as a themed app panel —
 // so this stays ink-on-cream regardless of the app's light/dark mode.
@@ -181,6 +196,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   // rather than forcing the handler to be re-attached on every id change.
   const sessionIdRef = useRef<string | null>(sessionIdProp ?? null);
   const [status, setStatus] = useState<PanelStatus>(sessionIdProp ? 'starting' : 'idle');
+  const [activity, setActivity] = useState<SessionActivity | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   // Derived, not local state: the same session's browser can also be turned
   // off from its Workbench tab's own close button (see browser-tabs-store's
@@ -208,6 +224,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
         if (active && existing) {
           if (!sessionIdProp) setSessionId(existing.sessionId);
           setStatus(existing.status === 'exited' ? 'exited' : 'running');
+          setActivity(existing.activity);
           // Re-attaching to a session whose browser was already on: its tab
           // already exists main-process side, so this only needs to tell the
           // global browser store it exists — never steals focus or opens the
@@ -280,13 +297,30 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     const batcher = createTerminalWriteBatcher((data) => terminalRef.current?.write(data));
     const unsubOutput = window.api.session.onOutput(sessionId, (chunk) => {
       batcher.push(chunk);
+      // Output proves the process is alive even if the one-shot status lookup raced the spawn.
+      setStatus((current) => (current === 'starting' ? 'running' : current));
+    });
+    // `activity` changes are pushed by main as events carrying only the id; re-read the snapshot.
+    const unsubActivity = window.api.session.onAnyActivity((changedId) => {
+      if (changedId !== sessionId) return;
+      void callIpc<SessionSnapshotWithOutput | null>('session.status', { sessionId })
+        .then((snap) => {
+          if (!snap) return;
+          setActivity(snap.activity);
+          if (snap.status === 'running') setStatus((current) => (current === 'starting' ? 'running' : current));
+        })
+        .catch(() => {
+          // Best-effort: the pill keeps its last known state.
+        });
     });
     const unsubExit = window.api.session.onExit(sessionId, () => {
       setStatus('exited');
+      setActivity(undefined);
     });
     return () => {
       dataDisposable?.dispose();
       unsubOutput();
+      unsubActivity();
       unsubExit();
       batcher.cancel();
     };
@@ -511,7 +545,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {showHeader && (
         <Box sx={{ px: 2, pt: 2 }}>
-          <SessionHeader pill={STATUS_PILL[status]} action={action} browserToggle={browserToggle} />
+          <SessionHeader pill={pillFor(status, activity)} action={action} browserToggle={browserToggle} />
         </Box>
       )}
       {error && (

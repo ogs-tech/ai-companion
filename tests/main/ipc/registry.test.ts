@@ -57,6 +57,9 @@ interface Deps {
   workspaceService: WorkspaceService;
   workspaceActivation: WorkspaceActivation;
   fileBrowserService: FileBrowserService | null;
+  fileOperationsService: null;
+  projectSearchService: null;
+  externalFileService: IpcDeps['externalFileService'];
   marketplaceService: MarketplaceService;
   hookService: HookService;
   healthService: HealthService;
@@ -96,6 +99,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const dialogPort: DialogPort = {
     selectFolder: dialogSpy.selectFolder,
     selectApplication: dialogSpy.selectApplication,
+    selectFiles: vi.fn().mockResolvedValue({ canceled: true, paths: [] }),
   };
 
   const adapterManager: AdapterManager = {
@@ -157,6 +161,9 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     workspaceService,
     workspaceActivation,
     fileBrowserService,
+    fileOperationsService: null,
+    projectSearchService: null,
+    externalFileService: {} as IpcDeps['externalFileService'],
     marketplaceService,
     hookService,
     healthService,

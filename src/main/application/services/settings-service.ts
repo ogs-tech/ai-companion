@@ -120,6 +120,9 @@ function assertValidSettings(value: unknown): asserts value is Settings {
   if (!THEME_MODES.includes(ui['theme'] as ThemeMode)) {
     invalid(`'ui.theme' must be one of ${THEME_MODES.join(' | ')}`);
   }
+  for (const flag of ['wordWrap', 'confirmTrash']) {
+    if (ui[flag] !== undefined && typeof ui[flag] !== 'boolean') invalid(`'ui.${flag}' must be a boolean`);
+  }
 
   if (!LANGUAGE_PREFERENCES.includes(s['language'] as LanguagePreference)) {
     invalid(`'language' must be one of ${LANGUAGE_PREFERENCES.join(' | ')}`);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionPanel, TERMINAL_NEWLINE_SEQUENCE } from '../../../src/renderer/components/SessionPanel.js';
 import {
@@ -187,6 +187,44 @@ describe('<SessionPanel>', () => {
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('session.write', { sessionId: 'entity:urn:skill:foo', data: 'ls\r' }),
     );
+  });
+
+  describe('status pill follows the session activity', () => {
+    const snapshot = (extra: Record<string, unknown> = {}) => ({
+      sessionId: 's1',
+      anchor: { kind: 'entity', urn: 'urn:skill:foo' },
+      cwd: '/workspace',
+      status: 'running',
+      browserEnabled: false,
+      ...extra,
+    });
+
+    it('shows "Trabalhando" when the attached session reports activity working', async () => {
+      call.mockImplementation(async () => ok(snapshot({ activity: 'working' })));
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
+      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Trabalhando'));
+    });
+
+    it('leaves "Iniciando" on the first output chunk even when the status lookup found nothing', async () => {
+      call.mockImplementation(async () => ok(null));
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
+      expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Iniciando');
+      await waitFor(() => expect(onOutput).toHaveBeenCalledWith('s1', expect.any(Function)));
+      act(() => (onOutput.mock.calls[0]?.[1] as (chunk: string) => void)('hello'));
+      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Em execução'));
+    });
+
+    it('refreshes the pill when the session activity changes', async () => {
+      let activity = 'working';
+      call.mockImplementation(async () => ok(snapshot({ activity })));
+      const onAnyActivity = vi.mocked(window.api.session.onAnyActivity);
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
+      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Trabalhando'));
+
+      activity = 'needs-input';
+      act(() => (onAnyActivity.mock.calls[0]?.[0] as (id: string) => void)('s1'));
+      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Aguardando você'));
+    });
   });
 
   it('shows the ended state and a resume action when the session exits', async () => {

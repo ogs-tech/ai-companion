@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import {
   Eye,
-  File as FileIcon,
   Folder,
   GitCompare,
   Globe,
@@ -87,6 +86,14 @@ import type { TerminalSnapshot } from '../../../shared/terminal.js';
 import { callIpc } from '../../lib/ipc.js';
 import type { OpenEditorsState } from '../../../shared/open-editors.js';
 import { OpenEditorsSection } from '../../components/workspace/OpenEditorsSection.js';
+import { ProjectSearchPanel } from '../../components/workspace/ProjectSearchPanel.js';
+import type { RowContextMenuAction } from '../../components/workspace/RowContextMenu.js';
+import type { PathChange } from '../../components/workspace/use-explorer-actions.js';
+import { fileIconFor } from '../../lib/file-icon.js';
+import { registerExternalFileOpener, registerFileOpener } from '../../lib/file-opener.js';
+import { revealInEditor, type RevealTarget } from '../../lib/editor-navigation.js';
+import { noteRecentFile } from '../../lib/recent-files-store.js';
+import { Copy, FolderSearch, History as HistoryGlyph, Pin, PinOff, X as XGlyph } from 'lucide-react';
 import { restoreTabs, toPersisted, type EntityKind, type OpenTab, type RestoreContext } from './open-tabs.js';
 
 function errorMessage(err: unknown): string {
@@ -142,6 +149,12 @@ function isEditableTab(tab: OpenTab): boolean {
 function entityTabGlyph(tab: Extract<OpenTab, { kind: EntityKind | 'instruction' }>): LucideIcon {
   if (tab.kind === 'instruction') return isPersonalInstruction(tab.entity) ? Globe : NotebookPen;
   return ENTITY_GROUP_ICONS[tab.kind];
+}
+
+/** Pinned file tabs first, each group keeping its own order. */
+function pinnedFirst(tabs: readonly OpenTab[]): OpenTab[] {
+  const pinned = (t: OpenTab): boolean => t.kind === 'file' && t.pinned === true;
+  return [...tabs.filter(pinned), ...tabs.filter((t) => !pinned(t))];
 }
 
 function isAreaTabDef(a: AreaDef): a is AreaDef & { area: WorkspaceAreaTab } {
@@ -206,11 +219,34 @@ export function WorkspaceScreen(): React.ReactElement {
   const refreshFiles = useRefreshFiles();
   const showHidden = useShowHiddenFiles();
 
-  const openFileTab = (relPath: string): void => {
-    const id = `file:${relPath}`;
-    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'file', relPath }]));
+  const openFileTab = (relPath: string, reveal?: RevealTarget): void => {
+    noteRecentFile(relPath);
+    // A renamed or moved tab keeps its original id, so match on the path it shows now.
+    const existing = openTabs.find((t) => t.kind === 'file' && t.relPath === relPath && t.external !== true);
+    const id = existing?.id ?? `file:${relPath}`;
+    if (existing === undefined) setOpenTabs((prev) => [...prev, { id, kind: 'file', relPath }]);
+    setActiveTabId(id);
+    if (reveal) revealInEditor(relPath, reveal);
+  };
+
+  /** A file outside the workspace roots, already granted by main (drop or "Abrir arquivo…"). */
+  const openExternalFileTab = (absPath: string): void => {
+    const id = `ext:${absPath}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'file', relPath: absPath, external: true }]));
     setActiveTabId(id);
   };
+
+  // Always calls the latest closure, so the registered openers never go stale.
+  const openFileLatest = useEffectEvent((relPath: string, reveal?: RevealTarget) => openFileTab(relPath, reveal));
+  const openExternalLatest = useEffectEvent((absPath: string) => openExternalFileTab(absPath));
+  useEffect(() => {
+    registerFileOpener((relPath, reveal) => openFileLatest(relPath, reveal));
+    registerExternalFileOpener((paths) => paths.forEach((p) => openExternalLatest(p)));
+    return () => {
+      registerFileOpener(null);
+      registerExternalFileOpener(null);
+    };
+  }, []);
 
   const openEntityTab = (kind: EntityKind, entity: Skill | Agent, isCreate: boolean): void => {
     const id = isCreate ? `entity-new:${kind}:${++newTabSeq.current}` : `entity:${entity.urn}`;
@@ -457,13 +493,107 @@ export function WorkspaceScreen(): React.ReactElement {
     return true;
   };
 
+  // The last 20 closed file tabs, most recent first, for "Reabrir aba fechada".
+  const [closedTabs, setClosedTabs] = useState<Array<{ relPath: string; pinned: boolean }>>([]);
+  const rememberClosed = (tab: OpenTab | undefined): void => {
+    if (tab?.kind !== 'file' || tab.external === true || tab.removed === true) return;
+    setClosedTabs((prev) => [{ relPath: tab.relPath, pinned: tab.pinned === true }, ...prev].slice(0, 20));
+  };
+  const reopenClosedTab = (): void => {
+    const [last, ...rest] = closedTabs;
+    if (!last) return;
+    setClosedTabs(rest);
+    const id = `file:${last.relPath}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'file', relPath: last.relPath, ...(last.pinned ? { pinned: true } : {}) }]));
+    setActiveTabId(id);
+  };
+
   const removeTab = (id: string): void => {
+    rememberClosed(openTabs.find((t) => t.id === id));
     setOpenTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
       setActiveTabId((cur) => (cur === id ? (next[next.length - 1]?.id ?? OVERVIEW_TAB_ID) : cur));
       return next;
     });
   };
+
+  const isPinnedTab = (t: OpenTab): boolean => t.kind === 'file' && t.pinned === true;
+
+  /** Every tab a bulk close may touch: never the pinned ones. */
+  const closeMany = (targets: readonly OpenTab[]): void => {
+    const closable = targets.filter((t) => !isPinnedTab(t));
+    if (closable.length === 0) return;
+    void settleDirtyTabs(closable).then((ok) => {
+      if (!ok) return;
+      const ids = new Set(closable.map((t) => t.id));
+      for (const tab of closable) {
+        rememberClosed(tab);
+        if (tab.kind === 'browser') void closeBrowserTab(tab.tabId);
+      }
+      setOpenTabs((prev) => prev.filter((t) => !ids.has(t.id)));
+      setActiveTabId((cur) => (ids.has(cur) ? OVERVIEW_TAB_ID : cur));
+    });
+  };
+
+  const togglePin = (id: string): void =>
+    setOpenTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== id || t.kind !== 'file') return t;
+        const { pinned: _was, ...rest } = t;
+        return t.pinned === true ? rest : { ...rest, pinned: true };
+      }),
+    );
+
+  /** Drag-reorder; a tab never crosses the pinned/unpinned divider. */
+  const reorderTabs = (fromId: string, toId: string): void =>
+    setOpenTabs((prev) => {
+      const from = prev.find((t) => t.id === fromId);
+      const to = prev.find((t) => t.id === toId);
+      if (!from || !to || isPinnedTab(from) !== isPinnedTab(to)) return prev;
+      const without = prev.filter((t) => t.id !== fromId);
+      without.splice(without.findIndex((t) => t.id === toId) + (prev.indexOf(from) < prev.indexOf(to) ? 1 : 0), 0, from);
+      return without;
+    });
+
+  const underPath = (path: string, folder: string): boolean => path === folder || path.startsWith(`${folder}/`);
+
+  /** Open tabs follow a renamed or moved file or folder: same tab, same text, new path. */
+  const retargetTabs = (changes: PathChange[]): void =>
+    setOpenTabs((prev) =>
+      prev.map((t) => {
+        if (t.kind !== 'file' || t.external === true) return t;
+        for (const { from, to } of changes) {
+          if (underPath(t.relPath, from)) return { ...t, relPath: `${to}${t.relPath.slice(from.length)}`, removed: false };
+        }
+        return t;
+      }),
+    );
+
+  /** Files or folders went to the trash: their tabs stay, flagged, keeping unsaved text. */
+  const markTabsRemoved = (paths: string[]): void =>
+    setOpenTabs((prev) => prev.map((t) => (t.kind === 'file' && t.external !== true && paths.some((p) => underPath(t.relPath, p)) ? { ...t, removed: true } : t)));
+
+  // The tree changed on disk outside the app: re-read listings, and flag open
+  // tabs whose file vanished (a rename done in Finder looks like a removal).
+  const queryClientForTree = queryClient;
+  const onTreeChanged = useEffectEvent(() => {
+    void queryClientForTree.invalidateQueries({ queryKey: ['workspace', 'listDir'] });
+    void queryClientForTree.invalidateQueries({ queryKey: ['workspace', 'listFiles'] });
+    const files = openTabs.filter((t): t is Extract<OpenTab, { kind: 'file' }> => t.kind === 'file' && t.external !== true);
+    void Promise.all(
+      files.map(async (t) => ({ id: t.id, gone: !(await callIpc('workspace.readFile', { path: t.relPath }).then(() => true, () => false)) })),
+    ).then((results) => {
+      const goneIds = new Set(results.filter((r) => r.gone).map((r) => r.id));
+      setOpenTabs((prev) =>
+        prev.map((t) => {
+          if (t.kind !== 'file' || t.external === true || !results.some((r) => r.id === t.id)) return t;
+          const gone = goneIds.has(t.id);
+          return (t.removed === true) === gone ? t : { ...t, removed: gone };
+        }),
+      );
+    });
+  });
+  useEffect(() => window.api.workspace?.onTreeChanged(() => onTreeChanged()), []);
 
   // Closes every tab at once, behind the same unsaved-changes dialog as closing one.
   const closeAllTabs = (): void => {
@@ -848,13 +978,19 @@ export function WorkspaceScreen(): React.ReactElement {
       ),
   };
 
-  const canvasTabs: WorkbenchTab[] = openTabs.map((tab): WorkbenchTab => {
+  // Pinned tabs always sit left of the others, in their own relative order.
+  const orderedTabs = pinnedFirst(openTabs);
+  const canvasTabs: WorkbenchTab[] = orderedTabs.map((tab): WorkbenchTab => {
     if (tab.kind === 'file') {
+      const name = tab.relPath.split('/').pop() || tab.relPath;
+      const icon = fileIconFor(name);
       return {
         id: tab.id,
-        glyph: FileIcon,
-        label: tab.relPath.split('/').pop() || tab.relPath,
+        glyph: icon.glyph,
+        glyphTone: icon.tone,
+        label: tab.removed === true ? `${name} (removido)` : name,
         breadcrumb: tab.relPath,
+        pinned: tab.pinned === true,
         dense: true,
         dirty: tab.dirty ?? false,
         onClose: () => closeTab(tab.id),
@@ -862,6 +998,8 @@ export function WorkspaceScreen(): React.ReactElement {
           <EditorPanel
             subject="file"
             path={tab.relPath}
+            external={tab.external === true}
+            removed={tab.removed === true}
             active={!hidden}
             onDirtyChange={(dirty) => setTabDirty(tab.id, dirty)}
             registerSave={registerTabSave(tab.id)}
@@ -1059,6 +1197,63 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   ) : undefined;
 
+  const tabMenu = (canvasTab: WorkbenchTab): RowContextMenuAction[] => {
+    if (canvasTab.id === OVERVIEW_TAB_ID) return [];
+    const tab = orderedTabs.find((t) => t.id === canvasTab.id);
+    if (!tab) return [];
+    const index = orderedTabs.indexOf(tab);
+    const fileTab = tab.kind === 'file' ? tab : undefined;
+    return [
+      { key: 'tab-close', label: 'Fechar', glyph: XGlyph, shortcut: '⌘W', onSelect: () => closeTab(tab.id) },
+      { key: 'tab-close-others', label: 'Fechar outras', glyph: XGlyph, onSelect: () => closeMany(orderedTabs.filter((t) => t.id !== tab.id)) },
+      { key: 'tab-close-right', label: 'Fechar à direita', glyph: XGlyph, onSelect: () => closeMany(orderedTabs.slice(index + 1)) },
+      { key: 'tab-close-saved', label: 'Fechar salvas', glyph: XGlyph, onSelect: () => closeMany(orderedTabs.filter((t) => !isDirty(t))) },
+      ...(fileTab
+        ? [
+            { key: 'tab-pin', label: fileTab.pinned === true ? 'Desafixar aba' : 'Fixar aba', glyph: fileTab.pinned === true ? PinOff : Pin, separatorBefore: true, onSelect: () => togglePin(tab.id) },
+            {
+              key: 'tab-copy-path',
+              label: 'Copiar caminho',
+              glyph: Copy,
+              onSelect: () => {
+                const write = (abs: string): Promise<void> => navigator.clipboard.writeText(abs);
+                (fileTab.external === true
+                  ? write(fileTab.relPath)
+                  : callIpc<{ absolutePath: string }>('workspace.resolvePath', { path: fileTab.relPath }).then((r) => write(r.absolutePath))
+                ).catch(showError);
+              },
+            },
+            ...(fileTab.external === true
+              ? []
+              : [{ key: 'tab-reveal', label: 'Revelar no Explorer', glyph: FolderSearch, onSelect: () => showExplorerView('files') }]),
+          ]
+        : []),
+      { key: 'tab-reopen', label: 'Reabrir aba fechada', glyph: HistoryGlyph, shortcut: '⇧⌘T', separatorBefore: true, onSelect: reopenClosedTab },
+    ];
+  };
+
+  const dropOnEditor = ({ files, treePaths }: { files: File[]; treePaths: string[] }): void => {
+    if (treePaths.length > 0) {
+      for (const path of treePaths) openFileTab(path);
+      return;
+    }
+    const paths = files.map((f) => window.api.getPathForFile(f)).filter((p) => p !== '');
+    if (paths.length === 0) return;
+    callIpc<string[]>('externalFile.grantDropped', { paths })
+      .then((granted) => granted.forEach(openExternalFileTab))
+      .catch(showError);
+  };
+
+  // Dropping a folder on the empty window (Início) opens it as a workspace.
+  const dropOnHome = (e: React.DragEvent): void => {
+    if (!isHome) return;
+    const item = e.dataTransfer.items[0];
+    const file = e.dataTransfer.files[0];
+    if (!item?.webkitGetAsEntry()?.isDirectory || !file) return;
+    e.preventDefault();
+    void handleOpenAsWorkspace(window.api.getPathForFile(file));
+  };
+
   const openEditorsSection = (
     <OpenEditorsSection tabs={canvasTabs} activeTabId={activeTabId} onSelect={setActiveTabId} onCloseAll={closeAllTabs} />
   );
@@ -1146,6 +1341,13 @@ export function WorkspaceScreen(): React.ReactElement {
     if (explorerCollapsed) toggleExplorerPanel();
   };
   useMenuCommand('view-files', () => showExplorerView('files'));
+  useMenuCommand('reopen-closed-tab', reopenClosedTab);
+  const [searchFocusSignal, setSearchFocusSignal] = useState(0);
+  useMenuCommand('search-project', () => {
+    if (!activeWorkspace) return;
+    showExplorerView('search');
+    setSearchFocusSignal((n) => n + 1);
+  });
   useMenuCommand('view-git', () => showExplorerView('git'));
   useMenuCommand('view-terminals', () => showExplorerView('terminals'));
   useMenuCommand('new-session', handleNewSession);
@@ -1161,7 +1363,15 @@ export function WorkspaceScreen(): React.ReactElement {
   });
 
   return (
-    <Box component="main" data-testid="workspace-screen" sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <Box
+      component="main"
+      data-testid="workspace-screen"
+      onDragOver={(e) => {
+        if (isHome && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault();
+      }}
+      onDrop={dropOnHome}
+      sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+    >
       {/* Three cards on the canvas: the Explorer Panel leads on the left
           (file/entity tree, plus the workspace's own identity and actions —
           same convention as any file-tree-driven IDE), the Workbench in the
@@ -1187,7 +1397,15 @@ export function WorkspaceScreen(): React.ReactElement {
               toolbarActions={explorerToolbarActions}
               homeRailItems={homeRailItems}
               onOpenWorkspaces={() => openAreaTab('workspaces')}
-              onSelectFile={openFileTab}
+              onSelectFile={(relPath) => openFileTab(relPath)}
+              onRetarget={retargetTabs}
+              onRemoved={markTabsRemoved}
+              searchSection={
+                <ProjectSearchPanel
+                  focusSignal={searchFocusSignal}
+                  onOpenMatch={(m) => openFileTab(m.path, { line: m.line, start: m.start, end: m.end })}
+                />
+              }
               onOpenAsWorkspace={(absolutePath) => void handleOpenAsWorkspace(absolutePath)}
               onPreviewFile={openFilePreviewTab}
               onNewAction={newActionForFile}
@@ -1203,7 +1421,7 @@ export function WorkspaceScreen(): React.ReactElement {
           <ResizeHandle />
           <Panel id="workbench-canvas-panel" minSize="30" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={panelCardSx()}>
-              <WorkbenchCanvas tabs={[overviewTab, ...canvasTabs]} activeTabId={activeTabId} onSelect={setActiveTabId} />
+              <WorkbenchCanvas tabs={[overviewTab, ...canvasTabs]} activeTabId={activeTabId} onSelect={setActiveTabId} onReorder={reorderTabs} tabMenu={tabMenu} onDropFiles={dropOnEditor} />
             </Box>
           </Panel>
           <ResizeHandle />
@@ -1243,22 +1461,20 @@ export function WorkspaceScreen(): React.ReactElement {
         </Group>
       </Box>
 
-      {activeWorkspace && (
-        <NewSessionDialog
-          open={newSessionOpen}
-          folders={folderRouting.multi ? folderRouting.folders : []}
-          aliases={folderRouting.aliases}
-          harnesses={runHarnesses.options}
-          onCancel={() => setNewSessionOpen(false)}
-          onStart={(folders, harness) => {
-            setNewSessionOpen(false);
-            spawnSession(
-              folderRouting.multi ? { kind: 'workspace', workspaceId: activeWorkspace.id, folders } : currentAnchor,
-              harness,
-            );
-          }}
-        />
-      )}
+      <NewSessionDialog
+        open={newSessionOpen}
+        folders={activeWorkspace && folderRouting.multi ? folderRouting.folders : []}
+        aliases={folderRouting.aliases}
+        harnesses={runHarnesses.options}
+        onCancel={() => setNewSessionOpen(false)}
+        onStart={(folders, harness) => {
+          setNewSessionOpen(false);
+          spawnSession(
+            activeWorkspace && folderRouting.multi ? { kind: 'workspace', workspaceId: activeWorkspace.id, folders } : currentAnchor,
+            harness,
+          );
+        }}
+      />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </Box>
   );

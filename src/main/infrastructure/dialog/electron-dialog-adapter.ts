@@ -2,6 +2,7 @@ import { dialog, BrowserWindow, type OpenDialogOptions } from 'electron';
 import type {
   DialogPort,
   SelectApplicationResult,
+  SelectFilesResult,
   SelectFolderParams,
   SelectFolderResult,
 } from '../../application/ports/dialog-port.js';
@@ -46,5 +47,14 @@ export class ElectronDialogAdapter implements DialogPort {
       return { canceled: true };
     }
     return { canceled: false, path: picked };
+  }
+
+  async selectFiles(): Promise<SelectFilesResult> {
+    const focused = BrowserWindow.getFocusedWindow();
+    const options: OpenDialogOptions = { properties: ['openFile', 'multiSelections'] };
+    const result = focused
+      ? await dialog.showOpenDialog(focused, options)
+      : await dialog.showOpenDialog(options);
+    return result.canceled ? { canceled: true, paths: [] } : { canceled: false, paths: result.filePaths };
   }
 }

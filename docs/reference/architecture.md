@@ -253,6 +253,8 @@ activation, alongside the Entity-backed graph, but rooted at the raw `rootPath` 
 `<rootPath>/.ai-companion` — it browses the author's real files, not the app's own data. There is none at
 Início (Global has no file tree), so the file-browser and `openWith.*` handlers fail `validation` there.
 
+File operations, search and watching sit beside it: `FileOperationsPort` (raw `node:fs` ops, `NodeFileOperationsAdapter`) and `TrashPort` (`ElectronTrash`, `shell.trashItem`) back `FileOperationsService` (create/rename/duplicate/trash/transfer/undo/listFiles) and `ProjectSearchService`; both reach disk only through `FileBrowserService.locate()` so alias routing and the containment guard are shared. `TreeWatcherPort` (`ChokidarTreeWatcher`) feeds `TreeWatchService`, which pushes `workspace:tree-changed`. These three are rebuilt on every activation (`rebuildFileServices` in `src/main/index.ts`); `ExternalFileService` (grant list for files outside the workspace) is built once. See the IPC contract for the methods.
+
 `readFile` returns a `FilePreview` tagged by `kind`: plain text is read as UTF-8 (capped at 256KB, marked
 `truncated`) and stays editable through `writeFile`; a `.xlsx` file is instead parsed with `exceljs` into a
 `SpreadsheetSheet` per sheet — cell text plus, when the source file styled that cell, its font/fill/alignment

@@ -10,6 +10,10 @@ export interface AdapterSettings {
 
 export interface UiSettings {
   theme: ThemeMode;
+  /** Soft-wrap in the editor; treated as `true` when absent. */
+  wordWrap?: boolean;
+  /** Ask before sending files to the trash; treated as `true` when absent. */
+  confirmTrash?: boolean;
 }
 
 /** USD per million tokens, for one model. */

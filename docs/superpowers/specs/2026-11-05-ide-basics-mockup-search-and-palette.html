@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDE basics: search-and-palette</title><style>
+  body{margin:0;background:#F7F4EE;color:#142036;font:14px/1.5 "Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px}
+  .banner{background:#119350;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:18px;font-weight:600}
+  h2{font-size:22px;margin:0 0 4px} h3{font-size:16px;margin:0 0 6px} .subtitle{color:#5A6573;margin:0 0 12px}
+  .section{margin-bottom:24px}
+  .options{display:flex;flex-direction:column;gap:12px}
+  .option{display:flex;gap:12px;background:#fff;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:14px}
+  .option .letter{width:28px;height:28px;border-radius:50%;background:#F2EEE5;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .option .content{flex:1;min-width:0} .option .content p{margin:0 0 8px;color:#5A6573}
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(20,32,54,.06);padding:1px 4px;border-radius:4px}
+</style></head><body><div class="wrap"><div class="banner">Aprovado: busca no projeto como mostrada; paleta = A (uma paleta com modos). B é referência rejeitada.</div>
+<style>
+  .app{--bg:#fff;--fg:#142036;--mut:#5A6573;--rail:#F2EEE5;--line:rgba(20,32,54,.11);--azul:#3D5CC2;--ambar:#D9A12C;--verde:#119350;
+    display:flex;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;overflow:hidden;font:12.5px/1.2 "Space Grotesk",-apple-system,sans-serif}
+  .app .strip{width:38px;background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:8px}
+  .app .strip i{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--mut)}
+  .app .strip i.on{background:#fff;color:var(--azul);box-shadow:inset 0 0 0 1px var(--line)}
+  .app .panel{width:300px;padding:10px 10px 12px}
+  .field{display:flex;align-items:center;gap:6px;border:1.5px solid var(--azul);border-radius:8px;padding:6px 8px;background:#fff}
+  .field .tg{margin-left:auto;display:flex;gap:3px}
+  .field .tg b{font:600 10.5px "JetBrains Mono",monospace;border-radius:4px;padding:2px 4px;color:var(--mut)}
+  .field .tg b.on{background:var(--azul);color:#fff}
+  .sum{color:var(--mut);font-size:11px;margin:8px 2px 6px}
+  .file{display:flex;align-items:center;gap:6px;height:24px;font-weight:600}
+  .file .n{margin-left:auto;background:var(--rail);border-radius:999px;padding:1px 7px;font-size:10.5px;color:var(--mut);font-weight:500}
+  .hit{display:flex;gap:8px;height:22px;align-items:center;padding-left:20px;font:11.5px "JetBrains Mono",monospace;color:var(--mut);white-space:nowrap;overflow:hidden}
+  .hit.hl{background:var(--rail);border-radius:5px}
+  .hit em{font-style:normal;color:var(--fg);background:color-mix(in srgb,var(--ambar) 38%,transparent);border-radius:3px;padding:0 1px}
+  .hit s{text-decoration:none;color:#9AA0A8;width:22px;text-align:right;flex:none}
+  svg.i{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .c-azul{color:#3D5CC2}
+  .stage{background:#F7F4EE;border-radius:10px;padding:16px;margin-top:10px;display:flex;justify-content:center}
+  .pal{width:420px;background:#fff;color:#142036;border:1px solid rgba(20,32,54,.11);border-radius:14px;box-shadow:0 12px 32px rgba(20,32,54,.18);overflow:hidden;font:12.5px/1.2 "Space Grotesk",sans-serif}
+  .pal .in{display:flex;gap:8px;align-items:center;padding:11px 12px;border-bottom:1px solid rgba(20,32,54,.11)}
+  .pal .in .pre{background:#3D5CC2;color:#fff;border-radius:5px;padding:2px 6px;font:600 11px "JetBrains Mono",monospace}
+  .pal .it{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px}
+  .pal .it.hl{background:#F2EEE5}
+  .pal .it .p{margin-left:auto;color:#5A6573;font-size:11px}
+  .pal .it kbd{margin-left:auto;font:11px "JetBrains Mono",monospace;color:#5A6573}
+  .pal .ft{border-top:1px solid rgba(20,32,54,.11);padding:7px 12px;color:#5A6573;font-size:11px;display:flex;gap:14px}
+  .pal mark{background:color-mix(in srgb,#D9A12C 38%,transparent);color:inherit;border-radius:2px}
+  .cap{font-size:11px;color:#5A6573;margin:0 0 6px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .tag{display:inline-block;background:#3D5CC2;color:#fff;border-radius:999px;font-size:11px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  .two{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-files" viewBox="0 0 24 24"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+</defs></svg>
+
+<h2>Busca no projeto e abrir arquivo rápido</h2>
+<p class="subtitle">Primeiro o painel de busca (para reagir). Depois a decisão sobre a paleta.</p>
+
+<div class="section">
+  <h3>Painel de busca no projeto</h3>
+  <div class="stage" style="padding:12px">
+    <div class="app">
+      <div class="strip"><i><svg class="i"><use href="#i-files"/></svg></i><i class="on"><svg class="i"><use href="#i-search"/></svg></i><i><svg class="i"><use href="#i-git"/></svg></i><i><svg class="i"><use href="#i-term"/></svg></i></div>
+      <div class="panel">
+        <div class="field"><svg class="i" style="color:#5A6573"><use href="#i-search"/></svg>useState<span class="tg"><b>Aa</b><b class="on">ab</b><b>.*</b></span></div>
+        <div class="sum">14 resultados em 5 arquivos</div>
+        <div class="file"><svg class="i" style="width:12px;height:12px;color:#5A6573"><use href="#i-chevd"/></svg><svg class="i c-azul"><use href="#i-code"/></svg>EditorPanel.tsx<span class="n">4</span></div>
+        <div class="hit"><s>3</s>import { <em>useState</em> } from 'react';</div>
+        <div class="hit hl"><s>41</s>const [dirty, setDirty] = <em>useState</em>(false);</div>
+        <div class="hit"><s>58</s>const [mode, setMode] = <em>useState</em>&lt;Mode&gt;('edit')</div>
+        <div class="file"><svg class="i" style="width:12px;height:12px;color:#5A6573"><use href="#i-chevd"/></svg><svg class="i c-azul"><use href="#i-code"/></svg>FolderTree.tsx<span class="n">3</span></div>
+        <div class="hit"><s>1</s>import { <em>useState</em> } from 'react';</div>
+        <div class="hit"><s>160</s>const [expanded, setExpanded] = <em>useState</em>(false);</div>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:#5A6573;margin-top:10px">Novo ícone na barra lateral (ao lado de Arquivos/Git/Terminais). Resultados agrupados por arquivo, ignorando <code>node_modules</code>, <code>.git</code> e <code>bin</code>/<code>obj</code>. Clicar abre o arquivo na linha e destaca o trecho. <b>Sem substituir no projeto</b> nesta versão enxuta; buscar/substituir dentro do arquivo continua no editor (⌘F / ⌘H).</p>
+</div>
+
+<div class="section" style="margin-top:28px">
+  <h3>Abrir arquivo, comandos e ir para linha: uma paleta ou duas?</h3>
+  <p class="subtitle">Hoje existe uma paleta de comandos (navegação e workspaces). Falta abrir arquivo por nome e ir para linha.</p>
+  <div class="options">
+
+    <div class="option" data-choice="palette-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Uma paleta só, com modos por prefixo <span class="tag">recomendado</span></h3>
+        <p><code>⌘P</code> abre em modo arquivos (busca fuzzy). <code>⇧⌘P</code> abre com <code>&gt;</code> já digitado (comandos). <code>⌘G</code> abre com <code>:</code> (ir para linha). Apagar o prefixo troca de modo. Um componente só, que estende o que já existe.</p>
+        <div class="stage"><div class="two">
+          <div class="pal"><div class="in"><svg class="i" style="color:#5A6573"><use href="#i-search"/></svg>edpan</div>
+            <div class="it hl"><svg class="i c-azul"><use href="#i-code"/></svg><span><mark>Ed</mark>itor<mark>Pan</mark>el.tsx</span><span class="p">src/renderer/components/workspace</span></div>
+            <div class="it"><svg class="i c-azul"><use href="#i-code"/></svg><span><mark>Ed</mark>itor<mark>Pan</mark>el.test.tsx</span><span class="p">tests/renderer/components</span></div>
+            <div class="ft"><span>⌘P arquivos</span><span>&gt; comandos</span><span>: linha</span></div></div>
+          <div class="pal"><div class="in"><span class="pre">&gt;</span>tema</div>
+            <div class="it hl"><svg class="i" style="color:#5A6573"><use href="#i-search"/></svg>Alternar tema claro/escuro<kbd></kbd></div>
+            <div class="it"><svg class="i" style="color:#5A6573"><use href="#i-search"/></svg>Abrir configurações<kbd>⌘,</kbd></div>
+            <div class="ft"><span>⇧⌘P comandos</span></div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="palette-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Dois diálogos separados</h3>
+        <p>⌘P abre um diálogo só de arquivos e ⇧⌘P a paleta de comandos atual, cada um com seu componente. Mais simples de entender de início, mas duplica a interface e o ir-para-linha viraria um terceiro diálogo.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div></body></html>

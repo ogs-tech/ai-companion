@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDE basics: root-and-icons</title><style>
+  body{margin:0;background:#F7F4EE;color:#142036;font:14px/1.5 "Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px}
+  .banner{background:#119350;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:18px;font-weight:600}
+  h2{font-size:22px;margin:0 0 4px} h3{font-size:16px;margin:0 0 6px} .subtitle{color:#5A6573;margin:0 0 12px}
+  .section{margin-bottom:24px}
+  .options{display:flex;flex-direction:column;gap:12px}
+  .option{display:flex;gap:12px;background:#fff;border:1px solid rgba(20,32,54,.11);border-radius:14px;padding:14px}
+  .option .letter{width:28px;height:28px;border-radius:50%;background:#F2EEE5;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .option .content{flex:1;min-width:0} .option .content p{margin:0 0 8px;color:#5A6573}
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(20,32,54,.06);padding:1px 4px;border-radius:4px}
+</style></head><body><div class="wrap"><div class="banner">Aprovado: nó raiz = A; ícones = B (glifo + cor por categoria). As outras opções são referência rejeitada.</div>
+<style>
+  .t{--bg:#fff;--fg:#142036;--mut:#5A6573;--rail:#F2EEE5;--line:rgba(20,32,54,.11);--azul:#3D5CC2;--verde:#119350;--ambar:#D9A12C;--erro:#C0392B;--slate:#7A7E89;
+     background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:6px 0;font:12.5px/1 "Space Grotesk",-apple-system,sans-serif;min-width:210px;flex:1}
+  .t.dark{--bg:#16223A;--fg:#F2EEE5;--mut:#9AA0A8;--rail:#1B2944;--line:rgba(255,255,255,.08);--azul:#5B79E0;--verde:#3FB97A;--ambar:#E5B547;--erro:#E2675A;--slate:#9AA0A8}
+  .t .r{display:flex;align-items:center;gap:6px;height:26px;padding-right:10px;white-space:nowrap}
+  .t .r.sel{background:var(--rail)}
+  .t .r .n{overflow:hidden;text-overflow:ellipsis}
+  .t .r .m{margin-left:auto;color:var(--mut);font-size:11px}
+  .t svg.i{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .t svg.ch{width:12px;height:12px;color:var(--mut)}
+  .t .k{font:600 10px/1 "Space Grotesk",sans-serif;letter-spacing:.08em;color:var(--mut);text-transform:uppercase;padding:6px 12px 4px}
+  .t .hd{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:5px;margin-bottom:4px}
+  .t .hd b{font-size:13px}
+  .t .hd span{font-size:11px;color:var(--mut);display:flex;gap:6px;align-items:center}
+  .t .chip{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:2px 7px;font-size:10.5px;color:var(--mut)}
+  .pair{display:flex;gap:10px;margin-top:10px}
+  .tag{display:inline-block;background:#3D5CC2;color:#fff;border-radius:999px;font-size:11px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  .rowgap{display:flex;gap:10px}
+  .g-mut{color:var(--mut)} .c-azul{color:var(--azul)} .c-verde{color:var(--verde)} .c-ambar{color:var(--ambar)} .c-erro{color:var(--erro)} .c-slate{color:var(--slate)}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-root" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><circle cx="12" cy="13" r="2" fill="currentColor"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></symbol>
+    <symbol id="i-json" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-img" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  </defs>
+</svg>
+
+<h2>Explorer: projeto solo e ícones de arquivo</h2>
+<p class="subtitle">Duas decisões. Clique em uma opção em cada bloco e depois me conte o que achou no terminal.</p>
+
+<div class="section">
+  <h3>1. Como identificar o projeto quando há uma pasta só?</h3>
+  <p class="subtitle">Hoje a árvore começa direto em <code>src/</code>, <code>docs/</code>… sem dizer de qual projeto são.</p>
+  <div class="options">
+
+    <div class="option" data-choice="root-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Nó raiz na árvore <span class="tag">recomendado</span></h3>
+        <p>Mesma linha que já existe no multi-pasta: a pasta é o nó de topo, expandido, e os arquivos ficam dentro. Uma pasta é só o caso N=1 de várias, sem regra especial.</p>
+        <div class="t">
+          <div class="r sel" style="padding-left:8px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i c-azul"><use href="#i-root"/></svg><b class="n">ai-companion</b><span class="m"><svg class="i" style="width:11px;height:11px;vertical-align:-1px"><use href="#i-branch"/></svg> main</span></div>
+          <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">src</span></div>
+          <div class="r" style="padding-left:44px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">main</span></div>
+          <div class="r" style="padding-left:44px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">renderer</span></div>
+          <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">docs</span></div>
+          <div class="r" style="padding-left:26px"><span style="width:12px"></span><svg class="i g-mut"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+          <div class="r" style="padding-left:26px"><span style="width:12px"></span><svg class="i g-mut"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="root-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Cabeçalho fixo acima da árvore</h3>
+        <p>O projeto vira um título (nome, caminho, branch) que não recolhe. A árvore começa logo abaixo, com menos indentação. Mais informativo, mas é um caso à parte do multi-pasta.</p>
+        <div class="t">
+          <div class="hd"><b>ai-companion</b><span>~/Projects/ogs-tech/engine <span class="chip"><svg class="i" style="width:10px;height:10px"><use href="#i-branch"/></svg>main</span></span></div>
+          <div class="r" style="padding-left:8px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">src</span></div>
+          <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">main</span></div>
+          <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">renderer</span></div>
+          <div class="r" style="padding-left:8px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">docs</span></div>
+          <div class="r" style="padding-left:8px"><span style="width:12px"></span><svg class="i g-mut"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+          <div class="r" style="padding-left:8px"><span style="width:12px"></span><svg class="i g-mut"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="root-c" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Só no título do painel</h3>
+        <p>A árvore não muda. O cabeçalho do painel Arquivos mostra “Arquivos · ai-companion”. É a menor mudança, mas o projeto some quando a árvore rola ou o painel fica estreito.</p>
+        <div class="t">
+          <div class="k">Arquivos · ai-companion</div>
+          <div class="r" style="padding-left:8px"><svg class="i ch"><use href="#i-chevd"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">src</span></div>
+          <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">main</span></div>
+          <div class="r" style="padding-left:26px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">renderer</span></div>
+          <div class="r" style="padding-left:8px"><svg class="i ch"><use href="#i-chev"/></svg><svg class="i g-mut"><use href="#i-folder"/></svg><span class="n">docs</span></div>
+          <div class="r" style="padding-left:8px"><span style="width:12px"></span><svg class="i g-mut"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+          <div class="r" style="padding-left:8px"><span style="width:12px"></span><svg class="i g-mut"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. Ícones por tipo de arquivo</h3>
+  <p class="subtitle">Hoje todo arquivo usa o mesmo ícone genérico. Cada opção aparece no tema claro e no escuro.</p>
+  <div class="options">
+
+    <div class="option" data-choice="icons-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Glifos por categoria, monocromáticos <span class="tag">recomendado</span></h3>
+        <p>Código, JSON, texto e imagem têm formas diferentes (Lucide, que o app já usa), todas na cor neutra. Segue “um papel cromático por vez”: o azul fica para ação e a cor fica para o status do Git. Sem dependência nova.</p>
+        <div class="pair">
+          <div class="t"><div class="k">Claro</div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-code"/></svg><span class="n">theme.ts</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-img"/></svg><span class="n">logo.png</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-file"/></svg><span class="n">.gitignore</span></div>
+          </div>
+          <div class="t dark"><div class="k">Escuro</div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-code"/></svg><span class="n">theme.ts</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-img"/></svg><span class="n">logo.png</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-file"/></svg><span class="n">.gitignore</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="icons-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Glifos com cor por categoria</h3>
+        <p>Mesmos glifos, com um tom por categoria tirado dos papéis do design system. Identifica mais rápido pela cor, mas compete com os marcadores do Git (M, A, ?) que também usam cor.</p>
+        <div class="pair">
+          <div class="t"><div class="k">Claro</div>
+            <div class="r" style="padding-left:12px"><svg class="i c-azul"><use href="#i-code"/></svg><span class="n">theme.ts</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i c-ambar"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i c-slate"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i c-verde"><use href="#i-img"/></svg><span class="n">logo.png</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-file"/></svg><span class="n">.gitignore</span></div>
+          </div>
+          <div class="t dark"><div class="k">Escuro</div>
+            <div class="r" style="padding-left:12px"><svg class="i c-azul"><use href="#i-code"/></svg><span class="n">theme.ts</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i c-ambar"><use href="#i-json"/></svg><span class="n">package.json</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i c-slate"><use href="#i-text"/></svg><span class="n">README.md</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i c-verde"><use href="#i-img"/></svg><span class="n">logo.png</span></div>
+            <div class="r" style="padding-left:12px"><svg class="i g-mut"><use href="#i-file"/></svg><span class="n">.gitignore</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="option" data-choice="icons-c" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Pacote de ícones de IDE (ex.: Material Icon Theme)</h3>
+        <p>Logos reais por linguagem e por arquivo conhecido (<code>package.json</code>, <code>tsconfig</code>…), como no VS Code. É o mais reconhecível, mas é uma <b>dependência nova</b>, coloridíssima, e foge do estilo traço fino do app. Não desenhei aqui porque dependeria do pacote.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div></body></html>

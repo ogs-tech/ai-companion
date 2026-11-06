@@ -54,4 +54,22 @@ describe('OpenEditorsService', () => {
     await fs.writeFile(`${DIR}/${OPEN_EDITORS_FILE}`, '{not json');
     expect(await service.load()).toEqual({ tabs: [], activeTabId: null });
   });
+
+  it('round-trips pinned file tabs and writes nothing for unpinned ones', async () => {
+    const { service, fs } = setup();
+    await service.save({
+      tabs: [
+        { id: 'file:a.ts', kind: 'file', relPath: 'a.ts', pinned: true },
+        { id: 'file-preview:b.md', kind: 'file-preview', relPath: 'b.md', pinned: true },
+        { id: 'file:c.ts', kind: 'file', relPath: 'c.ts', pinned: false },
+      ],
+      activeTabId: null,
+    });
+    expect((await service.load()).tabs).toEqual([
+      { id: 'file:a.ts', kind: 'file', relPath: 'a.ts', pinned: true },
+      { id: 'file-preview:b.md', kind: 'file-preview', relPath: 'b.md', pinned: true },
+      { id: 'file:c.ts', kind: 'file', relPath: 'c.ts' },
+    ]);
+    expect(await fs.readFile(`${DIR}/${OPEN_EDITORS_FILE}`)).not.toContain('"pinned": false');
+  });
 });

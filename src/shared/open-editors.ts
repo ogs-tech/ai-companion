@@ -9,8 +9,8 @@ import type { SessionAnchor } from './session.js';
  * and browser tabs already recover from their own main-process store.
  */
 export type PersistedTab =
-  | { id: string; kind: 'file'; relPath: string }
-  | { id: string; kind: 'file-preview'; relPath: string }
+  | { id: string; kind: 'file'; relPath: string; pinned?: boolean }
+  | { id: string; kind: 'file-preview'; relPath: string; pinned?: boolean }
   | { id: string; kind: 'entity'; entityKind: 'skill' | 'agent' | 'instruction'; urn: string; inherited: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
   | { id: string; kind: 'terminal'; terminalId: string }

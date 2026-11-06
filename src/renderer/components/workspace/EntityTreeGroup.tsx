@@ -3,6 +3,8 @@ import { Stack } from '@mui/material';
 import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { OriginMeta } from './OriginMeta.js';
+import { SyncDot } from '../ds/SyncDot.js';
+import { useEntitySyncStates } from '../../hooks/use-entity-sync-states.js';
 import { DetectedRows, useDetectedItems } from './DetectedTreeGroup.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { MINE_KEY, OriginGroups, type OriginView } from './OriginGroups.js';
@@ -128,6 +130,8 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
   // mode, where there is no group header and they take its place.
   const subDepth = flat ? depth : depth + 1;
 
+  const syncStates = useEntitySyncStates();
+
   const renderRow = (item: Entity, rowDepth: number): React.ReactElement => (
     <TreeGroupRow
       key={item.urn}
@@ -143,6 +147,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
       badge={
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
+          {syncStates[item.urn] && <SyncDot state={syncStates[item.urn]!} />}
           <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
         </Stack>
       }

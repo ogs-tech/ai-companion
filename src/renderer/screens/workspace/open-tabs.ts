@@ -8,7 +8,10 @@ import type { SessionAnchor } from '../../../shared/session.js';
 export type EntityKind = 'skill' | 'agent';
 
 export type OpenTab =
-  | { id: string; kind: 'file'; relPath: string; dirty?: boolean }
+  // `pinned`: kept compact on the left and spared by bulk closes. `removed`: the file left the
+  // disk but the tab (and any unsaved text) stays. `external`: `relPath` is an absolute path
+  // outside the workspace roots, granted by a drop or "Abrir arquivo…"; never restored.
+  | { id: string; kind: 'file'; relPath: string; dirty?: boolean; pinned?: boolean; removed?: boolean; external?: boolean }
   // `inherited`: a Global entity opened read-only from a workspace's "Do Global" section.
   | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean; inherited?: boolean }
   | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean; inherited?: boolean }
@@ -33,7 +36,8 @@ export function toPersisted(tabs: readonly OpenTab[]): PersistedTab[] {
   return tabs.flatMap((tab): PersistedTab[] => {
     switch (tab.kind) {
       case 'file':
-        return [{ id: tab.id, kind: 'file', relPath: tab.relPath }];
+        if (tab.external === true) return [];
+        return [{ id: tab.id, kind: 'file', relPath: tab.relPath, ...(tab.pinned === true ? { pinned: true } : {}) }];
       case 'preview':
         return tab.source.kind === 'file' ? [{ id: tab.id, kind: 'file-preview', relPath: tab.source.path }] : [];
       case 'skill':
@@ -62,7 +66,9 @@ export async function restoreTabs(saved: readonly PersistedTab[], ctx: RestoreCo
     saved.map(async (tab): Promise<OpenTab | null> => {
       switch (tab.kind) {
         case 'file':
-          return (await ctx.fileExists(tab.relPath)) ? { id: tab.id, kind: 'file', relPath: tab.relPath } : null;
+          return (await ctx.fileExists(tab.relPath))
+            ? { id: tab.id, kind: 'file', relPath: tab.relPath, ...(tab.pinned === true ? { pinned: true } : {}) }
+            : null;
         case 'file-preview':
           return (await ctx.fileExists(tab.relPath))
             ? { id: tab.id, kind: 'preview', label: tab.relPath.split('/').pop() || tab.relPath, source: { kind: 'file', path: tab.relPath } }

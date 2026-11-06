@@ -81,9 +81,8 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
       sx={{
         flexShrink: 0,
         height: 24,
-        bgcolor: 'background.paper',
-        borderTop: 1,
-        borderColor: 'divider',
+        // Canvas-coloured and borderless, like the header: the bar reads as part of the canvas.
+        bgcolor: 'background.default',
         px: 1.75,
         display: 'flex',
         alignItems: 'center',

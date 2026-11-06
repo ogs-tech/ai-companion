@@ -52,6 +52,33 @@ beforeEach(() => {
 });
 
 describe('FolderTree', () => {
+  describe('rename', () => {
+    it('renames through the context menu and calls workspace.renameEntry', async () => {
+      const user = userEvent.setup();
+      const spy = listing({ '': [{ name: 'a.txt', kind: 'file' }] }, { 'workspace.renameEntry': { path: 'b.txt' } });
+      renderTree();
+      fireEvent.contextMenu(await screen.findByText('a.txt'));
+      await user.click(await screen.findByText('Renomear'));
+      const input = await screen.findByTestId('tree-name-input');
+      await waitFor(() => expect(input).toHaveFocus());
+      await user.clear(input);
+      await user.type(input, 'b.txt{Enter}');
+      await waitFor(() => expect(spy).toHaveBeenCalledWith('workspace.renameEntry', { path: 'a.txt', newName: 'b.txt' }));
+    });
+
+    it('renames with F2 on the selected row', async () => {
+      const user = userEvent.setup();
+      const spy = listing({ '': [{ name: 'a.txt', kind: 'file' }] }, { 'workspace.renameEntry': { path: 'b.txt' } });
+      renderTree();
+      await user.click(await screen.findByText('a.txt'));
+      await user.keyboard('{F2}');
+      const input = await screen.findByTestId('tree-name-input');
+      await user.clear(input);
+      await user.type(input, 'b.txt{Enter}');
+      await waitFor(() => expect(spy).toHaveBeenCalledWith('workspace.renameEntry', { path: 'a.txt', newName: 'b.txt' }));
+    });
+  });
+
   describe('context menu — Abrir terminal aqui', () => {
     it('opens a terminal in the folder that was right-clicked', async () => {
       const user = userEvent.setup();
