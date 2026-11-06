@@ -52,10 +52,10 @@ describe('SessionRow', () => {
   });
 
   it.each([
-    ['needs-input', '!', 'Precisa de você'],
+    ['needs-input', '!', 'Pergunta'],
     ['working', '✻', 'Trabalhando'],
-    ['idle', '◉', 'Terminou'],
-    ['exited', '×', 'Encerrada'],
+    ['idle', '◌', 'Ocioso'],
+    ['exited', '×', 'Fechado'],
   ] as const)('shows a distinct glyph and accessible name for %s', (state, glyph, name) => {
     renderWithTheme(
       <SessionRow

@@ -1,7 +1,7 @@
 import type { EntityKind } from './entity.js';
 
 export type DetectedHarness = 'claude' | 'cursor';
-export type DetectedKind = Extract<EntityKind, 'skill' | 'agent' | 'mcp' | 'hook'>;
+export type DetectedKind = Extract<EntityKind, 'skill' | 'agent' | 'mcp' | 'hook' | 'instruction'>;
 
 /**
  * A customization found in a harness's own config files that is not (yet) a
@@ -16,7 +16,11 @@ export interface DetectedEntity {
   description: string;
   harness: DetectedHarness;
   scope: 'personal' | 'workspace';
-  /** Workspace folder the item was found in (workspace scope only). */
+  /**
+   * Workspace folder the item was found in (workspace scope only). For an
+   * `instruction` it is set only in a multi-folder workspace — where it names the
+   * folder-level instruction — and absent for the workspace-wide one.
+   */
   folder?: string;
   /** File the item was read from. */
   path: string;

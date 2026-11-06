@@ -1,9 +1,13 @@
-import { join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import type { FileSystemPort } from '../ports/filesystem-port.js';
 import type { EntityService, SaveEntityResult } from './entity-service.js';
 import type { DetectedEntity, DetectedHarness, DetectedKind, DetectedListParams } from '../../../shared/detected.js';
 import type { Agent, Entity, HookEntity, McpEntity, Skill } from '../../../shared/entity.js';
 import { entityUrn, WORKSPACE_SOURCE } from '../../../shared/entity.js';
+import type { Instruction } from '../../../shared/entity.js';
+import { folderInstructionName, workspaceInstructionName } from '../../../shared/instruction-names.js';
+import { workspacePath } from '../../../shared/brand-paths.js';
+import { CURSOR_RULE_MDC_MARKER } from '../entity/cursor-plugin-manifest.js';
 import { parseEntityFile } from '../entity/entity-serializer.js';
 import { translateHookFromCursor, translateHookToCursor } from '../entity/hook-translation.js';
 import { hashValue } from '../entity/merge-json.js';
@@ -21,6 +25,8 @@ export interface DetectionServiceDeps {
   homedir: string;
   entities: Pick<EntityService, 'list' | 'save'>;
   context: DetectionContext;
+  /** Clock for backup folder names; defaults to the current time. */
+  now?: () => Date;
 }
 
 interface Location {
@@ -33,7 +39,7 @@ const HARNESSES: ReadonlyArray<{ id: DetectedHarness; dir: string }> = [
   { id: 'claude', dir: '.claude' },
   { id: 'cursor', dir: '.cursor' },
 ];
-const ALL_KINDS: DetectedKind[] = ['skill', 'agent', 'mcp', 'hook'];
+const ALL_KINDS: DetectedKind[] = ['skill', 'agent', 'mcp', 'hook', 'instruction'];
 
 /**
  * Reads what Claude Code and Cursor already have on disk — skills, agents, MCP
@@ -51,7 +57,9 @@ export class DetectionService {
   async list(params: DetectedListParams = {}): Promise<DetectedEntity[]> {
     const kinds = params.kinds ?? ALL_KINDS;
     const found: DetectedEntity[] = [];
+    const takenInstructionNames = new Set((await this.deps.entities.list('instruction')).map((e) => e.name));
     for (const location of this.locations()) {
+      if (kinds.includes('instruction')) found.push(...(await this.instructions(location, takenInstructionNames)));
       for (const harness of HARNESSES) {
         if (kinds.includes('skill')) found.push(...(await this.skills(location, harness)));
         if (kinds.includes('agent')) found.push(...(await this.agents(location, harness)));
@@ -68,7 +76,17 @@ export class DetectionService {
     if (!item.importable) {
       throw validationError({ message: item.reason ?? 'This item cannot be imported', details: { reason: 'not-importable' } });
     }
-    return this.deps.entities.save({ entity: await this.toEntity(item), isCreate: true });
+    const entity = await this.toEntity(item);
+    if (item.kind !== 'instruction') return this.deps.entities.save({ entity, isCreate: true });
+    // The file occupies a destination the app is about to own: back it up and clear the way
+    // first (the sync never overwrites a file it does not own), and put it back if the save fails.
+    const backup = await this.moveToBackup(item.path);
+    try {
+      return await this.deps.entities.save({ entity, isCreate: true });
+    } catch (err) {
+      await this.deps.fs.copyFile(backup, item.path);
+      throw err;
+    }
   }
 
   private locations(): Location[] {
@@ -79,6 +97,18 @@ export class DetectionService {
     return out;
   }
 
+  /** Copies `path` into `~/.ai-companion/_backups/<timestamp>/detected/…`, then removes it. Returns the copy. */
+  private async moveToBackup(path: string): Promise<string> {
+    const stamp = (this.deps.now?.() ?? new Date()).toISOString().replace(/[:.]/g, '-');
+    const rel = relative(this.deps.homedir, path);
+    const flat = (rel.startsWith('..') ? path : rel).replace(/^[\\/]+/, '').replace(/[\\/]+/g, '__');
+    const backup = join(workspacePath(this.deps.homedir), '_backups', stamp, 'detected', flat);
+    await this.deps.fs.mkdir(join(backup, '..'), { recursive: true });
+    await this.deps.fs.copyFile(path, backup);
+    await this.deps.fs.unlink(path);
+    return backup;
+  }
+
   private make(
     kind: DetectedKind,
     name: string,
@@ -87,7 +117,8 @@ export class DetectionService {
     rest: Pick<DetectedEntity, 'description' | 'path' | 'preview'> & { importable?: boolean; reason?: string },
   ): DetectedEntity {
     const { importable = true, reason, ...fields } = rest;
-    const key = { h: harness, k: kind, s: loc.scope, f: loc.folder, n: name };
+    // An instruction level can hold several files; the file tells them apart.
+    const key = { h: harness, k: kind, s: loc.scope, f: loc.folder, n: name, ...(kind === 'instruction' ? { p: rest.path } : {}) };
     return {
       id: Buffer.from(JSON.stringify(key), 'utf8').toString('base64url'),
       kind,
@@ -99,6 +130,54 @@ export class DetectionService {
       ...(reason !== undefined ? { reason } : {}),
       ...fields,
     };
+  }
+
+  // ---- instructions ----------------------------------------------------------
+
+  /**
+   * Instruction files of one level (Global, or a workspace folder) that the app
+   * does not own: regular files only (a symlink is ours or someone's wiring) and
+   * not the app's marked `.mdc`. Whether the level already has an Instruction is
+   * decided in `withoutCanonical`.
+   */
+  private async instructions(loc: Location, taken: ReadonlySet<string>): Promise<DetectedEntity[]> {
+    const workspace = this.deps.context.workspace;
+    const multi = (workspace?.folders.length ?? 0) > 1;
+    let name = 'default';
+    let level: Location = loc;
+    if (loc.scope === 'workspace') {
+      const [rootPath = loc.base, ...extraFolders] = workspace?.folders ?? [];
+      const ws = { rootPath, extraFolders };
+      name = multi && loc.folder !== undefined ? folderInstructionName(ws, loc.folder, taken) : workspaceInstructionName(ws);
+      level = multi ? loc : { scope: 'workspace', base: loc.base };
+    }
+    const files: Array<{ path: string; harness: DetectedHarness }> = [];
+    const claudeFiles = loc.scope === 'personal' ? ['.claude/CLAUDE.md', 'AGENTS.md'] : ['CLAUDE.md', '.claude/CLAUDE.md', 'AGENTS.md'];
+    for (const file of claudeFiles) files.push({ path: join(loc.base, file), harness: 'claude' });
+    if (loc.scope === 'workspace') {
+      const rules = join(loc.base, '.cursor', 'rules');
+      for (const rule of await this.names(rules)) {
+        if (rule.endsWith('.mdc')) files.push({ path: join(rules, rule), harness: 'cursor' });
+      }
+    }
+    const out: DetectedEntity[] = [];
+    for (const { path, harness } of files) {
+      try {
+        if ((await this.deps.fs.lstat(path)).kind !== 'file') continue;
+      } catch {
+        continue;
+      }
+      const raw = await this.tryRead(path);
+      if (raw === undefined || raw.trim() === '' || raw.includes(CURSOR_RULE_MDC_MARKER)) continue;
+      out.push(
+        this.make('instruction', name, harness, level, {
+          description: relative(loc.base, path),
+          path,
+          preview: { file: basename(path) },
+        }),
+      );
+    }
+    return out;
   }
 
   // ---- skills / agents -------------------------------------------------------
@@ -258,7 +337,13 @@ export class DetectionService {
       const t = translateHookToCursor(hook);
       if (t.ok) cursorKeys.add(JSON.stringify([t.event, t.item['matcher'] ?? null, t.item['command']]));
     }
+    // A level that already has an Instruction offers nothing to import: a file still
+    // in the way is reported by the sync instead.
+    const instructions = (await this.deps.entities.list('instruction')) as Instruction[];
+    const levelTaken = (d: DetectedEntity): boolean =>
+      instructions.some((e) => e.scopes[0] === d.scope && (d.scope === 'personal' || (e.scopeId === this.deps.context.workspace?.id && e.folder === d.folder)));
     return found.filter((d) => {
+      if (d.kind === 'instruction') return !levelTaken(d);
       if (d.kind !== 'hook') return !names.has(entityUrn(d.kind, d.name));
       const cursor = d.preview['cursor'] as { event: string; command: unknown; matcher?: unknown } | undefined;
       if (cursor !== undefined) return !cursorKeys.has(JSON.stringify([cursor.event, cursor.matcher ?? null, cursor.command]));
@@ -282,6 +367,11 @@ export class DetectionService {
       metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
       source: WORKSPACE_SOURCE,
     };
+    if (item.kind === 'instruction') {
+      const raw = await this.deps.fs.readFile(item.path);
+      const instruction: Instruction = { ...common, kind: 'instruction', description: '', content: stripFrontmatter(raw) };
+      return instruction;
+    }
     if (item.kind === 'skill' || item.kind === 'agent') {
       const raw = await this.deps.fs.readFile(item.path);
       const parsed = parseEntityFile({ kind: item.kind, name: item.name, raw, source: WORKSPACE_SOURCE });
@@ -346,6 +436,12 @@ export class DetectionService {
       return undefined;
     }
   }
+}
+
+/** A Cursor `.mdc` rule opens with `---` frontmatter; the instruction is only its body. */
+function stripFrontmatter(raw: string): string {
+  const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(raw);
+  return (match ? raw.slice(match[0].length) : raw).replace(/^\s*\n/, '');
 }
 
 /** Stable, slug-safe name for a hook (hooks have no natural name). */

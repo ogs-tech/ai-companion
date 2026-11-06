@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Box, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Divider, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
-import { Folder, Lock, Package, Plus, Search, X } from 'lucide-react';
+import { GitBranch, Globe, Layers, Package, Plus, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, ContainerHeader, FooterLink } from '../ds/ContainerChrome.js';
 import { useDetected } from '../../hooks/use-detected.js';
@@ -24,6 +24,7 @@ import { blankCustomization } from '../../lib/blank-customization.js';
 import { matchesQuery } from '../../lib/control-panel-filter.js';
 import { isWorkspaceInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
+import type { DetectedEntity } from '../../../shared/detected.js';
 
 interface LocalScope {
   scope: 'workspace';
@@ -58,6 +59,8 @@ export interface CustomizationsListProps {
   onNewActionForInstruction: (entity: Instruction) => void;
   /** Workspace only: a fresh, unsaved instruction for "+". */
   seedWorkspaceInstruction?: () => Instruction;
+  /** Multi-folder workspace only: a fresh, unsaved instruction for one folder; `takenNames` are the instruction names already used. */
+  seedFolderInstruction?: (folder: string, takenNames: ReadonlySet<string>) => Instruction;
   /** Workspace only: opens a Global entity read-only, with an "Editar no Início" action. */
   onOpenInherited: (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction') => void;
   /** Collapses the container to its header. Owned by the panel split, which sizes the container. */
@@ -90,6 +93,7 @@ export function CustomizationsList({
   onInstructionProperties,
   onNewActionForInstruction,
   seedWorkspaceInstruction,
+  seedFolderInstruction,
   onOpenInherited,
   collapsed = false,
   onToggleCollapsed,
@@ -350,6 +354,70 @@ export function CustomizationsList({
   const { data: detectedList } = useDetected(['skill', 'agent']);
   const detectedCount = (folder: string | null): number =>
     folder === null ? 0 : (detectedList ?? []).filter((d) => d.scope === 'workspace' && d.folder === folder && matchesQuery(query, d.name, d.description)).length;
+  const { data: instructionDetected } = useDetected(['instruction']);
+  const detectedInstructionAt = (folder: string | undefined): DetectedEntity | undefined =>
+    (instructionDetected ?? []).find((d) => d.kind === 'instruction' && d.scope === 'workspace' && d.folder === folder);
+  const detectedPersonalInstruction = (instructionDetected ?? []).find((d) => d.kind === 'instruction' && d.scope === 'personal');
+  const instructionNames = new Set((instructions ?? []).map((i) => i.name));
+  const folderInstructionOf = (folder: string): Instruction | undefined => workspaceInstructions.find((i) => i.folder === folder);
+  const instructionRowMatches = matchesQuery(query, 'instructions');
+  /** The level's Instructions row — hollow, detected or saved — plus any extra workspace-wide instructions nested under it. */
+  const workspaceInstructionRows = (depth: number): React.ReactNode => {
+    if (!showsInstructions || !localScope || seedWorkspaceInstruction === undefined) return null;
+    const wide = workspaceInstructions.filter((i) => i.folder === undefined);
+    const [primary, ...extras] = wide;
+    if (primary === undefined && (!instructionRowMatches || searching)) return null;
+    return (
+      <>
+        <InstructionTreeRow
+          kind="workspace"
+          testId={primary ? `workspace-instruction-row-${primary.name}` : 'workspace-instruction-row'}
+          depth={depth}
+          instruction={primary}
+          detected={detectedInstructionAt(undefined)}
+          seed={() => primary ?? seedWorkspaceInstruction()}
+          onOpen={onOpenInstruction}
+          onPreview={onPreviewEntity}
+          onProperties={onInstructionProperties}
+          onNewAction={onNewActionForInstruction}
+        />
+        {extras.map((instruction) => (
+          <InstructionTreeRow
+            key={instruction.urn}
+            kind="workspace"
+            label={instruction.name}
+            testId={`workspace-instruction-row-${instruction.name}`}
+            depth={depth + 1}
+            instruction={instruction}
+            seed={() => instruction}
+            onOpen={onOpenInstruction}
+            onPreview={onPreviewEntity}
+            onProperties={onInstructionProperties}
+            onNewAction={onNewActionForInstruction}
+          />
+        ))}
+      </>
+    );
+  };
+  const folderInstructionRow = (folder: string, depth: number): React.ReactNode => {
+    if (!showsInstructions || seedFolderInstruction === undefined) return null;
+    const instruction = folderInstructionOf(folder);
+    if (instruction === undefined && (!instructionRowMatches || searching)) return null;
+    return (
+      <InstructionTreeRow
+        kind="folder"
+        testId={`folder-instruction-row-${routing.aliases[folder] ?? folder}`}
+        depth={depth}
+        instruction={instruction}
+        detected={detectedInstructionAt(folder)}
+        seed={() => instruction ?? seedFolderInstruction(folder, instructionNames)}
+        onOpen={onOpenInstruction}
+        onPreview={onPreviewEntity}
+        onProperties={onInstructionProperties}
+        onNewAction={onNewActionForInstruction}
+      />
+    );
+  };
   const originCount = (folder: string | null): number =>
     detectedCount(folder) +
     [...(skillList ?? []), ...(agentList ?? [])].filter(
@@ -366,23 +434,45 @@ export function CustomizationsList({
       { folder: null, label: 'Workspace' },
       ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string })),
     ];
+    const integrationsCount = (buckets['local:hook']?.[MINE_KEY] ?? 0) + (buckets['local:mcp']?.[MINE_KEY] ?? 0);
     return origins.map(({ folder, label }) => {
       const scoped = { ...localScope, folder };
+      const instruction = folder === null ? workspaceInstructions.find((i) => i.folder === undefined) : folderInstructionOf(folder);
+      const hasDetected = detectedInstructionAt(folder ?? undefined) !== undefined;
+      const count = originCount(folder) + (instruction !== undefined ? 1 : 0) + (folder === null ? integrationsCount : 0);
+      // A level with nothing in it stays put but collapsed and dimmed, so the place to create does not move.
+      const empty = count === 0 && !hasDetected;
       return (
         <PersistedGroup
           key={folder ?? '__shared'}
-          glyph={Folder}
+          glyph={folder === null ? Layers : GitBranch}
           label={label}
-          count={originCount(folder)}
+          count={count}
           storageKey={groupKey('local', `folder:${folder ?? 'shared'}`)}
           testId={`origin-folder-${label}`}
           forceOpen={searching}
           depth={base}
-          defaultOpen
+          defaultOpen={!empty}
+          muted={empty}
         >
+          {folder === null ? workspaceInstructionRows(base + 1) : folderInstructionRow(folder, base + 1)}
           {showsType('skill') && <EntityTreeGroup kind="skill" label="Skills" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
           {showsType('agent') && <EntityTreeGroup kind="agent" label="Agents" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
-          {folder === routing.folders[0] && localTypes({ kind: 'bucket', key: MINE_KEY, depth: base + 1 }, ['hook', 'mcp'])}
+          {folder === null && (showsType('hook') || showsType('mcp')) && (
+            <PersistedGroup
+              glyph={ENTITY_GROUP_ICONS.mcp}
+              label="Integrações"
+              count={integrationsCount}
+              storageKey={groupKey('local', 'folder:shared:integrations')}
+              testId="type-local-integrations"
+              forceOpen={searching}
+              depth={base + 1}
+              defaultOpen
+              muted={integrationsCount === 0}
+            >
+              {localTypes({ kind: 'bucket', key: MINE_KEY, depth: base + 2 }, ['hook', 'mcp'])}
+            </PersistedGroup>
+          )}
         </PersistedGroup>
       );
     });
@@ -394,28 +484,14 @@ export function CustomizationsList({
         <InstructionTreeRow
           kind="personal"
           instruction={personalInstruction}
+          detected={detectedPersonalInstruction}
           seed={() => blankCustomization('instruction') as Instruction}
           onOpen={onOpenInstruction}
           onPreview={onPreviewEntity}
           onNewAction={onNewActionForInstruction}
         />
       )}
-      {showsInstructions &&
-        workspaceInstructions.map((instruction) => (
-          <InstructionTreeRow
-            key={instruction.urn}
-            kind="workspace"
-            label={instruction.name}
-            testId={`workspace-instruction-row-${instruction.name}`}
-            depth={base}
-            instruction={instruction}
-            seed={() => instruction}
-            onOpen={onOpenInstruction}
-            onPreview={onPreviewEntity}
-            onProperties={onInstructionProperties}
-            onNewAction={onNewActionForInstruction}
-          />
-        ))}
+      {!routing.multi && workspaceInstructionRows(base)}
       {routing.multi && localScope ? (
         <>
           {originGroups()}
@@ -456,10 +532,16 @@ export function CustomizationsList({
     <List disablePadding>
       {localOrigins.census}
       {globalOrigins.census}
-      <ScopeSection section="local" glyph={Folder} label="Neste workspace" count={localCount} storageKey={scopeKey('local')} forceOpen={searching} defaultOpen hidden={isEmpty && searching}>
-        {localBody}
-      </ScopeSection>
-      <ScopeSection section="global" glyph={Lock} label="Do Início" tooltip="Somente leitura aqui — edite no Início" count={globalCount} storageKey={scopeKey('global')} forceOpen={searching} defaultOpen={false} hidden={reported && globalCount === 0}>
+ {routing.multi ? (
+        // Multi-folder: the levels are the top of the tree — Workspace, then one group per folder.
+        <Box data-testid="control-panel-levels" sx={isEmpty && searching ? { display: 'none' } : {}}>{localBody}</Box>
+      ) : (
+        <ScopeSection section="local" glyph={Layers} label="Workspace" count={localCount} storageKey={scopeKey('local')} forceOpen={searching} defaultOpen hidden={isEmpty && searching}>
+          {localBody}
+        </ScopeSection>
+      )}
+      {!(reported && globalCount === 0) && !(isEmpty && searching) && <Divider sx={{ mx: 1, my: 0.75 }} />}
+      <ScopeSection section="global" glyph={Globe} label="Global" tooltip="Somente leitura aqui — edite no Início" count={globalCount} storageKey={scopeKey('global')} forceOpen={searching} defaultOpen={false} hidden={reported && globalCount === 0}>
         {globalBody}
       </ScopeSection>
     </List>

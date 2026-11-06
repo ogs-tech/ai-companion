@@ -87,7 +87,7 @@ describe('global-instruction — end-to-end syncEntity to the Claude adapter', (
     expect(isAbsolute(target)).toBe(true);
   });
 
-  it('syncEntity with preexisting file at ~/.claude/CLAUDE.md produces conflict + backup', async () => {
+  it('syncEntity leaves a preexisting file at ~/.claude/CLAUDE.md untouched and says why', async () => {
     const { adapterManager, entityRepository, fs } = await setup();
     const entity = globalInstruction();
     await entityRepository.save(entity);
@@ -101,20 +101,12 @@ describe('global-instruction — end-to-end syncEntity to the Claude adapter', (
       (r) => r.adapter === 'claude' && r.destination === preexistingPath,
     );
     expect(claudeResult).toBeDefined();
-    expect(claudeResult!.status).toBe('conflict');
-    expect(claudeResult!.details?.action).toBe('overwritten');
+    expect(claudeResult!.status).toBe('ok');
+    expect(claudeResult!.details?.skipped).toBe('foreign-file');
+    expect(claudeResult!.message).toContain(preexistingPath);
 
-    const backupPath = claudeResult!.details?.backupPath;
-    expect(backupPath).toBeDefined();
-    expect(backupPath!.startsWith('/workspace/_backups/')).toBe(true);
-
-    const stat = await fs.lstat(preexistingPath);
-    expect(stat.kind).toBe('symlink');
-    const target = await fs.readlink(preexistingPath);
-    expect(target).toBe('/workspace/instructions/default.md');
-
-    const backedUp = await fs.lstat(backupPath!);
-    expect(backedUp.kind).toBe('file');
+    expect((await fs.lstat(preexistingPath)).kind).toBe('file');
+    expect(await fs.readFile(preexistingPath)).toBe('prior content');
   });
 
   it('all destinations returned for the global-instruction entity are absolute', async () => {

@@ -40,11 +40,11 @@ describe('SessionStatusBadge', () => {
     expect(pill).toHaveAttribute('data-variant', 'running');
   });
 
-  it('shows an "Encerrada" pill for an exited session', async () => {
+  it('shows an "Fechado" pill for an exited session', async () => {
     call.mockImplementation(async () => ok([snapshot({ status: 'exited' })]));
     renderWithQuery(<SessionStatusBadge anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
     const pill = await screen.findByTestId('status-pill-session-status-entity:urn:skill:foo');
-    expect(pill).toHaveTextContent('Encerrada');
+    expect(pill).toHaveTextContent('Fechado');
     expect(pill).toHaveAttribute('data-variant', 'exited');
   });
 });

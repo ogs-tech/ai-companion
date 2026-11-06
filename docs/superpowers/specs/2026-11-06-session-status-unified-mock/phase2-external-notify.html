@@ -1,0 +1,101 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>phase2-external-notify</title></head><body style="margin:0;padding:24px;background:#0b1220;color:#F2EEE5;font-family:Space Grotesk,-apple-system,sans-serif"><h2>Fase 2: sessões externas e avisos</h2>
+<p class="subtitle">Sessões abertas fora do app entram na mesma lista, com os mesmos 4 estados. Precisão honesta: o que é medido e o que é estimado ficam visíveis.</p>
+
+<style>
+  .p2{--canvas:#0F1828;--paper:#16223A;--rail:#1B2944;--ink:#F2EEE5;--mute:#8D9AB3;--faint:#5C6A85;--line:rgba(242,238,229,.09);--azul:#5B79E0;--verde:#3FB97A;--ambar:#E5B547;
+      font-family:"Space Grotesk",-apple-system,sans-serif;color:var(--ink);font-size:13px}
+  .p2 *{box-sizing:border-box}
+  .p2 .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 8px;margin-bottom:6px}
+  .p2 .cap{font-size:13px;color:#8a8f98;margin:18px 0 6px}
+  .p2 .ind{width:18px;height:18px;flex:none;display:inline-grid;place-items:center;font-weight:700;font-size:13px}
+  .p2 .w{color:var(--verde)}.p2 .q{color:var(--ambar)}.p2 .i,.p2 .x{color:var(--faint)}
+  .p2 .w .g{animation:spin 2.4s linear infinite;display:inline-block}.p2 .q .g{animation:pulse 1.4s ease-in-out infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{opacity:.35}}
+  @media (prefers-reduced-motion:reduce){.p2 .g{animation:none!important}}
+  .p2 .est{opacity:.85;border:1.5px dashed currentColor;border-radius:50%}
+  .p2 .row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px}
+  .p2 .row:hover{background:var(--rail)}
+  .p2 .row.rw{box-shadow:inset 3px 0 var(--verde)}.p2 .row.rq{box-shadow:inset 3px 0 var(--ambar);background:rgba(229,181,71,.07)}.p2 .row.dimr{opacity:.62}
+  .p2 .nm{font-weight:600}.p2 .sub{color:var(--mute);font-size:12px}
+  .p2 .main{flex:1;min-width:0}.p2 .rt{text-align:right;color:var(--mute);font-size:12px;line-height:1.35;font-variant-numeric:tabular-nums}
+  .p2 .ext{font-size:11px;color:var(--azul);border:1px solid rgba(91,121,224,.4);border-radius:4px;padding:0 6px;margin-left:8px;font-weight:400}
+  .p2 .pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid rgba(229,181,71,.45);color:var(--ambar);margin-right:6px}
+  .p2 .acts{display:flex;gap:6px;margin-left:8px}
+  .p2 .b{border:1px solid var(--line);background:none;color:var(--ink);border-radius:6px;padding:3px 9px;font:inherit;font-size:12px}
+  .p2 .b.p{background:var(--azul);border-color:var(--azul)}
+  .p2 .b[disabled]{opacity:.4}
+  .p2 .banner{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border:1px solid rgba(91,121,224,.4);background:rgba(91,121,224,.08);border-radius:8px;line-height:1.5}
+  .p2 .banner small{display:block;color:var(--mute);font-size:12px}
+  .p2 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  .p2 .notif{display:flex;gap:10px;background:#0b1220;border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:340px}
+  .p2 .notif .ico{width:34px;height:34px;border-radius:8px;background:var(--rail);display:grid;place-items:center;color:var(--ambar);font-weight:700}
+  .p2 .notif b{display:block}.p2 .notif span{color:var(--mute);font-size:12px}
+  .p2 .dock{display:inline-flex;margin-top:10px;position:relative;background:rgba(255,255,255,.06);border-radius:14px;padding:8px}
+  .p2 .dock i{width:42px;height:42px;border-radius:10px;background:var(--rail);display:grid;place-items:center;font-style:normal;color:var(--ink)}
+  .p2 .dock em{position:absolute;top:2px;right:2px;min-width:20px;height:20px;border-radius:10px;background:#e5484d;color:#fff;font-style:normal;font-size:12px;display:grid;place-items:center;padding:0 5px;font-weight:700}
+  .p2 .set{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--line)}
+  .p2 .set:last-child{border:0}.p2 .set .main small{display:block;color:var(--mute);font-size:12px}
+  .p2 .sw{width:30px;height:17px;border-radius:9px;background:var(--faint);position:relative;flex:none}
+  .p2 .sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:left .15s}
+  .p2 .sw.on{background:var(--verde)}.p2 .sw.on::after{left:15px}
+  .p2 .tbl{width:100%;border-collapse:collapse;font-size:12px}
+  .p2 .tbl td,.p2 .tbl th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--mute);font-weight:400;vertical-align:top}
+  .p2 .tbl td:first-child{color:var(--ink);white-space:nowrap}
+</style>
+
+<div class="p2">
+
+  <div class="cap">1. Lista com sessões externas (mesma ordem e mesmos estados)</div>
+  <div class="panel">
+    <div class="row rq"><span class="ind q"><span class="g">!</span></span><div class="main"><div class="nm">fix-migration<span class="ext">externa · VS Code</span></div><div class="sub"><span class="pill">Permissão: rm -rf dist</span>claude · espera 4m</div></div>
+      <div class="acts"><button class="b">Observar</button></div></div>
+    <div class="row rw"><span class="ind w"><span class="g">✻</span></span><div class="main"><div class="nm">refactor-auth<span class="ext">externa · iTerm</span></div><div class="sub">Bash: npm test · 48s</div></div>
+      <div class="acts"><button class="b">Observar</button></div></div>
+    <div class="row rw"><span class="ind w est"><span class="g">✻</span></span><div class="main"><div class="nm">spike-cache<span class="ext">externa · tmux</span></div><div class="sub">estimado pelo transcript · sem sinais instalados</div></div>
+      <div class="acts"><button class="b">Observar</button></div></div>
+    <div class="row dimr"><span class="ind i">◌</span><div class="main"><div class="nm">docs-pass<span class="ext">externa · iTerm</span></div><div class="sub">claude · ociosa há 12 min</div></div>
+      <div class="acts"><button class="b p">Assumir aqui</button></div></div>
+    <div class="row rw"><span class="ind w"><span class="g">✻</span></span><div class="main"><div class="nm">checkout-flow</div><div class="sub">Edit CartService.ts · 2m14s</div></div><div class="rt">$1,42</div></div>
+  </div>
+  <p class="sub" style="margin:4px 4px 0">Borda tracejada no indicador = estado <b>estimado</b> (sem hook). Sólido = informado pela própria sessão. A forma do estado não muda.</p>
+
+  <div class="cap">2. Pedido de consentimento, uma vez (mexe em arquivos seus, então não é silencioso)</div>
+  <div class="banner">
+    <span class="ind" style="color:var(--azul)">i</span>
+    <div style="flex:1">Ver o estado exato de sessões fora do app
+      <small>Adiciona 3 hooks em <code>~/.claude/settings.json</code> e <code>~/.cursor/hooks.json</code>. Não alteram suas outras chaves e ficam inativos fora desta lista. Remover a qualquer momento em Configurações.</small></div>
+    <div class="acts"><button class="b">Só estimado</button><button class="b p">Instalar sinais</button></div>
+  </div>
+
+  <div class="cap">3. O que "Observar" e "Assumir aqui" fazem</div>
+  <div class="panel"><table class="tbl">
+    <tr><td>Observar</td><td>Abre a conversa em leitura, acompanhando o transcript ao vivo. Não envia nada ao processo externo. Sempre disponível.</td></tr>
+    <tr><td>Assumir aqui</td><td>Retoma a conversa dentro do app (<code>--resume</code>). Só habilitado quando a sessão externa está ociosa ou fechada, para nunca ter dois processos na mesma conversa. O app não encerra o processo externo.</td></tr>
+  </table></div>
+
+  <div class="cap">4. Avisos fora do app</div>
+  <div class="two">
+    <div>
+      <div class="notif"><div class="ico">!</div><div><b>fix-migration pede permissão</b><span>rm -rf dist · claude · externa</span></div></div>
+      <div class="dock"><i>AI</i><em>2</em></div>
+      <p class="sub" style="margin-top:8px">Clicar leva direto à sessão (ou ao modo Observar, se externa). O badge do Dock conta só "Pergunta".</p>
+    </div>
+    <div class="panel" style="padding:4px 10px">
+      <div class="set"><div class="main">Avisar quando uma sessão fizer uma pergunta<small>Só na transição Trabalhando para Pergunta. Nunca por ociosidade.</small></div><span class="sw on"></span></div>
+      <div class="set"><div class="main">Avisar quando um turno longo terminar<small>Turnos acima de 2 minutos. Útil para builds e testes.</small></div><span class="sw"></span></div>
+      <div class="set"><div class="main">Incluir sessões externas</div><span class="sw on"></span></div>
+      <div class="set"><div class="main">Silenciar enquanto eu estiver nessa sessão<small>Janela em foco e aba aberta.</small></div><span class="sw on"></span></div>
+      <div class="set"><div class="main">Badge no Dock</div><span class="sw on"></span></div>
+    </div>
+  </div>
+
+  <div class="cap">5. Como detectar sem custar CPU</div>
+  <div class="panel"><table class="tbl">
+    <tr><th>Mecanismo</th><th>Custo e regra</th></tr>
+    <tr><td>Hooks globais (precisão)</td><td>Quando a variável de sinal do app não existe, o hook grava em <code>~/.ai-companion/signals/external/&lt;session_id&gt;.jsonl</code>. Um watcher do SO (FSEvents) a pasta inteira. Zero polling.</td></tr>
+    <tr><td>Transcript JSONL (fallback)</td><td>Watcher em <code>~/.claude/projects</code>. Lê só os últimos ~8 KB do arquivo que mudou. Estado estimado: modificado há menos de 3s = trabalhando.</td></tr>
+    <tr><td>Processos vivos</td><td>Um <code>ps</code> a cada 5s só se a janela está visível e há candidatas; 30s com a janela oculta; nada se o recurso está desligado. Serve para saber "fechado" e o terminal de origem.</td></tr>
+    <tr><td>Cursor externo</td><td>Mesmo caminho dos hooks globais (<code>hooks.json</code> já é global). Sem hook, só o processo vivo: aparece como ocioso/estimado, nunca como "Pergunta".</td></tr>
+  </table></div>
+</div>
+</body></html>

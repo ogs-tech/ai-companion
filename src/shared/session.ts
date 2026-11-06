@@ -89,6 +89,8 @@ export interface SessionSnapshot {
   activitySince?: number;
   /** Set only while `activity === 'needs-input'`. */
   attention?: SessionAttention;
+  /** Set only while `activity === 'working'` and a hook reported the tool: `Edit CartService.ts`. */
+  activityDetail?: string;
 }
 
 /**
@@ -119,6 +121,10 @@ export const SESSION_EXIT_CHANNEL = 'session:exit' as const;
 /** Push channel main→renderer fired whenever a running session's `activity` changes. */
 export const SESSION_ACTIVITY_CHANNEL = 'session:activity' as const;
 
+/** One batched push (250 ms window) with every session whose state or detail changed in it. */
 export interface SessionActivityEvent {
-  sessionId: string;
+  sessionIds: string[];
 }
+
+/** Coalescing window for `SESSION_ACTIVITY_CHANNEL`. */
+export const SESSION_ACTIVITY_BATCH_MS = 250;

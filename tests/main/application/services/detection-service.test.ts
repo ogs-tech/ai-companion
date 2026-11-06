@@ -6,7 +6,7 @@ import type { Entity } from '../../../../src/shared/entity.js';
 const HOME = '/home/u';
 const FOLDER = '/repos/app';
 
-function make(opts: { canonical?: Entity[]; open?: boolean } = {}) {
+function make(opts: { canonical?: Entity[]; open?: boolean; folders?: string[] } = {}) {
   const fs = new InMemoryFileSystem();
   const saved: Entity[] = [];
   const service = new DetectionService({
@@ -19,7 +19,8 @@ function make(opts: { canonical?: Entity[]; open?: boolean } = {}) {
         return { entity, syncReport: [] };
       },
     },
-    context: { workspace: opts.open === false ? null : { id: 'ws-1', folders: [FOLDER] } },
+    context: { workspace: opts.open === false ? null : { id: 'ws-1', folders: opts.folders ?? [FOLDER] } },
+    now: () => new Date('2026-11-05T12:00:00.000Z'),
   });
   return { fs, service, saved };
 }
@@ -113,5 +114,63 @@ describe('DetectionService', () => {
     const [bad] = await service.list();
     await expect(service.import(bad!.id)).rejects.toMatchObject({ kind: 'validation' });
     await expect(service.import('nope')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});
+
+describe('DetectionService — instructions', () => {
+  const instructionEntity = (over: Partial<Entity>): Entity =>
+    ({ urn: 'urn:instruction:x', kind: 'instruction', name: 'x', description: '', scopes: ['personal'], metadata: { version: '1.0.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: 'c', ...over }) as Entity;
+
+  it('detects the Global files and a workspace folder\'s files that the app does not own', async () => {
+    const { fs, service } = make();
+    fs.createFile(`${HOME}/AGENTS.md`, '# mine');
+    fs.createFile(`${FOLDER}/CLAUDE.md`, '# repo');
+    fs.createFile(`${FOLDER}/.cursor/rules/style.mdc`, '---\nalwaysApply: true\n---\nUse tabs');
+    const list = await service.list({ kinds: ['instruction'] });
+    expect(list.map((d) => `${d.scope}:${d.harness}:${d.preview['file']}`).sort()).toEqual([
+      'personal:claude:AGENTS.md',
+      'workspace:claude:CLAUDE.md',
+      'workspace:cursor:style.mdc',
+    ]);
+    expect(list.find((d) => d.scope === 'personal')).toMatchObject({ name: 'default', importable: true });
+    // Single-folder workspace: the workspace-wide level, so no folder.
+    expect(list.find((d) => d.scope === 'workspace')?.folder).toBeUndefined();
+  });
+
+  it('ignores symlinks, the app\'s marked rules and empty files', async () => {
+    const { fs, service } = make();
+    fs.createFile('/data/instructions/default.md', 'x');
+    await fs.mkdir(`${HOME}/.claude`, { recursive: true });
+    await fs.symlink({ target: '/data/instructions/default.md', path: `${HOME}/.claude/CLAUDE.md` });
+    fs.createFile(`${FOLDER}/.cursor/rules/app.mdc`, '---\nx-ai-companion-managed: true\n---\nbody');
+    fs.createFile(`${FOLDER}/AGENTS.md`, '  \n');
+    expect(await service.list({ kinds: ['instruction'] })).toEqual([]);
+  });
+
+  it('tags a folder-level file with its folder in a multi-folder workspace and names it after the folder', async () => {
+    const { fs, service } = make({ folders: [FOLDER, '/repos/ui-core'] });
+    fs.createFile('/repos/ui-core/AGENTS.md', '# ui');
+    const [item] = await service.list({ kinds: ['instruction'] });
+    expect(item).toMatchObject({ scope: 'workspace', folder: '/repos/ui-core', name: 'ui-core' });
+  });
+
+  it('offers nothing for a level that already has an Instruction', async () => {
+    const { fs, service } = make({
+      canonical: [instructionEntity({ urn: 'urn:instruction:default', name: 'default' }), instructionEntity({ urn: 'urn:instruction:app', name: 'app', scopes: ['workspace'], scopeId: 'ws-1' })],
+    });
+    fs.createFile(`${HOME}/AGENTS.md`, '# mine');
+    fs.createFile(`${FOLDER}/AGENTS.md`, '# repo');
+    expect(await service.list({ kinds: ['instruction'] })).toEqual([]);
+  });
+
+  it('imports a file as the level\'s Instruction, backing it up and clearing the destination first', async () => {
+    const { fs, service, saved } = make();
+    fs.createFile(`${FOLDER}/.cursor/rules/style.mdc`, '---\nalwaysApply: true\n---\nUse tabs\n');
+    const [item] = await service.list({ kinds: ['instruction'] });
+    await service.import(item!.id);
+    expect(saved[0]).toMatchObject({ kind: 'instruction', name: 'app', scopes: ['workspace'], scopeId: 'ws-1', content: 'Use tabs\n' });
+    expect((await fs.lstat(`${FOLDER}/.cursor/rules/style.mdc`)).kind).toBe('none');
+    const backup = await fs.readFile('/home/u/.ai-companion/_backups/2026-11-05T12-00-00-000Z/detected/repos__app__.cursor__rules__style.mdc');
+    expect(backup).toContain('Use tabs');
   });
 });

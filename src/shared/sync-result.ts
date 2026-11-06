@@ -3,7 +3,7 @@ export type SyncStatus = 'ok' | 'conflict' | 'error';
 export interface SyncResultDetails {
   backupPath?: string;
   replacedTarget?: string;
-  skipped?: 'no-linked-repos' | 'not-found' | 'unsupported-by-target';
+  skipped?: 'no-linked-repos' | 'not-found' | 'unsupported-by-target' | 'foreign-file';
   reason?: string;
   action?: 'overwritten';
 }

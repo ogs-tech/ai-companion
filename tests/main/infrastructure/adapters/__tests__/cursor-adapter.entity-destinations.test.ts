@@ -112,7 +112,18 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
         content: expect.stringContaining('alwaysApply: true'),
         ownershipMarker: CURSOR_RULE_MDC_MARKER,
         ownershipCheck: 'includes',
+        keepForeign: true,
       },
     ]);
+  });
+
+  it('routes a folder instruction to <folder>/.cursor/rules/<name>.mdc', async () => {
+    const ins: Instruction = {
+      urn: 'urn:instruction:ui-core', kind: 'instruction', name: 'ui-core',
+      description: '', scopes: ['workspace'], scopeId: 'proj-1', folder: '/repos/ui-core', metadata: meta,
+      source: WORKSPACE_SOURCE, content: 'body',
+    };
+    const [dest] = await adapter.resolveEntityDestinations({ entity: ins });
+    expect(dest).toMatchObject({ destination: '/repos/ui-core/.cursor/rules/ui-core.mdc', strategy: 'write', keepForeign: true });
   });
 });

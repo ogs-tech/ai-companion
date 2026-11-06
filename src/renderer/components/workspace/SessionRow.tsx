@@ -4,6 +4,7 @@ import type { SessionAttention } from '../../../shared/session.js';
 import {
   attentionLabel,
   FILTER_GLYPHS,
+  FILTER_LABELS,
   formatIdleFor,
   formatWait,
   type SessionRowState,
@@ -34,6 +35,10 @@ export interface SessionRowProps {
   waitingSince?: number | null;
   /** Epoch ms an `idle` row stopped, for "há 3min". */
   idleSince?: number | null;
+  /** Epoch ms a `working` row's turn started, for the client-side elapsed time. */
+  workingSince?: number | null;
+  /** What a `working` row is doing right now ("Edit CartService.ts"), when a hook said. */
+  activityDetail?: string | undefined;
   /** Epoch ms "now", injected so waiting time ticks and tests stay deterministic. */
   now?: number;
   /** The transcript's reading of this conversation; absent while a just-spawned session has yet to write one. */
@@ -58,12 +63,7 @@ export interface SessionRowProps {
  * focus ring is visible, because this is the only way to reach a session once
  * its tab is closed.
  */
-const ROW_NAMES: Record<SessionRowState, string> = {
-  'needs-input': 'Precisa de você',
-  working: 'Trabalhando',
-  idle: 'Terminou',
-  exited: 'Encerrada',
-};
+const ROW_NAMES: Record<SessionRowState, string> = FILTER_LABELS;
 
 const INDICATOR_COLORS: Record<
   SessionRowState,
@@ -83,6 +83,8 @@ export function SessionRow({
   attention,
   waitingSince = null,
   idleSince = null,
+  workingSince = null,
+  activityDetail,
   now,
   history,
   onOpen,
@@ -240,7 +242,7 @@ export function SessionRow({
               noWrap
               sx={{ fontSize: '0.625rem', color: 'text.secondary', flexGrow: 1, minWidth: 0 }}
             >
-              {harnessText}
+              {working && activityDetail ? activityDetail : harnessText}
             </Typography>
             <Typography
               component="span"
@@ -255,7 +257,9 @@ export function SessionRow({
             >
               {needsInput && waitingSince !== null && now !== undefined
                 ? formatWait(waitingSince, now)
-                : state === 'idle' && idleSince !== null && now !== undefined
+                : working && workingSince !== null && now !== undefined
+                  ? formatDuration(Math.max(0, now - workingSince))
+                  : state === 'idle' && idleSince !== null && now !== undefined
                   ? formatIdleFor(idleSince, now)
                   : history
                     ? `${formatWhen(history.endedAt)} · ${formatDuration(history.durationMs)}`

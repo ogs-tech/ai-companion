@@ -47,8 +47,8 @@ describe('CustomizationsList', () => {
 
     expect(await screen.findByTestId('tree-skill-deploy')).toBeVisible();
     expect(screen.queryByTestId('tree-skill-lint')).not.toBeInTheDocument();
-    expect(screen.getByTestId('control-panel-section-local')).toHaveTextContent('Neste workspace');
-    expect(screen.getByTestId('control-panel-section-global')).toHaveTextContent('Do Início');
+    expect(screen.getByTestId('control-panel-section-local')).toHaveTextContent('Workspace');
+    expect(screen.getByTestId('control-panel-section-global')).toHaveTextContent('Global');
     expect(screen.queryByTestId('origin-meta-global')).not.toBeInTheDocument();
     // Global's section starts closed: the workspace's own items stay in view.
     await waitFor(() => expect(screen.getByTestId('tree-inherited-skill-lint')).not.toBeVisible());

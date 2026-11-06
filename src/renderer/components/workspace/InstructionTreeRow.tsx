@@ -1,4 +1,4 @@
-import { Stack } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { useState } from 'react';
 import { Eye, ScrollText, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
@@ -9,19 +9,104 @@ import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
-import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
+import { useImportDetected } from '../../hooks/use-detected.js';
+import { useSettings } from '../../hooks/use-settings.js';
+import type { DetectedEntity } from '../../../shared/detected.js';
 import type { Instruction } from '../../../shared/entity.js';
+import type { EntitySyncState } from '../../../shared/sync-result.js';
 
-type InstructionRowKind = 'personal' | 'workspace';
+type InstructionRowKind = 'personal' | 'workspace' | 'folder';
 
 const ROW_COPY: Record<InstructionRowKind, { label: string; removeLabel?: (name: string) => string }> = {
-  personal: { label: 'instructions' },
+  personal: { label: 'Instructions' },
   workspace: {
-    label: 'instructions',
+    label: 'Instructions',
     removeLabel: (name) => `Remover as instructions deste workspace (${name})?`,
   },
+  folder: {
+    label: 'Instructions',
+    removeLabel: (name) => `Remover as instructions desta pasta (${name})?`,
+  },
 };
+
+const HARNESS_CHIPS: ReadonlyArray<{ id: 'claude' | 'cursor'; label: string }> = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'cursor', label: 'Cursor' },
+];
+
+/** Which harnesses an instruction is adapted for: one chip per enabled harness, green once its file is in sync. */
+function HarnessChips({ state }: { state: EntitySyncState | undefined }): React.ReactElement | null {
+  const { data: settings } = useSettings();
+  const enabled = HARNESS_CHIPS.filter(({ id }) => settings?.adapters?.[id]?.enabled ?? id === 'claude');
+  if (enabled.length === 0) return null;
+  return (
+    <Stack direction="row" spacing={0.25} data-testid="harness-chips">
+      {enabled.map(({ id, label }) => (
+        <Box
+          key={id}
+          component="span"
+          data-testid={`harness-chip-${id}`}
+          data-synced={state === 'synced'}
+          sx={(theme) => ({
+            fontSize: '0.625rem',
+            lineHeight: 1,
+            px: 0.625,
+            py: 0.375,
+            borderRadius: `${theme.ogs.radius.xs}px`,
+            border: `1px solid ${state === 'synced' ? theme.palette.success.main : theme.palette.divider}`,
+            color: state === 'synced' ? theme.palette.success.main : theme.palette.text.secondary,
+          })}
+        >
+          {label}
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+/** The detected file at the end of the row: its name, then a quiet "Aplicar" — one action per row. */
+function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; onApply: () => void; busy: boolean }): React.ReactElement {
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
+      <Box
+        component="span"
+        data-testid="detected-file"
+        sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem', color: 'text.disabled', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 })}
+      >
+        {String(detected.preview['file'] ?? detected.description)}
+      </Box>
+      <Box
+        component="button"
+        type="button"
+        disabled={busy}
+        data-testid="detected-apply"
+        aria-label={`Aplicar ${String(detected.preview['file'] ?? 'arquivo detectado')} como instructions`}
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          onApply();
+        }}
+        sx={(theme) => ({
+          font: 'inherit',
+          fontSize: '0.75rem',
+          color: theme.palette.info.main,
+          background: 'none',
+          border: 0,
+          borderRadius: `${theme.ogs.radius.xs}px`,
+          px: 0.5,
+          py: 0.25,
+          cursor: 'pointer',
+          flexShrink: 0,
+          '&:hover': { bgcolor: `${theme.palette.info.main}24` },
+          '&:disabled': { opacity: 0.5, cursor: 'default' },
+        })}
+      >
+        Aplicar
+      </Box>
+      <SyncDot state="detected" />
+    </Stack>
+  );
+}
 
 interface InstructionTreeRowProps {
   kind: InstructionRowKind;
@@ -40,6 +125,12 @@ interface InstructionTreeRowProps {
   label?: string;
   /** Tree nesting level, matching `FolderTree`'s `TreeNode` indent formula (`pl: 1.5 + depth * 2`). Defaults to `0` (top-level, unindented). */
   depth?: number;
+  /**
+   * A file of this level that the app does not own, found in a harness's own config. While the
+   * level has no Instruction, the row offers it ("Aplicar"); a click on the row itself still
+   * starts an empty one.
+   */
+  detected?: DetectedEntity | undefined;
 }
 
 /**
@@ -48,13 +139,26 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0 }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
   const syncStates = useEntitySyncStates();
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const menuTestId = testId ? `${testId}-menu` : `${kind}-instruction-menu`;
   const invalidate = useInvalidateInstructions();
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const importer = useImportDetected();
+  const offered = instruction == null ? detected : undefined;
+  const apply = (item: DetectedEntity): void =>
+    importer.mutate(
+      { id: item.id },
+      {
+        onSuccess: (result) => {
+          const imported = (result as { entity?: Instruction } | undefined)?.entity;
+          if (imported) onOpen(imported, false);
+        },
+        onError: (err) => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) }),
+      },
+    );
   const canDelete = instruction != null && copy.removeLabel !== undefined;
   const rowMenu = useRowContextMenu<Instruction>();
   const rowMenuTarget = rowMenu.state?.target;
@@ -90,22 +194,25 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         glyph={ScrollText}
         primary={label ?? copy.label}
         labelVariant="mono"
-        accentColor={ENTITY_ACCENT_COLOR.instruction}
+        muted={instruction == null && offered === undefined}
         onClick={() => onOpen(instruction ?? seed(), !instruction)}
         onContextMenu={(e) => {
           if (!instruction) return;
           rowMenu.openMenu(e, instruction);
         }}
-        {...(instruction
-          ? {
-              badge: (
-                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                  <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
-                  {syncStates[instruction.urn] && <SyncDot state={syncStates[instruction.urn]!} />}
-                </Stack>
-              ),
-            }
-          : {})}
+        badge={
+          instruction ? (
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+              <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
+              <HarnessChips state={syncStates[instruction.urn]} />
+              {syncStates[instruction.urn] && <SyncDot state={syncStates[instruction.urn]!} />}
+            </Stack>
+          ) : offered ? (
+            <DetectedBadge detected={offered} onApply={() => apply(offered)} busy={importer.isPending} />
+          ) : (
+            <SyncDot state="missing" />
+          )
+        }
         {...(instruction
           ? { actions: <RowMenuButton testId={menuTestId} label={`Ações de ${copy.label}`} onOpen={(e) => rowMenu.openMenu(e, instruction)} /> }
           : {})}

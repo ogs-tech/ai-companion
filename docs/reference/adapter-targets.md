@@ -128,6 +128,21 @@ canonical one with the same kind and name exists (hooks: same event/matcher/comm
 Not importable, with the reason shown: a skill folder with files besides `SKILL.md` (importing only the
 file would lose them), an invalid MCP definition, a Cursor hook with no Claude equivalent.
 
+### Instruction files
+
+Detection also covers **Instructions**, per level (Global, or one folder of the workspace): `CLAUDE.md`,
+`.claude/CLAUDE.md`, `AGENTS.md` and `.cursor/rules/*.mdc` (Global: `~/.claude/CLAUDE.md` and `~/AGENTS.md`
+only) that are regular files, non-empty and not carrying the app's `.mdc` marker. A level that already has an
+Instruction lists nothing. "Aplicar" imports the file (backed up, see the IPC contract); "Criar do zero" starts an
+empty Instruction.
+
+### Foreign files
+
+Instruction destinations carry `keepForeign: true`: when a file the app does not own already sits at one, the sync
+does **not** replace it. The Sync report gets `details.skipped: 'foreign-file'` with a message naming the file,
+and the entity's sync state stays `pending` until the user imports the file or removes it. (Skills, agents, MCP
+and hooks keep the older behaviour: overwrite with a backup under `_backups/`.)
+
 ## Removal
 
 - Deleting an entity with `removeSymlinks: true` removes its destinations.

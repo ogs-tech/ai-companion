@@ -559,10 +559,10 @@ describe('SessionsTreeGroup', () => {
 
       await screen.findByTestId('tree-session-workspace:need');
       expect(order()).toEqual(['need', 'work', 'idle', 'gone']);
-      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Precisa de você: 1');
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Pergunta: 1');
       expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 1');
-      expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Terminou: 1');
-      expect(screen.getByTestId('sessions-filter-exited')).toHaveAccessibleName('Encerradas: 1');
+      expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Ocioso: 1');
+      expect(screen.getByTestId('sessions-filter-exited')).toHaveAccessibleName('Fechado: 1');
       expect(screen.getByTestId('tree-session-workspace:need-reason')).toHaveTextContent(
         'Permissão: Bash',
       );
@@ -599,8 +599,8 @@ describe('SessionsTreeGroup', () => {
         'idle',
       );
       expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 0');
-      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Precisa de você: 0');
-      expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Terminou: 1');
+      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Pergunta: 0');
+      expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Ocioso: 1');
     });
 
     it('keeps the Encerradas count steady while history pages load', async () => {
@@ -614,7 +614,7 @@ describe('SessionsTreeGroup', () => {
       render();
       await screen.findByTestId('tree-session-workspace:work');
       await waitFor(() =>
-        expect(screen.getByTestId('sessions-filter-exited')).toHaveAccessibleName('Encerradas: 30'),
+        expect(screen.getByTestId('sessions-filter-exited')).toHaveAccessibleName('Fechado: 30'),
       );
       expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 1');
     });

@@ -115,6 +115,14 @@ Split by `scopes[0]`: **Personal** is the machine-wide singleton (stored in Glob
 |---|---|---|---|
 | Personal (singleton) | must be the literal `default` | exactly `["personal"]` | must be absent |
 | Workspace (per `Workspace`) | any slug except `default` | exactly `["workspace"]` | required, references a `Workspace.id` |
+| Folder (multi-folder workspace) | any slug except `default`; the folder's alias by default | exactly `["workspace"]` | required, references a `Workspace.id` |
+
+A folder instruction is a workspace instruction with `folder` set — the same meaning as `Entity.folder`: the
+absolute path of a workspace folder. Like for skills and agents it is **derived from where the file is stored**
+(`<folder>/.ai-companion/instructions/project/<slug>/`) and never written to `meta.json`. No `folder` = the
+workspace-wide instruction. A urn is unique across the whole workspace, so a folder instruction's name must not
+collide with another instruction's (`folderInstructionName` in `src/shared/instruction-names.ts` appends
+`-folder` when the alias is taken, e.g. by the workspace-wide one seeded from the primary folder's name).
 
 Enforced by `instructionEntitySchema` in `entity-schema.ts` (branch via `superRefine`) and by the domain
 guards `personalInstructionId()` and `projectInstructionSlug()` in `src/main/domain/instruction-id.ts`.

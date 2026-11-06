@@ -1,0 +1,88 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>phase4-answer-cost</title></head><body style="margin:0;padding:24px;background:#0b1220;color:#F2EEE5;font-family:Space Grotesk,-apple-system,sans-serif"><h2>Fase 4: responder inline (opcional) e custo, contexto, limite</h2>
+<p class="subtitle">Responder sem abrir a sessão vem desligado. Custo e contexto viram parte do estado, não uma tela à parte.</p>
+
+<style>
+  .p4{--canvas:#0F1828;--paper:#16223A;--rail:#1B2944;--ink:#F2EEE5;--mute:#8D9AB3;--faint:#5C6A85;--line:rgba(242,238,229,.09);--azul:#5B79E0;--verde:#3FB97A;--ambar:#E5B547;--erro:#E5484D;
+      font-family:"Space Grotesk",-apple-system,sans-serif;color:var(--ink);font-size:13px}
+  .p4 *{box-sizing:border-box}
+  .p4 .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 8px;margin-bottom:6px}
+  .p4 .cap{font-size:13px;color:#8a8f98;margin:18px 0 6px}
+  .p4 .ind{width:18px;height:18px;flex:none;display:inline-grid;place-items:center;font-weight:700;font-size:13px}
+  .p4 .w{color:var(--verde)}.p4 .q{color:var(--ambar)}.p4 .i,.p4 .x{color:var(--faint)}
+  .p4 .w .g{animation:spin 2.4s linear infinite;display:inline-block}.p4 .q .g{animation:pulse 1.4s ease-in-out infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{opacity:.35}}
+  @media (prefers-reduced-motion:reduce){.p4 .g{animation:none!important}}
+  .p4 .row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px}
+  .p4 .row.rw{box-shadow:inset 3px 0 var(--verde)}.p4 .row.rq{box-shadow:inset 3px 0 var(--ambar);background:rgba(229,181,71,.07)}.p4 .row.dimr{opacity:.7}
+  .p4 .nm{font-weight:600}.p4 .sub{color:var(--mute);font-size:12px}.p4 .main{flex:1;min-width:0}
+  .p4 .rt{text-align:right;color:var(--mute);font-size:12px;line-height:1.35;font-variant-numeric:tabular-nums}
+  .p4 .pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid rgba(229,181,71,.45);color:var(--ambar);margin-right:6px}
+  .p4 .b{border:1px solid var(--line);background:none;color:var(--ink);border-radius:6px;padding:4px 10px;font:inherit;font-size:12px}
+  .p4 .b.p{background:var(--azul);border-color:var(--azul)}
+  .p4 .cmd{font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--canvas);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:6px 0;color:var(--ink);word-break:break-all}
+  .p4 .ctx{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mute)}
+  .p4 .bar{flex:0 0 110px;height:6px;border-radius:3px;background:var(--rail);overflow:hidden}.p4 .bar i{display:block;height:100%;background:var(--verde)}
+  .p4 .bar.hi i{background:var(--ambar)}.p4 .bar.max i{background:var(--erro)}
+  .p4 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .p4 .set{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--line)}.p4 .set:last-child{border:0}
+  .p4 .set small{display:block;color:var(--mute);font-size:12px;line-height:1.4}
+  .p4 .sw{width:30px;height:17px;border-radius:9px;background:var(--faint);position:relative;flex:none}.p4 .sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff}
+  .p4 .sw.on{background:var(--verde)}.p4 .sw.on::after{left:15px}
+  .p4 .hdr{display:flex;align-items:center;gap:14px;padding:8px 10px;flex-wrap:wrap}
+  .p4 .st{display:inline-flex;align-items:center;gap:7px;padding:3px 10px;border-radius:12px;background:var(--rail)}
+  .p4 .lim{color:var(--ambar)}
+  .p4 table{width:100%;border-collapse:collapse;font-size:12px}.p4 td,.p4 th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--mute);font-weight:400;vertical-align:top}.p4 td:first-child{color:var(--ink);white-space:nowrap}
+</style>
+
+<div class="p4">
+
+  <div class="cap">G. Responder sem abrir a sessão (desligado por padrão)</div>
+  <div class="two">
+    <div class="panel" style="padding:4px 10px">
+      <div class="set"><div class="main">Responder permissões na lista<small>Mostra Permitir uma vez e Negar na linha. Só para sessões abertas pelo app (Claude). Perguntas abertas e sessões externas sempre exigem abrir a sessão.</small></div><span class="sw"></span></div>
+      <div class="set"><div class="main">Mostrar o contexto antes de aprovar<small>Sempre ligado quando a opção acima está ativa: o comando completo, a pasta e o último trecho da conversa.</small></div><span class="sw on"></span></div>
+    </div>
+    <div class="panel">
+      <div class="row rq" style="align-items:flex-start"><span class="ind q"><span class="g">!</span></span>
+        <div class="main"><div class="nm">fix-migration</div><div class="sub">claude · espera 4m · em <code>~/proj/api</code></div>
+          <div class="cmd">rm -rf dist && npm run build</div>
+          <div class="sub" style="margin-bottom:8px">"Vou limpar a pasta de saída antes de gerar o build novamente."</div>
+          <div style="display:flex;gap:8px"><button class="b p">Permitir uma vez</button><button class="b">Negar</button><button class="b" style="margin-left:auto">Abrir sessão</button></div>
+        </div></div>
+    </div>
+  </div>
+  <p class="sub" style="color:var(--mute);font-size:12px;margin:4px 4px 0">Sem "Sempre permitir" na lista: essa decisão fica na sessão. Sem atalho que aprove "a mais antiga": Enter só vale na linha em foco, depois que o comando completo estiver visível. Aprovar não tem desfazer (a ação roda), então a proteção é mostrar tudo antes, não um diálogo.</p>
+
+  <div class="cap">H. Custo, contexto e limite de uso, ao vivo</div>
+  <div class="panel">
+    <div class="hdr"><span class="st w"><span class="ind w"><span class="g">✻</span></span><span style="color:var(--ink)">Trabalhando</span></span><span class="sub">Edit CartService.ts · 2m14s</span>
+      <span class="ctx" style="margin-left:auto">Contexto <span class="bar hi"><i style="width:78%"></i></span>78%</span><span class="sub">$1,42</span></div>
+    <div class="hdr" style="border-top:1px solid var(--line)"><span class="st"><span class="ind i">◌</span><span class="lim">Ociosa, limite de uso</span></span><span class="sub lim">Volta às 15:40 (em 14 min). Retoma sozinha ao enviar de novo.</span>
+      <span class="ctx" style="margin-left:auto">Contexto <span class="bar"><i style="width:41%"></i></span>41%</span><span class="sub">$3,05</span></div>
+    <div class="hdr" style="border-top:1px solid var(--line)"><span class="st w"><span class="ind w"><span class="g">✻</span></span><span style="color:var(--ink)">Trabalhando</span></span><span class="sub">Contexto quase cheio: a próxima resposta pode resumir a conversa.</span>
+      <span class="ctx" style="margin-left:auto">Contexto <span class="bar max"><i style="width:94%"></i></span>94%</span><span class="sub">~$0,31</span></div>
+  </div>
+
+  <div class="cap">Na lista: o essencial, o detalhe ao passar o mouse</div>
+  <div class="panel">
+    <div class="row rw"><span class="ind w"><span class="g">✻</span></span><div class="main"><div class="nm">checkout-flow</div><div class="sub">Edit CartService.ts · ctx 78%</div></div><div class="rt">$1,42<br>claude</div></div>
+    <div class="row dimr"><span class="ind i">◌</span><div class="main"><div class="nm">api-tests</div><div class="sub lim">Limite de uso · volta em 14 min</div></div><div class="rt">$3,05<br>claude</div></div>
+    <div class="row rw"><span class="ind w"><span class="g">✻</span></span><div class="main"><div class="nm">spike-cache</div><div class="sub">ctx ~94% <span class="lim">· quase cheio</span></div></div><div class="rt">~$0,31<br>cursor</div></div>
+    <div class="sub" style="padding:8px 10px 2px;border-top:1px solid var(--line);margin-top:6px">Hoje: $4,78 · 3 sessões ativas · <span style="color:var(--ink)">Ver as 14 sessões</span></div>
+  </div>
+
+  <div class="cap">Avisos de custo (desligados por padrão)</div>
+  <div class="panel" style="padding:4px 10px">
+    <div class="set"><div class="main">Avisar quando uma sessão passar de um valor<small>Uma notificação quando cruzar US$ 5,00 e outra em US$ 10,00. Não interrompe a sessão.</small></div><span class="sw"></span></div>
+    <div class="set"><div class="main">Avisar quando o contexto passar de 90%<small>Uma vez por sessão, na transição.</small></div><span class="sw on"></span></div>
+  </div>
+
+  <div class="cap">De onde vêm os números</div>
+  <div class="panel"><table>
+    <tr><td>Contexto (%)</td><td>Claude: <code>usage</code> da última mensagem do assistente no JSONL (entrada + cache) dividido pela janela do modelo. Cursor: estimativa (~4 caracteres por token), marcada com "~".</td></tr>
+    <tr><td>Custo</td><td>Já calculado hoje pelo app; passa a atualizar a cada append do JSONL, dentro do mesmo lote de 250 ms da Fase 1.</td></tr>
+    <tr><td>Limite de uso</td><td>Entrada de erro de rate limit no JSONL, com o horário de retorno quando ele vier. É um <b>detalhe do estado Ocioso</b> (não um 5º estado) e não conta como "Pergunta".</td></tr>
+    <tr><td>Resposta inline (G)</td><td>Hook <code>PermissionRequest</code> do Claude devolvendo a decisão (a confirmar na versão alvo do CLI). Cursor e externas: sem resposta inline, só "Abrir sessão".</td></tr>
+  </table></div>
+</div>
+</body></html>

@@ -52,7 +52,9 @@ const api = {
     },
     /** Fires when any running session's activity (working / idle / needs-input) changes. */
     onAnyActivity: (listener: (sessionId: string) => void): (() => void) => {
-      const wrapped = (_event: IpcRendererEvent, payload: SessionActivityEvent): void => listener(payload.sessionId);
+      const wrapped = (_event: IpcRendererEvent, payload: SessionActivityEvent): void => {
+        for (const id of payload.sessionIds) listener(id);
+      };
       ipcRenderer.on(SESSION_ACTIVITY_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_ACTIVITY_CHANNEL, wrapped);
     },

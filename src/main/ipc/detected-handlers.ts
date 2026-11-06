@@ -4,7 +4,7 @@ import type { DetectedKind } from '../../shared/detected.js';
 import { asObject, asString, optParams } from './_validators.js';
 import { DomainError } from '../domain/errors.js';
 
-const KINDS: readonly DetectedKind[] = ['skill', 'agent', 'mcp', 'hook'];
+const KINDS: readonly DetectedKind[] = ['skill', 'agent', 'mcp', 'hook', 'instruction'];
 
 export function buildDetectedHandlers(service: DetectionService): IpcHandlers {
   return {

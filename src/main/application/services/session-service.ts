@@ -151,6 +151,7 @@ export class SessionService {
     session.activity = 'idle';
     session.activitySince = Date.now();
     delete session.attention;
+    delete session.activityDetail;
     this.outputTails.delete(session.sessionId);
   }
 
@@ -159,17 +160,25 @@ export class SessionService {
     delete session.activity;
     delete session.activitySince;
     delete session.attention;
+    delete session.activityDetail;
     this.outputTails.delete(session.sessionId);
     for (const listener of this.activityListeners) listener(session.sessionId);
   }
 
-  private setActivity(sessionId: string, change: ActivityChange): void {
+  private setActivity(sessionId: string, incoming: ActivityChange): void {
+    let change = incoming;
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
+    // A bare `working` (PostToolUse) while already working keeps the last tool until the next PreToolUse names a new one.
+    if (change.activity === 'working' && change.detail === undefined && session.activity === 'working' && session.activityDetail) {
+      change = { ...change, detail: session.activityDetail };
+    }
     const sameAttention = session.attention?.kind === change.attention?.kind && session.attention?.detail === change.attention?.detail;
-    if (session.activity === change.activity && sameAttention) return;
+    if (session.activity === change.activity && sameAttention && session.activityDetail === change.detail) return;
     if (session.activity !== change.activity) session.activitySince = Date.now();
     session.activity = change.activity;
+    if (change.detail) session.activityDetail = change.detail;
+    else delete session.activityDetail;
     if (change.attention) session.attention = change.attention;
     else delete session.attention;
     for (const listener of this.activityListeners) listener(sessionId);

@@ -27,7 +27,13 @@ export type MergeTarget =
   | { shape: 'array-item'; path: string[]; identity: Record<string, unknown>; value: unknown };
 
 export type AdapterDestination =
-  | { scope: 'personal' | 'workspace'; destination: string; strategy: 'symlink' }
+  | {
+      scope: 'personal' | 'workspace';
+      destination: string;
+      strategy: 'symlink';
+      /** A file the app does not own already at `destination` is never replaced: the sync reports it and leaves it alone. */
+      keepForeign?: boolean;
+    }
   | {
       scope: 'personal' | 'workspace';
       /** The shared JSON file the entry is merged into. */
@@ -60,6 +66,8 @@ export type AdapterDestination =
        * Where the marker is expected in the file. Defaults to `startsWith`.
        */
       ownershipCheck?: OwnershipCheck;
+      /** A file the app does not own already at `destination` is never replaced: the sync reports it and leaves it alone. */
+      keepForeign?: boolean;
     };
 
 export interface Adapter {

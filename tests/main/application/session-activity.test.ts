@@ -6,6 +6,7 @@ import {
   isAnswerInput,
   parseSignalLine,
   SIGNAL_HOOK_COMMANDS,
+  toolDetail,
 } from '../../../src/main/application/session-activity.js';
 
 describe('parseSignalLine', () => {
@@ -73,12 +74,30 @@ describe('isAnswerInput', () => {
 describe('claudeSignalSettings', () => {
   it('subscribes to the activity hooks but not to idle_prompt', () => {
     const settings = JSON.parse(claudeSignalSettings()) as { hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>> };
-    expect(Object.keys(settings.hooks).sort()).toEqual(['Notification', 'PostToolUse', 'Stop', 'UserPromptSubmit']);
+    expect(Object.keys(settings.hooks).sort()).toEqual(['Notification', 'PostToolUse', 'PreToolUse', 'Stop', 'UserPromptSubmit']);
     expect(settings.hooks['Notification']?.[0]?.matcher).toBe('permission_prompt|elicitation_dialog');
     expect(settings.hooks['Stop']?.[0]?.hooks[0]?.command).toBe(SIGNAL_HOOK_COMMANDS.idle);
   });
 
   it('hook commands are no-ops without the env var', () => {
     for (const command of Object.values(SIGNAL_HOOK_COMMANDS)) expect(command.startsWith('[ -z "$AI_COMPANION_SIGNAL_FILE" ] ||')).toBe(true);
+  });
+});
+
+describe('tool signals', () => {
+  it('turns a PreToolUse payload into a working change with a detail line', () => {
+    const signal = parseSignalLine('{"event":"tool","payload":{"tool_name":"Edit","tool_input":{"file_path":"/a/b/CartService.ts"}}}');
+    expect(interpretSignal(signal!)).toEqual({ activity: 'working', detail: 'Edit CartService.ts' });
+  });
+
+  it('shows the command for shell tools and degrades to the bare tool name', () => {
+    expect(toolDetail({ tool_name: 'Bash', tool_input: { command: 'npm   test' } })).toBe('Bash: npm test');
+    expect(toolDetail({ tool_name: 'Task' })).toBe('Task');
+    expect(toolDetail({ tool_input: {} })).toBeUndefined();
+  });
+
+  it('wires PreToolUse into the injected settings', () => {
+    const settings = JSON.parse(claudeSignalSettings()) as { hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>> };
+    expect(settings.hooks['PreToolUse']?.[0]?.hooks[0]?.command).toBe(SIGNAL_HOOK_COMMANDS.tool);
   });
 });

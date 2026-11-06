@@ -60,7 +60,7 @@ import {
   registerBrowserWorkbenchOpener,
   subscribeBrowserTabs,
 } from '../../lib/browser-tabs-store.js';
-import { seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
+import { seedFolderInstruction, seedWorkspaceInstruction } from '../../lib/instruction-seed.js';
 import { entityBody } from '../../lib/entity-body.js';
 import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } from '../../hooks/use-workspaces.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
@@ -1438,7 +1438,11 @@ export function WorkspaceScreen(): React.ReactElement {
             <ControlPanelContent
               isHome={isHome}
               {...(activeWorkspace
-                ? { seedWorkspaceInstruction: () => seedWorkspaceInstruction(activeWorkspace) }
+                ? {
+                    seedWorkspaceInstruction: () => seedWorkspaceInstruction(activeWorkspace),
+                    seedFolderInstruction: (folder: string, takenNames: ReadonlySet<string>) =>
+                      seedFolderInstruction(activeWorkspace, folder, takenNames),
+                  }
                 : {})}
               {...(entityLocalScope ? { localScope: entityLocalScope } : {})}
               {...(mcpMatchPath ? { mcpMatchPath } : {})}

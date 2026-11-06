@@ -3,6 +3,7 @@ import { screen, fireEvent } from '@testing-library/react';
 import { InstructionTreeRow } from '../../../../src/renderer/components/workspace/InstructionTreeRow.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import type { Instruction } from '../../../../src/shared/entity.js';
+import type { DetectedEntity } from '../../../../src/shared/detected.js';
 
 function instruction(overrides: Partial<Instruction> = {}): Instruction {
   return {
@@ -62,18 +63,18 @@ describe('InstructionTreeRow session badge', () => {
 });
 
 describe('InstructionTreeRow labels', () => {
-  it('labels the personal row plainly "instructions"', () => {
+  it('labels the personal row plainly "Instructions"', () => {
     renderWithShell(
       <InstructionTreeRow kind="personal" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('instructions');
+    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('Instructions');
   });
 
-  it('labels the workspace row plainly "instructions"', () => {
+  it('labels the workspace row plainly "Instructions"', () => {
     renderWithShell(
       <InstructionTreeRow kind="workspace" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('instructions');
+    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('Instructions');
   });
 
   it('overrides the default data-testid when a testId is supplied', () => {
@@ -129,3 +130,62 @@ describe('InstructionTreeRow context menu — New Action', () => {
   });
 });
 
+
+const detectedFile: DetectedEntity = {
+  id: 'det-1', kind: 'instruction', name: 'default', description: 'AGENTS.md', harness: 'claude',
+  scope: 'personal', path: '/home/u/AGENTS.md', importable: true, preview: { file: 'AGENTS.md' },
+};
+
+describe('InstructionTreeRow status', () => {
+  it('shows a plain "not created" dot, dimmed, when there is neither an instruction nor a detected file', () => {
+    renderWithShell(<InstructionTreeRow kind="folder" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />);
+    expect(screen.getByTestId('sync-dot')).toHaveAttribute('data-state', 'missing');
+    expect(screen.queryByTestId('detected-apply')).not.toBeInTheDocument();
+  });
+
+  it('offers the detected file: its name, a single "Aplicar", and the detected dot', () => {
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={null} detected={detectedFile} seed={() => instruction()} onOpen={vi.fn()} />);
+    expect(screen.getByTestId('detected-file')).toHaveTextContent('AGENTS.md');
+    expect(screen.getByTestId('detected-apply')).toHaveTextContent('Aplicar');
+    expect(screen.getByTestId('sync-dot')).toHaveAttribute('data-state', 'detected');
+  });
+
+  it('Aplicar imports the file and opens the imported instruction for editing, without starting an empty one', async () => {
+    const imported = instruction({ content: 'from file' });
+    call.mockImplementation(async (method: string) => (method === 'detected.import' ? ok({ entity: imported, syncReport: [] }) : ok(undefined)));
+    const onOpen = vi.fn();
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={null} detected={detectedFile} seed={() => instruction()} onOpen={onOpen} />);
+    fireEvent.click(screen.getByTestId('detected-apply'));
+    await vi.waitFor(() => expect(onOpen).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledWith('detected.import', { id: 'det-1' });
+    expect(onOpen).toHaveBeenCalledWith(imported, false);
+  });
+
+  it('clicking the row itself while a file is detected starts an empty instruction ("Criar do zero")', () => {
+    const onOpen = vi.fn();
+    const seed = instruction({ content: 'seed' });
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={null} detected={detectedFile} seed={() => seed} onOpen={onOpen} />);
+    fireEvent.click(screen.getByTestId('personal-instruction-row'));
+    expect(onOpen).toHaveBeenCalledWith(seed, true);
+  });
+
+  it('shows one chip per enabled harness, green only while the instruction is synced', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'settings.get') return ok({ adapters: { claude: { enabled: true }, cursor: { enabled: true } } });
+      if (method === 'adapter.entitySyncStates') return ok({ 'urn:instruction:default': 'synced' });
+      return ok(undefined);
+    });
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
+    await vi.waitFor(() => expect(screen.getByTestId('harness-chip-claude')).toHaveAttribute('data-synced', 'true'));
+    expect(screen.getByTestId('harness-chip-cursor')).toHaveAttribute('data-synced', 'true');
+  });
+
+  it('hides the chip of a harness whose adapter is disabled', async () => {
+    call.mockImplementation(async (method: string) =>
+      method === 'settings.get' ? ok({ adapters: { claude: { enabled: true }, cursor: { enabled: false } } }) : ok(undefined),
+    );
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
+    expect(await screen.findByTestId('harness-chip-claude')).toBeInTheDocument();
+    expect(screen.queryByTestId('harness-chip-cursor')).not.toBeInTheDocument();
+  });
+});

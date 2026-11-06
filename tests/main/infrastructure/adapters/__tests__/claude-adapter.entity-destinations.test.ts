@@ -32,8 +32,8 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
       source: WORKSPACE_SOURCE, content: 'body',
     };
     expect(await adapter.resolveEntityDestinations({ entity: ins })).toEqual([
-      { scope: 'personal', destination: '/home/u/.claude/CLAUDE.md', strategy: 'symlink' },
-      { scope: 'personal', destination: '/home/u/AGENTS.md', strategy: 'symlink' },
+      { scope: 'personal', destination: '/home/u/.claude/CLAUDE.md', strategy: 'symlink', keepForeign: true },
+      { scope: 'personal', destination: '/home/u/AGENTS.md', strategy: 'symlink', keepForeign: true },
     ]);
   });
 
@@ -70,8 +70,20 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
       source: WORKSPACE_SOURCE, content: 'body',
     };
     expect(await adapter.resolveEntityDestinations({ entity: ins })).toEqual([
-      { scope: 'workspace', destination: '/repos/acme/.claude/CLAUDE.md', strategy: 'symlink' },
-      { scope: 'workspace', destination: '/repos/acme/AGENTS.md', strategy: 'symlink' },
+      { scope: 'workspace', destination: '/repos/acme/.claude/CLAUDE.md', strategy: 'symlink', keepForeign: true },
+      { scope: 'workspace', destination: '/repos/acme/AGENTS.md', strategy: 'symlink', keepForeign: true },
+    ]);
+  });
+
+  it('routes a folder instruction to <folder>/{.claude/CLAUDE.md, AGENTS.md}', async () => {
+    const ins: Instruction = {
+      urn: 'urn:instruction:ui-core', kind: 'instruction', name: 'ui-core',
+      description: '', scopes: ['workspace'], scopeId: 'proj-1', folder: '/repos/ui-core', metadata: meta,
+      source: WORKSPACE_SOURCE, content: 'body',
+    };
+    expect(await adapter.resolveEntityDestinations({ entity: ins })).toEqual([
+      { scope: 'workspace', destination: '/repos/ui-core/.claude/CLAUDE.md', strategy: 'symlink', keepForeign: true },
+      { scope: 'workspace', destination: '/repos/ui-core/AGENTS.md', strategy: 'symlink', keepForeign: true },
     ]);
   });
 

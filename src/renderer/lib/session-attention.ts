@@ -80,16 +80,16 @@ export function attentionLabel(attention: SessionAttention | undefined): string 
 }
 
 export const FILTER_LABELS: Record<SessionFilter, string> = {
-  'needs-input': 'Precisa de você',
+  'needs-input': 'Pergunta',
   working: 'Trabalhando',
-  idle: 'Terminou',
-  exited: 'Encerradas',
+  idle: 'Ocioso',
+  exited: 'Fechado',
 };
 
 /** The glyph a state wears in its row and on its chip. */
 export const FILTER_GLYPHS: Record<SessionFilter, string> = {
   'needs-input': '!',
   working: '✻',
-  idle: '◉',
+  idle: '◌',
   exited: '×',
 };

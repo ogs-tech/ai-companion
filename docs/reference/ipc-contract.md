@@ -40,7 +40,7 @@ Defined in [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts).
 
 ## Push channels (exception to request/response)
 
-Every method above is request/response over `ipc:call`. One exception: `session:output` and `session:exit` (defined in [`src/shared/session.ts`](../../src/shared/session.ts)) stream live PTY output and report a session's exit code while a `claude` process spawned via `session.spawn` is running — that streaming can't fit the request/response `ipc:call` envelope. **Multiple sessions can be live at once** — one per anchor for `entity`, but any number for `workspace`/`personal` (see [`session`](#session) below) — so preload itself filters by `sessionId` before invoking the renderer's listener — there's no single "the" session to assume, and `sessionId` is only the anchor's own key (`entity:<urn>`) for `entity`; for `workspace`/`personal` it's an opaque `crypto.randomUUID()` with no relationship to any `urn`. Preload exposes these as `window.api.session.onOutput(sessionId, listener) → unsubscribe` and `window.api.session.onExit(sessionId, listener) → unsubscribe`, each listener receiving only the payload (`chunk` / `exitCode`) for that session. A third push channel, `external-link:open` (`src/shared/external-link.ts`, payload `{ url }`), carries a URL a session's CLI opened itself; preload exposes it unfiltered as `window.api.externalLink.onOpen(listener) → unsubscribe` (see [External link routing](architecture.md#session-bounded-context)). A third accessor, `window.api.session.onAnyExit(listener) → unsubscribe`, skips the `sessionId` filter entirely — it exists for `useSessions()`, which needs to notice a session exiting in the background without already knowing every live `sessionId` up front. A fourth push channel, `session:activity` (payload `{ sessionId }`, preload `window.api.session.onAnyActivity(listener) → unsubscribe`), fires whenever a running session's activity changes; `useSessions()` reacts by refetching `session.list`, which carries the new state.
+Every method above is request/response over `ipc:call`. One exception: `session:output` and `session:exit` (defined in [`src/shared/session.ts`](../../src/shared/session.ts)) stream live PTY output and report a session's exit code while a `claude` process spawned via `session.spawn` is running — that streaming can't fit the request/response `ipc:call` envelope. **Multiple sessions can be live at once** — one per anchor for `entity`, but any number for `workspace`/`personal` (see [`session`](#session) below) — so preload itself filters by `sessionId` before invoking the renderer's listener — there's no single "the" session to assume, and `sessionId` is only the anchor's own key (`entity:<urn>`) for `entity`; for `workspace`/`personal` it's an opaque `crypto.randomUUID()` with no relationship to any `urn`. Preload exposes these as `window.api.session.onOutput(sessionId, listener) → unsubscribe` and `window.api.session.onExit(sessionId, listener) → unsubscribe`, each listener receiving only the payload (`chunk` / `exitCode`) for that session. A third push channel, `external-link:open` (`src/shared/external-link.ts`, payload `{ url }`), carries a URL a session's CLI opened itself; preload exposes it unfiltered as `window.api.externalLink.onOpen(listener) → unsubscribe` (see [External link routing](architecture.md#session-bounded-context)). A third accessor, `window.api.session.onAnyExit(listener) → unsubscribe`, skips the `sessionId` filter entirely — it exists for `useSessions()`, which needs to notice a session exiting in the background without already knowing every live `sessionId` up front. A fourth push channel, `session:activity` (payload `{ sessionIds: string[] }`, preload `window.api.session.onAnyActivity(listener) → unsubscribe`, which calls the listener once per id), fires whenever a running session's activity, attention reason or current-tool detail (`SessionSnapshot.activityDetail`, e.g. `Edit CartService.ts`, from the `PreToolUse` hook) changes. Main coalesces changes in a 250 ms window (`SESSION_ACTIVITY_BATCH_MS`), so a tool-heavy turn yields one push per window; `useSessions()` reacts by refetching `session.list`, which carries the new state.
 
 A third pair, `terminal:output`/`terminal:exit` (`src/shared/terminal.ts`), streams a terminal's PTY output
 and reports its exit the same way, filtered by `terminalId` instead of `sessionId` —
@@ -529,6 +529,13 @@ The `customization.*` IPC namespace has been **removed**, and so has the polymor
 | `adapter.removeAll` | `{ adapterId: string }` | `RemoveAdapterResult` |
 | `adapter.setEnabled` | `{ adapterId: string; enabled: boolean; removeSymlinks?: boolean; runSyncAll?: boolean }` | See below |
 | `adapter.countDestinations` | `{ adapterId: string }` | `{ count: number }` |
+| `adapter.entitySyncStates` | none | `Record<urn, 'synced' \| 'pending'>` — read-only; see below |
+
+`adapter.entitySyncStates` checks the disk on every call (never a cached Sync report, so a file changed outside
+the app flips the state). An entity is `synced` only when every destination of every enabled harness is in place
+(symlink points at our source; generated/merged entry matches); `skip` destinations are ignored; an entity with
+nothing to materialize is absent from the map. A destination occupied by a file the app does not own (see
+"Foreign files" in [adapter-targets.md](adapter-targets.md)) makes the entity `pending`.
 
 `adapter.setEnabled` returns:
 
@@ -619,8 +626,14 @@ Customizations found in Claude's and Cursor's own files that are not yet canonic
 
 | Method | Params | Result |
 |---|---|---|
-| `detected.list` | `{ kinds?: ('skill' \| 'agent' \| 'mcp' \| 'hook')[] }` (default: all) | `DetectedEntity[]` — `{ id, kind, name, description, harness: 'claude' \| 'cursor', scope, folder?, path, importable, reason?, preview }` |
+| `detected.list` | `{ kinds?: ('skill' \| 'agent' \| 'mcp' \| 'hook' \| 'instruction')[] }` (default: all) | `DetectedEntity[]` — `{ id, kind, name, description, harness: 'claude' \| 'cursor', scope, folder?, path, importable, reason?, preview }` |
 | `detected.import` | `{ id: string }` | `{ entity: Entity; syncReport: SyncResult[] }` — `not_found` for an unknown id, `validation` when `importable` is false or the name already exists canonically |
+
+An `instruction` item is one file of a level (Global, a workspace folder) that the app does not own; `name` is the
+Instruction it would become, `folder` is set only in a multi-folder workspace, and `preview.file` is the file name.
+`detected.import` of an instruction first copies the file to `~/.ai-companion/_backups/<timestamp>/detected/` and
+removes it, then saves the Instruction (so the sync can put our symlink/rule in its place); if the save fails the
+file is restored.
 
 Workspace-scope items are listed only while that workspace is open. See [Adapter targets → Detected items
 and import](adapter-targets.md#detected-items-and-import).

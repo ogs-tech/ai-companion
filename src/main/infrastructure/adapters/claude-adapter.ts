@@ -34,8 +34,8 @@ export class ClaudeAdapter implements Adapter {
       const instruction = args.entity as Instruction;
       if (instruction.scopes[0] === 'personal') {
         return [
-          { scope: 'personal', destination: join(this.homedir, '.claude/CLAUDE.md'), strategy: 'symlink' },
-          { scope: 'personal', destination: join(this.homedir, 'AGENTS.md'), strategy: 'symlink' },
+          { scope: 'personal', destination: join(this.homedir, '.claude/CLAUDE.md'), strategy: 'symlink', keepForeign: true },
+          { scope: 'personal', destination: join(this.homedir, 'AGENTS.md'), strategy: 'symlink', keepForeign: true },
         ];
       }
       const scope = instruction.scopes[0];
@@ -46,8 +46,8 @@ export class ClaudeAdapter implements Adapter {
       }
       const repoPath = await resolveScopePath(instruction, this.scopeDeps);
       return [
-        { scope, destination: join(repoPath, '.claude/CLAUDE.md'), strategy: 'symlink' },
-        { scope, destination: join(repoPath, 'AGENTS.md'), strategy: 'symlink' },
+        { scope, destination: join(repoPath, '.claude/CLAUDE.md'), strategy: 'symlink', keepForeign: true },
+        { scope, destination: join(repoPath, 'AGENTS.md'), strategy: 'symlink', keepForeign: true },
       ];
     }
 

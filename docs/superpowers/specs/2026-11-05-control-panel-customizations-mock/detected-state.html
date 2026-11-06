@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estado detectado</title>
+<style>
+  :root { --canvas:#0F1828; --paper:#16223A; --rail:#1B2944; --ink:#F2EEE5; --mute:#8D9AB3; --faint:#5C6A85; --line:rgba(242,238,229,.09);
+          --azul:#5B79E0; --verde:#3FB97A; --ambar:#E5B547; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px; background:#0b1220; color:#c9d1e3; font:14px/1.5 "Space Grotesk",-apple-system,sans-serif; }
+  h1 { font-size:20px; margin:0 0 4px; color:var(--ink); } .sub { margin:0 0 20px; color:var(--mute); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; align-items:start; }
+  .cap { font-size:13px; margin:0 0 8px; color:#8a8f98; } .cap b { color:var(--ink); }
+  .panel { background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:10px 8px 12px; color:var(--ink); font-size:13px; }
+  .row { position:relative; display:flex; align-items:center; gap:8px; height:30px; padding:0 8px; border-radius:6px; white-space:nowrap; }
+  .row:hover, .row.hov { background:var(--rail); }
+  .row svg { width:15px; height:15px; flex:none; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .row .n { margin-left:auto; color:var(--mute); font-size:12px; font-variant-numeric:tabular-nums; }
+  .l1 { padding-left:8px; } .l2 { padding-left:26px; } .l3 { padding-left:44px; }
+  .lvl { font-weight:600; } .dim { color:var(--mute); }
+  .end { margin-left:auto; display:inline-flex; align-items:center; gap:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .dot.on { background:var(--verde); } .dot.off { border:1.5px solid var(--faint); }
+  /* today */
+  .dot.det-old { border:1.5px solid var(--azul); background:radial-gradient(circle,var(--azul) 35%,transparent 40%); margin-left:auto; }
+  .tag-old { font-size:11px; color:var(--azul); border:1px solid rgba(91,121,224,.4); border-radius:4px; padding:1px 6px; margin-left:auto; }
+  /* new detected dot: dashed ring = "something is there, not yours yet" */
+  .dot.det { border:1.5px dashed var(--azul); }
+  .file { font:11px "JetBrains Mono",ui-monospace,monospace; color:var(--faint); }
+  .act { font:inherit; font-size:12px; color:var(--azul); background:none; border:0; padding:2px 4px; border-radius:4px; cursor:pointer; }
+  .act:hover { background:rgba(91,121,224,.14); }
+  .act.solid { background:var(--azul); color:#0F1828; font-weight:600; padding:3px 9px; }
+  .act.ghost { color:var(--mute); }
+  .sub2 { font-size:11px; color:var(--mute); }
+  /* B: two-line row */
+  .row.tall { height:44px; align-items:center; }
+  .row.tall .two { display:flex; flex-direction:column; line-height:1.25; }
+  /* C: child row */
+  .child { margin:2px 8px 6px 44px; padding:8px 10px; border-left:2px solid var(--azul); background:rgba(91,121,224,.07); border-radius:0 6px 6px 0; font-size:12px; color:var(--mute); white-space:normal; }
+  .child .btns { display:flex; gap:8px; margin-top:8px; }
+  .note { margin:10px 0 0; padding-left:18px; font-size:12px; color:#8a8f98; } .note li { margin-bottom:3px; }
+  .sec { margin-top:28px; } .sec h2 { font-size:15px; color:var(--ink); margin:0 0 8px; }
+  .rec { color:var(--verde); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; padding:10px 8px 0; font-size:11px; color:var(--mute); }
+  .legend span { display:inline-flex; align-items:center; gap:5px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 8.2v7.6M18 10.2c0 4-6 3-11 6.4"/></symbol>
+  <symbol id="i-scroll" viewBox="0 0 24 24"><path d="M6 4h12v14a2 2 0 0 0 2 2H8a2 2 0 0 1-2-2z"/><path d="M6 4a2 2 0 0 0-2 2v2h2M10 9h6M10 13h6"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+
+<h1>Instructions detectadas: refinar</h1>
+<p class="sub">Um arquivo (<span class="file">AGENTS.md</span>) já existe em <b>vendors-bees-adapter</b> e não é do app. A spec dá duas saídas: <b>Aplicar</b> (importar) ou <b>Criar do zero</b>.</p>
+
+<div class="grid">
+
+  <!-- HOJE -->
+  <div>
+    <p class="cap"><b>Hoje</b> (seu print)</p>
+    <div class="panel">
+      <div class="row l1 lvl"><svg style="color:var(--azul)"><use href="#i-git"/></svg>vendors-bees-adapter<span class="n">5</span></div>
+      <div class="row l2"><svg><use href="#i-scroll"/></svg>Instructions<span class="tag-old">Aplicar</span><span class="dot det-old"></span></div>
+      <div class="row l2 dim"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">5</span></div>
+    </div>
+    <ul class="note">
+      <li>Chip e bolinha têm <code>margin-left:auto</code> os dois: o espaço livre se divide e "Aplicar" flutua no meio da linha.</li>
+      <li>A bolinha com ponto parece um radio button (selecionável), não um estado.</li>
+      <li>Não diz <i>o que</i> foi achado (só tooltip).</li>
+      <li>"Criar do zero" não aparece em lugar nenhum.</li>
+      <li>O chip parece botão mas é outline fino; some no hover.</li>
+    </ul>
+  </div>
+
+  <!-- A -->
+  <div>
+    <p class="cap"><b>A · Arquivo + ação na linha</b> <span class="rec">recomendada</span></p>
+    <div class="panel">
+      <div class="row l1 lvl"><svg style="color:var(--azul)"><use href="#i-git"/></svg>vendors-bees-adapter<span class="n">5</span></div>
+      <div class="row l2 hov"><svg><use href="#i-scroll"/></svg>Instructions<span class="end"><span class="file">AGENTS.md</span><button class="act">Aplicar</button><span class="dot det"></span></span></div>
+      <div class="row l2 dim"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">5</span></div>
+    </div>
+    <div class="legend"><span><i class="dot on"></i>sincronizado</span><span><i class="dot off"></i>não criada</span><span><i class="dot det"></i>detectada</span></div>
+    <ul class="note">
+      <li>Tudo agrupado à direita, na ordem: <b>o que foi achado → ação → estado</b>.</li>
+      <li>Anel <b>tracejado</b> azul: "tem algo aqui que ainda não é seu". Diferente do anel cinza liso (não criada) e de um radio.</li>
+      <li>"Aplicar" vira texto azul sem borda; ganha fundo no hover. Um botão, uma ação.</li>
+      <li>Clicar na linha (fora do Aplicar) abre a Instruction vazia para <b>Criar do zero</b>, com o aviso do arquivo ocupando o destino (spec).</li>
+      <li>Em painel estreito o nome do arquivo some primeiro (ellipsis); Aplicar e dot nunca.</li>
+    </ul>
+  </div>
+
+  <!-- B -->
+  <div>
+    <p class="cap"><b>B · Linha de duas linhas</b></p>
+    <div class="panel">
+      <div class="row l1 lvl"><svg style="color:var(--azul)"><use href="#i-git"/></svg>vendors-bees-adapter<span class="n">5</span></div>
+      <div class="row l2 tall"><svg><use href="#i-scroll"/></svg><span class="two">Instructions<span class="sub2">AGENTS.md encontrado</span></span><span class="end"><button class="act solid">Aplicar</button><span class="dot det"></span></span></div>
+      <div class="row l2 dim"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">5</span></div>
+    </div>
+    <ul class="note">
+      <li>Explica melhor o estado, com botão sólido bem visível.</li>
+      <li>Quebra a altura fixa de 30px: a árvore "pula" quando o arquivo é aplicado.</li>
+      <li>Com 4 pastas detectadas, vira um bloco pesado que briga com o resto.</li>
+    </ul>
+  </div>
+
+  <!-- C -->
+  <div>
+    <p class="cap"><b>C · Filha expansível com as duas saídas</b></p>
+    <div class="panel">
+      <div class="row l1 lvl"><svg style="color:var(--azul)"><use href="#i-git"/></svg>vendors-bees-adapter<span class="n">5</span></div>
+      <div class="row l2 hov"><svg><use href="#i-scroll"/></svg>Instructions<span class="end"><span class="dot det"></span></span></div>
+      <div class="child">
+        <span class="file">AGENTS.md</span> já existe aqui e não é gerenciado pelo app.
+        <div class="btns"><button class="act solid">Aplicar</button><button class="act ghost">Criar do zero</button></div>
+      </div>
+      <div class="row l2 dim"><svg><use href="#i-sparkles"/></svg>Skills<span class="n">5</span></div>
+    </div>
+    <ul class="note">
+      <li>As duas escolhas visíveis, com a explicação.</li>
+      <li>Em Skills/Agents/MCP essas linhas filhas já existem; mas aqui adiciona um nível só para uma decisão pontual.</li>
+      <li>Mais cliques e mais altura; o estado precisa de um chevron na linha.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="sec">
+  <h2>Recomendação</h2>
+  <p class="sub" style="margin:0">A mantém a árvore densa e fixa. Dá uma ação principal por linha e deixa "Criar do zero" no clique da linha, que é o que a spec já descreve (abrir a Instruction vazia). Só a spec não diz como o usuário <i>substitui</i> o arquivo estranho depois; sugiro um botão "Substituir (com backup)" dentro do editor, no aviso do arquivo ocupando o destino.</p>
+</div>
+</body>
+</html>

@@ -8,7 +8,7 @@ import '@xterm/xterm/css/xterm.css';
 import { attachEmbeddedBrowserLinks, embeddedBrowserLinkHandler } from '../lib/terminal-links.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
 import { createTerminalWriteBatcher } from '../lib/terminal-write-batcher.js';
-import { sessionsQueryKey } from '../hooks/use-sessions.js';
+import { sessionsQueryKey, useSessionSnapshot } from '../hooks/use-sessions.js';
 import {
   MAX_SESSION_ATTACHMENT_BYTES,
   sessionAnchorKey,
@@ -29,6 +29,7 @@ import {
 } from '../lib/browser-tabs-store.js';
 import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
+import { FILTER_LABELS } from '../lib/session-attention.js';
 import { SESSION_STATUS_PILL } from '../lib/session-status-pill.js';
 
 type PanelStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error';
@@ -62,9 +63,9 @@ const STATUS_PILL: Record<PanelStatus, { variant: StatusPillVariant; label: stri
 };
 
 const ACTIVITY_PILL: Record<SessionActivity, { variant: StatusPillVariant; label: string }> = {
-  working: { variant: 'running', label: 'Trabalhando' },
-  idle: { variant: 'idle', label: 'Ociosa' },
-  'needs-input': { variant: 'warning', label: 'Aguardando você' },
+  working: { variant: 'running', label: FILTER_LABELS.working },
+  idle: { variant: 'idle', label: FILTER_LABELS.idle },
+  'needs-input': { variant: 'warning', label: FILTER_LABELS['needs-input'] },
 };
 
 function pillFor(status: PanelStatus, activity: SessionActivity | undefined): { variant: StatusPillVariant; label: string } {
@@ -145,11 +146,13 @@ function attachmentRefData(paths: string[]): string {
 
 interface SessionHeaderProps {
   pill: { variant: StatusPillVariant; label: string };
+  /** Current tool while working ("Edit CartService.ts"). */
+  detail?: string;
   action?: React.ReactNode;
   browserToggle?: React.ReactNode;
 }
 
-function SessionHeader({ pill, action, browserToggle }: SessionHeaderProps): React.ReactElement {
+function SessionHeader({ pill, detail, action, browserToggle }: SessionHeaderProps): React.ReactElement {
   return (
     <Stack
       direction="row"
@@ -161,6 +164,11 @@ function SessionHeader({ pill, action, browserToggle }: SessionHeaderProps): Rea
       </Stack>
       <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
         <StatusPill variant={pill.variant} label={pill.label} testId="session" />
+        {detail && (
+          <Typography component="span" noWrap data-testid="session-detail" sx={{ fontSize: '0.75rem', color: 'text.secondary', maxWidth: 260 }}>
+            {detail}
+          </Typography>
+        )}
         {browserToggle}
         {action}
       </Stack>
@@ -198,6 +206,8 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   const [status, setStatus] = useState<PanelStatus>(sessionIdProp ? 'starting' : 'idle');
   const [activity, setActivity] = useState<SessionActivity | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  // The store is the source of truth once it lists this session; local state only bridges the gap before that.
+  const stored = useSessionSnapshot(sessionId);
   // Derived, not local state: the same session's browser can also be turned
   // off from its Workbench tab's own close button (see browser-tabs-store's
   // `closeBrowserTab`), so this has to track the shared store rather than a
@@ -545,7 +555,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {showHeader && (
         <Box sx={{ px: 2, pt: 2 }}>
-          <SessionHeader pill={pillFor(status, activity)} action={action} browserToggle={browserToggle} />
+          <SessionHeader pill={pillFor(stored ? stored.status : status, stored ? stored.activity : activity)} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
         </Box>
       )}
       {error && (

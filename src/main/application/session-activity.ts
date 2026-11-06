@@ -13,10 +13,14 @@ function simpleHook(event: 'working' | 'idle'): string {
 /** Wraps the hook's stdin JSON (single line) into one signal line. */
 const NOTIFICATION_HOOK = `${GUARD} || { printf '{"event":"notification","payload":'; tr -d '\\n\\r'; printf '}\\n'; } >> "$${SIGNAL_FILE_ENV}"; exit 0`;
 
+/** Same wrapping as `notification`, for `PreToolUse`: the payload carries `tool_name`/`tool_input`, which feed the "Edit CartService.ts" detail line. */
+const TOOL_HOOK = `${GUARD} || { printf '{"event":"tool","payload":'; tr -d '\\n\\r'; printf '}\\n'; } >> "$${SIGNAL_FILE_ENV}"; exit 0`;
+
 export const SIGNAL_HOOK_COMMANDS = {
   working: simpleHook('working'),
   idle: simpleHook('idle'),
   notification: NOTIFICATION_HOOK,
+  tool: TOOL_HOOK,
 } as const;
 
 /**
@@ -41,6 +45,8 @@ export function claudeSignalSettings(): string {
       UserPromptSubmit: run(SIGNAL_HOOK_COMMANDS.working),
       // The tool ran, so any permission question was answered.
       PostToolUse: run(SIGNAL_HOOK_COMMANDS.working),
+      // Working, plus which tool is running (detail line).
+      PreToolUse: run(SIGNAL_HOOK_COMMANDS.tool),
       Stop: run(SIGNAL_HOOK_COMMANDS.idle),
       Notification: [
         { matcher: 'permission_prompt|elicitation_dialog', hooks: [{ type: 'command', command: SIGNAL_HOOK_COMMANDS.notification }] },
@@ -61,8 +67,8 @@ export function parseSignalLine(line: string): SessionSignal | null {
   }
   if (raw === null || typeof raw !== 'object') return null;
   const { event, payload } = raw as { event?: unknown; payload?: unknown };
-  if (event !== 'working' && event !== 'idle' && event !== 'notification') return null;
-  if (event !== 'notification') return { event };
+  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool') return null;
+  if (event === 'working' || event === 'idle') return { event };
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
   return { event, payload: payload as Record<string, unknown> };
 }
@@ -70,12 +76,18 @@ export function parseSignalLine(line: string): SessionSignal | null {
 export interface ActivityChange {
   activity: SessionActivity;
   attention?: SessionAttention;
+  /** Short "what it is doing now" line while working, e.g. `Edit CartService.ts`. */
+  detail?: string;
 }
 
 /** Interprets a signal; `null` = ignore it (keep the current state). */
 export function interpretSignal(signal: SessionSignal): ActivityChange | null {
   if (signal.event === 'working') return { activity: 'working' };
   if (signal.event === 'idle') return { activity: 'idle' };
+  if (signal.event === 'tool') {
+    const detail = toolDetail(signal.payload);
+    return detail ? { activity: 'working', detail } : { activity: 'working' };
+  }
   const type = signal.payload?.['notification_type'];
   const message = signal.payload?.['message'];
   if (type === 'permission_prompt') {
@@ -85,6 +97,24 @@ export function interpretSignal(signal: SessionSignal): ActivityChange | null {
   if (type === 'elicitation_dialog') return { activity: 'needs-input', attention: { kind: 'question' } };
   // idle_prompt, auth_success, … must never read as "needs you".
   return null;
+}
+
+const MAX_DETAIL_CHARS = 60;
+
+/** `PreToolUse` payload → "Edit CartService.ts" / "Bash: npm test" / "Read"; `undefined` when the tool is unknown. */
+export function toolDetail(payload: Record<string, unknown> | undefined): string | undefined {
+  const tool = payload?.['tool_name'];
+  if (typeof tool !== 'string' || tool === '') return undefined;
+  const input = payload?.['tool_input'];
+  const fields = input !== null && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const path = fields['file_path'];
+  const command = fields['command'];
+  let target: string | undefined;
+  if (typeof path === 'string' && path !== '') target = path.split('/').pop();
+  else if (typeof command === 'string' && command !== '') target = command.replace(/\s+/g, ' ').trim();
+  if (!target) return tool;
+  const text = typeof command === 'string' && target === command.replace(/\s+/g, ' ').trim() ? `${tool}: ${target}` : `${tool} ${target}`;
+  return text.length > MAX_DETAIL_CHARS ? `${text.slice(0, MAX_DETAIL_CHARS - 1)}…` : text;
 }
 
 /** "Claude needs your permission to use Bash" → "Bash". */

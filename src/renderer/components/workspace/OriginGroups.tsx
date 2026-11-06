@@ -120,14 +120,16 @@ interface PersistedGroupProps {
   depth: number;
   /** Whether the group starts open when the user has not toggled it yet. */
   defaultOpen: boolean;
+  /** Dims the header — a level with nothing in it. */
+  muted?: boolean;
   children: React.ReactNode;
 }
 
 /** A collapsible group whose open state is remembered: a type ("Skills") or the "Plugins" block of the flat Control Panel list. */
-export function PersistedGroup({ glyph, label, count, storageKey, testId, forceOpen, depth, defaultOpen, children }: PersistedGroupProps): React.ReactElement {
+export function PersistedGroup({ glyph, label, count, storageKey, testId, forceOpen, depth, defaultOpen, muted = false, children }: PersistedGroupProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);
   return (
-    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)}>
+    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)} muted={muted}>
       {children}
     </TreeSubGroup>
   );

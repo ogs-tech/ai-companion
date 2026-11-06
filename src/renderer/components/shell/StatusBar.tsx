@@ -72,7 +72,10 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
   // Git exists only inside a workspace (at Início the call is rejected), and one fetch is enough here: git operations invalidate the query.
   const { data: git } = useQuery({ ...gitStatusOptions(undefined, false), enabled: inWorkspace });
   const branch = git?.isRepo ? git.head.name : null;
-  const needsYou = (sessions ?? []).filter((s) => s.status === 'running' && s.activity === 'needs-input').length;
+  const live = (sessions ?? []).filter((s) => s.status === 'running');
+  const needsYou = live.filter((s) => s.activity === 'needs-input').length;
+  const working = live.filter((s) => s.activity === 'working').length;
+  const idle = live.filter((s) => (s.activity ?? 'idle') === 'idle').length;
 
   return (
     <Box
@@ -122,6 +125,13 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
             {needsYou === 1 ? '! 1 sessão precisa de você' : `! ${needsYou} sessões precisam de você`}
           </Box>
         )}
+
+        {working > 0 && (
+          <Box component="span" data-testid="status-working" sx={{ color: 'success.main' }}>
+            {`✻ ${working} trabalhando`}
+          </Box>
+        )}
+        {idle > 0 && <Box component="span" data-testid="status-idle">{`◌ ${idle} ${idle === 1 ? 'ociosa' : 'ociosas'}`}</Box>}
 
         {cursor !== null && (
           <Box component="span" data-testid="status-cursor">{`Ln ${cursor.line}, Col ${cursor.column}`}</Box>

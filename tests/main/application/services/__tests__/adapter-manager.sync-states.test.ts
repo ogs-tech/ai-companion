@@ -9,8 +9,7 @@ import { FileMaterializer } from '../../../../../src/main/application/services/f
 import { AdapterManager } from '../../../../../src/main/application/services/adapter-manager.js';
 import { SettingsService } from '../../../../../src/main/application/services/settings-service.js';
 import { ClaudeAdapter } from '../../../../../src/main/infrastructure/adapters/claude-adapter.js';
-import { DomainError } from '../../../../../src/main/domain/errors.js';
-import { WORKSPACE_SOURCE, type Instruction, type Skill } from '../../../../../src/shared/entity.js';
+import { WORKSPACE_SOURCE, type Skill } from '../../../../../src/shared/entity.js';
 import type { Settings } from '../../../../../src/shared/settings.js';
 
 const HOMEDIR = '/home/alice';

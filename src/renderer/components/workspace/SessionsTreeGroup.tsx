@@ -88,6 +88,7 @@ interface MergedRow {
   waitingSince: number | null;
   /** When an `idle` session stopped, for "há 3min". */
   idleSince: number | null;
+  workingSince: number | null;
 }
 
 /**
@@ -383,6 +384,8 @@ export function SessionsTreeGroup({
               attention={row.live?.attention}
               waitingSince={row.waitingSince}
               idleSince={row.idleSince}
+              workingSince={row.workingSince}
+              activityDetail={row.live?.activityDetail}
               now={now}
               history={row.history}
               onOpen={() => void handleOpen(row)}
@@ -531,6 +534,7 @@ function mergeRows(
       state,
       waitingSince: session.activity === 'needs-input' ? (session.activitySince ?? null) : null,
       idleSince: state === 'idle' ? (session.activitySince ?? null) : null,
+      workingSince: state === 'working' ? (session.activitySince ?? null) : null,
       // Memory wins on label: it knows the anchor this session was opened
       // from, which is more meaningful here than the CLI's generated title.
       label: session.label,
@@ -554,6 +558,7 @@ function mergeRows(
       state: rowStateOf(null),
       waitingSince: null,
       idleSince: null,
+      workingSince: null,
       sortAt: Date.parse(entry.endedAt),
     });
   }

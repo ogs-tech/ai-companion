@@ -152,6 +152,8 @@ interface TreeSubGroupProps {
   depth: number;
   expanded: boolean;
   onToggle: () => void;
+  /** Dims the header — a level with nothing in it. */
+  muted?: boolean;
   children: React.ReactNode;
 }
 
@@ -160,7 +162,7 @@ interface TreeSubGroupProps {
  * Controlled (`expanded`/`onToggle`) so the parent can persist the choice and
  * force it open while a search is active.
  */
-export function TreeSubGroup({ testId, glyph, label, count, depth, expanded, onToggle, children }: TreeSubGroupProps): React.ReactElement {
+export function TreeSubGroup({ testId, glyph, label, count, depth, expanded, onToggle, muted = false, children }: TreeSubGroupProps): React.ReactElement {
   return (
     <>
       <TreeRow
@@ -170,6 +172,7 @@ export function TreeSubGroup({ testId, glyph, label, count, depth, expanded, onT
         glyph={glyph}
         primary={label}
         onClick={onToggle}
+        muted={muted}
         badge={<Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>}
       />
       <Collapse in={expanded} unmountOnExit>

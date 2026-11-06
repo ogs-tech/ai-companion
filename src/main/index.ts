@@ -77,7 +77,7 @@ import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-c
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
-import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL } from '../shared/session.js';
+import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL, SESSION_ACTIVITY_BATCH_MS } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
 import { TERMINAL_OUTPUT_CHANNEL, TERMINAL_EXIT_CHANNEL } from '../shared/terminal.js';
 import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
@@ -514,8 +514,17 @@ async function wireIpc(): Promise<void> {
     sessionService.onOutput((sessionId, chunk) => {
       mainWindow?.webContents.send(SESSION_OUTPUT_CHANNEL, { sessionId, chunk });
     });
+    // Coalesced: a tool-heavy turn fires a signal per tool call, but the UI needs one push per window.
+    const pendingActivity = new Set<string>();
+    let activityFlush: NodeJS.Timeout | undefined;
     sessionService.onActivity((sessionId) => {
-      mainWindow?.webContents.send(SESSION_ACTIVITY_CHANNEL, { sessionId });
+      pendingActivity.add(sessionId);
+      activityFlush ??= setTimeout(() => {
+        activityFlush = undefined;
+        const sessionIds = [...pendingActivity];
+        pendingActivity.clear();
+        mainWindow?.webContents.send(SESSION_ACTIVITY_CHANNEL, { sessionIds });
+      }, SESSION_ACTIVITY_BATCH_MS);
     });
     sessionService.onExit((sessionId, _status, exitCode) => {
       mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });

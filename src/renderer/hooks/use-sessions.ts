@@ -43,3 +43,14 @@ export function useSessionStatus(anchor: SessionAnchor): SessionStatus | undefin
   if (matches.some((session) => session.status === 'running')) return 'running';
   return matches.length > 0 ? 'exited' : undefined;
 }
+
+/**
+ * One session's live snapshot, read from the shared sessions store — the
+ * subscription that replaces a one-shot `session.status` lookup, so a pill
+ * can never stick on its first value. `undefined` until the session is listed.
+ */
+export function useSessionSnapshot(sessionId: string | null): SessionSnapshot | undefined {
+  const { data } = useSessions();
+  if (!sessionId) return undefined;
+  return data?.find((session) => session.sessionId === sessionId);
+}

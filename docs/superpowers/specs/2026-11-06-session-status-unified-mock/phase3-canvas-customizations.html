@@ -1,0 +1,98 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>phase3-canvas-customizations</title></head><body style="margin:0;padding:24px;background:#0b1220;color:#F2EEE5;font-family:Space Grotesk,-apple-system,sans-serif"><h2>Fase 3: canvas e painel de customizações</h2>
+<p class="subtitle">O estado das sessões aparece onde você já está trabalhando: nos arquivos e nas customizações. Nada novo para aprender, só o mesmo indicador.</p>
+
+<style>
+  .p3{--canvas:#0F1828;--paper:#16223A;--rail:#1B2944;--ink:#F2EEE5;--mute:#8D9AB3;--faint:#5C6A85;--line:rgba(242,238,229,.09);--azul:#5B79E0;--verde:#3FB97A;--ambar:#E5B547;
+      font-family:"Space Grotesk",-apple-system,sans-serif;color:var(--ink);font-size:13px}
+  .p3 *{box-sizing:border-box}
+  .p3 .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 8px;margin-bottom:6px}
+  .p3 .cap{font-size:13px;color:#8a8f98;margin:18px 0 6px}
+  .p3 .ind{width:16px;height:16px;flex:none;display:inline-grid;place-items:center;font-weight:700;font-size:12px}
+  .p3 .w{color:var(--verde)}.p3 .q{color:var(--ambar)}.p3 .i,.p3 .x{color:var(--faint)}
+  .p3 .w .g{animation:spin 2.4s linear infinite;display:inline-block}.p3 .q .g{animation:pulse 1.4s ease-in-out infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{opacity:.35}}
+  @media (prefers-reduced-motion:reduce){.p3 .g{animation:none!important}}
+  .p3 .two{display:grid;grid-template-columns:1fr 1.5fr;gap:12px;align-items:start}
+  .p3 .t{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px;white-space:nowrap}
+  .p3 .t:hover{background:var(--rail)}.p3 .t .n{margin-left:auto;color:var(--mute);font-size:12px;display:inline-flex;align-items:center;gap:5px}
+  .p3 .l2{padding-left:24px}.p3 .l3{padding-left:40px}.p3 .dim{color:var(--mute)}
+  .p3 .who{font-size:11px;border:1px solid rgba(63,185,122,.4);color:var(--verde);border-radius:4px;padding:0 5px;margin-left:auto;display:inline-flex;gap:4px;align-items:center}
+  .p3 .who.old{border-color:var(--line);color:var(--mute)}
+  .p3 .who.clash{border-color:rgba(229,181,71,.6);color:var(--ambar)}
+  .p3 .ed{background:var(--canvas);border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  .p3 .tabs{display:flex;background:var(--paper);border-bottom:1px solid var(--line)}
+  .p3 .tab{padding:8px 14px;color:var(--mute);display:flex;gap:7px;align-items:center}.p3 .tab.on{color:var(--ink);box-shadow:inset 0 -2px var(--azul)}
+  .p3 .bn{display:flex;gap:10px;align-items:center;padding:8px 12px;background:rgba(229,181,71,.1);border-bottom:1px solid rgba(229,181,71,.35);line-height:1.4}
+  .p3 .bn.ok{background:rgba(63,185,122,.08);border-color:rgba(63,185,122,.3)}
+  .p3 .code{font:12px/1.6 ui-monospace,Menlo,monospace;padding:10px 14px;color:var(--mute)}
+  .p3 .code .a{background:rgba(63,185,122,.14);color:#bfe9d1;display:block;margin:0 -14px;padding:0 14px}
+  .p3 .code .d{background:rgba(229,72,77,.12);color:#f0b9bb;display:block;margin:0 -14px;padding:0 14px;text-decoration:line-through}
+  .p3 .b{border:1px solid var(--line);background:none;color:var(--ink);border-radius:6px;padding:3px 9px;font:inherit;font-size:12px;margin-left:auto}
+  .p3 .b+.b{margin-left:0}.p3 .b.p{background:var(--azul);border-color:var(--azul)}
+  .p3 .chip{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:2px 9px;font-size:12px;color:var(--mute);margin-right:6px}
+  .p3 .chip.on{background:var(--rail);color:var(--ink);border-color:rgba(63,185,122,.45)}
+  .p3 .pop{margin:2px 8px 8px 40px;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+  .p3 .pop .t{height:26px;padding:0}
+  .p3 .toast{display:flex;gap:12px;align-items:center;background:#0b1220;border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+  .p3 .toast small{display:block;color:var(--mute);font-size:12px}
+  .p3 .hx{display:inline-flex;gap:4px}.p3 .hx s{text-decoration:none;font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--mute)}
+  .p3 .hx s.ok{color:var(--verde);border-color:rgba(63,185,122,.35)}.p3 .hx s.wn{color:var(--ambar);border-color:rgba(229,181,71,.45)}
+  .p3 table{width:100%;border-collapse:collapse;font-size:12px}.p3 td,.p3 th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--mute);font-weight:400;vertical-align:top}.p3 td:first-child{color:var(--ink);white-space:nowrap}
+</style>
+
+<div class="p3">
+
+  <div class="cap">E. Canvas: árvore de arquivos e editor</div>
+  <div class="two">
+    <div class="panel">
+      <div class="t"><span class="dim">▾ src/services</span></div>
+      <div class="t l2">CartService.ts<span class="who"><span class="ind w"><span class="g">✻</span></span>checkout-flow</span></div>
+      <div class="t l2">PaymentService.ts<span class="who old">checkout-flow · 1m</span></div>
+      <div class="t l2">OrderService.ts<span class="who clash">conflito</span></div>
+      <div class="t l2 dim">api.ts</div>
+      <div class="sub" style="margin:8px 8px 2px;font-size:12px;color:var(--mute)">Verde: sendo editado agora. Cinza: alterado neste turno. Âmbar: você tem edições não salvas num arquivo que uma sessão também está editando.</div>
+    </div>
+    <div class="ed">
+      <div class="tabs"><div class="tab on">OrderService.ts <span class="ind q">●</span></div><div class="tab">CartService.ts <span class="ind w"><span class="g">✻</span></span></div></div>
+      <div class="bn"><span class="ind q">!</span><span style="flex:1">checkout-flow também está editando este arquivo. Salvar agora pode sobrescrever o trabalho dela.</span><button class="b">Ver o que mudou</button><button class="b p">Salvar mesmo assim</button></div>
+      <div class="code"><span class="d">  return total + tax(order);</span><span class="a">  return roundCents(total + tax(order));</span>  // restante do arquivo</div>
+    </div>
+  </div>
+
+  <div class="cap">Depois que a sessão termina, a marca vira um resumo (e some ao abrir o diff)</div>
+  <div class="ed">
+    <div class="bn ok"><span class="ind w">✓</span><span style="flex:1">checkout-flow alterou 3 arquivos neste turno (+42 −9).</span><button class="b">Ver diff</button><button class="b">Abrir sessão</button></div>
+  </div>
+  <p class="sub" style="color:var(--mute);font-size:12px;margin:4px 4px 0">Fora de escopo: desfazer/reverter pelo app. O diff usa o git do workspace, como hoje.</p>
+
+  <div class="cap">F. Painel de customizações: quem está usando o quê</div>
+  <div class="panel">
+    <div style="padding:2px 8px 8px"><span class="chip on"><span class="ind w"><span class="g">✻</span></span>Em uso agora · 4</span><span class="chip">Todas</span></div>
+    <div class="t l2"><span class="dim">✦</span> code-review<span class="n"><span class="ind w"><span class="g">✻</span></span>2 sessões</span></div>
+    <div class="pop">
+      <div class="t"><span class="ind w"><span class="g">✻</span></span>checkout-flow<span class="n">Trabalhando</span></div>
+      <div class="t"><span class="ind q"><span class="g">!</span></span>fix-migration <span class="who old" style="margin-left:6px">externa</span><span class="n">Pergunta</span></div>
+    </div>
+    <div class="t l2"><span class="dim">⌘</span> github (MCP)<span class="n"><span class="ind w"><span class="g">✻</span></span>1 sessão</span></div>
+    <div class="t l2"><span class="dim">◈</span> reviewer (agente)<span class="n"><span class="ind i">◌</span>1 sessão</span></div>
+    <div class="t l2 dim"><span>✦</span> writing-plans</div>
+  </div>
+  <p class="sub" style="color:var(--mute);font-size:12px;margin:4px 4px 0">"Em uso" = a sessão invocou a skill, o agente ou uma ferramenta do MCP neste turno ou nos últimos 10 minutos (lido do transcript). Hooks aparecem como "configurado", não "em uso" (não dá para saber de forma confiável).</p>
+
+  <div class="cap">Editar ou desativar algo em uso: aviso inline e desfazer, sem diálogo</div>
+  <div class="toast"><div style="flex:1">code-review desativada<small>2 sessões em andamento podem continuar usando-a até reiniciar.</small></div><button class="b p">Desfazer</button></div>
+
+  <div class="cap">Saúde dos sinais (explica "por que esta sessão está sem estado")</div>
+  <div class="panel">
+    <div class="t">Sinais de sessão<span class="n"><span class="hx"><s class="ok">Claude instalado</s><s class="wn">Cursor: recarregar o Cursor</s></span></span></div>
+    <div class="t dim" style="padding-left:16px;font-size:12px">Sessões do Cursor abertas antes da instalação só passam a informar o estado depois de recarregar.</div>
+  </div>
+
+  <div class="cap">Fontes de cada marca</div>
+  <div class="panel"><table>
+    <tr><td>Arquivo em edição</td><td>Hook PreToolUse/PostToolUse com <code>tool_input.file_path</code> (Edit, Write, MultiEdit); externas via arquivo de sinal. Cursor: evento de edição do hook. Sem hook, nenhuma marca (nunca chuta).</td></tr>
+    <tr><td>Customização em uso</td><td>Entradas do transcript: <code>Skill</code>, <code>Task</code> com subagent, <code>mcp__servidor__ferramenta</code>. Índice incremental por sessão (só lê o que cresceu).</td></tr>
+    <tr><td>Renderização</td><td>Um mapa <code>arquivo → sessões</code> e <code>entidade → sessões</code> no store; a árvore assina só as linhas visíveis (virtualizadas).</td></tr>
+  </table></div>
+</div>
+</body></html>

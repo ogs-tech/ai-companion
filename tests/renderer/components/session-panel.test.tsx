@@ -222,8 +222,9 @@ describe('<SessionPanel>', () => {
       await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Trabalhando'));
 
       activity = 'needs-input';
-      act(() => (onAnyActivity.mock.calls[0]?.[0] as (id: string) => void)('s1'));
-      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Aguardando você'));
+      // The sessions store and the panel both subscribe; main's push reaches every listener.
+      act(() => onAnyActivity.mock.calls.forEach(([listener]) => (listener as (id: string) => void)('s1')));
+      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Pergunta'));
     });
   });
 

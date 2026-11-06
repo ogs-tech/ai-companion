@@ -486,6 +486,19 @@ export class AdapterManager {
     source: string,
     dest: AdapterDestination,
   ): Promise<SyncResult> {
+    if ((dest.strategy === 'symlink' || dest.strategy === 'write') && dest.keepForeign === true) {
+      const foreign = await this.foreignFileAt(dest, source);
+      if (foreign) {
+        const message = `${dest.destination} already exists and is not managed by the app; left untouched`;
+        return {
+          adapter: adapterId,
+          destination: dest.destination,
+          status: 'ok',
+          message,
+          details: { skipped: 'foreign-file', reason: message },
+        };
+      }
+    }
     if (dest.strategy === 'write') {
       return this.writeDestination(adapterId, dest);
     }
@@ -511,6 +524,21 @@ export class AdapterManager {
       return payload;
     } catch (err) {
       return this.symlinkError(adapterId, dest.destination, err);
+    }
+  }
+
+  /** True when a file the app does not own occupies the destination (never our symlink or marked file). */
+  private async foreignFileAt(dest: Extract<AdapterDestination, { strategy: 'symlink' | 'write' }>, source: string): Promise<boolean> {
+    try {
+      if (dest.strategy === 'symlink') {
+        return (await this.deps.symlinkManager.validate({ destination: dest.destination, source })) === 'real-file';
+      }
+      const args: Parameters<typeof this.deps.fileMaterializer.validate>[0] = { destination: dest.destination, content: dest.content };
+      if (dest.ownershipMarker !== undefined) args.ownershipMarker = dest.ownershipMarker;
+      if (dest.ownershipCheck !== undefined) args.ownershipCheck = dest.ownershipCheck;
+      return (await this.deps.fileMaterializer.validate(args)) === 'foreign';
+    } catch {
+      return false;
     }
   }
 
