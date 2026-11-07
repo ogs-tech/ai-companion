@@ -110,10 +110,17 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
   }, [visible]);
 
   return (
-    <Box
-      ref={containerRef}
-      data-testid={`terminal-panel-${terminalId}`}
-      sx={{ height: '100%', width: '100%', bgcolor: ogs.ink, p: 1, boxSizing: 'border-box' }}
-    />
+    // Padding lives on this wrapper, never on the host xterm opens into:
+    // FitAddon reads the host's computed `width`, which under `border-box`
+    // includes padding — so a padded host yields too many columns, the grid
+    // overflows horizontally, the scrollbar toggles the layout and the
+    // ResizeObserver re-fits in a loop (visible as flicker).
+    <Box sx={{ height: '100%', width: '100%', bgcolor: ogs.ink, p: 1, boxSizing: 'border-box' }}>
+      <Box
+        ref={containerRef}
+        data-testid={`terminal-panel-${terminalId}`}
+        sx={{ height: '100%', width: '100%', overflow: 'hidden' }}
+      />
+    </Box>
   );
 }

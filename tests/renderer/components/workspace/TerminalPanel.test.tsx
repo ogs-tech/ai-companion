@@ -4,7 +4,7 @@ import { TerminalPanel } from '../../../../src/renderer/components/workspace/Ter
 import * as ipc from '../../../../src/renderer/lib/ipc.js';
 
 const xterm = vi.hoisted(() => ({
-  instances: [] as Array<{ write: ReturnType<typeof vi.fn>; emitData: (d: string) => void; dispose: ReturnType<typeof vi.fn> }>,
+  instances: [] as Array<{ write: ReturnType<typeof vi.fn>; open: ReturnType<typeof vi.fn>; emitData: (d: string) => void; dispose: ReturnType<typeof vi.fn> }>,
 }));
 
 vi.mock('@xterm/xterm', () => ({
@@ -96,6 +96,15 @@ describe('TerminalPanel', () => {
     xterm.instances[0]!.emitData('ls\r');
     expect(ipc.callIpc).toHaveBeenCalledWith('terminal.write', { terminalId: 't1', data: 'ls\r' });
     await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('terminal.resize', { terminalId: 't1', cols: 100, rows: 30 }));
+  });
+
+  it('opens xterm in a padding-free, clipped host so FitAddon measures the real width', () => {
+    render(<TerminalPanel terminalId="t1" />);
+    const host = vi.mocked(xterm.instances[0]!.open).mock.calls[0]![0] as HTMLElement;
+    const style = getComputedStyle(host);
+    expect(style.paddingLeft).not.toMatch(/[1-9]/);
+    expect(style.paddingTop).not.toMatch(/[1-9]/);
+    expect(style.overflow).toBe('hidden');
   });
 
   it('does not resize while hidden', () => {
