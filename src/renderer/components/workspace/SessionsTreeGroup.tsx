@@ -144,6 +144,19 @@ export function SessionsTreeGroup({
   );
   const rows = useMemo(() => mergeRows(liveScoped, historyEntries), [liveScoped, historyEntries]);
   const [filter, setFilter] = useState<SessionFilter | null>(null);
+
+  // The CLI writes its title when a turn ends, so reload the history whenever a live session settles to idle.
+  const activityByPrev = useRef(new Map<string, SessionSnapshot['activity']>());
+  useEffect(() => {
+    let settled = false;
+    const next = new Map<string, SessionSnapshot['activity']>();
+    for (const s of liveSessions ?? []) {
+      next.set(s.sessionId, s.activity);
+      if (s.activity === 'idle' && activityByPrev.current.get(s.sessionId) === 'working') settled = true;
+    }
+    activityByPrev.current = next;
+    if (settled) void queryClient.invalidateQueries({ queryKey: ['session-history'] });
+  }, [liveSessions, queryClient]);
   const counts = useMemo(() => {
     const loaded = countByFilter([...rows.map((r) => r.state), ...externalList.map(externalStateOf)]);
     // History arrives page by page, so the loaded rows undercount. Every
@@ -541,6 +554,18 @@ export function currentScopeId(scope: HistoryScope): string | null {
   return scope.kind === 'workspace' ? scope.workspaceId : null;
 }
 
+/**
+ * Entity-anchored sessions keep the anchor's name (it says what they were opened
+ * for). Workspace/Início ones only have a generic "<name> N" label, so the CLI's
+ * own title replaces it as soon as the transcript has one.
+ */
+const UNTITLED_LABEL = 'Untitled';
+
+function liveLabelOf(session: SessionSnapshot, entry: SessionHistoryEntry | null): string {
+  const generic = session.anchor.kind === 'workspace' || session.anchor.kind === 'personal';
+  return generic ? (entry?.title ?? UNTITLED_LABEL) : session.label;
+}
+
 function mergeRows(
   live: readonly SessionSnapshot[],
   history: readonly SessionHistoryEntry[],
@@ -561,9 +586,7 @@ function mergeRows(
       waitingSince: session.activity === 'needs-input' ? (session.activitySince ?? null) : null,
       idleSince: state === 'idle' ? (session.activitySince ?? null) : null,
       workingSince: state === 'working' ? (session.activitySince ?? null) : null,
-      // Memory wins on label: it knows the anchor this session was opened
-      // from, which is more meaningful here than the CLI's generated title.
-      label: session.label,
+      label: liveLabelOf(session, entry),
       status: session.status,
       live: session,
       history: entry,

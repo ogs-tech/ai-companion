@@ -16,6 +16,9 @@ const NOTIFICATION_HOOK = `${GUARD} || { printf '{"event":"notification","payloa
 /** Same wrapping as `notification`, for `PreToolUse`: the payload carries `tool_name`/`tool_input`, which feed the "Edit CartService.ts" detail line. */
 const TOOL_HOOK = `${GUARD} || { printf '{"event":"tool","payload":'; tr -d '\\n\\r'; printf '}\\n'; } >> "$${SIGNAL_FILE_ENV}"; exit 0`;
 
+/** `SessionStart` (startup/resume/clear/compact): its payload carries the CLI's current `session_id`, which `/clear` replaces. */
+const SESSION_START_HOOK = `${GUARD} || { printf '{"event":"session-start","payload":'; tr -d '\\n\\r'; printf '}\\n'; } >> "$${SIGNAL_FILE_ENV}"; exit 0`;
+
 /** Marker the inline-answer setting toggles; absent = the permission hook returns at once and Claude shows its own prompt. */
 export const INLINE_ANSWER_MARKER = 'signals/inline-answer-enabled';
 
@@ -43,6 +46,7 @@ export const SIGNAL_HOOK_COMMANDS = {
   notification: NOTIFICATION_HOOK,
   tool: TOOL_HOOK,
   permission: PERMISSION_HOOK,
+  sessionStart: SESSION_START_HOOK,
 } as const;
 
 /**
@@ -70,6 +74,7 @@ export function claudeSignalSettings(): string {
       // Working, plus which tool is running (detail line).
       PreToolUse: run(SIGNAL_HOOK_COMMANDS.tool),
       PermissionRequest: [{ hooks: [{ type: 'command', command: SIGNAL_HOOK_COMMANDS.permission, timeout: 30 }] }],
+      SessionStart: run(SIGNAL_HOOK_COMMANDS.sessionStart),
       Stop: run(SIGNAL_HOOK_COMMANDS.idle),
       Notification: [
         { matcher: 'permission_prompt|elicitation_dialog', hooks: [{ type: 'command', command: SIGNAL_HOOK_COMMANDS.notification }] },
@@ -90,7 +95,7 @@ export function parseSignalLine(line: string): SessionSignal | null {
   }
   if (raw === null || typeof raw !== 'object') return null;
   const { event, payload } = raw as { event?: unknown; payload?: unknown };
-  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool' && event !== 'permission') return null;
+  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool' && event !== 'permission' && event !== 'session-start') return null;
   if (event === 'working' || event === 'idle') return { event };
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
   return { event, payload: payload as Record<string, unknown> };
@@ -111,6 +116,7 @@ export interface ActivityChange {
 
 /** Interprets a signal; `null` = ignore it (keep the current state). */
 export function interpretSignal(signal: SessionSignal): ActivityChange | null {
+  if (signal.event === 'session-start') return null;
   if (signal.event === 'working') return { activity: 'working' };
   if (signal.event === 'idle') return { activity: 'idle' };
   if (signal.event === 'permission') {

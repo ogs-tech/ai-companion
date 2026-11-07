@@ -76,7 +76,7 @@ describe('isAnswerInput', () => {
 describe('claudeSignalSettings', () => {
   it('subscribes to the activity hooks but not to idle_prompt', () => {
     const settings = JSON.parse(claudeSignalSettings()) as { hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>> };
-    expect(Object.keys(settings.hooks).sort()).toEqual(['Notification', 'PermissionRequest', 'PostToolUse', 'PreToolUse', 'Stop', 'UserPromptSubmit']);
+    expect(Object.keys(settings.hooks).sort()).toEqual(['Notification', 'PermissionRequest', 'PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']);
     expect(settings.hooks['Notification']?.[0]?.matcher).toBe('permission_prompt|elicitation_dialog');
     expect(settings.hooks['Stop']?.[0]?.hooks[0]?.command).toBe(SIGNAL_HOOK_COMMANDS.idle);
   });

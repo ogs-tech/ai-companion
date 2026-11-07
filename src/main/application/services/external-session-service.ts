@@ -55,7 +55,8 @@ export class ExternalSessionService {
   }
 
   list(): ExternalSession[] {
-    return [...this.sessions.values()];
+    // A `/clear` in an app session can register its new conversation here before the app learns the id; hide it.
+    return [...this.sessions.values()].filter((s) => !this.deps.isOwnConversation(s.id));
   }
 
   /** `off` stops every watcher and timer (the feature costs nothing); `exact` also listens to hook files; `estimated` only reads transcripts and processes. */
@@ -92,10 +93,28 @@ export class ExternalSessionService {
     let changed = false;
     const claimed = new Set<LiveProcess>();
 
+    // Pass 1: command lines that name the conversation. Pass 2: an id-less process serves ONE session in its cwd (the most recently active), so a single live process cannot keep every old transcript in that folder open.
+    const matched = new Map<ExternalSession, LiveProcess>();
     for (const session of this.sessions.values()) {
-      const process = this.matchProcess(session, live);
+      const byId = live.find((p) => p.conversationId === session.id);
+      if (byId) {
+        matched.set(session, byId);
+        claimed.add(byId);
+      }
+    }
+    const byRecency = [...this.sessions.values()].filter((s) => !matched.has(s)).sort((a, b) => b.lastEventAt - a.lastEventAt);
+    for (const session of byRecency) {
+      if (!session.cwd) continue;
+      const byCwd = live.find((p) => !claimed.has(p) && p.harness === session.harness && p.cwd === session.cwd && p.conversationId === null);
+      if (byCwd) {
+        matched.set(session, byCwd);
+        claimed.add(byCwd);
+      }
+    }
+
+    for (const session of this.sessions.values()) {
+      const process = matched.get(session);
       if (process) {
-        claimed.add(process);
         const terminal = process.terminal ?? undefined;
         if (session.closed || session.terminal !== terminal) {
           session.closed = false;
@@ -204,14 +223,6 @@ export class ExternalSessionService {
     delete session.activityDetail;
     delete session.editingFile;
     this.cancelSettle(session.id);
-  }
-
-  /** The process for a session: by conversation id when the command line names it, else the only unclaimed one in the same harness+cwd. */
-  private matchProcess(session: ExternalSession, live: readonly LiveProcess[]): LiveProcess | undefined {
-    const byId = live.find((p) => p.conversationId === session.id);
-    if (byId) return byId;
-    if (!session.cwd) return undefined;
-    return live.find((p) => p.harness === session.harness && p.cwd === session.cwd && p.conversationId === null);
   }
 
   private isKnown(process: LiveProcess): boolean {

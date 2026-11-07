@@ -1175,6 +1175,18 @@ describe('SessionService activity', () => {
     expect(changes).toEqual([sessionId, sessionId]);
   });
 
+  it('follows the conversation to the new session_id after /clear, without touching the activity', async () => {
+    const { service, signals, changes } = withSignals();
+    const { sessionId, conversationId } = await service.spawn(anchor);
+    signals.emit(sessionId, { event: 'session-start', payload: { session_id: 'new-id', source: 'clear' } });
+    expect(service.status(sessionId)?.conversationId).toBe('new-id');
+    expect(service.status(sessionId)?.activity).toBe('idle');
+    expect(changes).toHaveLength(1);
+    signals.emit(sessionId, { event: 'session-start', payload: { session_id: 'new-id' } });
+    expect(changes).toHaveLength(1);
+    expect(conversationId).not.toBe('new-id');
+  });
+
   it('ignores an idle_prompt notification instead of crying wolf', async () => {
     const { service, signals, changes } = withSignals();
     const { sessionId } = await service.spawn(anchor);

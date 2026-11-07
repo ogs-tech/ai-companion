@@ -120,6 +120,18 @@ describe('ExternalSessionService', () => {
     expect(t.service.list()[0]?.terminal).toBe('Terminal');
   });
 
+  it('lets one id-less process keep only the most recent session in its folder open', async () => {
+    const t = setup([{ pid: 7, harness: 'claude', cwd: '/w', terminal: 'VS Code', conversationId: null }]);
+    await t.service.setMode('exact');
+    t.signal(hook('old', { event: 'idle', payload: { cwd: '/w' } }));
+    t.advance(60_000);
+    t.signal(hook('recent', { event: 'idle', payload: { cwd: '/w' } }));
+    t.advance(11_000);
+    await t.service.scanProcesses();
+    const byId = Object.fromEntries(t.service.list().map((s) => [s.id, s.closed]));
+    expect(byId).toEqual({ old: true, recent: false });
+  });
+
   it('emits only on real change', () => {
     const t = setup();
     const changes = vi.fn();

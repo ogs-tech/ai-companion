@@ -120,19 +120,26 @@ describe('SessionsTreeGroup', () => {
       expect(screen.queryByTestId('tree-session-conv-running')).not.toBeInTheDocument();
     });
 
-    it("keeps the app's own label for a live session rather than the CLI's generated title", async () => {
+    it("shows the CLI's title for a live workspace session once it has one", async () => {
       route({
         'session.list': ok([runningSession]),
-        'sessionHistory.list': ok(
-          page([entry({ conversationId: 'conv-running', title: 'Título gerado' })]),
-        ),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-running', title: 'Título gerado' })])),
       });
 
       render();
 
       const row = await screen.findByTestId('tree-session-workspace:w1');
-      expect(within(row).getByText('Acme')).toBeInTheDocument();
-      expect(within(row).queryByText('Título gerado')).not.toBeInTheDocument();
+      expect(within(row).getByText('Título gerado')).toBeInTheDocument();
+      expect(within(row).queryByText('Acme')).not.toBeInTheDocument();
+    });
+
+    it('labels a live workspace session "Untitled" until the CLI titles it', async () => {
+      route({ 'session.list': ok([runningSession]), 'sessionHistory.list': ok(page([])) });
+
+      render();
+
+      const row = await screen.findByTestId('tree-session-workspace:w1');
+      expect(within(row).getByText('Untitled')).toBeInTheDocument();
     });
 
     it('takes cost and model from the transcript for that same live session', async () => {

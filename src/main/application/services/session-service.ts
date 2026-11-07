@@ -100,6 +100,7 @@ export class SessionService {
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
     this.signals = options?.signals;
     this.signals?.onSignal((sessionId, signal) => {
+      if (signal.event === 'session-start') this.followConversation(sessionId, signal.payload);
       const change = interpretSignal(signal);
       if (change) this.setActivity(sessionId, change);
     });
@@ -166,6 +167,19 @@ export class SessionService {
     delete session.permissionRequest;
     this.outputTails.delete(session.sessionId);
     for (const listener of this.activityListeners) listener(session.sessionId);
+  }
+
+  /**
+   * `/clear` makes the CLI continue under a brand-new `session_id`. The session
+   * follows it so resume, history and the external-session filter keep pointing
+   * at the live conversation instead of the abandoned one.
+   */
+  private followConversation(sessionId: string, payload: Record<string, unknown> | undefined): void {
+    const session = this.sessions.get(sessionId);
+    const next = payload?.['session_id'];
+    if (!session || session.harness !== 'claude' || typeof next !== 'string' || next === session.conversationId) return;
+    session.conversationId = next;
+    for (const listener of this.activityListeners) listener(sessionId);
   }
 
   private setActivity(sessionId: string, change: ActivityChange): void {
