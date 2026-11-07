@@ -95,6 +95,6 @@ describe('SessionRow', () => {
       />,
     );
     expect(screen.getByTestId('row-reason')).toHaveTextContent('Permissão: Bash');
-    expect(screen.getByText('espera 4min')).toBeInTheDocument();
+    expect(screen.getByText('precisa de você · 4min')).toBeInTheDocument();
   });
 });

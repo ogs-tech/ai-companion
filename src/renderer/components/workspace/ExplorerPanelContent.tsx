@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import { useQueries } from '@tanstack/react-query';
-import { FolderTree as FilesGlyph, GitBranch, Search, SquareTerminal } from 'lucide-react';
+import { FolderTree as FilesGlyph, Globe, GitBranch, Search, SquareTerminal } from 'lucide-react';
 import { SectionHeader } from '../ds/ContainerChrome.js';
 import { FolderTree, type RootInfo } from './FolderTree.js';
 import type { ExplorerActions, PathChange } from './use-explorer-actions.js';
@@ -56,6 +56,8 @@ interface ExplorerPanelContentProps {
   onRemoved?: (paths: string[]) => void;
   /** Hands the screen the Explorer's controller (undo, paste) so menu commands can reach it. */
   onExplorerActions?: (actions: ExplorerActions) => void;
+  /** The Navegador view's body (rendered with `fill`). */
+  browserSection?: React.ReactNode;
   /** The "Buscar no projeto" view's body (rendered with `fill`). */
   searchSection?: React.ReactNode;
 }
@@ -127,6 +129,7 @@ function WorkspaceExplorer({
   onRemoved,
   onExplorerActions,
   searchSection,
+  browserSection,
 }: WorkspaceExplorerProps): React.ReactElement {
   const routing = useMemo(() => folderRoutingFor(workspace), [workspace]);
   const { multi, aliases } = routing;
@@ -193,14 +196,15 @@ function WorkspaceExplorer({
       count: terminals.filter((t) => t.status === 'running').length,
       badgeColor: 'success',
     },
+    { testId: 'explorer-view-browser', label: 'Navegador', glyph: Globe, active: view === 'browser', onClick: () => onSelectView('browser') },
   ];
 
   return (
     <ExplorerFrame rail={<ExplorerRail items={items} />}>
       {view === 'files' && (
         <>
+          <SectionHeader level="view" title="Arquivos" testId="explorer-files-header" actions={toolbarActions} />
           {openEditorsSection}
-          <SectionHeader title="Arquivos" testId="explorer-files-header" actions={toolbarActions} />
           <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             {/* Waits for the workspace so the root node is there from the first render — adding it later would remount every row. */}
             {workspace !== undefined && <FolderTree
@@ -259,6 +263,7 @@ function WorkspaceExplorer({
           <SingleRepoGitView workspaceId={workspace?.id} gitPolling={gitPolling} onOpenGitDiff={onOpenGitDiff} />
         ))}
       {view === 'terminals' && terminalsSection}
+      {view === 'browser' && browserSection}
       <DiscardConfirmDialog files={actions.pendingDiscard} onCancel={actions.cancelDiscard} onConfirm={actions.confirmDiscard} />
     </ExplorerFrame>
   );

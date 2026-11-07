@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HomeOverview } from '../../../../src/renderer/components/workspace/overview/HomeOverview.js';
 import { WorkspaceOverview } from '../../../../src/renderer/components/workspace/overview/WorkspaceOverview.js';
@@ -35,7 +35,7 @@ describe('todayFilters', () => {
 describe('HomeOverview', () => {
   const renderHome = (props: Partial<React.ComponentProps<typeof HomeOverview>> = {}) =>
     renderWithShell(
-      <HomeOverview onOpenSession={vi.fn()} onOpenHistory={vi.fn()} onOpenDiagnostics={vi.fn()} onError={vi.fn()} {...props} />,
+      <HomeOverview onOpenSession={vi.fn()} onOpenHistory={vi.fn()} onOpenDiagnostics={vi.fn()} {...props} />,
     );
 
   it('lists running sessions, opens one on click, and shows today\'s spend with a history link', async () => {
@@ -52,24 +52,11 @@ describe('HomeOverview', () => {
     expect(onOpenHistory).toHaveBeenCalled();
   });
 
-  it('lists recents newest first and switches on click', async () => {
-    const user = userEvent.setup();
-    answer({ 'workspace.list': [ACME, BRAVO], 'workspace.getActive': null, 'workspace.switchTo': BRAVO });
+  it('does not repeat the workspaces list — the left panel owns it', async () => {
+    answer({ 'workspace.list': [ACME, BRAVO], 'workspace.getActive': null });
     renderHome();
-    const card = await screen.findByTestId('overview-card-recents');
-    await waitFor(() => expect(within(card).getAllByTestId(/^overview-recent-/)).toHaveLength(2));
-    expect(within(card).getAllByTestId(/^overview-recent-/).map((r) => r.getAttribute('data-testid'))).toEqual([
-      'overview-recent-w2',
-      'overview-recent-w1',
-    ]);
-    await user.click(screen.getByTestId('overview-recent-w2'));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.switchTo', { id: 'w2' }));
-  });
-
-  it('offers "Abrir pasta…" when there are no recents', async () => {
-    answer({ 'workspace.list': [] });
-    renderHome();
-    expect(await screen.findByTestId('overview-open-folder')).toBeInTheDocument();
+    await screen.findByTestId('overview-card-sessions');
+    expect(screen.queryByTestId('overview-card-recents')).not.toBeInTheDocument();
   });
 
   it('shows the worst health severity, the top two problems, and links to Diagnóstico', async () => {
@@ -120,6 +107,7 @@ describe('WorkspaceOverview', () => {
         onOpenInstruction={vi.fn()}
         onOpenTerminal={vi.fn()}
         onError={vi.fn()}
+       
         {...props}
       />,
     );

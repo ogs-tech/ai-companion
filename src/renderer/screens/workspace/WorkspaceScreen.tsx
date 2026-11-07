@@ -18,6 +18,7 @@ import {
 import { Icon } from '../../components/ds/Icon.js';
 import { ResizeHandle } from '../../components/ds/ResizeHandle.js';
 import { panelCardSx, SidePanel } from '../../components/ds/SidePanel.js';
+import { BrowserSection } from '../../components/workspace/BrowserSection.js';
 import { ExplorerPanelContent } from '../../components/workspace/ExplorerPanelContent.js';
 import type { RailItem } from '../../components/workspace/ExplorerRail.js';
 import type { ExplorerView } from '../../components/workspace/ExplorerRail.js';
@@ -51,11 +52,13 @@ import {
   type ApplyWorkspaceHistoryResult,
   type WorkspaceHistoryEntry,
 } from '../../lib/workspace-history-store.js';
+import { shortcutFor } from '../../lib/shortcut-labels.js';
 import { registerAreaOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
 import { publishWorkspacePanels, registerWorkspaceShellCommands } from '../../lib/workspace-shell-store.js';
 import {
   closeBrowserTab,
   getBrowserTabsSnapshot,
+  openManualTab,
   reconcileBrowserTabs,
   registerBrowserWorkbenchOpener,
   subscribeBrowserTabs,
@@ -96,7 +99,7 @@ import { fileIconFor } from '../../lib/file-icon.js';
 import { registerExternalFileOpener, registerFileOpener } from '../../lib/file-opener.js';
 import { revealInEditor, type RevealTarget } from '../../lib/editor-navigation.js';
 import { noteRecentFile } from '../../lib/recent-files-store.js';
-import { Copy, FolderSearch, History as HistoryGlyph, Pin, PinOff, X as XGlyph } from 'lucide-react';
+import { Copy, FolderSearch, Plus, History as HistoryGlyph, Pin, PinOff, X as XGlyph } from 'lucide-react';
 import { restoreTabs, toPersisted, type EntityKind, type OpenTab, type RestoreContext } from './open-tabs.js';
 
 function errorMessage(err: unknown): string {
@@ -994,7 +997,6 @@ export function WorkspaceScreen(): React.ReactElement {
           onOpenSession={openSessionTab}
           onOpenHistory={openHistoryTab}
           onOpenDiagnostics={() => openAreaTab('diagnostico')}
-          onError={(message) => setToast({ variant: 'error', message })}
         />
       ),
   };
@@ -1228,6 +1230,15 @@ export function WorkspaceScreen(): React.ReactElement {
     />
   ) : undefined;
 
+  // Everything that becomes a Workbench tab. Shortcut hints only where a real accelerator exists.
+  const newMenu: RowContextMenuAction[] = activeWorkspace
+    ? [
+        { key: 'session', label: 'Nova sessão', glyph: Plus, onSelect: handleNewSession, ...(shortcutFor('new-session') ? { shortcut: shortcutFor('new-session') as string } : {}) },
+        { key: 'terminal', label: 'Novo terminal', glyph: SquareTerminal, onSelect: () => openTerminalIn('') },
+        { key: 'browser', label: 'Novo navegador', glyph: Globe, onSelect: () => void openManualTab().catch(showError) },
+      ]
+    : [];
+
   const tabMenu = (canvasTab: WorkbenchTab): RowContextMenuAction[] => {
     if (canvasTab.id === OVERVIEW_TAB_ID) return [];
     const tab = orderedTabs.find((t) => t.id === canvasTab.id);
@@ -1443,6 +1454,7 @@ export function WorkspaceScreen(): React.ReactElement {
               onNewAction={newActionForFile}
               openEditorsSection={openEditorsSection}
               {...(terminalsSection !== undefined ? { terminalsSection } : {})}
+              browserSection={<BrowserSection activeWorkbenchTabId={activeTabId} onError={(message) => setToast({ variant: 'error', message })} />}
               onOpenTerminalHere={openTerminalIn}
               onOpenGitDiff={openGitDiffTab}
               view={explorerView}
@@ -1453,7 +1465,7 @@ export function WorkspaceScreen(): React.ReactElement {
           <ResizeHandle />
           <Panel id="workbench-canvas-panel" minSize="30" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={panelCardSx()}>
-              <WorkbenchCanvas tabs={[overviewTab, ...canvasTabs]} activeTabId={activeTabId} onSelect={setActiveTabId} onReorder={reorderTabs} tabMenu={tabMenu} onDropFiles={dropOnEditor} />
+              <WorkbenchCanvas tabs={[overviewTab, ...canvasTabs]} activeTabId={activeTabId} onSelect={setActiveTabId} onReorder={reorderTabs} tabMenu={tabMenu} newMenu={newMenu} onDropFiles={dropOnEditor} />
             </Box>
           </Panel>
           <ResizeHandle />

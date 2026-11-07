@@ -69,7 +69,7 @@ describe('StatusBar', () => {
     const off = onMenuCommand('go-needs-attention', handler);
     renderWithShell(<StatusBar />);
     const item = await screen.findByTestId('status-needs-you');
-    expect(item).toHaveTextContent('! 1 sessão precisa de você');
+    expect(item).toHaveTextContent('1 sessão precisa de você');
     await userEvent.click(item);
     expect(handler).toHaveBeenCalledOnce();
     off();
@@ -98,9 +98,17 @@ describe('StatusBar', () => {
     expect(opener).toHaveBeenCalledWith('diagnostico');
   });
 
-  it('renders one adapter entry per harness, ✓ when enabled and — when not', async () => {
-    renderWithShell(<StatusBar />);
-    expect(await screen.findByTestId('status-adapter-claude')).toHaveTextContent('Claude ✓');
-    expect(screen.getByTestId('status-adapter-cursor')).toHaveTextContent('Cursor —');
+  it('keeps adapters and idle sessions out of the bar', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'workspace.getActive') return ok(null);
+      if (method === 'settings.get') return ok(SETTINGS);
+      if (method === 'session.list') return ok([{ sessionId: 's1', status: 'running', activity: 'idle' }]);
+      return ok(null);
+    });
+    renderWithShell(<StatusBar healthSeverity="ok" />);
+    await screen.findByTestId('status-pill-sync');
+    expect(screen.queryByTestId('status-adapter-claude')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-idle')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-sessions')).not.toBeInTheDocument();
   });
 });

@@ -1,10 +1,7 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
-import { Activity, Folder, FolderOpen, Globe, SquareTerminal } from 'lucide-react';
-import { Icon } from '../../ds/Icon.js';
+import { Stack, Typography } from '@mui/material';
+import { Activity, Globe, SquareTerminal } from 'lucide-react';
 import { StatusPill } from '../../ds/StatusPill.js';
 import { OverviewCard, OverviewGrid, OverviewLink, OverviewRow, todayFilters } from './OverviewCard.js';
-import { recentWorkspaces, useContextNavigation } from '../../../hooks/use-context-navigation.js';
-import { useWorkspaces } from '../../../hooks/use-workspaces.js';
 import { useSessions } from '../../../hooks/use-sessions.js';
 import { useSessionHistoryStats } from '../../../hooks/use-session-history.js';
 import { useHealthReport } from '../../../hooks/use-health-report.js';
@@ -12,7 +9,7 @@ import { usePersonalInstruction } from '../../../hooks/use-instructions.js';
 import { useCustomizationList } from '../../../hooks/use-customization-list.js';
 import { useMcpList } from '../../../hooks/use-mcp-list.js';
 import { useSettings } from '../../../hooks/use-settings.js';
-import { formatCostUsd, formatWhen } from '../../../lib/format-session-history.js';
+import { formatCostUsd } from '../../../lib/format-session-history.js';
 import { HARNESSES, HARNESS_IDS } from '../../../../shared/harness.js';
 import type { SessionSnapshot } from '../../../../shared/session.js';
 import type { Severity } from '../../../../shared/health.js';
@@ -25,17 +22,10 @@ interface HomeOverviewProps {
   /** Opens the Histórico tab (scope `all`). */
   onOpenHistory: () => void;
   onOpenDiagnostics: () => void;
-  onError: (message: string) => void;
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-/** Início's Visão geral: live sessions, recent workspaces, health and what Global holds. */
-export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics, onError }: HomeOverviewProps): React.ReactElement {
-  const { switchTo, openFolder } = useContextNavigation();
-  const { data: workspaces } = useWorkspaces();
+/** Início's Visão geral: live sessions, health and what Global holds. */
+export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics }: HomeOverviewProps): React.ReactElement {
   const { data: sessions } = useSessions();
   const { data: todayStats } = useSessionHistoryStats({ kind: 'all' }, todayFilters());
   const { data: health } = useHealthReport('personal');
@@ -46,15 +36,10 @@ export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics, 
   const { data: settings } = useSettings();
 
   const live = (sessions ?? []).filter((s) => s.status === 'running' && s.scopeId === null);
-  const recents = recentWorkspaces(workspaces ?? [], null);
   const problems = (health?.checks ?? [])
     .filter((c) => c.severity !== 'ok')
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
     .slice(0, 2);
-
-  const guarded = (action: () => Promise<unknown>): void => {
-    action().catch((err: unknown) => onError(errorMessage(err)));
-  };
 
   return (
     <OverviewGrid testId="home-overview">
@@ -80,34 +65,6 @@ export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics, 
               primary={s.label}
               trailing={<StatusPill variant="running" />}
               onClick={() => onOpenSession(s)}
-            />
-          ))
-        )}
-      </OverviewCard>
-
-      <OverviewCard testId="overview-card-recents" glyph={Folder} title="Recentes">
-        {recents.length === 0 ? (
-          <Box>
-            <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 1 }}>Nenhum workspace aberto ainda.</Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              data-testid="overview-open-folder"
-              startIcon={<Icon glyph={FolderOpen} size={14} />}
-              onClick={() => guarded(openFolder)}
-            >
-              Abrir pasta…
-            </Button>
-          </Box>
-        ) : (
-          recents.map((w) => (
-            <OverviewRow
-              key={w.id}
-              testId={`overview-recent-${w.id}`}
-              glyph={Folder}
-              primary={w.name}
-              {...(w.lastOpenedAt ? { secondary: formatWhen(w.lastOpenedAt) } : {})}
-              onClick={() => guarded(() => switchTo(w.id))}
             />
           ))
         )}

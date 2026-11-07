@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shell UX: mockup anotado</title>
+<style>
+  :root{--cream:#F7F4EE;--ink:#142036;--line:rgba(20,32,54,.11);--sec:#5A6573;--dis:#9AA0A8;--rail:#F2EEE5;--verde:#119350;--ambar:#9A6B00;--pin:#C0392B}
+  body{margin:0;padding:24px;background:#fff;color:var(--ink);font-family:"Space Grotesk",-apple-system,sans-serif;font-size:14px;line-height:1.5}
+  h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:28px 0 8px} p{max-width:760px;color:var(--sec);margin:4px 0}
+  .win{--r1:36px;width:1040px;max-width:100%;height:460px;background:var(--cream);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;font-size:12px;margin-top:16px}
+  .win *{box-sizing:border-box}
+  .top{height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px}
+  .ib{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--sec);font-size:14px;flex:none}
+  .ib.on{background:var(--rail);color:var(--ink)}
+  .ib.pend{outline:1.5px dashed var(--pin);outline-offset:1px}
+  .ctx{display:flex;align-items:center;gap:6px;padding:0 8px;height:26px;font-weight:600;font-size:12.5px}
+  .ctx i{width:8px;height:8px;border-radius:2px;background:var(--ink)}
+  .srch{margin:0 auto;width:250px;height:26px;border:1px solid var(--line);background:#fff;border-radius:10px;display:flex;justify-content:space-between;align-items:center;padding:0 10px;color:var(--sec)}
+  .srch b{font-family:"JetBrains Mono",monospace;font-weight:400;font-size:11px}
+  .grid{flex:1;min-height:0;display:flex;gap:6px;padding:0 6px}
+  .c{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+  .c.l{width:24%;flex-direction:row}.c.m{flex:1}.c.r{width:26%}
+  .rail{width:34px;flex:none;border-right:1px solid var(--line);padding:6px 4px;display:flex;flex-direction:column;gap:4px;align-items:center}
+  .lbody{flex:1;min-width:0;display:flex;flex-direction:column}
+  .h{height:var(--r1);flex:none;display:flex;align-items:center;gap:7px;padding:0 10px;font-weight:600;font-size:12.5px;border-bottom:1px solid var(--line)}
+  .h small{font-weight:400;color:var(--sec);font-size:11px}.h .a{margin-left:auto;color:var(--sec);font-weight:400}
+  .row{height:26px;display:flex;align-items:center;gap:7px;padding:0 10px;color:var(--sec);white-space:nowrap;overflow:hidden}
+  .row.sel{background:var(--rail);color:var(--ink)}.row small{margin-left:auto;color:var(--dis);font-size:10.5px}
+  .warn{color:var(--ambar)}
+  .tabs{height:var(--r1);flex:none;display:flex;align-items:flex-end;gap:2px;padding:0 8px;border-bottom:1px solid var(--line)}
+  .tab{height:28px;padding:0 10px;display:flex;align-items:center;gap:6px;color:var(--sec);border-radius:8px 8px 0 0;white-space:nowrap}
+  .tab.on{color:var(--ink);background:var(--rail);font-weight:500}
+  .plus{margin-left:2px;align-self:center;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:var(--sec)}
+  .url{margin:8px;height:26px;border:1px solid var(--line);border-radius:8px;background:#FBFAF6;display:flex;align-items:center;padding:0 10px;color:var(--sec);font-family:"JetBrains Mono",monospace;font-size:11px}
+  .page{flex:1;margin:0 8px 8px;border-radius:8px;background:repeating-linear-gradient(0deg,#F2EEE5 0 14px,#fff 14px 28px);opacity:.7}
+  .foot{height:24px;flex:none;display:flex;align-items:center;gap:14px;padding:0 12px;font-size:11px;color:var(--sec);white-space:nowrap}
+  .foot .r{margin-left:auto;display:flex;gap:14px;align-items:center}.dot{display:inline-block;width:6px;height:6px;border-radius:50%}
+  .n{display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:8px;background:var(--pin);color:#fff;font:600 10px/1 "Space Grotesk",sans-serif;margin-left:4px;flex:none}
+  .base{height:0;border-top:1.5px dashed var(--pin);margin:0 6px;position:relative;top:-0px}
+  table{border-collapse:collapse;width:100%;max-width:1040px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-top:1px solid var(--line)}
+  th{color:var(--sec);font-weight:500}td:first-child{white-space:nowrap}code{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--rail);padding:1px 5px;border-radius:4px}
+  .open{color:var(--pin)}
+</style>
+</head>
+<body>
+<h1>Shell UX: mockup anotado</h1>
+<p>Companheiro de <code>2026-11-07-shell-ux-consistency-design.md</code>. Estado mostrado: workspace aberto, visão <b>Navegador</b> ativa no Explorer, uma aba de navegador no Workbench, uma sessão esperando resposta. Contornos tracejados vermelhos = decisão ainda aberta no design. Fidelidade: layout e medidas, não pixel final. Dark theme, Electron e fontes ainda não verificados.</p>
+
+<div class="win">
+  <div class="top">
+    <span class="ib on" style="width:auto;padding:0 6px;background:none"></span>
+    <span class="ib pend">‹</span><span class="ib pend">›</span>
+    <span class="ctx"><i></i>ai-companion ▾<span class="n">1</span></span>
+    <div class="srch"><span>⌕ Buscar ou ir para…</span><b>⌘K</b></div>
+    <span class="ib on">◧</span><span class="ib on">◨<span class="n">2</span></span><span class="ib">⚙</span>
+  </div>
+  <div class="grid">
+    <div class="c l">
+      <div class="rail"><span class="ib">▤</span><span class="ib">⌕</span><span class="ib">⎇</span><span class="ib">▭</span><span class="ib on">◍</span></div>
+      <div class="lbody">
+        <div class="h">Navegador <small>3</small><span class="a">＋</span><span class="n">3</span></div>
+        <div class="row sel">◍ localhost:5173</div>
+        <div class="row">◍ Electron · Docs</div>
+        <div class="row">◍ github.com/…/pull/42</div>
+      </div>
+    </div>
+    <div class="c m">
+      <div class="tabs"><div class="tab">⌂</div><div class="tab">CLAUDE.md</div><div class="tab">✻ refactor-auth</div><div class="tab on">◍ localhost:5173</div><div class="plus">＋</div><span class="n" style="align-self:center">4</span></div>
+      <div class="url">‹ › ↻ &nbsp;http://localhost:5173/</div>
+      <div class="page"></div>
+    </div>
+    <div class="c r">
+      <div class="h">Sessões <small>3</small><span class="a">＋</span><span class="n">5</span></div>
+      <div class="row warn">! fix-tests <small>precisa de você</small></div>
+      <div class="row">✻ refactor-auth</div>
+      <div class="row">◌ docs-pass</div>
+      <div style="flex:1"></div>
+      <div class="h" style="border-top:1px solid var(--line)">Customizações <small>24</small><span class="a">＋</span></div>
+      <div class="row">brainstorming</div><div class="row">code-review</div>
+    </div>
+  </div>
+  <div class="foot"><span>ai-companion · ⎇ feat/folder-workspace<span class="n">6</span></span>
+    <div class="r"><span class="warn">● 1 precisa de você</span><span>2 trabalhando</span><span><span class="dot" style="background:var(--verde)"></span> Sincronizado</span></div></div>
+</div>
+
+<h2>Anotações</h2>
+<table>
+  <tr><th>#</th><th>O que</th><th>Medida / token</th><th>Onde mexer</th></tr>
+  <tr><td><span class="n">0</span> Linha de base</td><td>Primeira linha de TODO card (abas, título do Explorer, Sessões, Customizações) com a mesma altura e hairline embaixo. Hoje: 28 / ~34 / 40px.</td><td>36px; <code>1px solid theme.palette.divider</code>; cards: <code>radius.md</code> (14), gap 6px, sem sombra.</td><td><code>components/ds/ContainerChrome.tsx</code> (<code>ContainerHeader</code> 40px, <code>SectionHeader</code> 28px), tab strip em <code>workspace/WorkbenchCanvas.tsx</code>. Rota provável: um primitivo de cabeçalho único.</td></tr>
+  <tr><td><span class="n">1</span> Header</td><td>Contexto à esquerda, busca ⌘K centralizada, toggles de painel e Configurações à direita. O globo sai.</td><td>40px, fundo <code>background.default</code>, sem borda.</td><td><code>components/shell/TopNav.tsx</code>. Manter <code>data-testid</code>: <code>command-palette-trigger</code>, <code>workspace-toggle-files</code>, <code>workspace-toggle-customizations</code>, <code>nav-settings</code>. <code>nav-browser-toggle</code> sai (atualizar testes).</td></tr>
+  <tr><td><span class="n open">?</span> Voltar/Avançar</td><td class="open">Contornados em vermelho: decisão aberta (manter botões, ou remover e criar comandos de menu com atalho). Hoje são o único acesso ao histórico.</td><td>26×26, ícone 18.</td><td><code>TopNav.tsx</code>, <code>lib/workspace-history-store.ts</code>, <code>src/shared/desktop.ts</code> (se virarem comandos).</td></tr>
+  <tr><td><span class="n">2</span> Toggles de painel</td><td>Ficam no header (não no footer). Ativo = fundo <code>rail</code>; oculto = ícone <code>text.disabled</code>.</td><td>Igual a hoje.</td><td>Sem mudança de comportamento.</td></tr>
+  <tr><td><span class="n">3</span> Visão Navegador</td><td>Quarta visão do Explorer, abaixo de Terminais no rail. Lista as páginas abertas; clicar foca ou abre a aba no Workbench; "+" abre página nova. Vazio: <code>EmptyState</code>.</td><td>Linha 26px, mesmo estilo de <code>TreeRow</code>.</td><td><code>ExplorerView</code> em <code>workspace/ExplorerRail.tsx</code> (hoje <code>'files' | 'search' | 'git' | 'terminals'</code>), <code>ExplorerPanelContent.tsx</code>, <code>lib/browser-tabs-store.ts</code> (<code>openManualTab</code>). Fixados: fora, salvo decisão em contrário.</td></tr>
+  <tr><td><span class="n">4</span> "+" no strip</td><td>Menu: Nova sessão, Novo terminal, Novo navegador. Atalho de criação; a lista continua no Explorer. Mostrar o atalho real só onde existe (Nova sessão: <code>Shift+CmdOrCtrl+N</code>).</td><td>Botão 24×24 depois da última aba; menu com <code>RowContextMenu</code> ou MUI <code>Menu</code>.</td><td><code>WorkbenchCanvas.tsx</code> (novo prop para o menu), ações vindas de <code>WorkspaceScreen.tsx</code>.</td></tr>
+  <tr><td><span class="n">5</span> Sessões</td><td>Sessão que precisa de você no topo, texto "precisa de você" à direita, cor <code>warning</code>. O resto mantém a ordem atual.</td><td>Cor: <code>warning.main</code>; texto 10.5px.</td><td><code>workspace/SessionsTreeGroup.tsx</code> / <code>SessionRow.tsx</code> (ordenação por <code>activity === 'needs-input'</code>).</td></tr>
+  <tr><td><span class="n">6</span> Footer</td><td>Esquerda: workspace + branch. Direita: Ln/Col e "Salvo às…" só com editor ativo; um resumo de sessões (precisa de você primeiro; "ociosas" some); saúde do sync. Adaptadores saem do footer (ficam no tooltip do sync e em Configurações). Ícones do set da app, não glifos de texto.</td><td>24px, 11px, fundo <code>background.default</code>, sem borda.</td><td><code>components/shell/StatusBar.tsx</code>. Manter <code>data-testid</code>: <code>status-bar</code>, <code>status-workspace</code>, <code>status-branch</code>, <code>status-needs-you</code>, <code>status-working</code>, <code>status-pill-sync</code>, <code>status-save-state</code>, <code>status-cursor</code>. Remover/atualizar: <code>status-idle</code>, <code>status-adapter-*</code>.</td></tr>
+</table>
+
+<h2>Fora deste mockup</h2>
+<p>Início (sem workspace), Git e Terminais no Explorer, estados de erro e carregamento do Navegador, tema escuro, largura estreita com os três cards. Verificar no Electron antes de dar como pronto.</p>
+</body>
+</html>

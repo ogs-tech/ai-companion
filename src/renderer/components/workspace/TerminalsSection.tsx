@@ -170,6 +170,7 @@ export function TerminalsSection({ openTerminalIds, onOpen, onRemoved, onEditLau
     <Box data-testid="terminals-section" sx={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : { borderTop: 1, borderColor: 'divider', flexShrink: 0, maxHeight: '45%', display: 'flex', flexDirection: 'column' }}>
       <SectionHeader
         title="Terminais"
+        level="view"
         testId="terminals-header"
         count={terminals.length}
         actions={

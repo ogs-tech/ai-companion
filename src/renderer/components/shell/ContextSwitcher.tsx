@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ButtonBase, Divider, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, ChevronRight, Folder, FolderMinus, FolderOpen, FolderPlus, House, Trash2 } from 'lucide-react';
+import { ChevronDown, Folder, FolderMinus, FolderOpen, FolderPlus, House, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RenameWorkspaceDialog } from './RenameWorkspaceDialog.js';
@@ -24,11 +24,16 @@ function errorMessage(err: unknown): string {
 
 /**
  * The TopNav's "where am I" control: `🏠 Início ▾` or `📁 <name> ▾`. Its menu
- * is the one place to change context — Início, recents, every workspace,
- * open a folder, remove the open workspace. The workspace root path lives
+ * is the one place to change context — Início, the latest recents, "Todos…"
+ * (the palette's list), open a folder, remove the open workspace. The workspace root path lives
  * only in this button's tooltip.
  */
-export function ContextSwitcher(): React.ReactElement {
+interface ContextSwitcherProps {
+  /** "Todos…": the full list lives in the command palette, not a submenu. */
+  onOpenAllWorkspaces: () => void;
+}
+
+export function ContextSwitcher({ onOpenAllWorkspaces }: ContextSwitcherProps): React.ReactElement {
   const { activeWorkspace, goHome, switchTo, openFolder } = useContextNavigation();
   const { data: workspaces } = useWorkspaces();
   const deleteWorkspace = useDeleteWorkspace();
@@ -38,7 +43,6 @@ export function ContextSwitcher(): React.ReactElement {
   // Set right after the first extra folder lands: the old name described one folder.
   const [renaming, setRenaming] = useState<{ workspace: Workspace; reason?: string } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [allAnchor, setAllAnchor] = useState<HTMLElement | null>(null);
   // Captured when the dialog opens, so a context change underneath can't retarget it.
   const [pendingRemoval, setPendingRemoval] = useState<Workspace | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -46,10 +50,8 @@ export function ContextSwitcher(): React.ReactElement {
   const isHome = activeWorkspace === null;
   const currentId = activeWorkspace?.id ?? null;
   const recents = recentWorkspaces(workspaces ?? [], currentId);
-  const alphabetical = [...(workspaces ?? [])].sort((a, b) => a.name.localeCompare(b.name));
 
   const closeMenus = (): void => {
-    setAllAnchor(null);
     setMenuAnchor(null);
   };
 
@@ -131,15 +133,18 @@ export function ContextSwitcher(): React.ReactElement {
             <ListItemText>{w.name}</ListItemText>
           </MenuItem>
         ))}
-        <MenuItem
-          data-testid="context-switcher-all"
-          disabled={alphabetical.length === 0}
-          onClick={(e) => setAllAnchor(e.currentTarget)}
-        >
-          <ListItemIcon><Icon glyph={Folder} size={16} /></ListItemIcon>
-          <ListItemText>Todos os workspaces</ListItemText>
-          <Icon glyph={ChevronRight} size={14} />
-        </MenuItem>
+        {(workspaces?.length ?? 0) > recents.length + (isHome ? 0 : 1) && (
+          <MenuItem
+            data-testid="context-switcher-all"
+            onClick={() => {
+              closeMenus();
+              onOpenAllWorkspaces();
+            }}
+          >
+            <ListItemIcon><Icon glyph={Folder} size={16} /></ListItemIcon>
+            <ListItemText>Todos…</ListItemText>
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem data-testid="context-switcher-open-folder" onClick={() => run(openFolder)}>
           <ListItemIcon><Icon glyph={FolderOpen} size={16} /></ListItemIcon>
@@ -176,26 +181,6 @@ export function ContextSwitcher(): React.ReactElement {
             <ListItemText>Remover este workspace…</ListItemText>
           </MenuItem>
         )}
-      </Menu>
-
-      <Menu
-        anchorEl={allAnchor}
-        open={allAnchor !== null}
-        onClose={() => setAllAnchor(null)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        data-testid="context-switcher-all-menu"
-      >
-        {alphabetical.map((w) => (
-          <MenuItem
-            key={w.id}
-            data-testid={`context-switcher-workspace-${w.id}`}
-            selected={w.id === currentId}
-            onClick={() => run(() => switchTo(w.id))}
-          >
-            <ListItemText>{w.name}</ListItemText>
-          </MenuItem>
-        ))}
       </Menu>
 
       <WorkspaceRemoveConfirmDialog

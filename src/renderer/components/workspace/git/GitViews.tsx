@@ -193,6 +193,7 @@ export function RepositoriesView({ routing, gitPolling, onOpenGitDiff }: GitView
     <>
       <SectionHeader
         title="Repositórios"
+        level="view"
         testId="git-repositories-header"
         actions={
           <SectionAction

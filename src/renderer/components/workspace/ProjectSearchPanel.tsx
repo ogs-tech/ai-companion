@@ -118,7 +118,7 @@ export function ProjectSearchPanel({ focusSignal, onOpenMatch }: ProjectSearchPa
 
   return (
     <Box data-testid="project-search" sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <SectionHeader title="Buscar no projeto" testId="project-search-header" />
+      <SectionHeader level="view" title="Buscar no projeto" testId="project-search-header" />
       <Box sx={{ px: 1.25, pb: 0.75 }}>
         <TextField
           fullWidth

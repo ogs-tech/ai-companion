@@ -68,9 +68,9 @@ export function formatIdleFor(sinceMs: number, nowMs: number): string {
   return `há ${formatDuration(Math.max(0, nowMs - sinceMs))}`;
 }
 
-/** "espera 4min" */
+/** "precisa de você · 4min" — says in words that the session is blocked on the user, and for how long. */
 export function formatWait(sinceMs: number, nowMs: number): string {
-  return `espera ${formatDuration(Math.max(0, nowMs - sinceMs))}`;
+  return `precisa de você · ${formatDuration(Math.max(0, nowMs - sinceMs))}`;
 }
 
 /** Short pill text for a needs-input row: "Permissão: Bash" / "Permissão" / "Pergunta". */

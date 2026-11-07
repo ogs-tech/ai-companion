@@ -102,7 +102,7 @@ export interface SessionSnapshot {
   browserEnabled: boolean;
   /** Present only while `status === 'running'`. A session with no signal yet is `idle`: `working` means a turn is running. */
   activity?: SessionActivity;
-  /** Epoch ms of the last `activity` change — drives "espera <duração>" for `needs-input`. */
+  /** Epoch ms of the last `activity` change — drives "precisa de você · <duração>" for `needs-input`. */
   activitySince?: number;
   /** Set only while `activity === 'needs-input'`. */
   attention?: SessionAttention;

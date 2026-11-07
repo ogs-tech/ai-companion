@@ -1,5 +1,6 @@
 import { Box, Skeleton, Tooltip, Typography } from '@mui/material';
 import { CircleAlert } from 'lucide-react';
+import { PANEL_HEADER_HEIGHT } from '../ds/ContainerChrome.js';
 import { Icon } from '../ds/Icon.js';
 import { GitBranchChip } from './git/GitBranchChip.js';
 import { GitSyncButton } from './git/GitSyncButton.js';
@@ -49,7 +50,7 @@ export function ExplorerToolbar({ status, actions }: ExplorerToolbarProps): Reac
   return (
     <Box
       data-testid="explorer-toolbar"
-      sx={{ flexShrink: 0, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.5 }}
+      sx={{ flexShrink: 0, height: PANEL_HEADER_HEIGHT, boxSizing: 'border-box', px: 1.25, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.5 }}
     >
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>{left}</Box>
       {data?.isRepo && <GitSyncButton status={data} actions={actions} />}

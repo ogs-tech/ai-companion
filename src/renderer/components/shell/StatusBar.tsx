@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Box, Tooltip } from '@mui/material';
+import { Activity, CircleAlert, GitBranch } from 'lucide-react';
 import { HARNESSES, HARNESS_IDS } from '../../../shared/harness.js';
+import { Icon } from '../ds/Icon.js';
 import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 import { gitStatusOptions } from '../../hooks/use-git.js';
 import { useSessions } from '../../hooks/use-sessions.js';
@@ -29,12 +31,19 @@ const SYNC_LABEL: Record<HealthSeverity, string> = {
 };
 
 const SYNC_TOOLTIP: Record<HealthSeverity, string> = {
-  ok: 'Tudo sincronizado com Claude Code/Cursor.',
+  ok: 'Tudo sincronizado.',
   warning: 'Alguns itens estão desincronizados — ver Diagnóstico.',
   error: 'Falha ao sincronizar — ver Diagnóstico.',
 };
 
 const timeFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+/** The sync verdict plus which harness adapters are on ("Claude Code ✓ · Cursor —"). */
+function syncTooltip(severity: HealthSeverity, settings: ReturnType<typeof useSettings>['data']): string {
+  if (!settings) return SYNC_TOOLTIP[severity];
+  const adapters = HARNESS_IDS.map((id) => `${HARNESSES[id].displayName} ${settings.adapters[id]?.enabled === true ? '✓' : '—'}`).join(' · ');
+  return `${SYNC_TOOLTIP[severity]} ${adapters}`;
+}
 
 /** Role=button behaviour for a clickable span: click, Enter and Space. */
 function buttonProps(onActivate: () => void): {
@@ -57,9 +66,11 @@ function buttonProps(onActivate: () => void): {
 
 /**
  * The one global status bar. Left: where you are (workspace, git branch).
- * Right, in the order the user acts on them: save state of the active file,
- * sessions that need you (click → jumps to the first), cursor position, then
- * sync health (click → Diagnóstico) and which harness adapters are on.
+ * Right, only what changes what you do next: cursor and save state (only with
+ * an editor active), one sessions summary with "precisa de você" first (click →
+ * jumps to it), then sync health (click → Diagnóstico). Which harness adapters
+ * are on lives in the sync tooltip and in Configurações; idle sessions are not
+ * information and are not counted. Layout controls live in the header.
  * Every item is derived from state that already exists; nothing here detects anything.
  */
 export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElement {
@@ -75,7 +86,6 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
   const live = (sessions ?? []).filter((s) => s.status === 'running');
   const needsYou = live.filter((s) => s.activity === 'needs-input').length;
   const working = live.filter((s) => s.activity === 'working').length;
-  const idle = live.filter((s) => (s.activity ?? 'idle') === 'idle').length;
 
   return (
     <Box
@@ -99,11 +109,19 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
       {inWorkspace && (
         <Box component="span" data-testid="status-workspace" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {workspace.name}
-          {branch !== null && branch !== undefined && <Box component="span" data-testid="status-branch">{` · ⎇ ${branch}`}</Box>}
+          {branch !== null && branch !== undefined && (
+            <Box component="span" data-testid="status-branch" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, ml: 1.25, verticalAlign: 'bottom' }}>
+              <Icon glyph={GitBranch} size={12} />
+              {branch}
+            </Box>
+          )}
         </Box>
       )}
 
       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.75 }}>
+        {cursor !== null && (
+          <Box component="span" data-testid="status-cursor">{`Ln ${cursor.line}, Col ${cursor.column}`}</Box>
+        )}
         {tab?.editable === true && tab.dirty && (
           <Box component="span" data-testid="status-save-state" sx={{ color: 'warning.main' }}>
             Alterações não salvas
@@ -115,30 +133,30 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
           </Box>
         )}
 
-        {needsYou > 0 && (
-          <Box
-            component="span"
-            data-testid="status-needs-you"
-            {...buttonProps(() => dispatchMenuCommand('go-needs-attention'))}
-            sx={{ color: 'warning.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-          >
-            {needsYou === 1 ? '! 1 sessão precisa de você' : `! ${needsYou} sessões precisam de você`}
+        {(needsYou > 0 || working > 0) && (
+          <Box component="span" data-testid="status-sessions" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.25 }}>
+            {needsYou > 0 && (
+              <Box
+                component="span"
+                data-testid="status-needs-you"
+                {...buttonProps(() => dispatchMenuCommand('go-needs-attention'))}
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'warning.main', fontWeight: 600, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+              >
+                <Icon glyph={CircleAlert} size={12} />
+                {needsYou === 1 ? '1 sessão precisa de você' : `${needsYou} sessões precisam de você`}
+              </Box>
+            )}
+            {working > 0 && (
+              <Box component="span" data-testid="status-working" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'success.main' }}>
+                <Icon glyph={Activity} size={12} />
+                {`${working} trabalhando`}
+              </Box>
+            )}
           </Box>
-        )}
-
-        {working > 0 && (
-          <Box component="span" data-testid="status-working" sx={{ color: 'success.main' }}>
-            {`✻ ${working} trabalhando`}
-          </Box>
-        )}
-        {idle > 0 && <Box component="span" data-testid="status-idle">{`◌ ${idle} ${idle === 1 ? 'ociosa' : 'ociosas'}`}</Box>}
-
-        {cursor !== null && (
-          <Box component="span" data-testid="status-cursor">{`Ln ${cursor.line}, Col ${cursor.column}`}</Box>
         )}
 
         {healthSeverity !== undefined && (
-          <Tooltip title={SYNC_TOOLTIP[healthSeverity]}>
+          <Tooltip title={syncTooltip(healthSeverity, settings)}>
             <Box
               data-testid="status-pill-sync"
               data-variant={healthSeverity}
@@ -150,19 +168,6 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
             </Box>
           </Tooltip>
         )}
-
-        {settings &&
-          HARNESS_IDS.map((id) => {
-            const enabled = settings.adapters[id]?.enabled ?? false;
-            return (
-              <Box component="span" key={id} data-testid={`status-adapter-${id}`} data-enabled={enabled}>
-                {HARNESSES[id].displayName}
-                <Box component="span" sx={{ color: enabled ? 'inherit' : 'text.disabled' }}>
-                  {enabled ? ' ✓' : ' —'}
-                </Box>
-              </Box>
-            );
-          })}
       </Box>
     </Box>
   );

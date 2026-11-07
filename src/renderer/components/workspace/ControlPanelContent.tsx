@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
 import { Plus } from 'lucide-react';
-import { ContainerHeader } from '../ds/ContainerChrome.js';
+import { ContainerHeader, PANEL_HEADER_HEIGHT } from '../ds/ContainerChrome.js';
 import { Icon } from '../ds/Icon.js';
 import { ResizeHandle } from '../ds/ResizeHandle.js';
 import { CustomizationsList, type CustomizationsListProps } from './CustomizationsList.js';
@@ -61,10 +61,10 @@ export function ControlPanelContent({
           id="control-panel-sessions-split"
           panelRef={sessionsPanelRef}
           collapsible
-          collapsedSize={40}
+          collapsedSize={PANEL_HEADER_HEIGHT}
           defaultSize="40"
           minSize={120}
-          onResize={(size) => setSessionsExpanded(size.inPixels > 48)}
+          onResize={(size) => setSessionsExpanded(size.inPixels > PANEL_HEADER_HEIGHT + 8)}
           style={{ overflow: 'hidden' }}
         >
           <Box data-testid="workspace-sessions-panel" sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -98,9 +98,9 @@ export function ControlPanelContent({
           id="control-panel-customizations-split"
           panelRef={customizationsPanelRef}
           collapsible
-          collapsedSize={40}
+          collapsedSize={PANEL_HEADER_HEIGHT}
           minSize={160}
-          onResize={(size) => setCustomizationsExpanded(size.inPixels > 48)}
+          onResize={(size) => setCustomizationsExpanded(size.inPixels > PANEL_HEADER_HEIGHT + 8)}
           style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
         >
           {/* Remounts on scope change, so chip, search text and origin reset. */}

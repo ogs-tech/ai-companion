@@ -2,7 +2,7 @@ import { Badge, Box, Tooltip } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 
-export type ExplorerView = 'files' | 'search' | 'git' | 'terminals';
+export type ExplorerView = 'files' | 'search' | 'git' | 'terminals' | 'browser';
 
 /** One destination on the rail — a view of the open workspace, or (at Início) an app area. */
 export interface RailItem {

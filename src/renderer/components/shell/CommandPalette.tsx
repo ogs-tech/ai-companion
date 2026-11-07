@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, List, ListItemButton, ListItemIcon, ListItemText, TextField, Typography } from '@mui/material';
 import type { PaperProps } from '@mui/material';
-import { File, Folder, FolderOpen, LayoutGrid, type LucideIcon } from 'lucide-react';
+import { File, Folder, Globe, FolderOpen, LayoutGrid, type LucideIcon } from 'lucide-react';
 import { Box } from '@mui/material';
 import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
@@ -11,6 +11,7 @@ import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 import { useContextNavigation } from '../../hooks/use-context-navigation.js';
 import { useWorkspaces } from '../../hooks/use-workspaces.js';
 import { focusOverview } from '../../lib/workspace-shell-store.js';
+import { openManualTab } from '../../lib/browser-tabs-store.js';
 import { callIpc } from '../../lib/ipc.js';
 import { fileIconFor, toneColor } from '../../lib/file-icon.js';
 import { fuzzyFilter } from '../../lib/fuzzy.js';
@@ -23,9 +24,10 @@ import { useActiveWorkspace } from '../../hooks/use-workspaces.js';
  * How the palette opens. `commands` is the classic palette (⌘K, the TopNav
  * button): commands with no prefix shown. `files` is ⌘P. `command-mode` is
  * ⇧⌘P (a `>` already typed) and `line` is ⌘G (a `:` already typed) — in the
- * last three, deleting the prefix falls back to the file list.
+ * last three, deleting the prefix falls back to the file list. `workspaces`
+ * opens straight on "Ir para workspace…" (the TopNav switcher's "Todos…").
  */
-export type PaletteIntent = 'commands' | 'files' | 'command-mode' | 'line';
+export type PaletteIntent = 'commands' | 'files' | 'command-mode' | 'line' | 'workspaces';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -33,7 +35,7 @@ interface CommandPaletteProps {
   intent?: PaletteIntent;
 }
 
-const INITIAL_QUERY: Record<PaletteIntent, string> = { commands: '', files: '', 'command-mode': '>', line: ':' };
+const INITIAL_QUERY: Record<PaletteIntent, string> = { commands: '', files: '', 'command-mode': '>', line: ':', workspaces: '' };
 
 type ActiveMode = 'commands' | 'files' | 'line';
 
@@ -64,9 +66,9 @@ function errorMessage(err: unknown): string {
 }
 
 export function CommandPalette({ open, onClose, intent = 'commands' }: CommandPaletteProps): React.ReactElement {
-  const baseMode: ActiveMode = intent === 'commands' ? 'commands' : 'files';
+  const baseMode: ActiveMode = intent === 'commands' || intent === 'workspaces' ? 'commands' : 'files';
   const [query, setQuery] = useState(INITIAL_QUERY[intent]);
-  const [mode, setMode] = useState<PaletteMode>('root');
+  const [mode, setMode] = useState<PaletteMode>(intent === 'workspaces' ? 'workspaces' : 'root');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const navigate = useAreaNavigation();
   const { switchTo, openFolder } = useContextNavigation();
@@ -90,6 +92,7 @@ export function CommandPalette({ open, onClose, intent = 'commands' }: CommandPa
     const go = (area: Area) => () => navigate(area);
     return [
       { id: 'overview', label: 'Visão geral', glyph: LayoutGrid, shortcut: '⌘0', run: focusOverview },
+      { id: 'new-browser', label: 'Novo navegador', glyph: Globe, run: () => openManualTab() },
       { id: 'open-folder', label: 'Abrir pasta…', glyph: FolderOpen, shortcut: '⌘O', run: openFolder },
       {
         id: 'open-external-file',

@@ -1,9 +1,10 @@
 import { SessionStateMark } from '../SessionStateMark.js';
 import type { SessionRowState } from '../../lib/session-attention.js';
-import { Fragment, useRef } from 'react';
-import { Box, Stack, Tooltip, Typography } from '@mui/material';
+import { Fragment, useRef, useState } from 'react';
+import { Box, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import { TREE_DRAG_TYPE, readTreeDrag } from '../../lib/tree-drag.js';
-import { X, type LucideIcon } from 'lucide-react';
+import { Plus, X, type LucideIcon } from 'lucide-react';
+import { PANEL_HEADER_HEIGHT } from '../ds/ContainerChrome.js';
 import { Icon } from '../ds/Icon.js';
 import { toneColor, type FileTone } from '../../lib/file-icon.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
@@ -65,6 +66,8 @@ interface WorkbenchCanvasProps {
   onReorder?: (fromId: string, toId: string) => void;
   /** Right-click menu for a tab; omitted or empty means no menu. */
   tabMenu?: (tab: WorkbenchTab) => RowContextMenuAction[];
+  /** Creation shortcuts behind the strip's trailing "+" (Nova sessão, Novo terminal…); omitted or empty hides the button. */
+  newMenu?: readonly RowContextMenuAction[];
   /** Files dropped on the editor area: OS files (absolute paths via `getPathForFile`) or tree paths. */
   onDropFiles?: (drop: { files: File[]; treePaths: string[] }) => void;
 }
@@ -74,17 +77,19 @@ interface WorkbenchCanvasProps {
  * open file AND every open Skill/Agent/Instruction tab lives here, all
  * rendered through the same EditorPanel; sessions share the tab strip too.
  */
-export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMenu, onDropFiles }: WorkbenchCanvasProps): React.ReactElement {
+export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMenu, newMenu, onDropFiles }: WorkbenchCanvasProps): React.ReactElement {
   const menu = useRowContextMenu<WorkbenchTab>();
   const dragId = useRef<string | null>(null);
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const [newAnchor, setNewAnchor] = useState<HTMLElement | null>(null);
+  const hasNewMenu = (newMenu?.length ?? 0) > 0;
   return (
     <Box data-testid="workbench-canvas" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
-      {tabs.length > 0 && (
+      {(tabs.length > 0 || hasNewMenu) && (
         <Stack
           direction="row"
           data-testid="workbench-tabs"
-          sx={{ px: 1, py: 0.75, gap: 0.375, borderBottom: 1, borderColor: 'divider', overflowX: 'auto', flexShrink: 0 }}
+          sx={{ px: 1, height: PANEL_HEADER_HEIGHT, boxSizing: 'border-box', alignItems: 'center', gap: 0.375, borderBottom: 1, borderColor: 'divider', overflowX: 'auto', flexShrink: 0 }}
         >
           {tabs.map((tab) => {
             const active = tab.id === activeTabId;
@@ -207,8 +212,40 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
               </Fragment>
             );
           })}
+          {hasNewMenu && (
+            <Tooltip title="Novo…">
+              <IconButton
+                size="small"
+                data-testid="workbench-new"
+                aria-label="Novo…"
+                aria-haspopup="menu"
+                onClick={(e) => setNewAnchor(e.currentTarget)}
+                sx={{ p: 0.5, flexShrink: 0, color: 'text.secondary' }}
+              >
+                <Icon glyph={Plus} size={14} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Stack>
       )}
+      <Menu open={newAnchor !== null} anchorEl={newAnchor} onClose={() => setNewAnchor(null)}>
+        {(newMenu ?? []).map((action) => (
+          <MenuItem
+            key={action.key}
+            data-testid={`workbench-new-${action.key}`}
+            onClick={() => {
+              setNewAnchor(null);
+              action.onSelect(newAnchor as HTMLElement);
+            }}
+          >
+            <ListItemIcon><Icon glyph={action.glyph} size={14} /></ListItemIcon>
+            <ListItemText primary={action.label} />
+            {action.shortcut !== undefined && (
+              <Typography component="span" variant="caption" sx={{ ml: 3, color: 'text.secondary' }}>{action.shortcut}</Typography>
+            )}
+          </MenuItem>
+        ))}
+      </Menu>
       {activeTab?.breadcrumb && (
         <Box
           data-testid="workbench-breadcrumb"

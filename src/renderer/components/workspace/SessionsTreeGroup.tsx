@@ -157,7 +157,7 @@ export function SessionsTreeGroup({
     () => rows.filter((r) => matchesFilter(r.state, filter)),
     [rows, filter],
   );
-  // Ticks only while a live row shows a duration ("espera 4min", "há 3min"), so
+  // Ticks only while a live row shows a duration ("precisa de você · 4min", "há 3min"), so
   // those stay honest without a global timer.
   const [now, setNow] = useState(() => Date.now());
   const hasDurations = rows.some((r) => r.live && r.state !== 'exited') || externalList.some((e) => !e.closed);

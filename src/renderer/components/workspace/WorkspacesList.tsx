@@ -41,6 +41,7 @@ export function WorkspacesList({ onOpenWorkspaces, limit = RECENT_LIMIT }: Works
     <Box data-testid="workspaces-list" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, pt: 0.5 }}>
       <SectionHeader
         title="Workspaces"
+        level="view"
         testId="workspaces-header"
         actions={<SectionAction label="Abrir pasta como workspace" testId="workspaces-new" glyph={FolderPlus} onClick={() => void openFolder().catch(fail)} />}
       />

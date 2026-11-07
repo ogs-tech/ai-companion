@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { AppBar, ButtonBase, Divider, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
 import {
-  ChevronLeft, ChevronRight, Globe, PanelLeft, PanelRight, Search, Settings as SettingsGlyph,
+  ChevronLeft, ChevronRight, PanelLeft, PanelRight, Search, Settings as SettingsGlyph,
 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { shortcutFor } from '../../lib/shortcut-labels.js';
@@ -10,7 +10,6 @@ import {
   navigateWorkspaceHistory,
   subscribeWorkspaceHistory,
 } from '../../lib/workspace-history-store.js';
-import { openManualTab } from '../../lib/browser-tabs-store.js';
 import {
   getWorkspacePanelsSnapshot,
   subscribeWorkspacePanels,
@@ -21,9 +20,11 @@ import { ContextSwitcher } from './ContextSwitcher.js';
 interface TopNavProps {
   onOpenSettings: () => void;
   onOpenCommandPalette: () => void;
+  /** The switcher's "Todos…": opens the palette on its workspace list. */
+  onOpenWorkspacePicker: () => void;
 }
 
-export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): React.ReactElement {
+export function TopNav({ onOpenSettings, onOpenCommandPalette, onOpenWorkspacePicker }: TopNavProps): React.ReactElement {
   const paletteShortcut = shortcutFor('command-palette') ?? '';
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
   const { explorerCollapsed, controlCollapsed } = useSyncExternalStore(subscribeWorkspacePanels, getWorkspacePanelsSnapshot);
@@ -67,7 +68,7 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
               </IconButton>
             </span>
           </Tooltip>
-          <ContextSwitcher />
+          <ContextSwitcher onOpenAllWorkspaces={onOpenWorkspacePicker} />
         </Stack>
 
         {/* Search-field-shaped ⌘K trigger — same onClick, it only looks like an input. */}
@@ -132,18 +133,6 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette }: TopNavProps): R
         <Divider orientation="vertical" flexItem sx={{ my: 1 }} />
 
         <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
-          <Tooltip title="Abrir navegador">
-            <IconButton
-              data-testid="nav-browser-toggle"
-              onClick={() => void openManualTab()}
-              size="small"
-              sx={{ color: 'text.secondary' }}
-              aria-label="Abrir navegador"
-            >
-              <Icon glyph={Globe} size={18} />
-            </IconButton>
-          </Tooltip>
-
           <Tooltip title="Configurações">
             <IconButton
               data-testid="nav-settings"

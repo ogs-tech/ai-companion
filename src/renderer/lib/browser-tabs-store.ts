@@ -128,6 +128,11 @@ function commitTab(tabId: string, url: string): void {
   workbenchOpener?.(tabId);
 }
 
+/** Focuses (opening it first if it was closed) the Workbench tab of an already-known browser tab. */
+export function focusBrowserTab(tabId: string): void {
+  workbenchOpener?.(tabId);
+}
+
 /** Opens a manual tab (the "+" affordance, or a redirected external link), and opens/focuses its Workbench tab. */
 export async function openManualTab(url?: string): Promise<void> {
   const { tabId } = await callIpc<{ tabId: string }>('browser.openTab', url ? { url } : {});

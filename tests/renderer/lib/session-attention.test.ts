@@ -55,7 +55,7 @@ describe('compareRows', () => {
 
 describe('labels', () => {
   it('formats the wait and the reason pill', () => {
-    expect(formatWait(0, 4 * 60_000)).toBe('espera 4min');
+    expect(formatWait(0, 4 * 60_000)).toBe('precisa de você · 4min');
     expect(formatIdleFor(0, 3 * 60_000)).toBe('há 3min');
     expect(attentionLabel({ kind: 'permission', detail: 'Bash' })).toBe('Permissão: Bash');
     expect(attentionLabel({ kind: 'permission' })).toBe('Permissão');

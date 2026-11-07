@@ -3,6 +3,9 @@ import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { Icon } from './Icon.js';
 import { treeGroupLabelSx } from './TreeRow.js';
 
+/** Height of the first row of every workspace card (tab strip, view title, container header) — the window's shared baseline. */
+export const PANEL_HEADER_HEIGHT = 36;
+
 interface ContainerHeaderProps {
   title: string;
   /** Prefix for the collapse button's test id (`${testId}-collapse`). */
@@ -20,11 +23,19 @@ interface ContainerHeaderProps {
 /**
  * The header every Control Panel container shares: collapse chevron, a
  * sentence-case title, a quiet count or live status, and right-aligned
- * actions. 40px tall, so the two containers read as the same kind of thing.
+ * actions. {@link PANEL_HEADER_HEIGHT} tall with a bottom hairline, the same
+ * baseline as the Workbench tab strip and the Explorer's view titles.
  */
 export function ContainerHeader({ title, testId, collapsed, onToggle, count, status, actions }: ContainerHeaderProps): React.ReactElement {
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: 40, flexShrink: 0, pl: 1.25, pr: 1 }}>
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={(theme) => ({
+        alignItems: 'center', height: PANEL_HEADER_HEIGHT, flexShrink: 0, pl: 1.25, pr: 1, boxSizing: 'border-box',
+        borderBottom: `1px solid ${theme.palette.divider}`,
+      })}
+    >
       <IconButton
         size="small"
         data-testid={`${testId}-collapse`}
@@ -127,6 +138,12 @@ interface SectionHeaderProps {
   onToggle?: () => void;
   /** Right-aligned {@link SectionAction}s. */
   actions?: React.ReactNode;
+  /**
+   * `view` is the first row of an Explorer view ("Arquivos", "Git"…): on the
+   * shared baseline, with a hairline. `section` (default) is a compact
+   * sub-group inside a view.
+   */
+  level?: 'view' | 'section';
 }
 
 /**
@@ -135,8 +152,9 @@ interface SectionHeaderProps {
  * left panel's counterpart of {@link ContainerHeader} (which the right
  * panel's containers use).
  */
-export function SectionHeader({ title, testId, count, collapsed, onToggle, actions }: SectionHeaderProps): React.ReactElement {
+export function SectionHeader({ title, testId, count, collapsed, onToggle, actions, level = 'section' }: SectionHeaderProps): React.ReactElement {
   const toggles = collapsed !== undefined && onToggle !== undefined;
+  const view = level === 'view';
   return (
     <Box
       data-testid={testId}
@@ -150,10 +168,19 @@ export function SectionHeader({ title, testId, count, collapsed, onToggle, actio
             },
           }
         : {})}
-      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minHeight: 28, flexShrink: 0, pl: 1, pr: 0.5, cursor: toggles ? 'pointer' : 'default' }}
+      sx={(theme) => ({
+        display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, pr: 0.5, cursor: toggles ? 'pointer' : 'default',
+        ...(view
+          ? { height: PANEL_HEADER_HEIGHT, boxSizing: 'border-box', pl: 1.25, borderBottom: `1px solid ${theme.palette.divider}` }
+          : { minHeight: 28, pl: 1 }),
+      })}
     >
       {collapsed !== undefined && <Icon glyph={collapsed ? ChevronRight : ChevronDown} size={14} />}
-      <Typography component="span" sx={{ ...treeGroupLabelSx, flex: 1, minWidth: 0 }} noWrap>
+      <Typography
+        component="span"
+        sx={{ ...(view ? { fontSize: '0.8125rem', fontWeight: 600, color: 'text.primary' } : { ...treeGroupLabelSx }), flex: 1, minWidth: 0 }}
+        noWrap
+      >
         {title}
       </Typography>
       {count !== undefined && (

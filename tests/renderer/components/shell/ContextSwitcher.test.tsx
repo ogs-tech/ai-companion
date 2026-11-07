@@ -14,14 +14,14 @@ const CHARLIE: Workspace = { id: 'w3', name: 'Charlie', rootPath: '/repos/charli
 
 let call: CallSpy;
 
-const setup = (active: Workspace | null, extra: Record<string, unknown> = {}) => {
+const setup = (active: Workspace | null, extra: Record<string, unknown> = {}, onOpenAllWorkspaces: () => void = vi.fn()) => {
   call.mockImplementation(async (method: string) => {
     if (method in extra) return ok(extra[method]);
     if (method === 'workspace.list') return ok([ACME, BRAVO, CHARLIE]);
     if (method === 'workspace.getActive') return ok(active);
     return ok(undefined);
   });
-  renderWithShell(<ContextSwitcher />);
+  renderWithShell(<ContextSwitcher onOpenAllWorkspaces={onOpenAllWorkspaces} />);
 };
 
 const openMenu = async (user: ReturnType<typeof userEvent.setup>, label: RegExp): Promise<HTMLElement> => {
@@ -88,13 +88,23 @@ describe('ContextSwitcher', () => {
     expect(call).not.toHaveBeenCalledWith('workspace.switchTo', expect.anything());
   });
 
-  it('lists every workspace alphabetically in the "Todos os workspaces" submenu', async () => {
+  it('"Todos…" hands the full list to the palette instead of a submenu', async () => {
+    const user = userEvent.setup();
+    const onOpenAllWorkspaces = vi.fn();
+    const many = Array.from({ length: 8 }, (_, i) => ({ ...BRAVO, id: `x${i}`, name: `X${i}` }));
+    setup(null, { 'workspace.list': many }, onOpenAllWorkspaces);
+    await openMenu(user, /Contexto: Início/);
+    expect(screen.getAllByTestId(/^context-switcher-recent-/)).toHaveLength(5);
+    await user.click(screen.getByTestId('context-switcher-all'));
+    expect(onOpenAllWorkspaces).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('context-switcher-all-menu')).not.toBeInTheDocument();
+  });
+
+  it('hides "Todos…" when the recents already show every workspace', async () => {
     const user = userEvent.setup();
     setup(null);
     await openMenu(user, /Contexto: Início/);
-    await user.click(screen.getByTestId('context-switcher-all'));
-    const submenu = await screen.findByTestId('context-switcher-all-menu');
-    expect(within(submenu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Acme', 'Bravo', 'Charlie']);
+    expect(screen.queryByTestId('context-switcher-all')).not.toBeInTheDocument();
   });
 
   it('"Criar workspace…" picks a folder, then opens it', async () => {
@@ -123,7 +133,7 @@ describe('ContextSwitcher', () => {
       if (method === 'workspace.open') return { ok: false, error: { kind: 'validation', message: 'home dir is Global' } };
       return ok(undefined);
     });
-    renderWithShell(<ContextSwitcher />);
+    renderWithShell(<ContextSwitcher onOpenAllWorkspaces={vi.fn()} />);
     await openMenu(user, /Contexto: Início/);
     await user.click(screen.getByTestId('context-switcher-open-folder'));
     expect(await screen.findByTestId('toast')).toHaveTextContent('home dir is Global');
@@ -212,7 +222,7 @@ describe('ContextSwitcher', () => {
         }
         return ok(undefined);
       });
-      renderWithShell(<ContextSwitcher />);
+      renderWithShell(<ContextSwitcher onOpenAllWorkspaces={vi.fn()} />);
       const menu = await openMenu(user, /Contexto: Acme/);
       await user.click(within(menu).getByTestId('context-switcher-add-folder'));
       expect(await screen.findByText(/already belongs to workspace "Bravo"/)).toBeInTheDocument();
