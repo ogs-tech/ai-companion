@@ -15,7 +15,7 @@ export const EXTERNAL_CONSENT_MARKER = 'signals/external-enabled';
  * stdin JSON rides along as the payload (cwd, tool_input.file_path, …).
  * `$HOME` expands in the harness's shell, so no path is baked in.
  */
-function externalHook(harness: HarnessId, event: 'working' | 'idle' | 'notification' | 'tool'): string {
+function externalHook(harness: HarnessId, event: 'working' | 'idle' | 'notification' | 'tool' | 'session-start' | 'session-end'): string {
   const dir = `"$HOME/.ai-companion/signals"`;
   return [
     `IN=$(tr -d '\\n\\r')`,
@@ -38,6 +38,9 @@ export const CLAUDE_EXTERNAL_HOOKS = {
   PreToolUse: quiet(externalHook('claude', 'tool')),
   Stop: quiet(externalHook('claude', 'idle')),
   Notification: quiet(externalHook('claude', 'notification')),
+  // `/clear` ends one conversation and starts another: these two make the app swap them at once instead of waiting for a process scan.
+  SessionStart: quiet(externalHook('claude', 'session-start')),
+  SessionEnd: quiet(externalHook('claude', 'session-end')),
 } as const;
 
 export const CURSOR_EXTERNAL_HOOKS = {
@@ -61,8 +64,8 @@ export function parseExternalLine(line: string): { harness: HarnessId; signal: S
   if (raw === null || typeof raw !== 'object') return null;
   const { harness, event, payload } = raw as { harness?: unknown; event?: unknown; payload?: unknown };
   if (harness !== 'claude' && harness !== 'cursor') return null;
-  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool') return null;
+  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool' && event !== 'session-start' && event !== 'session-end') return null;
   const body = payload !== null && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : undefined;
-  if ((event === 'notification' || event === 'tool') && !body) return null;
+  if ((event === 'notification' || event === 'tool' || event === 'session-start') && !body) return null;
   return { harness, signal: body ? { event, payload: body } : { event } };
 }

@@ -3,8 +3,8 @@
  * parsed but not yet interpreted (see `session-activity.ts`).
  */
 export interface SessionSignal {
-  event: 'working' | 'idle' | 'notification' | 'tool' | 'permission' | 'session-start';
-  /** Hook stdin JSON for `notification`, `tool`, `permission` and `session-start`; absent otherwise. */
+  event: 'working' | 'idle' | 'notification' | 'tool' | 'permission' | 'session-start' | 'session-end';
+  /** Hook stdin JSON for `notification`, `tool`, `permission`, `session-start` and `session-end`; absent otherwise. */
   payload?: Record<string, unknown>;
 }
 

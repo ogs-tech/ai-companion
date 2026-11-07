@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { conversationIdOf, harnessOf, terminalOf } from '../../../src/main/infrastructure/external-sessions/ps-process-scan-adapter.js';
-import { cwdFromTail } from '../../../src/main/infrastructure/external-sessions/fs-claude-transcript-watch.js';
+import { cwdFromTail, titleFromTail } from '../../../src/main/infrastructure/external-sessions/fs-claude-transcript-watch.js';
 
 describe('process scan helpers', () => {
   it('matches the executable, not an argument that merely mentions claude', () => {
@@ -29,5 +29,16 @@ describe('transcript tail', () => {
     const tail = ['{"cwd":"/old"}', '{"cwd":"/new","type":"user"}', '{"type":"assistant","cw'].join('\n');
     expect(cwdFromTail(tail)).toBe('/new');
     expect(cwdFromTail('{"type":"x"}')).toBeNull();
+  });
+});
+
+describe('titleFromTail', () => {
+  it('takes the newest ai-title, and a custom title (/rename) over it', () => {
+    const ai = (t: string) => JSON.stringify({ type: 'ai-title', aiTitle: t });
+    expect(titleFromTail([ai('First'), '{"type":"user"}', ai('Second')].join('\n'))).toBe('Second');
+    expect(titleFromTail([ai('Generated'), JSON.stringify({ type: 'custom-title', customTitle: 'Mine' }), ai('Later')].join('\n'))).toBe('Mine');
+  });
+  it('is null with no title or only a partial line', () => {
+    expect(titleFromTail('{"type":"user"}\n{"aiTitle":"cut')).toBeNull();
   });
 });

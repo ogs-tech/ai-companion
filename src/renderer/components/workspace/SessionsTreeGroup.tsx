@@ -119,7 +119,6 @@ export function SessionsTreeGroup({
   const { data: external } = useExternalSessions();
   const { data: settings } = useSettings();
   const inlineAnswerEnabled = resolveSessionSettings(settings ?? null).inlineAnswer;
-  const externalList = useMemo(() => external?.sessions ?? [], [external]);
   // Same default period as the Histórico tab this panel links to.
   const filters = useMemo(() => defaultHistoryFilters(new Date()), []);
   const history = useSessionHistory(scope, filters);
@@ -132,6 +131,15 @@ export function SessionsTreeGroup({
     [history.data],
   );
 
+  // External sessions start with their folder name; the CLI's own title (live from the transcript, else the history) says which conversation it is.
+  const externalList = useMemo(() => {
+    const titles = new Map(historyEntries.flatMap((e) => (e.title ? [[e.conversationId, e.title] as const] : [])));
+    return (external?.sessions ?? []).map((s) => {
+      const title = s.title ?? titles.get(s.id);
+      return title ? { ...s, label: title } : s;
+    });
+  }, [external, historyEntries]);
+
   // Sessions the user just apagou: hidden at once (and out of the chip counts),
   // actually removed only when the undo window closes.
   const [pendingRemoval, setPendingRemoval] = useState<ReadonlySet<string>>(new Set());
@@ -142,7 +150,11 @@ export function SessionsTreeGroup({
     () => liveInScope(liveSessions ?? [], scope).filter((s) => !pendingRemoval.has(s.sessionId)),
     [liveSessions, scope, pendingRemoval],
   );
-  const rows = useMemo(() => mergeRows(liveScoped, historyEntries), [liveScoped, historyEntries]);
+  // An external session already has its own row; its transcript must not add a second one.
+  const rows = useMemo(() => {
+    const external = new Set(externalList.map((e) => e.id));
+    return mergeRows(liveScoped, historyEntries.filter((e) => !external.has(e.conversationId)));
+  }, [liveScoped, historyEntries, externalList]);
   const [filter, setFilter] = useState<SessionFilter | null>(null);
 
   // The CLI writes its title when a turn ends, so reload the history whenever a live session settles to idle.

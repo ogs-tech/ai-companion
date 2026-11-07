@@ -13,6 +13,11 @@ describe('parseExternalLine', () => {
       signal: { event: 'working', payload: { cwd: '/w', session_id: 'a' } },
     });
   });
+  it('accepts SessionStart/SessionEnd (a start needs its payload)', () => {
+    expect(parseExternalLine('{"harness":"claude","event":"session-end","payload":{"reason":"clear"}}')?.signal.event).toBe('session-end');
+    expect(parseExternalLine('{"harness":"claude","event":"session-end","payload":null}')?.signal).toEqual({ event: 'session-end' });
+    expect(parseExternalLine('{"harness":"claude","event":"session-start","payload":null}')).toBeNull();
+  });
   it('rejects malformed lines, unknown harnesses and payload-less tool events', () => {
     expect(parseExternalLine('nope')).toBeNull();
     expect(parseExternalLine('{"harness":"x","event":"idle"}')).toBeNull();

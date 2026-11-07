@@ -20,6 +20,8 @@ export interface ExternalSession
   cwd: string | null;
   /** Folder name of `cwd`, or the id's prefix when unknown. */
   label: string;
+  /** The CLI's own title for the conversation, read off its transcript as soon as it is written; absent until then. */
+  title?: string;
   /** The process is gone (or never seen after hooks reported it). Exit reason is unknowable from outside. */
   closed: boolean;
   precision: ExternalPrecision;

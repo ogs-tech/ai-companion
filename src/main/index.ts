@@ -646,20 +646,23 @@ async function wireIpc(): Promise<void> {
   sessionService.onExit(() => void sessionNotifier.evaluate());
   app.on('browser-window-focus', () => externalSessions.setVisible(true));
   app.on('browser-window-blur', () => externalSessions.setVisible(false));
+  const presentExternalHarnesses = async (): Promise<HarnessId[]> => {
+    const present: HarnessId[] = [];
+    if (await sessionRuntimes.claude.isAvailable()) present.push('claude');
+    if (await sessionRuntimes.cursor.isAvailable()) present.push('cursor');
+    return present;
+  };
   externalHooksInstaller
-    .consent()
+    .heal(await presentExternalHarnesses())
+    .catch((error: unknown) => console.error('[external-sessions] hook upgrade failed:', error))
+    .then(() => externalHooksInstaller.consent())
     .then((consent) => (consent === 'unset' ? undefined : externalSessions.setMode(consent)))
     .catch((error: unknown) => console.error('[external-sessions] not started:', error));
   const externalSessionHandlers = {
     external: externalSessions,
     installer: externalHooksInstaller,
     sessions: sessionService,
-    presentHarnesses: async () => {
-      const present: HarnessId[] = [];
-      if (await sessionRuntimes.claude.isAvailable()) present.push('claude');
-      if (await sessionRuntimes.cursor.isAvailable()) present.push('cursor');
-      return present;
-    },
+    presentHarnesses: presentExternalHarnesses,
     setFocusedSession: (id: string | null) => {
       focusedSessionId = id;
     },

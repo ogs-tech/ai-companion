@@ -64,6 +64,15 @@ export class ExternalHooksInstaller {
     }
   }
 
+  /** At startup under `exact` consent: installs entries a newer app version added (e.g. SessionEnd), so an existing install keeps up without re-asking. Idempotent. */
+  async heal(harnesses: readonly HarnessId[]): Promise<void> {
+    if ((await this.consent()) !== 'exact') return;
+    for (const harness of harnesses) {
+      if (await this.installed(harness)) continue;
+      for (const entry of this.entries(harness)) await this.merge.apply(entry);
+    }
+  }
+
   /** Revokes consent entirely (Settings): entries out, marker out, back to "ask again". */
   async revoke(): Promise<void> {
     await this.uninstallEntries();

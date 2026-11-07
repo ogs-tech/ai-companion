@@ -41,6 +41,23 @@ export function cwdFromTail(text: string): string | null {
   return null;
 }
 
+/** The CLI's title from the newest `custom-title` (the user's `/rename`, wins) or `ai-title` line in the tail; `null` when the tail has none. */
+export function titleFromTail(text: string): string | null {
+  let custom: string | null = null;
+  let generated: string | null = null;
+  for (const line of text.split('\n')) {
+    if (!line.includes('Title"')) continue;
+    try {
+      const entry = JSON.parse(line) as { customTitle?: unknown; aiTitle?: unknown };
+      if (typeof entry.customTitle === 'string' && entry.customTitle.trim()) custom = entry.customTitle.trim();
+      if (typeof entry.aiTitle === 'string' && entry.aiTitle.trim()) generated = entry.aiTitle.trim();
+    } catch {
+      // A partial line.
+    }
+  }
+  return custom ?? generated;
+}
+
 /**
  * Fallback with no hooks: one recursive watcher on `~/.claude/projects`, reading
  * only the last ~8 KB of a transcript that changed. State derived from this is
@@ -90,7 +107,8 @@ export class FsClaudeTranscriptWatch implements TranscriptWatchPort {
     if (!tail) return;
     const id = basename(file, '.jsonl');
     this.paths.set(id, file);
-    this.listener?.({ id, harness: 'claude', cwd: cwdFromTail(tail.text), modifiedAt: tail.mtimeMs });
+    const title = titleFromTail(tail.text);
+    this.listener?.({ id, harness: 'claude', cwd: cwdFromTail(tail.text), modifiedAt: tail.mtimeMs, ...(title ? { title } : {}) });
   }
 
   private async find(id: string): Promise<string | null> {

@@ -41,6 +41,8 @@ export class ExternalSessionService {
   private readonly sessions = new Map<string, ExternalSession>();
   private readonly listeners: Array<() => void> = [];
   private readonly settleTimers = new Map<string, NodeJS.Timeout>();
+  /** Conversations a `SessionEnd` hook closed: a still-exiting process must not revive them; only a new signal does. */
+  private readonly ended = new Set<string>();
   private scanTimer: NodeJS.Timeout | undefined;
   private visible = true;
   private mode: 'off' | 'exact' | 'estimated' = 'off';
@@ -95,14 +97,15 @@ export class ExternalSessionService {
 
     // Pass 1: command lines that name the conversation. Pass 2: an id-less process serves ONE session in its cwd (the most recently active), so a single live process cannot keep every old transcript in that folder open.
     const matched = new Map<ExternalSession, LiveProcess>();
-    for (const session of this.sessions.values()) {
+    const open = [...this.sessions.values()].filter((s) => !this.ended.has(s.id));
+    for (const session of open) {
       const byId = live.find((p) => p.conversationId === session.id);
       if (byId) {
         matched.set(session, byId);
         claimed.add(byId);
       }
     }
-    const byRecency = [...this.sessions.values()].filter((s) => !matched.has(s)).sort((a, b) => b.lastEventAt - a.lastEventAt);
+    const byRecency = open.filter((s) => !matched.has(s)).sort((a, b) => b.lastEventAt - a.lastEventAt);
     for (const session of byRecency) {
       if (!session.cwd) continue;
       const byCwd = live.find((p) => !claimed.has(p) && p.harness === session.harness && p.cwd === session.cwd && p.conversationId === null);
@@ -112,7 +115,7 @@ export class ExternalSessionService {
       }
     }
 
-    for (const session of this.sessions.values()) {
+    for (const session of open) {
       const process = matched.get(session);
       if (process) {
         const terminal = process.terminal ?? undefined;
@@ -146,10 +149,17 @@ export class ExternalSessionService {
 
   private onSignal({ harness, id, signal }: ExternalSignal): void {
     if (this.deps.isOwnConversation(id)) return;
-    const change = interpretSignal(signal);
-    if (!change) return;
     const now = this.deps.now();
+    if (signal.event === 'session-end') {
+      this.endSession(id, now, signal.payload?.['reason'] === 'clear');
+      return;
+    }
+    const known = this.sessions.has(id);
+    // A fresh conversation (startup, `/clear`) is idle until its first prompt. On a known one — resume, `/compact` mid-turn — it only proves it is alive.
+    const change = signal.event === 'session-start' ? (known ? null : ({ activity: 'idle' } as const)) : interpretSignal(signal);
+    if (!change && signal.event !== 'session-start') return;
     const cwd = cwdOf(signal.payload);
+    this.ended.delete(id);
     let session = this.sessions.get(id);
     if (!session) {
       session = this.create(id, harness, cwd, 'measured', now);
@@ -163,19 +173,43 @@ export class ExternalSessionService {
       session.label = basename(cwd);
     }
     this.cancelSettle(id);
-    applyActivityChange(session, change, now);
+    if (change) applyActivityChange(session, change, now);
+    this.emit();
+  }
+
+  /** A `/clear` is a swap, not an exit: the old conversation leaves the list so only the fresh idle one remains instead of a closed row piling up per clear. */
+  private endSession(id: string, now: number, replaced: boolean): void {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    this.ended.add(id);
+    if (replaced) {
+      this.cancelSettle(id);
+      this.sessions.delete(id);
+      this.emit();
+      return;
+    }
+    applyActivityChange(session, { activity: 'idle' }, now);
+    this.close(session);
     this.emit();
   }
 
   /** Estimated state from a transcript write: modified within the window = working; it settles to idle when the window passes without another write. */
-  private onTranscript({ id, harness, cwd, modifiedAt }: TranscriptChange): void {
+  private onTranscript({ id, harness, cwd, modifiedAt, title }: TranscriptChange): void {
     if (this.deps.isOwnConversation(id)) return;
     const existing = this.sessions.get(id);
-    // A hook already reports this one exactly; the transcript adds nothing.
-    if (existing?.precision === 'measured') return;
+    // A hook already reports this one exactly; the transcript only adds its title.
+    if (existing?.precision === 'measured') {
+      if (title && existing.title !== title) {
+        existing.title = title;
+        this.emit();
+      }
+      return;
+    }
     const now = this.deps.now();
+    if (this.ended.has(id)) return;
     const session = existing ?? this.create(id, harness, cwd, 'estimated', now);
     if (!existing) this.sessions.set(id, session);
+    if (title) session.title = title;
     if (cwd && !session.cwd) {
       session.cwd = cwd;
       session.label = basename(cwd);

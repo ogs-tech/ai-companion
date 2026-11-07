@@ -142,6 +142,18 @@ describe('SessionsTreeGroup', () => {
       expect(within(row).getByText('Untitled')).toBeInTheDocument();
     });
 
+    it("labels an external session with the CLI's title instead of its folder name", async () => {
+      const external = { id: 'conv-ext', harness: 'claude', cwd: '/repos/ws', label: 'ws', closed: false, precision: 'measured', lastEventAt: 1, activity: 'idle', activitySince: 1 };
+      route({
+        'externalSession.state': ok({ consent: 'exact', sessions: [external] }),
+        'sessionHistory.list': ok(page([entry({ conversationId: 'conv-ext', title: 'Fix the login bug' })])),
+      });
+
+      render();
+
+      expect(await screen.findByText('Fix the login bug')).toBeInTheDocument();
+    });
+
     it('takes cost and model from the transcript for that same live session', async () => {
       route({
         'session.list': ok([runningSession]),

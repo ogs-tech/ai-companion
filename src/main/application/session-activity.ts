@@ -95,7 +95,7 @@ export function parseSignalLine(line: string): SessionSignal | null {
   }
   if (raw === null || typeof raw !== 'object') return null;
   const { event, payload } = raw as { event?: unknown; payload?: unknown };
-  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool' && event !== 'permission' && event !== 'session-start') return null;
+  if (event !== 'working' && event !== 'idle' && event !== 'notification' && event !== 'tool' && event !== 'permission' && event !== 'session-start') return null; // `session-end` is external-only
   if (event === 'working' || event === 'idle') return { event };
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
   return { event, payload: payload as Record<string, unknown> };
@@ -116,7 +116,7 @@ export interface ActivityChange {
 
 /** Interprets a signal; `null` = ignore it (keep the current state). */
 export function interpretSignal(signal: SessionSignal): ActivityChange | null {
-  if (signal.event === 'session-start') return null;
+  if (signal.event === 'session-start' || signal.event === 'session-end') return null;
   if (signal.event === 'working') return { activity: 'working' };
   if (signal.event === 'idle') return { activity: 'idle' };
   if (signal.event === 'permission') {

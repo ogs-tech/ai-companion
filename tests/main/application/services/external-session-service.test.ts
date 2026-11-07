@@ -132,6 +132,43 @@ describe('ExternalSessionService', () => {
     expect(byId).toEqual({ old: true, recent: false });
   });
 
+  it('drops the old conversation on a /clear so only the fresh idle one is listed', () => {
+    const t = setup();
+    t.signal(hook('old', { event: 'idle', payload: { cwd: '/w' } }));
+    t.signal(hook('old', { event: 'session-end', payload: { reason: 'clear' } }));
+    t.signal(hook('new', { event: 'session-start', payload: { cwd: '/w', source: 'clear' } }));
+    expect(t.service.list().map((s) => [s.id, s.closed, s.activity])).toEqual([['new', false, 'idle']]);
+  });
+
+  it('closes a session the moment SessionEnd arrives, and a still-exiting process cannot revive it', async () => {
+    const proc: LiveProcess = { pid: 1, harness: 'claude', cwd: '/w', conversationId: null, terminal: 'VS Code' };
+    const t = setup([proc]);
+    await t.service.setMode('exact');
+    t.signal(hook('old', { event: 'working', payload: { cwd: '/w' } }));
+    t.signal(hook('old', { event: 'session-end', payload: { reason: 'prompt_input_exit' } }));
+    expect(t.service.list()[0]).toMatchObject({ id: 'old', closed: true, activity: 'idle' });
+    await t.service.scanProcesses();
+    expect(t.service.list()[0]?.closed).toBe(true);
+    t.signal(hook('old', { event: 'working', payload: { cwd: '/w' } }));
+    expect(t.service.list()[0]?.closed).toBe(false);
+  });
+
+  it('registers a SessionStart as an idle session, but never resets a known one mid-turn', () => {
+    const t = setup();
+    t.signal(hook('new', { event: 'session-start', payload: { cwd: '/w/app', source: 'clear' } }));
+    expect(t.service.list()[0]).toMatchObject({ id: 'new', precision: 'measured', activity: 'idle', cwd: '/w/app' });
+    t.signal(hook('new', { event: 'working', payload: { cwd: '/w/app' } }));
+    t.signal(hook('new', { event: 'session-start', payload: { source: 'compact' } }));
+    expect(t.service.list()[0]?.activity).toBe('working');
+  });
+
+  it('takes the title from the transcript, also for a hook-measured session', () => {
+    const t = setup();
+    t.signal(hook('s1', { event: 'working', payload: { cwd: '/w/app' } }));
+    t.transcript({ id: 's1', harness: 'claude', cwd: '/w/app', modifiedAt: t.now, title: 'Fix login' });
+    expect(t.service.list()[0]).toMatchObject({ title: 'Fix login', precision: 'measured', activity: 'working' });
+  });
+
   it('emits only on real change', () => {
     const t = setup();
     const changes = vi.fn();

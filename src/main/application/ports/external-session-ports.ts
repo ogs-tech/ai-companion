@@ -23,6 +23,8 @@ export interface TranscriptChange {
   cwd: string | null;
   /** Epoch ms of the file's last modification. */
   modifiedAt: number;
+  /** The CLI's own title for the conversation (`customTitle` wins over `aiTitle`), when the tail carries one. */
+  title?: string;
 }
 
 /** Fallback for sessions with no hooks: a watcher on the harness's transcript directory. */
