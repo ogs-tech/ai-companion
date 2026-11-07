@@ -4,11 +4,11 @@
 
 > Local desktop app that manages your AI **harnesses** — one source of truth for your customizations, materialized into each harness's own config surface.
 >
-> **Direction:** evolving into an AI-first IDE where you bring your own harness. The editor is not built yet — see [the direction](docs/explanation/ide-direction.md).
+> **Direction:** evolving into an AI-first IDE where you bring your own harness. The editor is not built yet — see [the direction](docs/product/about/ide-direction.md).
 
 ## What it does
 
-A **harness** is the program that turns a language model into an agent that works on your code: it loads the context, exposes the tools and runs the loop. The model thinks; the harness acts. Claude Code is a harness, Cursor is another — both can run the same model and still behave differently. ([Full definition](docs/explanation/harness-model.md).)
+A **harness** is the program that turns a language model into an agent that works on your code: it loads the context, exposes the tools and runs the loop. The model thinks; the harness acts. Claude Code is a harness, Cursor is another — both can run the same model and still behave differently. ([Full definition](docs/product/harnesses/harness-model.md).)
 
 This app does two things for a harness:
 
@@ -40,7 +40,7 @@ npm install
 npm run dev
 ```
 
-On first launch, pick a workspace folder. Full walkthrough: [docs/tutorials/getting-started.md](docs/tutorials/getting-started.md).
+On first launch, pick a workspace folder. Full walkthrough: [docs/product/get-started/getting-started.md](docs/product/get-started/getting-started.md).
 
 ## Scripts
 
@@ -63,15 +63,15 @@ Documentation follows the [Diátaxis](https://diataxis.fr/) framework. Start at 
 
 Direct links:
 
-- **Tutorials** — [Getting started](docs/tutorials/getting-started.md)
-- **Reference** — [Architecture](docs/reference/architecture.md) · [Customization schema](docs/reference/customization-schema.md) · [IPC contract](docs/reference/ipc-contract.md)
-- **Explanation** — [Harness model](docs/explanation/harness-model.md) · [PRD](docs/explanation/prd.md) · [IDE direction](docs/explanation/ide-direction.md)
+- **Tutorials** — [Getting started](docs/product/get-started/getting-started.md)
+- **Reference** — [Architecture](docs/technical/reference/architecture.md) · [Customization schema](docs/technical/reference/customization-schema.md) · [IPC contract](docs/technical/reference/ipc-contract.md)
+- **Explanation** — [Harness model](docs/product/harnesses/harness-model.md) · [PRD](docs/product/about/prd.md) · [IDE direction](docs/product/about/ide-direction.md)
 
 ## Scope
 
-- **In:** everything under `manage` and `run` above, plus workspaces/projects, health checks and a workspace file browser. Full breakdown in the [PRD](docs/explanation/prd.md#5-scope).
+- **In:** everything under `manage` and `run` above, plus workspaces/projects, health checks and a workspace file browser. Full breakdown in the [PRD](docs/product/about/prd.md#5-scope).
 - **Out:** being a harness itself, being a general-purpose code editor, collaboration and team sync, any cloud component, telemetry.
-- **Adding a harness:** a registry entry plus one adapter — see [the contract](docs/explanation/harness-model.md#adding-a-harness).
+- **Adding a harness:** a registry entry plus one adapter — see [the contract](docs/product/harnesses/harness-model.md#adding-a-harness).
 
 ## Repository
 

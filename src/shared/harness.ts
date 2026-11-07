@@ -13,7 +13,7 @@
  * loop, it has its own on-disk configuration surface (the files it reads for
  * its instructions, skills and agents), and the user installs it on their own
  * machine. A model, an HTTP API, an MCP server and a web chat are none of
- * those — see `docs/explanation/harness-model.md` for the full rationale.
+ * those — see `docs/product/harnesses/harness-model.md` for the full rationale.
  *
  * Adding a harness means adding an entry here, an `Adapter` implementation
  * under `src/main/infrastructure/adapters/`, and wiring it in the composition

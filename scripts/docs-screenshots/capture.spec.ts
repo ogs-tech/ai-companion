@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, type ElectronApplication, type Page } from '@playwright/test';
 import { launch, seedDemo, shot, stubFolderPicker, widenExplorer, withHighlight, type Demo } from './lib.js';
 
@@ -80,6 +82,30 @@ test('use-terminals: open a terminal', async () => {
   await shot(page, guide, '03-terminal-open');
 });
 
+test('sessions: sessions outside the app', async () => {
+  const guide = 'sessions';
+  const panel = page.getByTestId('workspace-sessions-panel');
+  await panel.waitFor();
+  await shot(page, guide, '01-sessions-panel');
+
+  // Hook signal files, as the hooks installed in another terminal's claude would write them.
+  const dir = join(demo.home, '.ai-companion', 'signals', 'external');
+  mkdirSync(dir, { recursive: true });
+  const line = (event: string, payload: Record<string, unknown>): string => JSON.stringify({ harness: 'claude', event, payload }) + '\n';
+  const cwd = demo.workspace;
+  writeFileSync(join(dir, 'a1111111-0000-4000-8000-000000000001.jsonl'), line('working', { session_id: 'a1111111-0000-4000-8000-000000000001', cwd }) + line('tool', { session_id: 'a1111111-0000-4000-8000-000000000001', cwd, tool_name: 'Edit', tool_input: { file_path: join(cwd, 'src', 'routes.js') } }));
+  writeFileSync(join(dir, 'b2222222-0000-4000-8000-000000000002.jsonl'), line('working', { session_id: 'b2222222-0000-4000-8000-000000000002', cwd }) + line('notification', { session_id: 'b2222222-0000-4000-8000-000000000002', cwd, notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' }));
+  writeFileSync(join(dir, 'c3333333-0000-4000-8000-000000000003.jsonl'), line('working', { session_id: 'c3333333-0000-4000-8000-000000000003', cwd }) + line('idle', { session_id: 'c3333333-0000-4000-8000-000000000003', cwd }));
+
+  const banner = page.getByTestId('external-consent-banner');
+  if (await banner.isVisible().catch(() => false)) {
+    await withHighlight(page, page.getByTestId('external-consent-exact'), '1', () => shot(page, guide, '02-consent-banner'));
+    await page.getByTestId('external-consent-exact').click();
+  }
+  await page.waitForTimeout(1500);
+  await shot(page, guide, '03-external-sessions');
+});
+
 test('workspaces: switcher menu', async () => {
   const switcher = page.getByTestId('context-switcher');
   await withHighlight(page, switcher, '1', async () => {
@@ -94,6 +120,8 @@ test('settings', async () => {
   await page.getByTestId('nav-settings').click();
   await page.getByTestId('settings-screen').waitFor();
   await shot(page, 'settings', '01-settings');
+  await page.getByTestId('sessions-settings').scrollIntoViewIfNeeded();
+  await shot(page, 'sessions', '04-sessions-settings');
   await page.getByRole('button', { name: 'Voltar' }).click();
 });
 

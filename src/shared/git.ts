@@ -1,5 +1,5 @@
 // Types for the `git` IPC namespace — a git client over the active workspace
-// root's own repository. See docs/reference/ipc-contract.md, "git".
+// root's own repository. See docs/technical/reference/ipc-contract.md, "git".
 
 export type GitChange =
   | 'modified'
