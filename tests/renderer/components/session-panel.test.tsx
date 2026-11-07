@@ -109,7 +109,7 @@ describe('<SessionPanel>', () => {
 
   it('shows the "Sessão" header with its status pill while idle, since that is where the "Abrir sessão" action lives', () => {
     renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
-    expect(screen.getByTestId('status-pill-session')).toBeInTheDocument();
+    expect(screen.getByTestId('session-state')).toBeInTheDocument();
   });
 
   it('drops the "Abrir sessão" action once the session is running, but keeps a thin header for the browser toggle', async () => {
@@ -129,7 +129,7 @@ describe('<SessionPanel>', () => {
     await user.click(screen.getByTestId('session-open'));
 
     await waitFor(() => expect(screen.queryByTestId('session-open')).toBeNull());
-    expect(screen.getByTestId('status-pill-session')).toBeInTheDocument();
+    expect(screen.getByTestId('session-state')).toBeInTheDocument();
     expect(screen.getByTestId('session-browser-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('session-terminal')).toBeInTheDocument();
   });
@@ -202,16 +202,36 @@ describe('<SessionPanel>', () => {
     it('shows "Trabalhando" when the attached session reports activity working', async () => {
       call.mockImplementation(async () => ok(snapshot({ activity: 'working' })));
       renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
-      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Trabalhando'));
+      await waitFor(() => expect(screen.getByTestId('session-state')).toHaveTextContent('Trabalhando'));
     });
 
-    it('leaves "Iniciando" on the first output chunk even when the status lookup found nothing', async () => {
+    it('shows Ocioso with an "iniciando" detail until the first output chunk, even when the status lookup found nothing', async () => {
       call.mockImplementation(async () => ok(null));
       renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
-      expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Iniciando');
+      expect(screen.getByTestId('session-state')).toHaveTextContent('Ocioso');
+      expect(screen.getByTestId('session-detail')).toHaveTextContent('iniciando');
       await waitFor(() => expect(onOutput).toHaveBeenCalledWith('s1', expect.any(Function)));
       act(() => (onOutput.mock.calls[0]?.[1] as (chunk: string) => void)('hello'));
-      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Em execução'));
+      await waitFor(() => expect(screen.queryByTestId('session-detail')).toBeNull());
+      expect(screen.getByTestId('session-state')).toHaveTextContent('Ocioso');
+    });
+
+    it('stops claiming "iniciando" after the grace period when no output or activity ever arrives', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        // First lookup races the spawn and finds nothing; the retry finds the live session.
+        let lookups = 0;
+        call.mockImplementation(async () => ok(++lookups === 1 ? null : snapshot({ activity: 'working' })));
+        renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
+        expect(screen.getByTestId('session-detail')).toHaveTextContent('iniciando');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5000);
+        });
+        await waitFor(() => expect(screen.getByTestId('session-state')).toHaveTextContent('Trabalhando'));
+        expect(screen.queryByText('iniciando')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('refreshes the pill when the session activity changes', async () => {
@@ -219,12 +239,12 @@ describe('<SessionPanel>', () => {
       call.mockImplementation(async () => ok(snapshot({ activity })));
       const onAnyActivity = vi.mocked(window.api.session.onAnyActivity);
       renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
-      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Trabalhando'));
+      await waitFor(() => expect(screen.getByTestId('session-state')).toHaveTextContent('Trabalhando'));
 
       activity = 'needs-input';
       // The sessions store and the panel both subscribe; main's push reaches every listener.
       act(() => onAnyActivity.mock.calls.forEach(([listener]) => (listener as (id: string) => void)('s1')));
-      await waitFor(() => expect(screen.getByTestId('status-pill-session')).toHaveTextContent('Pergunta'));
+      await waitFor(() => expect(screen.getByTestId('session-state')).toHaveTextContent('Pergunta'));
     });
   });
 

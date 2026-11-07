@@ -1,4 +1,6 @@
+import { keyframes } from '@mui/material';
 import { SessionStateMark } from '../SessionStateMark.js';
+import { FILTER_LABELS } from '../../lib/session-attention.js';
 import type { SessionRowState } from '../../lib/session-attention.js';
 import { Fragment, useRef, useState } from 'react';
 import { Box, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
@@ -31,6 +33,8 @@ export interface WorkbenchTab {
   dense?: boolean;
   /** A session tab's live state: shown as the four-state mark beside the label. */
   sessionState?: SessionRowState;
+  /** What that state is about ("Edit · 12 s", "Permissão: Bash") — appended to the state name in the tab's tooltip. */
+  sessionDetail?: string;
   /** Unsaved-changes indicator — a small dot next to the label, same signal a `closeTab`/scope-switch discard guard reads to decide whether to confirm. */
   dirty?: boolean;
   /**
@@ -47,6 +51,14 @@ export interface WorkbenchTab {
   iconOnly?: boolean;
   /** Rendered for every open tab on every render, not just the active one — visibility is a `display` toggle (via the `hidden` arg), never a mount/unmount, so scroll position survives switching away and back. */
   render: (hidden: boolean) => React.ReactNode;
+}
+
+/** One soft ring per 2 s on an inactive tab that is waiting on the user — the only state that asks for you. */
+const attentionRing = keyframes`0% { opacity: 0.7; transform: scale(0.96); } 70%, 100% { opacity: 0; transform: scale(1.04); }`;
+
+function tabTooltip(tab: WorkbenchTab): string {
+  if (tab.sessionState) return tab.sessionDetail ? `${FILTER_LABELS[tab.sessionState]} — ${tab.sessionDetail}` : FILTER_LABELS[tab.sessionState];
+  return tab.iconOnly || tab.pinned ? tab.label : '';
 }
 
 function TabGlyph({ tab }: { tab: WorkbenchTab }): React.ReactElement {
@@ -97,7 +109,7 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
             const lastPinned = tab.pinned === true && !tabs[tabs.indexOf(tab) + 1]?.pinned;
             return (
               <Fragment key={tab.id}>
-              <Tooltip title={tab.iconOnly || tab.pinned ? tab.label : ''}>
+              <Tooltip title={tabTooltip(tab)}>
                 <Box
                   role="button"
                   tabIndex={0}
@@ -140,11 +152,30 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
                   sx={(theme) => ({
                     display: 'flex',
                     alignItems: 'center',
+                    position: 'relative',
                     cursor: 'pointer',
                     borderRadius: `${theme.ogs.radius.pill}px`,
                     color: active ? 'text.primary' : 'text.secondary',
                     bgcolor: active ? theme.ogs.surfaces.rail : 'transparent',
+                    // A closed session's tab recedes; it stays reachable.
+                    opacity: tab.sessionState === 'exited' && !active ? 0.6 : 1,
                     flexShrink: 0,
+                    '@media (prefers-reduced-motion: no-preference)': {
+                      transition: 'background-color 0.2s ease, color 0.2s ease, opacity 0.25s ease',
+                      ...(tab.sessionState === 'needs-input' && !active
+                        ? {
+                            '&::before': {
+                              content: '""',
+                              position: 'absolute',
+                              inset: 0,
+                              borderRadius: 'inherit',
+                              border: `1px solid ${theme.palette.warning.main}`,
+                              pointerEvents: 'none',
+                              animation: `${attentionRing} 2s ease-out infinite`,
+                            },
+                          }
+                        : {}),
+                    },
                     '&:hover': active ? {} : { bgcolor: 'action.hover' },
                     '&:hover .workbench-tab-close, &:focus-within .workbench-tab-close': { color: 'text.secondary', display: 'inline-flex' },
                     '&:hover .workbench-tab-dirty, &:focus-within .workbench-tab-dirty': { display: tab.onClose && !tab.pinned ? 'none' : undefined },

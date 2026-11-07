@@ -5,15 +5,15 @@ description: The four session states (Pergunta, Trabalhando, Ocioso, Fechado), t
 
 ## Read a session's state
 
-The list, the tabs, the status bar and the tab header use the same four states. The shape carries the
+The list, the tabs, the status bar and the session header use the same four states. The shape carries the
 meaning; colour only reinforces it.
 
 | State | Mark | Meaning |
 |---|---|---|
-| **Pergunta** | `!` yellow, pulses | Blocked on you: a permission prompt or a question. Never shown for a session that merely finished its turn. |
+| **Pergunta** | `!` yellow, pulses (a soft ring on its tab when that tab is not the active one) | Blocked on you: a permission prompt or a question. Never shown for a session that merely finished its turn. |
 | **Trabalhando** | `✻` green, spins | A turn is running. The detail shows the current tool and elapsed time. |
-| **Ocioso** | `◌` grey | Alive and waiting at the prompt, or no signal yet. |
-| **Fechado** | `×` grey | The process is gone. |
+| **Ocioso** | dashed ring, grey | Alive and waiting at the prompt, or no signal yet. A session just started shows "iniciando…" beside it for up to 5 seconds. |
+| **Fechado** | ring with a slash, grey | The process is gone. Its tab is dimmed. |
 
 The four chips above the list filter by state and show their counts. The row also shows how much of the
 context window is used (amber over 70%, red over 90%) and the cost so far. Cursor's context is an

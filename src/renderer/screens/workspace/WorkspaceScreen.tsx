@@ -69,7 +69,7 @@ import { useActiveWorkspace, useGoHome, useOpenWorkspace, useSwitchWorkspace } f
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { requestObserve } from '../../lib/external-observe-store.js';
 import { SessionFileBanner } from '../../components/workspace/SessionFileBanner.js';
-import { rowStateOf } from '../../lib/session-attention.js';
+import { rowStateOf, sessionStateDetail } from '../../lib/session-attention.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
 import { useRunHarnesses } from '../../hooks/use-run-harnesses.js';
@@ -1118,9 +1118,11 @@ export function WorkspaceScreen(): React.ReactElement {
       const running = sessions?.some((s) => s.sessionId === tab.sessionId && s.status === 'running') ?? false;
       const tabSession = sessions?.find((s) => s.sessionId === tab.sessionId);
       const tabHarness = tabSession?.harness;
+      const tabDetail = tabSession ? sessionStateDetail(tabSession) : undefined;
       return {
         id: tab.id,
         ...(tabSession ? { sessionState: rowStateOf(tabSession) } : {}),
+        ...(tabDetail ? { sessionDetail: tabDetail } : {}),
         glyph: tabHarness ? harnessGlyph(tabHarness) : SquareTerminal,
         label: tab.label,
         closeLabel: running ? 'Minimizar' : 'Fechar',

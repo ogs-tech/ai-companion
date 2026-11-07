@@ -11,6 +11,7 @@ import { resolveSessionSettings } from '../../../shared/settings.js';
 import { ExternalConsentBanner, ExternalSessionRows, externalStateOf } from './ExternalSessionsBlock.js';
 import { useExternalSessions } from '../../hooks/use-external-sessions.js';
 import { SessionRow } from './SessionRow.js';
+import { StateGlyph } from '../SessionStateMark.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useWorkspaces } from '../../hooks/use-workspaces.js';
 import {
@@ -23,7 +24,6 @@ import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import {
   compareRows,
   countByFilter,
-  FILTER_GLYPHS,
   FILTER_LABELS,
   matchesFilter,
   rowStateOf,
@@ -370,8 +370,8 @@ export function SessionsTreeGroup({
                   },
                 })}
               >
-                <Box component="span" aria-hidden sx={{ color, fontWeight: 700 }}>
-                  {FILTER_GLYPHS[key]}
+                <Box component="span" aria-hidden sx={{ color, display: 'inline-flex' }}>
+                  <StateGlyph state={key} />
                 </Box>
                 {count}
               </Box>

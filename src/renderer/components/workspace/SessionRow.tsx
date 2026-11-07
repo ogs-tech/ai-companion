@@ -1,11 +1,11 @@
 import { Box, Skeleton, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
 import type { HarnessId } from '../../../shared/harness.js';
 import { ContextBar } from '../ContextBar.js';
+import { StateGlyph } from '../SessionStateMark.js';
 import type { SessionMetrics } from '../../../shared/session-metrics.js';
 import type { SessionAttention } from '../../../shared/session.js';
 import {
   attentionLabel,
-  FILTER_GLYPHS,
   FILTER_LABELS,
   formatIdleFor,
   formatWait,
@@ -179,10 +179,10 @@ export function SessionRow({
             width: 14,
             flexShrink: 0,
             ...(estimated ? { border: '1px dashed currentColor', borderRadius: '50%' } : {}),
-            textAlign: 'center',
-            fontWeight: 700,
-            fontSize: '0.8125rem',
-            lineHeight: '1.2rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '1.2rem',
             color: INDICATOR_COLORS[state],
             // Only "precisa de você" moves: if everything blinks, nothing is urgent.
             '@media (prefers-reduced-motion: no-preference)': needsInput
@@ -190,7 +190,7 @@ export function SessionRow({
               : {},
           }}
         >
-          {FILTER_GLYPHS[state]}
+          <StateGlyph state={state} />
         </Box>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>

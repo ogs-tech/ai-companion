@@ -7,6 +7,7 @@ import {
   formatWait,
   matchesFilter,
   rowStateOf,
+  sessionStateDetail,
 } from '../../../src/renderer/lib/session-attention.js';
 import type { SessionSnapshot } from '../../../src/shared/session.js';
 
@@ -25,6 +26,15 @@ describe('rowStateOf', () => {
     expect(rowStateOf(live({ activity: 'working' }))).toBe('working');
     expect(rowStateOf(live({ activity: 'idle' }))).toBe('idle');
     expect(rowStateOf(live({}))).toBe('idle');
+  });
+});
+
+describe('sessionStateDetail', () => {
+  it('says what the pending ask is, or the current tool, and nothing for idle/exited', () => {
+    expect(sessionStateDetail(live({ activity: 'needs-input', attention: { kind: 'permission', detail: 'Bash' } }))).toBe('Permissão: Bash');
+    expect(sessionStateDetail(live({ activity: 'working', activityDetail: 'Edit · 12 s' }))).toBe('Edit · 12 s');
+    expect(sessionStateDetail(live({ activity: 'idle' }))).toBeUndefined();
+    expect(sessionStateDetail(live({ status: 'exited', activity: 'working', activityDetail: 'x' }))).toBeUndefined();
   });
 });
 

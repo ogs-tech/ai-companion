@@ -52,11 +52,11 @@ describe('SessionRow', () => {
   });
 
   it.each([
-    ['needs-input', '!', 'Pergunta'],
-    ['working', '✻', 'Trabalhando'],
-    ['idle', '◌', 'Ocioso'],
-    ['exited', '×', 'Fechado'],
-  ] as const)('shows a distinct glyph and accessible name for %s', (state, glyph, name) => {
+    ['needs-input', 'Pergunta'],
+    ['working', 'Trabalhando'],
+    ['idle', 'Ocioso'],
+    ['exited', 'Fechado'],
+  ] as const)('shows a distinct mark and accessible name for %s', (state, name) => {
     renderWithTheme(
       <SessionRow
         label="api"
@@ -68,7 +68,8 @@ describe('SessionRow', () => {
       />,
     );
     const indicator = screen.getByTestId('row-indicator');
-    expect(indicator).toHaveTextContent(glyph);
+    expect(indicator).toHaveAttribute('data-state', state);
+    expect(indicator.querySelector('svg')).not.toBeNull();
     expect(indicator).toHaveAccessibleName(name);
   });
 

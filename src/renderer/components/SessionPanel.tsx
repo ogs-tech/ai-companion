@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from 'react';
-import { Box, Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, IconButton, Stack, Tooltip, Typography, keyframes } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { SquareTerminal, Lock, Globe } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
@@ -18,7 +18,8 @@ import {
 } from '../../shared/session.js';
 import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
-import { StatusPill, type StatusPillVariant } from './ds/StatusPill.js';
+import { StatusPill } from './ds/StatusPill.js';
+import { SessionStateMark } from './SessionStateMark.js';
 import { EmptyState } from './ds/EmptyState.js';
 import {
   closeSessionTab,
@@ -31,8 +32,10 @@ import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
 import { ContextBar } from './ContextBar.js';
 import type { SessionMetrics } from '../../shared/session-metrics.js';
-import { FILTER_LABELS } from '../lib/session-attention.js';
-import { SESSION_STATUS_PILL } from '../lib/session-status-pill.js';
+import { FILTER_LABELS, type SessionRowState } from '../lib/session-attention.js';
+
+const fadeIn = keyframes`from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; }`;
+const dots = keyframes`0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; }`;
 
 type PanelStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error';
 
@@ -54,25 +57,34 @@ interface SessionPanelProps {
   visible?: boolean;
 }
 
-const STATUS_PILL: Record<PanelStatus, { variant: StatusPillVariant; label: string }> = {
-  idle: { variant: 'idle', label: 'Parada' },
-  starting: { variant: 'starting', label: 'Iniciando' },
-  error: { variant: 'error', label: 'Erro' },
-  ...SESSION_STATUS_PILL,
-  // A live session with no activity signal (harness without hooks, or none yet) is
-  // truthfully "running", never stuck on "Iniciando".
-  running: { variant: 'running', label: 'Em execução' },
-};
+/** How long a session may sit with no signal before "iniciando" stops being claimed. */
+const STARTING_GRACE_MS = 5000;
 
-const ACTIVITY_PILL: Record<SessionActivity, { variant: StatusPillVariant; label: string }> = {
-  working: { variant: 'running', label: FILTER_LABELS.working },
-  idle: { variant: 'idle', label: FILTER_LABELS.idle },
-  'needs-input': { variant: 'warning', label: FILTER_LABELS['needs-input'] },
-};
+/** What the header says: the same four states as the list and the tabs, plus a failure that is not a session state. */
+interface HeaderStatus {
+  state: SessionRowState | 'error';
+  label: string;
+  /** Secondary text beside the label ("Edit · 12 s", "iniciando"). */
+  detail?: string;
+  /** No signal yet: the mark breathes and the detail's dots animate. */
+  starting?: boolean;
+}
 
-function pillFor(status: PanelStatus, activity: SessionActivity | undefined): { variant: StatusPillVariant; label: string } {
-  if (status === 'running' && activity) return ACTIVITY_PILL[activity];
-  return STATUS_PILL[status];
+function headerStatusFor(status: PanelStatus, activity: SessionActivity | undefined): HeaderStatus {
+  switch (status) {
+    case 'error':
+      return { state: 'error', label: 'Erro' };
+    case 'idle':
+    case 'exited':
+      return { state: 'exited', label: FILTER_LABELS.exited };
+    // A live session with no signal is Ocioso (the doc's rule); "iniciando" is only a detail of it.
+    case 'starting':
+      return { state: 'idle', label: FILTER_LABELS.idle, detail: 'iniciando', starting: true };
+    case 'running': {
+      const state = activity ?? 'idle';
+      return { state, label: FILTER_LABELS[state] };
+    }
+  }
 }
 
 // A real terminal reads as its own environment, not as a themed app panel —
@@ -147,8 +159,8 @@ function attachmentRefData(paths: string[]): string {
 }
 
 interface SessionHeaderProps {
-  pill: { variant: StatusPillVariant; label: string };
-  /** Current tool while working ("Edit CartService.ts"). */
+  status: HeaderStatus;
+  /** Current tool while working ("Edit CartService.ts"); wins over the status's own detail. */
   detail?: string;
   /** Live cost / context. */
   metrics?: SessionMetrics | undefined;
@@ -156,7 +168,8 @@ interface SessionHeaderProps {
   browserToggle?: React.ReactNode;
 }
 
-function SessionHeader({ pill, detail, metrics, action, browserToggle }: SessionHeaderProps): React.ReactElement {
+function SessionHeader({ status, detail, metrics, action, browserToggle }: SessionHeaderProps): React.ReactElement {
+  const shownDetail = detail ?? status.detail;
   return (
     <Stack
       direction="row"
@@ -167,10 +180,32 @@ function SessionHeader({ pill, detail, metrics, action, browserToggle }: Session
         <Kicker>Sessão</Kicker>
       </Stack>
       <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-        <StatusPill variant={pill.variant} label={pill.label} testId="session" />
-        {detail && (
-          <Typography component="span" noWrap data-testid="session-detail" sx={{ fontSize: '0.75rem', color: 'text.secondary', maxWidth: 260 }}>
-            {detail}
+        {status.state === 'error' ? (
+          <StatusPill variant="error" label={status.label} testId="session" />
+        ) : (
+          <Stack direction="row" spacing={0.75} data-testid="session-state" data-state={status.state} sx={{ alignItems: 'center' }}>
+            <SessionStateMark state={status.state} breathing={status.starting === true} />
+            <Typography component="span" sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>
+              {status.label}
+            </Typography>
+          </Stack>
+        )}
+        {shownDetail && (
+          <Typography
+            component="span"
+            noWrap
+            data-testid="session-detail"
+            sx={{
+              fontSize: '0.75rem',
+              color: 'text.secondary',
+              maxWidth: 260,
+              '@media (prefers-reduced-motion: no-preference)': {
+                animation: `${fadeIn} 0.2s ease-out`,
+                ...(status.starting && !detail ? { '&::after': { content: '""', display: 'inline-block', width: '1.2em', textAlign: 'left', animation: `${dots} 1.2s steps(4, end) infinite` } } : {}),
+              },
+            }}
+          >
+            {shownDetail}
           </Typography>
         )}
         <ContextBar metrics={metrics} testId="session-context" />
@@ -190,7 +225,7 @@ function SessionHeader({ pill, detail, metrics, action, browserToggle }: Session
 export function SessionPanelLocked(): React.ReactElement {
   return (
     <Box data-testid="session-panel-locked">
-      <SessionHeader pill={{ variant: 'idle', label: 'Disponível após salvar' }} />
+      <SessionHeader status={{ state: 'exited', label: 'Disponível após salvar' }} />
       <EmptyState
         glyph={Lock}
         title="Salve para abrir uma sessão"
@@ -269,6 +304,22 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  // "Iniciando" is a claim about the first moments only. The one-shot lookup above can race the
+  // spawn (it finds nothing and never runs again), so when no output or activity has arrived
+  // within the grace period, ask again and settle on what the main process says.
+  useEffect(() => {
+    if (status !== 'starting' || !sessionId) return;
+    const timer = setTimeout(() => {
+      void callIpc<SessionSnapshotWithOutput | null>('session.status', { sessionId })
+        .then((snap) => {
+          if (snap) setActivity(snap.activity);
+          setStatus((current) => (current === 'starting' ? (snap?.status === 'exited' ? 'exited' : 'running') : current));
+        })
+        .catch(() => setStatus((current) => (current === 'starting' ? 'running' : current)));
+    }, STARTING_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [status, sessionId]);
 
   useEffect(() => {
     const terminal = new Terminal({
@@ -565,7 +616,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {showHeader && (
         <Box sx={{ px: 2, pt: 2 }}>
-          <SessionHeader pill={pillFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
+          <SessionHeader status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
         </Box>
       )}
       {error && (

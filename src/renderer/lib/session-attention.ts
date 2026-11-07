@@ -79,6 +79,14 @@ export function attentionLabel(attention: SessionAttention | undefined): string 
   return attention?.detail ? `Permissão: ${attention.detail}` : 'Permissão';
 }
 
+/** What a session's state is about, for a tooltip: the pending permission/question, or the current tool. */
+export function sessionStateDetail(live: SessionSnapshot): string | undefined {
+  const state = rowStateOf(live);
+  if (state === 'needs-input') return attentionLabel(live.attention);
+  if (state === 'working') return live.activityDetail;
+  return undefined;
+}
+
 export const FILTER_LABELS: Record<SessionFilter, string> = {
   'needs-input': 'Pergunta',
   working: 'Trabalhando',
@@ -86,10 +94,10 @@ export const FILTER_LABELS: Record<SessionFilter, string> = {
   exited: 'Fechado',
 };
 
-/** The glyph a state wears in its row and on its chip. */
+/** Plain-text stand-in for a state's mark, for places that cannot render the SVG (tooltip strings). */
 export const FILTER_GLYPHS: Record<SessionFilter, string> = {
   'needs-input': '!',
   working: '✻',
   idle: '◌',
-  exited: '×',
+  exited: '⊘',
 };

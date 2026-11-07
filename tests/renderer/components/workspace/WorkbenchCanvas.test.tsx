@@ -31,3 +31,27 @@ describe('WorkbenchCanvas "+" menu', () => {
     expect(onTerminal).toHaveBeenCalledOnce();
   });
 });
+
+describe('WorkbenchCanvas session tabs', () => {
+  const sessionTab = (over: Partial<Parameters<typeof WorkbenchCanvas>[0]['tabs'][number]> = {}): Parameters<typeof WorkbenchCanvas>[0]['tabs'][number] => ({
+    id: 's1',
+    label: 'refactor-auth',
+    glyph: SquareTerminal,
+    render: () => null,
+    sessionState: 'needs-input',
+    sessionDetail: 'Permissão: Bash',
+    ...over,
+  });
+
+  it('names the state and what it is about in the tab tooltip', async () => {
+    renderWithTheme(<WorkbenchCanvas tabs={[sessionTab()]} activeTabId={null} onSelect={vi.fn()} />);
+    await userEvent.hover(screen.getByTestId('workbench-tab-s1'));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Pergunta — Permissão: Bash');
+  });
+
+  it('draws each state with the shared mark', () => {
+    renderWithTheme(<WorkbenchCanvas tabs={[sessionTab({ id: 'a', sessionState: 'exited' }), sessionTab({ id: 'b', sessionState: 'idle' })]} activeTabId={null} onSelect={vi.fn()} />);
+    expect(screen.getByTestId('workbench-tab-state-a')).toHaveAttribute('data-state', 'exited');
+    expect(screen.getByTestId('workbench-tab-state-b').querySelector('svg')).not.toBeNull();
+  });
+});
