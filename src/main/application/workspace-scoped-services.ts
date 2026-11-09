@@ -26,6 +26,7 @@ import { McpAuthCollector } from './services/health/mcp-auth-collector.js';
 import { McpRuntimeCollector } from './services/health/mcp-runtime-collector.js';
 import { ConfigDriftCollector } from './services/health/config-drift-collector.js';
 import { SymlinkCollector } from './services/health/symlink-collector.js';
+import { MergeEntryCollector } from './services/health/merge-entry-collector.js';
 import { GeneratedFileCollector } from './services/health/generated-file-collector.js';
 import type { HealthCollector } from './services/health/health-collector.js';
 import { WorkspaceTeardownService } from './services/workspace-teardown.js';
@@ -190,6 +191,7 @@ export function buildWorkspaceScopedServices(
     new ConfigDriftCollector(pluginService, clock),
     new SymlinkCollector(adapterManager, symlinkManager, clock),
     new GeneratedFileCollector(adapterManager, fileMaterializer, settingsService, clock),
+    new MergeEntryCollector(adapterManager, mergeMaterializer, clock),
   ];
   const healthService = new HealthService(healthCollectors, clock);
 

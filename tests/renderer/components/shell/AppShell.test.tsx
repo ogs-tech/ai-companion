@@ -3,6 +3,7 @@ import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppShell } from '../../../../src/renderer/components/shell/AppShell.js';
 import { dispatchMenuCommand } from '../../../../src/renderer/lib/menu-commands.js';
+import { registerConfigOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
 import { openManualTab } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
@@ -24,7 +25,7 @@ beforeEach(() => {
 describe('AppShell', () => {
   it('renders TopNav, the given children, and the global status bar', () => {
     renderWithShell(
-      <AppShell onOpenSettings={() => undefined}>
+      <AppShell>
         <div data-testid="screen" />
       </AppShell>,
     );
@@ -34,20 +35,24 @@ describe('AppShell', () => {
     expect(screen.getByTestId('status-bar')).toBeInTheDocument();
   });
 
-  it('opens settings via TopNav', async () => {
-    const onOpenSettings = vi.fn();
+  it('opens the Config view via TopNav and the open-settings menu command', async () => {
+    const opener = vi.fn();
+    registerConfigOpener(opener);
     renderWithShell(
-      <AppShell onOpenSettings={onOpenSettings}>
+      <AppShell>
         <div data-testid="screen" />
       </AppShell>,
     );
     await userEvent.click(screen.getByTestId('nav-settings'));
-    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(opener).toHaveBeenCalledOnce();
+    act(() => dispatchMenuCommand('open-settings'));
+    expect(opener).toHaveBeenCalledTimes(2);
+    registerConfigOpener(null);
   });
 
   it('opens the command palette when the menu asks for it', async () => {
     renderWithShell(
-      <AppShell onOpenSettings={() => undefined}>
+      <AppShell>
         <div data-testid="screen" />
       </AppShell>,
     );
@@ -65,7 +70,7 @@ describe('AppShell external links', () => {
       return unsubscribe;
     });
     const { unmount } = renderWithShell(
-      <AppShell onOpenSettings={() => undefined}>
+      <AppShell>
         <div />
       </AppShell>,
     );

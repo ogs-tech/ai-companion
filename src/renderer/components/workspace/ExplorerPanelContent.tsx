@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import { useQueries } from '@tanstack/react-query';
-import { FolderTree as FilesGlyph, Globe, GitBranch, Search, SquareTerminal } from 'lucide-react';
+import { FolderTree as FilesGlyph, Globe, GitBranch, Search, Settings as SettingsGlyph, SquareTerminal } from 'lucide-react';
 import { SectionHeader } from '../ds/ContainerChrome.js';
 import { FolderTree, type RootInfo } from './FolderTree.js';
 import type { ExplorerActions, PathChange } from './use-explorer-actions.js';
 import { WorkspacesList } from './WorkspacesList.js';
+import { ConfigTree } from './ConfigTree.js';
 import { ExplorerFrame, ExplorerRail, type ExplorerView, type RailItem } from './ExplorerRail.js';
 import { useTerminals } from '../../hooks/use-terminals.js';
 import { DiscardConfirmDialog } from './git/DiscardConfirmDialog.js';
@@ -60,6 +61,9 @@ interface ExplorerPanelContentProps {
   browserSection?: React.ReactNode;
   /** The "Buscar no projeto" view's body (rendered with `fill`). */
   searchSection?: React.ReactNode;
+  /** The Config page whose tab is in front (highlighted in the Config tree). */
+  activeConfigPage: string | null;
+  onOpenConfigPage: (page: string) => void;
 }
 
 /**
@@ -86,9 +90,24 @@ export function ExplorerPanelContent(props: ExplorerPanelContentProps): React.Re
   };
 
   if (isHome) {
+    // Início's rail is destinations that open tabs, plus Config — the one entry that swaps the body.
+    const homeItems: RailItem[] = [
+      ...props.homeRailItems,
+      {
+        testId: 'explorer-view-config',
+        label: 'Configurações',
+        glyph: SettingsGlyph,
+        active: view === 'config',
+        onClick: () => setView(view === 'config' ? 'files' : 'config'),
+      },
+    ];
     return (
-      <ExplorerFrame rail={<ExplorerRail items={props.homeRailItems} />}>
-        <WorkspacesList onOpenWorkspaces={props.onOpenWorkspaces} />
+      <ExplorerFrame rail={<ExplorerRail items={homeItems} />}>
+        {view === 'config' ? (
+          <ConfigTree activePage={props.activeConfigPage} onOpenPage={props.onOpenConfigPage} />
+        ) : (
+          <WorkspacesList onOpenWorkspaces={props.onOpenWorkspaces} />
+        )}
       </ExplorerFrame>
     );
   }
@@ -123,6 +142,8 @@ function WorkspaceExplorer({
   onOpenGitDiff,
   isWorkspaceRoot,
   dirtyFiles,
+  activeConfigPage,
+  onOpenConfigPage,
   view,
   onSelectView,
   onRetarget,
@@ -197,6 +218,7 @@ function WorkspaceExplorer({
       badgeColor: 'success',
     },
     { testId: 'explorer-view-browser', label: 'Navegador', glyph: Globe, active: view === 'browser', onClick: () => onSelectView('browser') },
+    { testId: 'explorer-view-config', label: 'Configurações', glyph: SettingsGlyph, active: view === 'config', onClick: () => onSelectView('config') },
   ];
 
   return (
@@ -264,6 +286,7 @@ function WorkspaceExplorer({
         ))}
       {view === 'terminals' && terminalsSection}
       {view === 'browser' && browserSection}
+      {view === 'config' && <ConfigTree activePage={activeConfigPage} onOpenPage={onOpenConfigPage} />}
       <DiscardConfirmDialog files={actions.pendingDiscard} onCancel={actions.cancelDiscard} onConfirm={actions.confirmDiscard} />
     </ExplorerFrame>
   );

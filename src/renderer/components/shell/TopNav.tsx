@@ -16,15 +16,15 @@ import {
   toggleWorkspacePanel,
 } from '../../lib/workspace-shell-store.js';
 import { ContextSwitcher } from './ContextSwitcher.js';
+import { openConfig } from '../../lib/workspace-area-store.js';
 
 interface TopNavProps {
-  onOpenSettings: () => void;
   onOpenCommandPalette: () => void;
   /** The switcher's "Todos…": opens the palette on its workspace list. */
   onOpenWorkspacePicker: () => void;
 }
 
-export function TopNav({ onOpenSettings, onOpenCommandPalette, onOpenWorkspacePicker }: TopNavProps): React.ReactElement {
+export function TopNav({ onOpenCommandPalette, onOpenWorkspacePicker }: TopNavProps): React.ReactElement {
   const paletteShortcut = shortcutFor('command-palette') ?? '';
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
   const { explorerCollapsed, controlCollapsed } = useSyncExternalStore(subscribeWorkspacePanels, getWorkspacePanelsSnapshot);
@@ -136,7 +136,7 @@ export function TopNav({ onOpenSettings, onOpenCommandPalette, onOpenWorkspacePi
           <Tooltip title="Configurações">
             <IconButton
               data-testid="nav-settings"
-              onClick={onOpenSettings}
+              onClick={() => openConfig()}
               size="small"
               sx={{ color: 'text.secondary' }}
               aria-label="Configurações"

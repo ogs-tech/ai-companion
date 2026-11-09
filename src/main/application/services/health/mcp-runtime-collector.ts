@@ -1,4 +1,5 @@
 import type { HealthCheck, Severity } from '../../../../shared/health.js';
+import { entityUrn } from '../../../../shared/entity.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type {
   ClaudeRuntimePort,
@@ -50,6 +51,8 @@ export class McpRuntimeCollector implements HealthCollector {
         title:
           severity === 'ok' ? `MCP "${name}" healthy` : `MCP "${name}" runtime problem`,
         target: name,
+        entityUrn: entityUrn('mcp', name),
+        channel: 'claude',
         observedAt,
         ...(summary?.detail !== undefined ? { detail: summary.detail } : {}),
         ...(severity !== 'ok'

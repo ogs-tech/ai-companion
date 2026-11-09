@@ -82,7 +82,7 @@ The polymorphic `Customization` model and its `customization-service` umbrella a
 
 ### Harness adapters
 
-`src/shared/harness.ts` is the registry of harnesses the app integrates with — id, display name, capabilities, and whether a fresh install syncs to it unasked. Default settings (`getDefaults`), settings validation (`assertValidSettings`) and the Settings screen's toggles all derive from it, so "which harnesses exist" is stated once. It is a pure data module in `shared/` because both the main process (defaults, validation) and the renderer (toggles) need it.
+`src/shared/harness.ts` is the registry of harnesses the app integrates with — id, display name, capabilities, and whether a fresh install syncs to it unasked. Default settings (`getDefaults`), settings validation (`assertValidSettings`) and the Config view's harness pages all derive from it, so "which harnesses exist" is stated once. It is a pure data module in `shared/` because both the main process (defaults, validation) and the renderer (toggles) need it.
 
 The adapter implementations — the `manage` side of that registry — live under `src/main/infrastructure/adapters/`:
 

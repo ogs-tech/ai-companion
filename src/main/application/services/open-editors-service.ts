@@ -41,6 +41,8 @@ function parseTab(raw: unknown): PersistedTab | null {
         : null;
     case 'history':
       return { id, kind: 'history' };
+    case 'config':
+      return isNonEmptyString(raw['page']) ? { id, kind: 'config', page: raw['page'] } : null;
     case 'area':
       return typeof raw['area'] === 'string' && AREAS.has(raw['area'])
         ? { id, kind: 'area', area: raw['area'] as 'workspaces' | 'starter-pack' | 'marketplaces' | 'diagnostico' }

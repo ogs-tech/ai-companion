@@ -3,6 +3,7 @@ import type { ClockPort } from '../../ports/clock-port.js';
 import type { SymlinkPlanEntry } from '../adapter-manager.js';
 import type { SymlinkValidateState } from '../symlink-manager.js';
 import type { HealthCollector } from './health-collector.js';
+import { channelOf } from './channel.js';
 
 /** Minimal slices of the collaborators this collector needs. */
 export interface SymlinkPlanner {
@@ -72,6 +73,8 @@ export class SymlinkCollector implements HealthCollector {
         severity: verdict.severity,
         title: verdict.title,
         target: entry.destination,
+        entityUrn: entry.entityUrn,
+        ...channelOf(entry.adapterId),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),
       });

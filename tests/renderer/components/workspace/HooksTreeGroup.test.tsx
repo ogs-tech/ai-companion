@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HooksTreeGroup } from '../../../../src/renderer/components/workspace/HooksTreeGroup.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -48,7 +48,7 @@ describe('HooksTreeGroup', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderWithShell(<HooksTreeGroup showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-hook'));
-    await user.click(await screen.findByTestId('tree-hook-menu-h1'));
+    fireEvent.contextMenu(await screen.findByTestId('tree-hook-h1'));
     await user.click(await screen.findByTestId('row-context-menu-delete'));
     expect(confirmSpy).toHaveBeenCalled();
     await waitFor(() => expect(call).toHaveBeenCalledWith('hook.delete', { id: 'h1', scope: 'personal' }));

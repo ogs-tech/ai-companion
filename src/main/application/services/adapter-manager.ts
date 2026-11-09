@@ -3,7 +3,7 @@ import type { EntitySyncState, SyncResult, SyncResultDetails } from '../../../sh
 import type { Entity } from '../../../shared/entity.js';
 import type { SettingsService } from './settings-service.js';
 import type { EntityRepository } from '../ports/entity-repository.js';
-import type { Adapter, AdapterDestination } from '../ports/adapter.js';
+import type { Adapter, AdapterDestination, MergeTarget } from '../ports/adapter.js';
 import type { SymlinkManager } from './symlink-manager.js';
 import type { FileMaterializer } from './file-materializer.js';
 import type { MergeMaterializer } from './merge-materializer.js';
@@ -35,6 +35,7 @@ export interface AdapterManagerDeps {
 
 export interface SymlinkPlanEntry {
   adapterId: string;
+  entityUrn: string;
   source: string;
   destination: string;
   scope: 'personal' | 'workspace';
@@ -42,8 +43,17 @@ export interface SymlinkPlanEntry {
 
 export interface GeneratedFilePlanEntry {
   adapterId: string;
+  entityUrn: string;
   destination: string;
   content: string;
+}
+
+export interface MergePlanEntry {
+  adapterId: string;
+  entityUrn: string;
+  /** The shared JSON file the entry lives in. */
+  destination: string;
+  target: MergeTarget;
 }
 
 export interface SyncAllCommand {
@@ -60,6 +70,11 @@ export interface SyncEntityCommand {
 
 export interface RemoveEntityCommand {
   entity: Entity;
+}
+
+/** An entity with `enabled: false` is removed from every harness by design, so it is never a health problem. */
+function isDisabled(entity: Entity): boolean {
+  return (entity as { enabled?: boolean }).enabled === false;
 }
 
 export class AdapterManager {
@@ -394,6 +409,7 @@ export class AdapterManager {
 
     const entries: SymlinkPlanEntry[] = [];
     for (const entity of entities) {
+      if (isDisabled(entity)) continue;
       const source = this.entitySourcePath(entity);
       for (const adapter of enabledAdapters) {
         const destinations = await adapter.resolveEntityDestinations({ entity });
@@ -401,6 +417,7 @@ export class AdapterManager {
           if (dest.strategy !== 'symlink') continue;
           entries.push({
             adapterId: adapter.adapterId,
+            entityUrn: entity.urn,
             source,
             destination: dest.destination,
             scope: dest.scope,
@@ -418,11 +435,31 @@ export class AdapterManager {
     const entities = await this.deps.entityRepository.list();
     const entries: GeneratedFilePlanEntry[] = [];
     for (const entity of entities) {
+      if (isDisabled(entity)) continue;
       for (const adapter of enabledAdapters) {
         const destinations = await adapter.resolveEntityDestinations({ entity });
         for (const dest of destinations) {
           if (dest.strategy !== 'write') continue;
-          entries.push({ adapterId: adapter.adapterId, destination: dest.destination, content: dest.content });
+          entries.push({ adapterId: adapter.adapterId, entityUrn: entity.urn, destination: dest.destination, content: dest.content });
+        }
+      }
+    }
+    return entries;
+  }
+
+  /** Read-only plan of every merge destination (one entry in a shared JSON file: MCP servers, hooks) across enabled adapters. */
+  async planMergeDestinations(): Promise<MergePlanEntry[]> {
+    const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
+    const enabledAdapters = this.enabledAdapters(settings);
+    const entities = await this.deps.entityRepository.list();
+    const entries: MergePlanEntry[] = [];
+    for (const entity of entities) {
+      if (isDisabled(entity)) continue;
+      for (const adapter of enabledAdapters) {
+        const destinations = await adapter.resolveEntityDestinations({ entity });
+        for (const dest of destinations) {
+          if (dest.strategy !== 'merge') continue;
+          entries.push({ adapterId: adapter.adapterId, entityUrn: entity.urn, destination: dest.destination, target: dest.target });
         }
       }
     }

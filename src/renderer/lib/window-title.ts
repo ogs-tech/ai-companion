@@ -6,7 +6,6 @@ const DIRTY_MARK = '●';
 
 /** Window title rules from the desktop-basics spec, section 4. */
 export function composeWindowTitle(status: ShellStatus): string {
-  if (status.settingsOpen) return `Configurações — ${brand.displayName}`;
   const { workspaceName, tab } = status;
   if (tab === null) return workspaceName ?? `Início — ${brand.displayName}`;
   const label = tab.dirty ? `${tab.title} ${DIRTY_MARK}` : tab.title;

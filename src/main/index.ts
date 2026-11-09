@@ -128,7 +128,7 @@ const DEV_FOCUS_PORT = 47174;
  * this exposes every window in the app over CDP while any session's browser
  * tool is active, not just that session's own view.
  */
-const EMBEDDED_BROWSER_CDP_PORT = 9333;
+const EMBEDDED_BROWSER_CDP_PORT = Number(process.env['AI_COMPANION_CDP_PORT']) || 9333; // the env override lets an e2e run beside a dev instance
 app.commandLine.appendSwitch('remote-debugging-port', String(EMBEDDED_BROWSER_CDP_PORT));
 
 let mainWindow: BrowserWindow | null = null;

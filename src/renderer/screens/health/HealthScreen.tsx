@@ -13,6 +13,7 @@ import { Icon } from '../../components/ds/Icon.js';
 import { Kicker } from '../../components/ds/Kicker.js';
 import { ScreenHeader } from '../../components/ds/ScreenHeader.js';
 import { StatusPill } from '../../components/ds/StatusPill.js';
+import { clearDiagnosticsFocus, useDiagnosticsFocus } from '../../lib/diagnostics-focus.js';
 import { useHealthReport } from '../../hooks/use-health-report.js';
 import { useSyncThenRefresh } from '../../hooks/use-sync-then-refresh.js';
 import type { HealthCategory, HealthCheck, Severity } from '../../../shared/health.js';
@@ -24,6 +25,7 @@ const CATEGORY_LABEL: Record<HealthCategory, string> = {
   'config-drift': 'Config Drift',
   symlink: 'Symlinks',
   'generated-file': 'Generated Files',
+  'merge-entry': 'Hooks & MCP entries',
 };
 
 const SEVERITY_PILL: Record<Severity, 'ok' | 'warning' | 'error'> = {
@@ -38,6 +40,7 @@ const CATEGORY_ORDER: readonly HealthCategory[] = [
   'config-drift',
   'symlink',
   'generated-file',
+  'merge-entry',
 ];
 
 function groupByCategory(checks: HealthCheck[]): Map<HealthCategory, HealthCheck[]> {
@@ -53,7 +56,10 @@ export function HealthScreen(): React.ReactElement {
   const { data, isLoading, isFetching } = useHealthReport('personal');
   const sync = useSyncThenRefresh('personal');
 
-  const checks = data?.checks ?? [];
+  // Arriving from a ⚠ in the customizations tree narrows the screen to that item's checks.
+  const focusUrn = useDiagnosticsFocus();
+  const allChecks = data?.checks ?? [];
+  const checks = focusUrn === null ? allChecks : allChecks.filter((c) => c.entityUrn === focusUrn);
   const actionable = checks.filter((c) => c.severity !== 'ok');
   const groups = groupByCategory(checks);
 
@@ -80,6 +86,17 @@ export function HealthScreen(): React.ReactElement {
           </Button>
         }
       />
+
+      {focusUrn !== null && (
+        <Box data-testid="health-focus" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Mostrando apenas <Box component="span" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono })}>{focusUrn}</Box>
+          </Typography>
+          <Button size="small" data-testid="health-focus-clear" onClick={clearDiagnosticsFocus}>
+            Ver tudo
+          </Button>
+        </Box>
+      )}
 
       {sync.data && <SyncSummary results={sync.data} />}
 

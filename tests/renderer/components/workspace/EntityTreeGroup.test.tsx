@@ -117,7 +117,7 @@ describe('EntityTreeGroup', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderWithShell(<EntityTreeGroup kind="skill" label="Skills" onEdit={vi.fn()} />);
     await user.click(await screen.findByTestId('tree-group-skill'));
-    await user.click(await screen.findByTestId('tree-skill-menu-personal-skill'));
+    fireEvent.contextMenu(await screen.findByTestId('tree-skill-personal-skill'));
     await user.click(await screen.findByTestId('row-context-menu-delete'));
     expect(confirmSpy).toHaveBeenCalled();
     await waitFor(() =>

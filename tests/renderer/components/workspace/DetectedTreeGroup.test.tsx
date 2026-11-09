@@ -37,9 +37,11 @@ describe('detected skills inside the kind group', () => {
     await user.click(await screen.findByTestId('tree-group-skill'));
     expect(await screen.findByTestId('tree-detected-d-skill')).toHaveTextContent('detectado · Cursor');
     expect(screen.getByTestId('tree-detected-d-big')).toHaveTextContent('não importável');
-    expect(screen.queryByTestId('tree-detected-menu-d-big')).not.toBeInTheDocument();
+    // Hover reveals nothing: the menu is the context menu, and a row that cannot be imported has none.
+    fireEvent.contextMenu(screen.getByTestId('tree-detected-d-big'));
+    expect(screen.queryByText('Importar')).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId('tree-detected-menu-d-skill'));
+    fireEvent.contextMenu(screen.getByTestId('tree-detected-d-skill'));
     await user.click(await screen.findByText('Importar'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'd-skill' }));
   });
@@ -71,9 +73,10 @@ describe('McpTreeGroup detected rows', () => {
     renderWithShell(<McpTreeGroup showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-mcp'));
     expect(await screen.findByTestId('tree-mcp-harness-fs')).toHaveTextContent('Cursor');
-    expect(screen.queryByTestId('tree-mcp-menu-bad')).not.toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByTestId('tree-mcp-bad'));
+    expect(screen.queryByText('Importar')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('tree-mcp-menu-fs'));
+    fireEvent.contextMenu(screen.getByTestId('tree-mcp-fs'));
     await user.click(await screen.findByText('Importar'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'det-fs' }));
   });

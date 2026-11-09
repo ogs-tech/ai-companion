@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Box, Tooltip, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
 import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
-import { OriginMeta } from './OriginMeta.js';
+import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { useEntityHealth } from '../../hooks/use-entity-health.js';
+import { countProblems } from '../../lib/entity-health.js';
+import { entityUrn } from '../../../shared/entity.js';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
-import { RowMenuButton } from './RowMenuButton.js';
-import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useMcpList } from '../../hooks/use-mcp-list.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
@@ -16,23 +17,7 @@ import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp } from '../../hooks/
 import { IpcCallError } from '../../lib/ipc.js';
 import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
-import { needsAuth, type McpHealthState, type McpServer } from '../../../shared/mcp.js';
-
-const HEALTH_DOT_COLOR: Record<McpHealthState, string> = {
-  ok: 'success.main', warning: 'warning.main', error: 'error.main', 'needs-auth': 'warning.main',
-};
-
-/** Health as a 7px dot — the full state and detail live in the tooltip. */
-function HealthDot({ server }: { server: McpServer }): React.ReactElement | null {
-  const color = !server.enabled && server.source.kind === 'workspace' ? 'text.disabled' : server.health ? HEALTH_DOT_COLOR[server.health.state] : undefined;
-  if (color === undefined) return null;
-  const title = server.health ? `${server.health.state}${server.health.detail ? ` — ${server.health.detail}` : ''}` : 'Desabilitado';
-  return (
-    <Tooltip title={title}>
-      <Box component="span" data-testid={`tree-mcp-health-${server.id}`} sx={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, bgcolor: color }} />
-    </Tooltip>
-  );
-}
+import { needsAuth, type McpServer } from '../../../shared/mcp.js';
 
 const MCP_SCOPE_LABEL: Record<McpServer['scope'], string> = {
   global: 'usuário',
@@ -66,11 +51,17 @@ interface McpTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Reports how many of the rows have a problem in some channel. */
+  onProblems?: (count: number) => void;
+  /** Row indent of the group header — see `TreeGroup`'s `depth`. */
+  depth?: number;
+  /** Starts expanded — see `TreeGroup`'s `defaultExpanded`. */
+  defaultExpanded?: boolean;
   /** Takes part in a cross-type origin view — see `OriginView`. */
   view?: OriginView;
 }
 
-export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat = false, query = '', origin = 'all', onCount, view }: McpTreeGroupProps): React.ReactElement {
+export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat = false, query = '', origin = 'all', onCount, onProblems, depth = 0, defaultExpanded = false, view }: McpTreeGroupProps): React.ReactElement {
   const { data } = useMcpList();
   const del = useDeleteMcp();
   const setEnabled = useSetMcpEnabled();
@@ -116,7 +107,10 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
     .filter((s) => matchesOrigin(origin, s.source.kind === 'plugin'))
     .filter((s) => matchesQuery(query, s.name))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const health = useEntityHealth();
+  const problems = countProblems(health, visible.map((s) => entityUrn('mcp', s.name)));
   useReportCount(visible.length, onCount);
+  useReportCount(problems, onProblems);
   // Two servers with the same name differ only by where they are configured — say so on those rows.
   const nameCounts = new Map<string, number>();
   for (const s of visible) if (s.source.kind !== 'plugin') nameCounts.set(s.name, (nameCounts.get(s.name) ?? 0) + 1);
@@ -128,6 +122,9 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
         glyph={Plug}
         label="MCP"
         count={visible.length}
+        problems={problems}
+        depth={depth}
+        defaultExpanded={defaultExpanded}
         flat={flat}
         onCreate={() => setEditor({ mode: 'create' })}
         createLabel="Novo servidor MCP"
@@ -138,8 +135,8 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
           storageScope={`${matchPath ?? 'home'}:mcp`}
           testId="mcp"
           forceOpen={query.trim() !== ''}
-          depth={flat ? 0 : 1}
-          plainDepth={0}
+          depth={flat ? depth : depth + 1}
+          plainDepth={depth}
           {...(view ? { view } : {})}
           renderRow={(server, depth) => {
             const global = !isLocal(server, matchPath);
@@ -151,10 +148,9 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
                 glyph={Plug}
                 mono
                 depth={depth}
-                accentColor={ENTITY_ACCENT_COLOR.mcp}
                 muted={isDisabled || global}
                 primary={server.name}
-                onContextMenu={(e) => rowMenu.openMenu(e, server)}
+                {...(rowMenuActionsFor(server) ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, server) } : {})}
                 badge={
                   <>
                     {server.source.kind !== 'plugin' && (nameCounts.get(server.name) ?? 0) > 1 && (
@@ -168,14 +164,8 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
                       </Typography>
                     )}
                     <SessionsUsingBadge usage={{ kind: 'mcp', name: server.name }} testId={`tree-mcp-using-${server.id}`} />
-                    <HealthDot server={server} />
-                    <OriginMeta {...(server.source.kind === 'plugin' ? { pluginId: server.source.pluginId } : {})} />
+                    <ChannelWarning urn={entityUrn('mcp', server.name)} channels={health.get(entityUrn('mcp', server.name)) ?? []} />
                   </>
-                }
-                actions={
-                  rowMenuActionsFor(server) ? (
-                    <RowMenuButton testId={`tree-mcp-menu-${server.id}`} label={`Ações de ${server.name}`} onOpen={(e) => rowMenu.openMenu(e, server)} />
-                  ) : undefined
                 }
               />
             );

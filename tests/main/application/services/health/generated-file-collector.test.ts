@@ -25,19 +25,19 @@ const make = (opts: {
 describe('GeneratedFileCollector', () => {
   it('reports ok for a matching generated file', async () => {
     const collector = make({
-      plan: [{ adapterId: 'cursor', destination: '/repos/app/AGENTS.md', content: 'x' }],
+      plan: [{ adapterId: 'cursor', entityUrn: 'urn:instruction:default', destination: '/repos/app/AGENTS.md', content: 'x' }],
       state: 'ok',
       settings: settings({}),
     });
     const checks = await collector.collect('personal');
     expect(checks).toHaveLength(1);
-    expect(checks[0]).toMatchObject({ category: 'generated-file', severity: 'ok', target: '/repos/app/AGENTS.md' });
+    expect(checks[0]).toMatchObject({ category: 'generated-file', severity: 'ok', target: '/repos/app/AGENTS.md', entityUrn: 'urn:instruction:default', channel: 'cursor' });
   });
 
   it('reports error for a missing file and warning for drift/foreign', async () => {
     for (const [state, severity] of [['missing', 'error'], ['drift', 'warning'], ['foreign', 'warning']] as const) {
       const collector = make({
-        plan: [{ adapterId: 'cursor', destination: '/repos/app/AGENTS.md', content: 'x' }],
+        plan: [{ adapterId: 'cursor', entityUrn: 'urn:instruction:default', destination: '/repos/app/AGENTS.md', content: 'x' }],
         state,
         settings: settings({}),
       });

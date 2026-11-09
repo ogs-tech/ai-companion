@@ -15,7 +15,7 @@ const detectedItem: DetectedEntity = {
   path: '/home/u/.cursor/mcp.json', importable: true, preview: { def: { command: 'fs-mcp' } },
 };
 
-function make(opts: { canonical?: McpEntity[]; detected?: DetectedEntity[]; workspaceId?: string | null } = {}) {
+function make(opts: { canonical?: McpEntity[]; detected?: DetectedEntity[]; workspaceId?: string | null; pluginServers?: unknown[] } = {}) {
   const store = new Map((opts.canonical ?? []).map((e) => [e.urn, e]));
   const save = vi.fn(async ({ entity: e }: { entity: McpEntity; isCreate?: boolean }) => {
     store.set(e.urn, e);
@@ -38,7 +38,7 @@ function make(opts: { canonical?: McpEntity[]; detected?: DetectedEntity[]; work
   };
   const service = new McpService({
     canonical: () => canonical,
-    plugins: { read: async () => [] } as never,
+    plugins: { read: async () => opts.pluginServers ?? [] } as never,
     runtime: { readMcpRuntimeLogs: async () => [], readMcpAuthAlerts: async () => [] } as never,
   });
   return { service, save, del };
@@ -53,6 +53,13 @@ describe('McpService (canonical layer)', () => {
       scope: 'detected',
       source: { kind: 'detected', detectedId: 'det-1', harness: 'cursor', importable: true },
     });
+  });
+
+  it('lists a plugin server once: a detected entry with the same name is dropped', async () => {
+    const { service } = make({ detected: [detectedItem], pluginServers: [{ location: { kind: 'plugin', pluginId: 'p', pluginDir: '/d' }, pluginId: 'p', name: 'fs', def: { command: 'fs' }, provenance: {} }] });
+    const list = await service.list();
+    expect(list.filter((s) => s.name === 'fs')).toHaveLength(1);
+    expect(list.find((s) => s.name === 'fs')).toMatchObject({ scope: 'plugin' });
   });
 
   it('saves a global server as a personal entity', async () => {

@@ -123,32 +123,56 @@ describe('CustomizationsList', () => {
     await waitFor(() => expect(screen.getByTestId('control-panel-section-global')).toBeVisible());
   });
 
-  it('groups every type under one section per origin, so a plugin appears once with its skills and hooks together', async () => {
-    const user = userEvent.setup();
+  it('lists a plugin once, as a folder under Integrações, and keeps what it provides out of the type groups', async () => {
     const plugin = { kind: 'plugin' as const, pluginId: 'dev-kit@market' };
     const pluginSkill = { ...localSkill, urn: 'urn:skill:scaffold', name: 'scaffold', source: plugin };
     const pluginHook = { ...hook, id: 'h2', source: plugin };
     call.mockImplementation(async (method: string) => {
       if (method === 'skill.list') return ok([localSkill, pluginSkill]);
       if (method === 'hook.list') return ok([hook, pluginHook]);
+      if (method === 'plugin.list') return ok([{ id: 'dev-kit@market', scope: 'personal', origin: 'imported', enabled: true }]);
       if (method === 'instruction.list') return ok([]);
       return ok([]);
     });
     renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
 
-    // The user's own items are split by type and open; everything a plugin provides sits in one closed "Plugins" block.
     expect(await screen.findByTestId('tree-skill-deploy')).toBeVisible();
     expect(await screen.findByTestId('tree-hook-h1')).toBeVisible();
     expect(screen.getByTestId('tree-subgroup-type-local-skill')).toHaveTextContent('Skills');
     expect(screen.getByTestId('tree-subgroup-type-local-integrations')).toHaveTextContent('Integrações');
     expect(screen.getByTestId('tree-subgroup-type-local-agent')).toHaveTextContent('Agents');
-    expect(screen.getByTestId('tree-subgroup-plugins-local')).toHaveTextContent('Plugins');
+    // No origin-based "Plugins" block, and nothing a plugin ships is listed outside the plugin's own detail.
+    expect(screen.queryByTestId('tree-subgroup-plugins-local')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tree-skill-scaffold')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tree-hook-h2')).not.toBeInTheDocument();
+    // Hooks, MCP and Plugins are folders of Integrações; the plugin appears exactly once.
+    expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('Hooks');
+    expect(screen.getByTestId('tree-group-mcp')).toHaveTextContent('MCP');
+    expect(screen.getByTestId('tree-group-plugin')).toHaveTextContent('Plugins');
+    expect(await screen.findAllByTestId('tree-plugin-dev-kit@market')).toHaveLength(1);
+    expect(screen.queryByTestId('detail-drawer-plugin')).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByTestId('tree-subgroup-plugins-local'));
-    await user.click(await screen.findByTestId('tree-subgroup-origin-local-dev-kit@market'));
-    expect(await screen.findByTestId('tree-skill-scaffold')).toBeVisible();
-    expect(await screen.findByTestId('tree-hook-h2')).toBeVisible();
+  it('sums the items with a problem up the folders, counting an item once however many channels fail', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'skill.list') return ok([localSkill]);
+      if (method === 'hook.list') return ok([hook, { ...hook, id: 'h2' }, { ...hook, id: 'h3' }]);
+      if (method === 'instruction.list') return ok([]);
+      if (method === 'health.getReport') {
+        const check = (id: string, urn: string, channel: string) => ({ id, category: 'merge-entry', severity: 'error', title: 't', entityUrn: urn, channel, observedAt: '' });
+        return ok({ checks: [check('1', 'urn:hook:h1', 'claude'), check('2', 'urn:hook:h1', 'cursor'), check('3', 'urn:hook:h2', 'cursor')] });
+      }
+      return ok([]);
+    });
+    renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
+
+    await waitFor(() => expect(screen.getByTestId('tree-hook-h1')).toHaveTextContent('⚠ Claude · Cursor'));
+    expect(screen.getByTestId('tree-hook-h2')).toHaveTextContent('⚠ Cursor');
+    expect(screen.getByTestId('tree-hook-h3')).not.toHaveTextContent('⚠');
+    // Hooks: 2 items fail (h1 in both channels counts once), and Integrações sums its children.
+    await waitFor(() => expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('2 ⚠'));
+    expect(screen.getByTestId('tree-subgroup-type-local-integrations')).toHaveTextContent('2 ⚠');
+    expect(screen.getByTestId('tree-subgroup-type-local-skill')).not.toHaveTextContent('⚠');
   });
 
   it('shows an empty state when nothing matches', async () => {

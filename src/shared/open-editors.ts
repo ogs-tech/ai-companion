@@ -16,6 +16,7 @@ export type PersistedTab =
   | { id: string; kind: 'terminal'; terminalId: string }
   | { id: string; kind: 'git-diff'; path: string; source: GitDiffSource }
   | { id: string; kind: 'history' }
+  | { id: string; kind: 'config'; page: string }
   | { id: string; kind: 'area'; area: 'workspaces' | 'starter-pack' | 'marketplaces' | 'diagnostico' };
 
 export interface OpenEditorsState {

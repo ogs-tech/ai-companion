@@ -20,11 +20,9 @@ export interface ShellStatus {
   /** null when the "Visão geral" tab (or nothing) is in front. */
   tab: ActiveTabStatus | null;
   cursor: { line: number; column: number } | null;
-  /** True while the Settings screen replaces the workspace. */
-  settingsOpen: boolean;
 }
 
-const EMPTY: ShellStatus = { workspaceName: null, tab: null, cursor: null, settingsOpen: false };
+const EMPTY: ShellStatus = { workspaceName: null, tab: null, cursor: null };
 
 let snapshot: ShellStatus = EMPTY;
 const listeners = new Set<() => void>();

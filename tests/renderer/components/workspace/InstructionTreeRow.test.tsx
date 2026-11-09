@@ -137,9 +137,9 @@ const detectedFile: DetectedEntity = {
 };
 
 describe('InstructionTreeRow status', () => {
-  it('shows a plain "not created" dot, dimmed, when there is neither an instruction nor a detected file', () => {
+  it('shows nothing but the dimmed name when there is neither an instruction nor a detected file', () => {
     renderWithShell(<InstructionTreeRow kind="folder" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />);
-    expect(screen.getByTestId('sync-dot')).toHaveAttribute('data-state', 'missing');
+    expect(screen.queryByTestId('sync-dot')).not.toBeInTheDocument();
     expect(screen.queryByTestId('detected-apply')).not.toBeInTheDocument();
   });
 
@@ -169,23 +169,24 @@ describe('InstructionTreeRow status', () => {
     expect(onOpen).toHaveBeenCalledWith(seed, true);
   });
 
-  it('shows one chip per enabled harness, green only while the instruction is synced', async () => {
-    call.mockImplementation(async (method: string) => {
-      if (method === 'settings.get') return ok({ adapters: { claude: { enabled: true }, cursor: { enabled: true } } });
-      if (method === 'adapter.entitySyncStates') return ok({ 'urn:instruction:default': 'synced' });
-      return ok(undefined);
-    });
+  it('stays silent when the instruction is healthy in every channel', async () => {
+    call.mockImplementation(async (method: string) => (method === 'health.getReport' ? ok({ checks: [] }) : ok(undefined)));
     renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
-    await vi.waitFor(() => expect(screen.getByTestId('harness-chip-claude')).toHaveAttribute('data-synced', 'true'));
-    expect(screen.getByTestId('harness-chip-cursor')).toHaveAttribute('data-synced', 'true');
+    await vi.waitFor(() => expect(call).toHaveBeenCalledWith('health.getReport', expect.anything()));
+    expect(screen.queryByTestId('channel-warning')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sync-dot')).not.toBeInTheDocument();
   });
 
-  it('hides the chip of a harness whose adapter is disabled', async () => {
+  it('flags only the channel that fails, with a warning and its name', async () => {
     call.mockImplementation(async (method: string) =>
-      method === 'settings.get' ? ok({ adapters: { claude: { enabled: true }, cursor: { enabled: false } } }) : ok(undefined),
+      method === 'health.getReport'
+        ? ok({ checks: [
+            { id: 'a', category: 'symlink', severity: 'ok', title: 't', entityUrn: 'urn:instruction:default', channel: 'claude', observedAt: '' },
+            { id: 'b', category: 'generated-file', severity: 'error', title: 't', entityUrn: 'urn:instruction:default', channel: 'cursor', observedAt: '' },
+          ] })
+        : ok(undefined),
     );
     renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
-    expect(await screen.findByTestId('harness-chip-claude')).toBeInTheDocument();
-    expect(screen.queryByTestId('harness-chip-cursor')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('channel-warning')).toHaveTextContent('⚠ Cursor');
   });
 });

@@ -25,6 +25,7 @@ describe('OpenEditorsService', () => {
         { id: 'git-diff:index:a.ts', kind: 'git-diff', path: 'a.ts', source: { kind: 'index' } },
         { id: 'history', kind: 'history' },
         { id: 'diagnostico', kind: 'area', area: 'diagnostico' },
+        { id: 'config:language', kind: 'config', page: 'language' },
       ],
       activeTabId: 'file:a.ts',
     };
@@ -40,6 +41,7 @@ describe('OpenEditorsService', () => {
         { id: 'file:a.ts', kind: 'file', relPath: 'a.ts' },
         { id: 'x', kind: 'unknown' },
         { id: 'file:b', kind: 'file' },
+        { id: 'config:', kind: 'config' },
         { kind: 'history' },
         'nope',
       ],

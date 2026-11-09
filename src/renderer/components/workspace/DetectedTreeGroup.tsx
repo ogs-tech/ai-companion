@@ -4,8 +4,6 @@ import { SyncDot } from '../ds/SyncDot.js';
 import { Download, ScanSearch } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
-import { RowMenuButton } from './RowMenuButton.js';
-import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useDetected, useImportDetected } from '../../hooks/use-detected.js';
 import { IpcCallError } from '../../lib/ipc.js';
@@ -77,7 +75,6 @@ export function DetectedRows({ items, depth }: DetectedRowsProps): React.ReactEl
           depth={depth}
           muted
           mono
-          accentColor={ENTITY_ACCENT_COLOR[item.kind === 'skill' ? 'skill' : 'agent']}
           primary={item.importable ? item.name : <Tooltip title={item.reason ?? 'Não pode ser importado'}><span>{item.name}</span></Tooltip>}
           {...(item.importable ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, item) } : {})}
           badge={
@@ -88,7 +85,6 @@ export function DetectedRows({ items, depth }: DetectedRowsProps): React.ReactEl
               </Typography>
             </Stack>
           }
-          actions={item.importable ? <RowMenuButton testId={`tree-detected-menu-${item.id}`} label={`Ações de ${item.name}`} onOpen={(e) => rowMenu.openMenu(e, item)} /> : undefined}
         />
       ))}
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={actions} />

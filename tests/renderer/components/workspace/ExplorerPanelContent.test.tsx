@@ -60,6 +60,8 @@ function renderPanel(isHome = false, view: 'files' | 'git' | 'terminals' = 'file
       isHome={isHome}
       gitPolling
       homeRailItems={homeRailItems}
+      activeConfigPage={null}
+      onOpenConfigPage={vi.fn()}
       onOpenWorkspaces={vi.fn()}
       onSelectFile={onSelectFile}
       onOpenAsWorkspace={vi.fn()}
@@ -579,6 +581,8 @@ describe('Multi-folder workspace', () => {
         isHome={false}
         gitPolling
         homeRailItems={homeRailItems}
+      activeConfigPage={null}
+      onOpenConfigPage={vi.fn()}
         onOpenWorkspaces={vi.fn()}
         onSelectFile={vi.fn()}
         onOpenAsWorkspace={vi.fn()}

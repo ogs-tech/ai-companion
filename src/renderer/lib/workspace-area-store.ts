@@ -23,3 +23,20 @@ export function registerAreaOpener(next: ((area: WorkspaceAreaTab) => void) | nu
 export function openWorkspaceArea(area: WorkspaceAreaTab): void {
   opener?.(area);
 }
+
+// Config works the same way: the header button and ⌘, sit outside
+// WorkspaceScreen, which owns the Explorer view and the Workbench tabs.
+let configOpener: ((page?: string) => void) | null = null;
+
+/** Called by `WorkspaceScreen` while mounted; pass `null` on unmount. */
+export function registerConfigOpener(next: ((page?: string) => void) | null): void {
+  configOpener = next;
+}
+
+/**
+ * Shows the Explorer's Config view and focuses a Config tab: `page`, else the
+ * last one in front, else the default. A no-op if WorkspaceScreen isn't mounted.
+ */
+export function openConfig(page?: string): void {
+  configOpener?.(page);
+}

@@ -1,10 +1,10 @@
 import { beforeEach, describe, it, expect } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Settings as SettingsScreen } from '../../../../src/renderer/screens/Settings.js';
-import { mockApi, ok, renderWithTheme, type CallSpy } from '../../test-utils.js';
+import { ConfigPage } from '../../../../src/renderer/screens/config/ConfigPage.js';
+import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 
-const render = (ui: React.ReactElement) => renderWithTheme(ui);
+const render = (ui: React.ReactElement) => renderWithShell(ui);
 import type { Settings } from '../../../../src/shared/settings.js';
 import type { SyncResult } from '../../../../src/shared/sync-result.js';
 
@@ -33,7 +33,7 @@ const setupRoute = (overrides: Record<string, unknown> = {}): void => {
   });
 };
 
-describe('<Settings> — adapters section toggle-on (AC#15)', () => {
+describe('<HarnessPage> — adapters section toggle-on (AC#15)', () => {
   it('toggling claude on calls adapter.setEnabled with enabled:true', async () => {
     const user = userEvent.setup();
     const initial: Settings = {
@@ -47,7 +47,7 @@ describe('<Settings> — adapters section toggle-on (AC#15)', () => {
       if (method === 'adapter.countDestinations') return Promise.resolve(ok({ count: 0 }));
       return Promise.resolve(ok(undefined));
     });
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     const toggle = await screen.findByLabelText('Claude');
     await user.click(toggle);
@@ -58,11 +58,11 @@ describe('<Settings> — adapters section toggle-on (AC#15)', () => {
   });
 });
 
-describe('<Settings> — adapters section toggle-off (AC#14)', () => {
+describe('<HarnessPage> — adapters section toggle-off (AC#14)', () => {
   it('toggling claude off opens ConfirmDisableModal', async () => {
     const user = userEvent.setup();
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     const toggle = await screen.findByLabelText('Claude');
     await user.click(toggle);
@@ -79,7 +79,7 @@ describe('<Settings> — adapters section toggle-off (AC#14)', () => {
   it('clicking "Sim" calls adapter.setEnabled with removeSymlinks:true', async () => {
     const user = userEvent.setup();
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     const toggle = await screen.findByLabelText('Claude');
     await user.click(toggle);
@@ -96,10 +96,10 @@ describe('<Settings> — adapters section toggle-off (AC#14)', () => {
   });
 });
 
-describe('<Settings> — cursor adapter toggle', () => {
+describe('<HarnessPage> — cursor adapter toggle', () => {
   it('renders a Cursor checkbox reflecting settings.adapters.cursor.enabled', async () => {
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:cursor" />);
     const toggle = (await screen.findByLabelText('Cursor')) as HTMLInputElement;
     expect(toggle.checked).toBe(false);
   });
@@ -107,7 +107,7 @@ describe('<Settings> — cursor adapter toggle', () => {
   it('toggling cursor on calls adapter.setEnabled with adapterId:"cursor"', async () => {
     const user = userEvent.setup();
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:cursor" />);
 
     const toggle = await screen.findByLabelText('Cursor');
     await user.click(toggle);
@@ -131,7 +131,7 @@ describe('<Settings> — cursor adapter toggle', () => {
       if (method === 'adapter.countDestinations') return Promise.resolve(ok({ count: 3 }));
       return Promise.resolve(ok(undefined));
     });
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:cursor" />);
 
     const toggle = await screen.findByLabelText('Cursor');
     await user.click(toggle);

@@ -3,18 +3,16 @@ import { useState } from 'react';
 import { Eye, ScrollText, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
 import { SyncDot } from '../ds/SyncDot.js';
-import { useEntitySyncStates } from '../../hooks/use-entity-sync-states.js';
+import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { useEntityHealth } from '../../hooks/use-entity-health.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
-import { useSettings } from '../../hooks/use-settings.js';
 import type { DetectedEntity } from '../../../shared/detected.js';
 import type { Instruction } from '../../../shared/entity.js';
-import type { EntitySyncState } from '../../../shared/sync-result.js';
 
 type InstructionRowKind = 'personal' | 'workspace' | 'folder';
 
@@ -29,41 +27,6 @@ const ROW_COPY: Record<InstructionRowKind, { label: string; removeLabel?: (name:
     removeLabel: (name) => `Remover as instructions desta pasta (${name})?`,
   },
 };
-
-const HARNESS_CHIPS: ReadonlyArray<{ id: 'claude' | 'cursor'; label: string }> = [
-  { id: 'claude', label: 'Claude' },
-  { id: 'cursor', label: 'Cursor' },
-];
-
-/** Which harnesses an instruction is adapted for: one chip per enabled harness, green once its file is in sync. */
-function HarnessChips({ state }: { state: EntitySyncState | undefined }): React.ReactElement | null {
-  const { data: settings } = useSettings();
-  const enabled = HARNESS_CHIPS.filter(({ id }) => settings?.adapters?.[id]?.enabled ?? id === 'claude');
-  if (enabled.length === 0) return null;
-  return (
-    <Stack direction="row" spacing={0.25} data-testid="harness-chips">
-      {enabled.map(({ id, label }) => (
-        <Box
-          key={id}
-          component="span"
-          data-testid={`harness-chip-${id}`}
-          data-synced={state === 'synced'}
-          sx={(theme) => ({
-            fontSize: '0.625rem',
-            lineHeight: 1,
-            px: 0.625,
-            py: 0.375,
-            borderRadius: `${theme.ogs.radius.xs}px`,
-            border: `1px solid ${state === 'synced' ? theme.palette.success.main : theme.palette.divider}`,
-            color: state === 'synced' ? theme.palette.success.main : theme.palette.text.secondary,
-          })}
-        >
-          {label}
-        </Box>
-      ))}
-    </Stack>
-  );
-}
 
 /** The detected file at the end of the row: its name, then a quiet "Aplicar" — one action per row. */
 function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; onApply: () => void; busy: boolean }): React.ReactElement {
@@ -141,9 +104,8 @@ interface InstructionTreeRowProps {
  */
 export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
-  const syncStates = useEntitySyncStates();
+  const health = useEntityHealth();
   const rowTestId = testId ?? `${kind}-instruction-row`;
-  const menuTestId = testId ? `${testId}-menu` : `${kind}-instruction-menu`;
   const invalidate = useInvalidateInstructions();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const importer = useImportDetected();
@@ -204,18 +166,12 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
           instruction ? (
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
               <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
-              <HarnessChips state={syncStates[instruction.urn]} />
-              {syncStates[instruction.urn] && <SyncDot state={syncStates[instruction.urn]!} />}
+              <ChannelWarning urn={instruction.urn} channels={health.get(instruction.urn) ?? []} />
             </Stack>
           ) : offered ? (
             <DetectedBadge detected={offered} onApply={() => apply(offered)} busy={importer.isPending} />
-          ) : (
-            <SyncDot state="missing" />
-          )
+          ) : undefined
         }
-        {...(instruction
-          ? { actions: <RowMenuButton testId={menuTestId} label={`Ações de ${copy.label}`} onOpen={(e) => rowMenu.openMenu(e, instruction)} /> }
-          : {})}
       />
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

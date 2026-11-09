@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Settings as SettingsScreen } from '../../../src/renderer/screens/Settings.js';
-import { mockApi, ok, renderWithTheme, type CallSpy } from '../test-utils.js';
-import type { LanguagePreference, Settings } from '../../../src/shared/settings.js';
+import { ConfigPage } from '../../../../src/renderer/screens/config/ConfigPage.js';
+import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
+import type { LanguagePreference, Settings } from '../../../../src/shared/settings.js';
 
-const render = (ui: React.ReactElement) => renderWithTheme(ui);
+const render = (ui: React.ReactElement) => renderWithShell(ui);
 
 const baseSettings: Settings = {
   adapters: {
@@ -39,11 +39,11 @@ const setupRoute = (
   });
 };
 
-describe('<Settings> — toggles', () => {
+describe('<ConfigPage> — toggles', () => {
   it('toggling claude off calls adapter.countDestinations and opens modal', async () => {
     const user = userEvent.setup();
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     const toggle = await screen.findByLabelText('Claude');
     await user.click(toggle);
@@ -66,7 +66,7 @@ describe('<Settings> — toggles', () => {
       },
     };
     setupRoute(initial);
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     const toggle = await screen.findByLabelText('Claude');
     await user.click(toggle);
@@ -77,10 +77,10 @@ describe('<Settings> — toggles', () => {
   });
 });
 
-describe('<Settings> — no per-adapter default scope', () => {
+describe('<ConfigPage> — no per-adapter default scope', () => {
   it('does not render a default scope <select> for any adapter', async () => {
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     await screen.findByLabelText('Claude');
 
@@ -94,7 +94,7 @@ describe('<Settings> — no per-adapter default scope', () => {
       adapters: { claude: { enabled: false }, cursor: { enabled: false } },
     };
     setupRoute(initial);
-    render(<SettingsScreen />);
+    render(<ConfigPage page="harness:claude" />);
 
     await user.click(await screen.findByLabelText('Claude'));
 
@@ -111,10 +111,10 @@ describe('<Settings> — no per-adapter default scope', () => {
   });
 });
 
-describe('<Settings> — language selector', () => {
+describe('<ConfigPage> — language selector', () => {
   it('renders the language select with current value from settings', async () => {
     setupRoute({ ...baseSettings, language: 'pt-BR' as LanguagePreference });
-    render(<SettingsScreen />);
+    render(<ConfigPage page="language" />);
 
     const select = await screen.findByLabelText('Language');
     expect(select).toHaveTextContent('Português (pt-BR)');
@@ -122,7 +122,7 @@ describe('<Settings> — language selector', () => {
 
   it('defaults to Off when language is off', async () => {
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="language" />);
 
     const select = await screen.findByLabelText('Language');
     expect(select).toHaveTextContent('Off');
@@ -131,7 +131,7 @@ describe('<Settings> — language selector', () => {
   it('calls settings.setLanguage when selection changes', async () => {
     const user = userEvent.setup();
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="language" />);
 
     const select = await screen.findByLabelText('Language');
     await user.click(select);
@@ -148,7 +148,7 @@ describe('<Settings> — language selector', () => {
 
   it('shows info note when language is not off', async () => {
     setupRoute({ ...baseSettings, language: 'en' as LanguagePreference });
-    render(<SettingsScreen />);
+    render(<ConfigPage page="language" />);
 
     await waitFor(() =>
       expect(
@@ -159,7 +159,7 @@ describe('<Settings> — language selector', () => {
 
   it('hides info note when language is off', async () => {
     setupRoute();
-    render(<SettingsScreen />);
+    render(<ConfigPage page="language" />);
 
     await screen.findByLabelText('Language');
 

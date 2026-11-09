@@ -1,4 +1,5 @@
 import type { HealthCheck } from '../../../../shared/health.js';
+import { entityUrn } from '../../../../shared/entity.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { ClaudeRuntimePort } from '../../ports/claude-runtime-port.js';
 import type { HealthCollector } from './health-collector.js';
@@ -22,6 +23,8 @@ export class McpAuthCollector implements HealthCollector {
       severity: 'warning',
       title: `MCP "${alert.name}" needs authentication`,
       target: alert.name,
+      entityUrn: entityUrn('mcp', alert.name),
+      channel: 'claude',
       remediation: 'Run /mcp in Claude Code to authenticate.',
       observedAt,
     }));

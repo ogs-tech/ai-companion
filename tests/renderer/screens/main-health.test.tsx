@@ -48,7 +48,7 @@ beforeEach(() => {
 describe('<Main> — sync status + diagnostics', () => {
   it('paints the status bar sync entry with the report worst severity', async () => {
     setupRoute('error');
-    renderWithShell(<Main onOpenSettings={() => undefined} />);
+    renderWithShell(<Main />);
 
     const pill = await screen.findByTestId('status-pill-sync');
     expect(pill).toHaveAttribute('data-variant', 'error');
@@ -56,7 +56,7 @@ describe('<Main> — sync status + diagnostics', () => {
 
   it('opens Diagnóstico as a Workbench tab from the status bar sync entry', async () => {
     setupRoute('ok');
-    renderWithShell(<Main onOpenSettings={() => undefined} />);
+    renderWithShell(<Main />);
 
     await screen.findByTestId('workspaces-list');
     await userEvent.click(screen.getByTestId('status-pill-sync'));
@@ -66,7 +66,7 @@ describe('<Main> — sync status + diagnostics', () => {
 
   it('opens Diagnóstico as a Workbench tab from the Explorer Panel', async () => {
     setupRoute('ok');
-    renderWithShell(<Main onOpenSettings={() => undefined} />);
+    renderWithShell(<Main />);
 
     await screen.findByTestId('workspaces-list');
     await userEvent.click(screen.getByTestId('explorer-area-diagnostico'));
@@ -76,7 +76,7 @@ describe('<Main> — sync status + diagnostics', () => {
 
   it('shows a severity dot on the Explorer Panel Diagnóstico row when unhealthy', async () => {
     setupRoute('error');
-    renderWithShell(<Main onOpenSettings={() => undefined} />);
+    renderWithShell(<Main />);
 
     const dot = await screen.findByTestId('explorer-area-diagnostico-severity');
     expect(dot).toBeInTheDocument();

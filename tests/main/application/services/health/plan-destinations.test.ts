@@ -64,7 +64,7 @@ const setup = async () => {
     adapters: new Map<string, Adapter>([['claude', adapter]]),
     entityDataDir: () => '/ws',
   });
-  return { manager };
+  return { manager, entityRepository };
 };
 
 const setupInstruction = async () => {
@@ -91,6 +91,13 @@ const setupInstruction = async () => {
 };
 
 describe('AdapterManager.planDestinations', () => {
+  it('leaves a disabled entity out: it is removed from channels by design, not a problem', async () => {
+    const { manager, entityRepository } = await setup();
+    await entityRepository.save({ ...skill('beta'), enabled: false } as Skill);
+    const plan = await manager.planDestinations();
+    expect(plan.map((p) => p.entityUrn)).toEqual(['urn:skill:alpha']);
+  });
+
   it('resolves expected (source, destination) pairs for enabled adapters', async () => {
     const { manager } = await setup();
     const plan = await manager.planDestinations();
@@ -98,6 +105,7 @@ describe('AdapterManager.planDestinations', () => {
     expect(plan).toEqual([
       {
         adapterId: 'claude',
+        entityUrn: 'urn:skill:alpha',
         source: '/ws/skills/alpha',
         destination: '/home/.claude/skills/alpha',
         scope: 'personal',

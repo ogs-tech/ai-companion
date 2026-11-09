@@ -1,22 +1,24 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Box, Menu, MenuItem, Tooltip } from '@mui/material';
-import { AlertTriangle, Puzzle } from 'lucide-react';
-import { Icon } from '../ds/Icon.js';
-import { DetailDrawer } from '../DetailDrawer.js';
+import { useQuery } from '@tanstack/react-query';
+import { Menu, MenuItem, Tooltip } from '@mui/material';
+import { Plug, Puzzle, Terminal, Webhook, type LucideIcon } from 'lucide-react';
+import type { HarnessId } from '../../../shared/harness.js';
+import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { useEntityHealth } from '../../hooks/use-entity-health.js';
+import { countProblems } from '../../lib/entity-health.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
-import { RowMenuButton } from './RowMenuButton.js';
-import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import {
   pluginsQueryKey, usePluginList, useRemovePlugin, useTogglePlugin, useUpdatePlugin, type PluginScope,
 } from '../../hooks/use-plugins.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
-import { PluginDetail } from '../../screens/plugins/PluginDetail.js';
+import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
+import { callIpc } from '../../lib/ipc.js';
 import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
-import type { PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
+import type { PluginDetailIpc, PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
 
 interface PluginsTreeGroupProps {
   /** True while a workspace is open — plugins then split into this workspace's own (Claude Code's 'project' plugin scope) vs Personal ones, matching how EntityTreeGroup's localScope works. Omitted at Início, where only 'personal' scope exists and nothing is filtered. */
@@ -34,11 +36,17 @@ interface PluginsTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Reports how many of the rows have a problem in some channel. */
+  onProblems?: (count: number) => void;
+  /** Starts expanded — see `TreeGroup`'s `defaultExpanded`. */
+  defaultExpanded?: boolean;
   /** Renders nothing and only reports the count, so it keeps flowing while the rows' group is collapsed or hidden. */
   countOnly?: boolean;
 }
 
-type RowMenu = { anchorEl: HTMLElement; item: PluginListItemIpc };
+type RowMenu = { anchorPosition: { top: number; left: number }; item: PluginListItemIpc };
+
+const pluginUrn = (id: string): string => `urn:plugin:${id}`;
 type PublishState = { pluginId: string; scope: PluginScope; currentVersion?: string; hasPublishInfo: boolean };
 
 function refShort(ref: PluginRefIpc | undefined): string | undefined {
@@ -49,7 +57,7 @@ function errorMessage(err: unknown): string {
   return err instanceof IpcCallError ? err.message : String(err);
 }
 
-export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = false, flat = false, depth = 0, query = '', origin = 'all', onCount, countOnly = false }: PluginsTreeGroupProps): React.ReactElement {
+export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = false, flat = false, depth = 0, query = '', origin = 'all', onCount, onProblems, defaultExpanded = false, countOnly = false }: PluginsTreeGroupProps): React.ReactElement {
   const qc = useQueryClient();
   const personal = usePluginList('personal');
   const project = usePluginList('project', Boolean(isProjectContext));
@@ -65,7 +73,6 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
   const [rowMenu, setRowMenu] = useState<RowMenu | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [publishing, setPublishing] = useState<PublishState | null>(null);
-  const [selected, setSelected] = useState<PluginListItemIpc | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const localItems = onlyGlobal ? [] : isProjectContext ? (project.data ?? []) : (personal.data ?? []);
@@ -74,7 +81,10 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
     .filter((p) => matchesOrigin(origin, p.origin !== 'owned'))
     .filter((p) => matchesQuery(query, p.id))
     .sort((a, b) => a.id.localeCompare(b.id));
+  const health = useEntityHealth();
+  const problems = countProblems(health, visible.map((p) => pluginUrn(p.id)));
   useReportCount(visible.length, onCount);
+  useReportCount(problems, onProblems);
   const importScope: PluginScope = isProjectContext ? 'project' : 'personal';
 
   if (countOnly) return <></>;
@@ -93,6 +103,9 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
         glyph={Puzzle}
         label="Plugins"
         count={visible.length}
+        problems={problems}
+        depth={depth}
+        defaultExpanded={defaultExpanded}
         flat={flat}
         onCreate={() => setImportOpen(true)}
         createLabel="Importar plugin"
@@ -101,47 +114,23 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
           const global = isProjectContext ? item.scope === 'personal' : false;
           const ref = refShort(item.installedRef);
           return (
-            <TreeGroupRow
+            <PluginFolder
               key={item.id}
-              testId={`tree-plugin-${item.id}`}
-              glyph={Puzzle}
+              item={item}
               depth={depth}
-              mono
-              accentColor={ENTITY_ACCENT_COLOR.plugin}
               muted={!item.enabled || global}
-              onClick={() => setSelected(item)}
-              primary={
-                <Tooltip title={`${item.origin === 'owned' ? 'Próprio' : 'Importado'}${ref ? ` · ${ref}` : ''}${item.enabled ? '' : ' · desabilitado'}`}>
-                  <span>{item.id}</span>
-                </Tooltip>
-              }
-              badge={
-                <>
-                  {item.drift && (
-                    <Tooltip title={item.drift.details ?? `Desvio detectado: ${item.drift.kind}`}>
-                      <Box component="span" data-testid={`tree-plugin-drift-${item.id}`} sx={{ display: 'inline-flex', color: 'warning.main' }}>
-                        <Icon glyph={AlertTriangle} size={14} />
-                      </Box>
-                    </Tooltip>
-                  )}
-                </>
-              }
-              actions={
-                <RowMenuButton
-                  testId={`tree-plugin-menu-${item.id}`}
-                  label={`Mais opções para ${item.id}`}
-                  onOpen={(e) => {
-                    e.stopPropagation();
-                    setRowMenu({ anchorEl: e.currentTarget as HTMLElement, item });
-                  }}
-                />
-              }
+              tooltip={`${item.origin === 'owned' ? 'Próprio' : 'Importado'}${ref ? ` · ${ref}` : ''}${item.enabled ? '' : ' · desabilitado'}`}
+              channels={health.get(pluginUrn(item.id)) ?? []}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setRowMenu({ anchorPosition: { top: e.clientY, left: e.clientX }, item });
+              }}
             />
           );
         })}
       </TreeGroup>
 
-      <Menu anchorEl={rowMenu?.anchorEl ?? null} open={rowMenu !== null} onClose={closeRowMenu}>
+      <Menu anchorReference="anchorPosition" {...(rowMenu ? { anchorPosition: rowMenu.anchorPosition } : {})} open={rowMenu !== null} onClose={closeRowMenu}>
         {rowMenu && (
           <MenuItem
             key="toggle"
@@ -225,16 +214,56 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
         />
       )}
 
-      <DetailDrawer
-        open={selected !== null}
-        onClose={() => setSelected(null)}
-        title={selected?.id ?? ''}
-        testId="plugin"
-      >
-        {selected && <PluginDetail pluginId={selected.id} scope={selected.scope} />}
-      </DetailDrawer>
-
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+    </>
+  );
+}
+
+interface PluginFolderProps {
+  item: PluginListItemIpc;
+  depth: number;
+  muted: boolean;
+  tooltip: string;
+  channels: readonly HarnessId[];
+  onContextMenu: (e: React.MouseEvent) => void;
+}
+
+/** A plugin as a droplist: the row toggles, and what the plugin provides lists inline underneath. */
+function PluginFolder({ item, depth, muted, tooltip, channels, onContextMenu }: PluginFolderProps): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const { data: detail } = useQuery<PluginDetailIpc>({
+    queryKey: ['plugin.detail', item.scope, item.id],
+    queryFn: () => callIpc<PluginDetailIpc>('plugin.get', { id: item.id, scope: item.scope }),
+    enabled: open,
+  });
+  const artifacts = detail?.manifest?.artifacts;
+  const provided: Array<{ key: string; glyph: LucideIcon; label: string }> = artifacts
+    ? [
+        ...artifacts.skills.map((n) => ({ key: `skill:${n}`, glyph: ENTITY_GROUP_ICONS.skill, label: n })),
+        ...artifacts.agents.map((n) => ({ key: `agent:${n}`, glyph: ENTITY_GROUP_ICONS.agent, label: n })),
+        ...artifacts.commands.map((n) => ({ key: `command:${n}`, glyph: Terminal, label: n })),
+        ...(artifacts.hooks > 0 ? [{ key: 'hooks', glyph: Webhook, label: `Hooks · ${artifacts.hooks}` }] : []),
+        ...(artifacts.mcp ? [{ key: 'mcp', glyph: Plug, label: 'MCP' }] : []),
+      ]
+    : [];
+  return (
+    <>
+      <TreeGroupRow
+        testId={`tree-plugin-${item.id}`}
+        glyph={Puzzle}
+        depth={depth}
+        mono
+        chevron={open ? 'expanded' : 'collapsed'}
+        muted={muted}
+        onClick={() => setOpen((v) => !v)}
+        primary={<Tooltip title={tooltip}><span>{item.id}</span></Tooltip>}
+        badge={<ChannelWarning urn={pluginUrn(item.id)} channels={channels} />}
+        onContextMenu={onContextMenu}
+      />
+      {open &&
+        provided.map((p) => (
+          <TreeGroupRow key={p.key} testId={`tree-plugin-${item.id}-${p.key}`} glyph={p.glyph} depth={depth + 1} mono muted primary={p.label} />
+        ))}
     </>
   );
 }

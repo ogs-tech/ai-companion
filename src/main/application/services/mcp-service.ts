@@ -48,7 +48,9 @@ export class McpService {
 
     const own = canonical.map((e) => this.entityToDto(e, health));
     const fromPlugins = plugins.map((s) => this.pluginToDto(s, health));
-    const found = detected.map((d) => this.detectedToDto(d, health));
+    // A plugin's server is listed under the plugin only: a harness-file entry of the same name is the same server.
+    const pluginNames = new Set(plugins.flatMap((s) => [s.name, `plugin-${s.pluginId}-${s.name}`]));
+    const found = detected.filter((d) => !pluginNames.has(d.name)).map((d) => this.detectedToDto(d, health));
 
     // Names already represented, so the runtime-health join doesn't double-list them as orphans.
     const claimed = new Set<string>([...canonical.map((e) => e.name), ...detected.map((d) => d.name)]);

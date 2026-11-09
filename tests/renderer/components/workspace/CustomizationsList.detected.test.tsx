@@ -73,7 +73,7 @@ describe('CustomizationsList detected items', () => {
     // A folder with nothing to show is collapsed and dimmed, so its row only appears once it is opened.
     await userEvent.setup().click(screen.getByTestId('tree-subgroup-origin-folder-bees'));
     const bees = await screen.findByTestId('folder-instruction-row-bees');
-    expect(bees.querySelector('[data-testid="sync-dot"]')).toHaveAttribute('data-state', 'missing');
+    expect(bees.querySelector('[data-testid="sync-dot"]')).toBeNull();
 
     // "Criar do zero": the click seeds an empty instruction owned by that folder.
     await userEvent.setup().click(bees);

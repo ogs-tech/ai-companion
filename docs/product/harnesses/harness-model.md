@@ -102,7 +102,7 @@ harness is not a second-class citizen — it is the normal case.
 | **Cursor** | ✅ (opt-in, off by default) | ✅ (same switch) | `~/.cursor/`, `<repo>/.cursor/`, a generated `AGENTS.md` per repo · the `cursor-agent` CLI and its chat metadata (`~/.cursor/chats/`) — cost is estimated from the chat text in `store.db` (model is real, tokens are not recorded) |
 
 Source of truth: `HARNESSES` in `src/shared/harness.ts`. Default settings,
-settings validation and the Settings screen's toggles all derive from it, so
+settings validation and the Config view's harness pages all derive from it, so
 the table above cannot drift from the code without the tests noticing.
 
 ## Adding a harness

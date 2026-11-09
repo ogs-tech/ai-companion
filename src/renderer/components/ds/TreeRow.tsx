@@ -21,8 +21,6 @@ export interface TreeRowProps {
   primary: React.ReactNode;
   /** Trailing chip/badge inside the label row, e.g. a count, a plugin origin badge, or a "Global" tag. */
   badge?: React.ReactNode;
-  /** Left-edge color spine marking this row's kind — the same signature used by WorkbenchCanvas's tab strip, so a session row here and a tab there read as one visual system. */
-  accentColor?: string;
   onClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   /** Trailing content after the label row, e.g. hover actions or a fixed-width create-action slot. */
@@ -63,7 +61,7 @@ function labelSx(variant: 'default' | 'mono' | 'group'): SxProps<Theme> {
 
 /**
  * The single row shape shared by every tree in the workspace side panels —
- * chevron + icon + truncated label + badge + accent spine + actions.
+ * chevron + icon + truncated label + badge + actions.
  * `FolderTree`'s file/folder rows and `TreeGroup`'s group-header/entity rows
  * both render through this instead of each solving the same layout on its
  * own.
@@ -75,7 +73,6 @@ export function TreeRow({
   glyph,
   primary,
   badge,
-  accentColor,
   onClick,
   onContextMenu,
   actions,
@@ -110,25 +107,12 @@ export function TreeRow({
           : {}),
         position: 'relative',
         '&:hover .tree-row-actions, &:focus-within .tree-row-actions, .tree-row-actions:has([aria-expanded="true"])': { opacity: 1 },
-        // Hover actions take the origin text's place instead of squeezing the name.
-        ...(actions && actionsVisibility === 'hover'
-          ? { '&:hover .tree-row-origin, &:focus-within .tree-row-origin': { display: 'none' } }
-          : {}),
         // `rail` is too close to `paper` in dark mode to read as a fill there.
         '&.Mui-selected, &.Mui-selected:hover': {
           bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.secondary.main, 0.16) : theme.ogs.surfaces.rail,
         },
       })}
     >
-      {accentColor && (
-        <Box
-          sx={(theme) => ({
-            // Inset so the spine sits inside the row's rounded pill.
-            position: 'absolute', left: 2, top: 4, bottom: 4, width: 3,
-            borderRadius: `${theme.ogs.radius.xs}px`, bgcolor: accentColor,
-          })}
-        />
-      )}
       <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
         {chevron === 'spacer' ? (
           <Box sx={{ width: 14 }} />

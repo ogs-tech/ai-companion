@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PluginsTreeGroup } from '../../../../src/renderer/components/workspace/PluginsTreeGroup.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -29,7 +29,9 @@ beforeEach(() => {
       const scope = (params as { scope?: string } | undefined)?.scope;
       return ok(scope === 'project' ? [localPlugin] : [personalPlugin]);
     }
-    if (method === 'plugin.get') return ok(localPlugin);
+    if (method === 'plugin.get') {
+      return ok({ ...localPlugin, manifest: { id: 'local-plugin', version: '1', artifacts: { skills: ['brainstorm'], agents: [], commands: [], hooks: 2, mcp: true, lsp: false } } });
+    }
     return ok(undefined);
   });
 });
@@ -62,19 +64,22 @@ describe('PluginsTreeGroup', () => {
     const user = userEvent.setup();
     renderWithShell(<PluginsTreeGroup isProjectContext showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-plugin'));
-    await user.click(await screen.findByTestId('tree-plugin-menu-local-plugin'));
+    fireEvent.contextMenu(await screen.findByTestId('tree-plugin-local-plugin'));
     await user.click(await screen.findByTestId('tree-plugin-toggle-local-plugin'));
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('plugin.toggle', { id: 'local-plugin', scope: 'project', enabled: false }),
     );
   });
 
-  it('clicking a row opens the detail drawer', async () => {
+  it('clicking a row expands it inline with what the plugin provides, and opens no drawer', async () => {
     const user = userEvent.setup();
     renderWithShell(<PluginsTreeGroup isProjectContext showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-plugin'));
     await user.click(await screen.findByTestId('tree-plugin-local-plugin'));
-    expect(await screen.findByTestId('detail-drawer-plugin')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-plugin-local-plugin-skill:brainstorm')).toBeInTheDocument();
+    expect(screen.getByTestId('tree-plugin-local-plugin-hooks')).toHaveTextContent('Hooks · 2');
+    expect(screen.getByTestId('tree-plugin-local-plugin-mcp')).toBeInTheDocument();
+    expect(screen.queryByTestId('detail-drawer-plugin')).not.toBeInTheDocument();
   });
 
   it('opens the import dialog via the "+" header action', async () => {
@@ -89,7 +94,7 @@ describe('PluginsTreeGroup', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderWithShell(<PluginsTreeGroup isProjectContext showGlobal={false} />);
     await user.click(await screen.findByTestId('tree-group-plugin'));
-    await user.click(await screen.findByTestId('tree-plugin-menu-local-plugin'));
+    fireEvent.contextMenu(await screen.findByTestId('tree-plugin-local-plugin'));
     await user.click(await screen.findByText('Remover'));
     expect(confirmSpy).toHaveBeenCalled();
     await waitFor(() => expect(call).toHaveBeenCalledWith('plugin.remove', { id: 'local-plugin', scope: 'project' }));

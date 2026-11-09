@@ -5,7 +5,7 @@ import { formatAccelerator } from '../../../src/renderer/lib/shortcut-labels.js'
 import { publishShellStatus, getShellStatus, resetShellStatus } from '../../../src/renderer/lib/shell-status-store.js';
 import type { ShellStatus } from '../../../src/renderer/lib/shell-status-store.js';
 
-const base: ShellStatus = { workspaceName: null, tab: null, cursor: null, settingsOpen: false };
+const base: ShellStatus = { workspaceName: null, tab: null, cursor: null };
 const tab = (over: Partial<NonNullable<ShellStatus['tab']>> = {}): NonNullable<ShellStatus['tab']> => ({
   title: 'a.md',
   dirty: false,
@@ -38,7 +38,7 @@ describe('composeWindowTitle', () => {
     expect(composeWindowTitle({ ...base, workspaceName: 'acme', tab: tab() })).toBe('a.md — acme');
     expect(composeWindowTitle({ ...base, workspaceName: 'acme', tab: tab({ dirty: true }) })).toBe('a.md ● — acme');
     expect(composeWindowTitle({ ...base, tab: tab({ title: 'minha-skill' }) })).toBe('minha-skill — Início');
-    expect(composeWindowTitle({ ...base, workspaceName: 'acme', settingsOpen: true })).toBe('Configurações — AI Companion');
+    expect(composeWindowTitle({ ...base, workspaceName: 'acme', tab: tab({ title: 'Configurações · Claude Code' }) })).toBe('Configurações · Claude Code — acme');
   });
 });
 

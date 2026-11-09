@@ -12,6 +12,7 @@ const FROZEN = new Date('2026-06-05T10:00:00.000Z');
 
 const entry = (destination: string): SymlinkPlanEntry => ({
   adapterId: 'claude',
+  entityUrn: `urn:skill:${destination}`,
   source: `/ws/skills/${destination}`,
   destination: `/home/.claude/skills/${destination}`,
   scope: 'personal',
@@ -42,6 +43,8 @@ describe('SymlinkCollector', () => {
       category: 'symlink',
       severity: 'ok',
       target: '/home/.claude/skills/alpha',
+      entityUrn: 'urn:skill:alpha',
+      channel: 'claude',
       observedAt: FROZEN.toISOString(),
     });
   });

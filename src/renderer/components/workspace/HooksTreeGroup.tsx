@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Tooltip, Typography } from '@mui/material';
 import { Download, Trash2, Webhook } from 'lucide-react';
-import { OriginMeta } from './OriginMeta.js';
+import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { useEntityHealth } from '../../hooks/use-entity-health.js';
+import { entityUrn } from '../../../shared/entity.js';
+import { countProblems } from '../../lib/entity-health.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
-import { RowMenuButton } from './RowMenuButton.js';
-import { ENTITY_ACCENT_COLOR } from '../shell/nav.js';
 import { useDeleteHook, useHooks, type Hook } from '../../hooks/use-hooks.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
 import { HARNESS_LABEL } from './DetectedTreeGroup.js';
@@ -27,12 +28,18 @@ interface HooksTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Reports how many of the rows have a problem in some channel. */
+  onProblems?: (count: number) => void;
+  /** Row indent of the group header — see `TreeGroup`'s `depth`. */
+  depth?: number;
+  /** Starts expanded — see `TreeGroup`'s `defaultExpanded`. */
+  defaultExpanded?: boolean;
   /** Takes part in a cross-type origin view — see `OriginView`. */
   view?: OriginView;
 }
 
 /** Hooks are personal-only (no `scopeId`) — inside a project workspace they only show once "Mostrar entidades globais" is on, since none of them are local to begin with. */
-export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, query = '', origin = 'all', onCount, view }: HooksTreeGroupProps): React.ReactElement {
+export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, query = '', origin = 'all', onCount, onProblems, depth = 0, defaultExpanded = false, view }: HooksTreeGroupProps): React.ReactElement {
   const { data } = useHooks();
   const del = useDeleteHook();
   const importer = useImportDetected();
@@ -47,7 +54,11 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
   const onMutationError = (err: unknown): void => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
   const items = (isProjectContext && !showGlobal ? [] : (data ?? [])).filter((h) => matchesOrigin(origin, h.source.kind === 'plugin') && matchesQuery(query, describeHookHandler(h.handler), h.event))
     .sort((a, b) => hookRowLabel(a).localeCompare(hookRowLabel(b)));
+  const health = useEntityHealth();
+  // A hook the harness cannot express is not a fault, and no check is emitted for it (`skip` destination).
+  const problems = countProblems(health, items.map((h) => entityUrn('hook', h.id)));
   useReportCount(items.length, onCount);
+  useReportCount(problems, onProblems);
 
   const handleDelete = (hookId: string, label: string): void => {
     if (!window.confirm(`Remover hook "${label}"?`)) return;
@@ -60,15 +71,15 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
 
   return (
     <>
-      <TreeGroup testId="hook" glyph={Webhook} label="Hooks" count={items.length} flat={flat}>
+      <TreeGroup testId="hook" glyph={Webhook} label="Hooks" count={items.length} problems={problems} depth={depth} defaultExpanded={defaultExpanded} flat={flat}>
         <OriginGroups
           glyph={Webhook}
           items={items}
           storageScope={`${isProjectContext ? 'ws' : 'home'}:hook`}
           testId="hook"
           forceOpen={query.trim() !== ''}
-          depth={flat ? 0 : 1}
-          plainDepth={0}
+          depth={flat ? depth : depth + 1}
+          plainDepth={depth}
           {...(view ? { view } : {})}
           renderRow={(item, depth) => (
             <TreeGroupRow
@@ -77,7 +88,6 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
               glyph={Webhook}
               mono
               depth={depth}
-              accentColor={ENTITY_ACCENT_COLOR.hook}
               primary={<Tooltip title={describeHookHandler(item.handler)}><span>{hookRowLabel(item)}</span></Tooltip>}
               badge={
                 <>
@@ -86,14 +96,12 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
                       {HARNESS_LABEL[item.source.harness]}{item.source.importable ? '' : ' · não importável'}
                     </Typography>
                   )}
-                  <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
+                  <ChannelWarning urn={entityUrn('hook', item.id)} channels={health.get(entityUrn('hook', item.id)) ?? []} />
                 </>
               }
-              actions={
-                item.source.kind === 'workspace' || (item.source.kind === 'detected' && item.source.importable) ? (
-                  <RowMenuButton testId={`tree-hook-menu-${item.id}`} label="Ações do hook" onOpen={(e) => rowMenu.openMenu(e, item)} />
-                ) : undefined
-              }
+              {...(item.source.kind === 'workspace' || (item.source.kind === 'detected' && item.source.importable)
+                ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, item) }
+                : {})}
             />
           )}
         />

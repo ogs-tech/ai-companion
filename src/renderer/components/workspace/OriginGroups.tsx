@@ -112,6 +112,8 @@ interface PersistedGroupProps {
   glyph: LucideIcon;
   label: string;
   count: number;
+  /** Items inside with a problem in some channel — `N ⚠` before the count. */
+  problems?: number;
   /** Persistence key — one per workspace, section and group. */
   storageKey: string;
   testId: string;
@@ -126,10 +128,10 @@ interface PersistedGroupProps {
 }
 
 /** A collapsible group whose open state is remembered: a type ("Skills") or the "Plugins" block of the flat Control Panel list. */
-export function PersistedGroup({ glyph, label, count, storageKey, testId, forceOpen, depth, defaultOpen, muted = false, children }: PersistedGroupProps): React.ReactElement {
+export function PersistedGroup({ glyph, label, count, problems = 0, storageKey, testId, forceOpen, depth, defaultOpen, muted = false, children }: PersistedGroupProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);
   return (
-    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)} muted={muted}>
+    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} problems={problems} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)} muted={muted}>
       {children}
     </TreeSubGroup>
   );

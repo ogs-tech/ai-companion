@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Box, Divider, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
-import { GitBranch, Globe, Layers, Package, Plus, Search, X } from 'lucide-react';
+import { GitBranch, Globe, Layers, Plus, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, ContainerHeader, FooterLink } from '../ds/ContainerChrome.js';
 import { useDetected } from '../../hooks/use-detected.js';
@@ -10,7 +10,7 @@ import { EntityTreeGroup, seedNewEntity } from './EntityTreeGroup.js';
 import { HooksTreeGroup } from './HooksTreeGroup.js';
 import { InstructionTreeRow } from './InstructionTreeRow.js';
 import { McpTreeGroup } from './McpTreeGroup.js';
-import { MINE_KEY, OriginSection, PersistedGroup, sortOriginKeys, type OriginView } from './OriginGroups.js';
+import { MINE_KEY, PersistedGroup, type OriginView } from './OriginGroups.js';
 import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { useFolderRouting } from '../../hooks/use-folder-routing.js';
 import { useCustomizationList } from '../../hooks/use-customization-list.js';
@@ -42,8 +42,8 @@ const TYPE_GROUPS: ReadonlyArray<{ id: string; label: string; glyph: LucideIcon;
   { id: 'integrations', label: 'Integrações', glyph: ENTITY_GROUP_ICONS.mcp, types: ['hook', 'mcp', 'plugin'] },
 ];
 
-/** Row types the list shows. Plugin rows live under "Integrações" / "Plugins" groups, not as a top-level type. */
-const TYPES: ReadonlyArray<RowType> = ['instruction', 'skill', 'agent', 'hook', 'mcp'];
+/** Row types the list shows. Plugins are folders under "Integrações", one row per plugin. */
+const TYPES: ReadonlyArray<RowType> = ['instruction', 'skill', 'agent', 'hook', 'mcp', 'plugin'];
 
 export interface CustomizationsListProps {
   /** True at Início (Global): a single editable section. False while a workspace is open — or still loading. */
@@ -104,12 +104,17 @@ export function CustomizationsList({
 
   const [query, setQuery] = useState('');
   const [counts, setCounts] = useState<Record<string, number>>({});
+  // Items with a problem in some channel, per `section:type` — what a folder shows as `N ⚠`.
+  const [problemCounts, setProblemCounts] = useState<Record<string, number>>({});
   const [newMenuAnchor, setNewMenuAnchor] = useState<HTMLElement | null>(null);
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [pluginImportOpen, setPluginImportOpen] = useState(false);
 
   const report = useCallback((key: string, count: number): void => {
     setCounts((prev) => (prev[key] === count ? prev : { ...prev, [key]: count }));
+  }, []);
+  const reportProblems = useCallback((key: string, count: number): void => {
+    setProblemCounts((prev) => (prev[key] === count ? prev : { ...prev, [key]: count }));
   }, []);
 
   const types = TYPES;
@@ -182,7 +187,10 @@ export function CustomizationsList({
     onNewAction: onNewActionForEntity,
   };
   const scopeProp = localScope ? { localScope } : {};
-  const counter = (section: Section, type: RowType) => ({ onCount: (n: number) => report(`${section}:${type}`, n) });
+  const counter = (section: Section, type: RowType) => ({
+    onCount: (n: number) => report(`${section}:${type}`, n),
+    onProblems: (n: number) => reportProblems(`${section}:${type}`, n),
+  });
 
   // Skills, agents, hooks and MCP share one origin axis: every type list first
   // reports how many rows each origin has ("census"), then the sections below
@@ -192,20 +200,27 @@ export function CustomizationsList({
     setBuckets((prev) => (JSON.stringify(prev[key]) === JSON.stringify(counts) ? prev : { ...prev, [key]: counts }));
   }, []);
   type ViewMode = { kind: 'census' } | { kind: 'bucket'; key: string; depth: number };
-  const viewProps = (section: Section, type: RowType, mode: ViewMode): { view: OriginView; onCount?: (n: number) => void } =>
+  const viewProps = (section: Section, type: RowType, mode: ViewMode): { view: OriginView; onCount?: (n: number) => void; onProblems?: (n: number) => void } =>
     mode.kind === 'census'
       ? { view: { kind: 'census', onBuckets: (counts) => reportBuckets(`${section}:${type}`, counts) }, ...counter(section, type) }
       : { view: mode };
+  // Hooks and MCP are folders of their own under Integrações: a header at the bucket's depth, rows with it.
+  // A census instance renders no rows, so it stays flat (no header) and only reports.
+  const folderProps = (section: Section, type: RowType, mode: ViewMode) => ({
+    ...viewProps(section, type, mode),
+    flat: mode.kind === 'census',
+    ...(mode.kind === 'bucket' ? { depth: mode.depth, defaultExpanded: true } : {}),
+  });
 
   const localTypes = (mode: ViewMode, only?: ReadonlyArray<RowType>): React.ReactNode => {
     const on = (type: RowType): boolean => showsType(type) && (only === undefined || only.includes(type));
     return (
     <>
-      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" flat query={query} {...viewProps('local', 'skill', mode)} {...entityHandlers} {...scopeProp} />}
-      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" flat query={query} {...viewProps('local', 'agent', mode)} {...entityHandlers} {...scopeProp} />}
-      {on('hook') && <HooksTreeGroup flat query={query} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...viewProps('local', 'hook', mode)} />}
+      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" flat origin="mine" query={query} {...viewProps('local', 'skill', mode)} {...entityHandlers} {...scopeProp} />}
+      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" flat origin="mine" query={query} {...viewProps('local', 'agent', mode)} {...entityHandlers} {...scopeProp} />}
+      {on('hook') && <HooksTreeGroup origin="mine" query={query} showGlobal={false} {...(isHome ? {} : { isProjectContext: true })} {...folderProps('local', 'hook', mode)} />}
       {on('mcp') && (
-        <McpTreeGroup flat query={query} showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('local', 'mcp', mode)} />
+        <McpTreeGroup origin="mine" query={query} showGlobal={false} {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...folderProps('local', 'mcp', mode)} />
       )}
     </>
     );
@@ -214,11 +229,11 @@ export function CustomizationsList({
     const on = (type: RowType): boolean => showsType(type) && (only === undefined || only.includes(type));
     return (
     <>
-      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" inherited flat query={query} {...viewProps('global', 'skill', mode)} {...inheritedHandlers} {...scopeProp} />}
-      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" inherited flat query={query} {...viewProps('global', 'agent', mode)} {...inheritedHandlers} {...scopeProp} />}
-      {on('hook') && <HooksTreeGroup flat query={query} isProjectContext showGlobal {...viewProps('global', 'hook', mode)} />}
+      {on('skill') && <EntityTreeGroup kind="skill" label="Skills" inherited flat origin="mine" query={query} {...viewProps('global', 'skill', mode)} {...inheritedHandlers} {...scopeProp} />}
+      {on('agent') && <EntityTreeGroup kind="agent" label="Agents" inherited flat origin="mine" query={query} {...viewProps('global', 'agent', mode)} {...inheritedHandlers} {...scopeProp} />}
+      {on('hook') && <HooksTreeGroup origin="mine" query={query} isProjectContext showGlobal {...folderProps('global', 'hook', mode)} />}
       {on('mcp') && (
-        <McpTreeGroup flat query={query} showGlobal onlyGlobal {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...viewProps('global', 'mcp', mode)} />
+        <McpTreeGroup origin="mine" query={query} showGlobal onlyGlobal {...(mcpMatchPath ? { matchPath: mcpMatchPath } : {})} {...folderProps('global', 'mcp', mode)} />
       )}
     </>
     );
@@ -229,34 +244,28 @@ export function CustomizationsList({
   const scopeKey = (section: Section): string => `scope-section:${localScope?.scopeId ?? 'home'}:${section}`;
   const groupKey = (section: Section, suffix: string): string => `tree-subgroup:${localScope?.scopeId ?? 'home'}:${section}:${suffix}`;
 
+  // Plugins are listed once, as closed folders under Integrações: what a plugin provides is reached through it.
   const pluginRows = (section: Section, depth: number, census = false): React.ReactNode =>
     showsType('plugin') && (
       <PluginsTreeGroup
-        flat
+        origin="all"
         depth={depth}
         query={query}
-       
         {...(section === 'local'
           ? { showGlobal: false, ...(isHome ? {} : { isProjectContext: true }) }
           : { isProjectContext: true, showGlobal: true, onlyGlobal: true })}
-        {...(census ? { countOnly: true, ...counter(section, 'plugin') } : {})}
+        {...(census ? { flat: true, countOnly: true, ...counter(section, 'plugin') } : { defaultExpanded: true })}
       />
     );
 
-  // The user's own items split by type (Skills / Agents / Integrações); everything
-  // a plugin provides sits in one collapsed "Plugins" block, one group per plugin.
-  const originSections = (section: Section, typesFor: (mode: ViewMode, only?: ReadonlyArray<RowType>) => React.ReactNode): { census: React.ReactNode; body: React.ReactNode; mine: React.ReactNode; plugins: React.ReactNode } => {
-    const totals: Record<string, number> = {};
-    for (const type of types) {
-      for (const [key, n] of Object.entries(buckets[`${section}:${type}`] ?? {})) totals[key] = (totals[key] ?? 0) + n;
-    }
-    const pluginKeys = sortOriginKeys(Object.keys(totals).filter((key) => key !== MINE_KEY && (totals[key] ?? 0) > 0));
-    const pluginsTotal = pluginKeys.reduce((sum, key) => sum + (totals[key] ?? 0), 0);
-
+  // The user's own items split by type (Skills / Agents / Integrações). Plugins are folders under
+  // Integrações; what they provide is not listed again in the type groups.
+  const originSections = (section: Section, typesFor: (mode: ViewMode, only?: ReadonlyArray<RowType>) => React.ReactNode): { census: React.ReactNode; body: React.ReactNode; mine: React.ReactNode } => {
     const mineCount = (type: RowType): number => {
       if (!showsType(type)) return 0;
       return type === 'plugin' ? (counts[`${section}:plugin`] ?? 0) : (buckets[`${section}:${type}`]?.[MINE_KEY] ?? 0);
     };
+    const problemsOf = (type: RowType): number => (showsType(type) ? (problemCounts[`${section}:${type}`] ?? 0) : 0);
     const visibleGroups = TYPE_GROUPS.filter((g) => g.types.some(showsType));
     const groupBody = (g: (typeof TYPE_GROUPS)[number], depth: number): React.ReactNode => (
       <>
@@ -265,14 +274,15 @@ export function CustomizationsList({
       </>
     );
     const mine = visibleGroups
-      .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + mineCount(type), 0) }))
+      .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + mineCount(type), 0), problems: g.types.reduce((sum, type) => sum + problemsOf(type), 0) }))
       .filter(({ g, count }) => count > 0 || (g.alwaysShown === true && !searching))
-      .map(({ g, count }) => (
+      .map(({ g, count, problems }) => (
         <PersistedGroup
           key={g.id}
           glyph={g.glyph}
           label={g.label}
           count={count}
+          problems={problems}
           storageKey={groupKey(section, `type:${g.id}`)}
           testId={`type-${section}-${g.id}`}
           forceOpen={searching}
@@ -282,52 +292,8 @@ export function CustomizationsList({
           {groupBody(g, base + 1)}
         </PersistedGroup>
       ));
-    const plugins = pluginKeys.length > 0 && (
-      <PersistedGroup
-        glyph={Package}
-        label="Plugins"
-        count={pluginsTotal}
-        storageKey={groupKey(section, 'plugins')}
-        testId={`plugins-${section}`}
-        forceOpen={searching}
-        depth={base}
-        defaultOpen={false}
-      >
-        {pluginKeys.map((key) => (
-          <OriginSection
-            key={key}
-            originKey={key}
-            count={totals[key] ?? 0}
-            storageKey={groupKey(section, key)}
-            testId={`origin-${section}-${key}`}
-            forceOpen={searching}
-            depth={base + 1}
-          >
-            {visibleGroups
-              .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + (showsType(type) ? (buckets[`${section}:${type}`]?.[key] ?? 0) : 0), 0) }))
-              .filter(({ count }) => count > 0)
-              .map(({ g, count }) => (
-                <PersistedGroup
-                  key={g.id}
-                  glyph={g.glyph}
-                  label={g.label}
-                  count={count}
-                  storageKey={groupKey(section, `${key}:type:${g.id}`)}
-                  testId={`type-${section}-${key}-${g.id}`}
-                  forceOpen={searching}
-                  depth={base + 2}
-                  defaultOpen
-                >
-                  {typesFor({ kind: 'bucket', key, depth: base + 3 }, g.types)}
-                </PersistedGroup>
-              ))}
-          </OriginSection>
-        ))}
-      </PersistedGroup>
-    );
     return {
       mine,
-      plugins,
       // Census instances render nothing; they stay outside every collapsible so counts keep flowing.
       census: (
         <>
@@ -335,12 +301,7 @@ export function CustomizationsList({
           {pluginRows(section, 0, true)}
         </>
       ),
-      body: (
-        <>
-          {mine}
-          {plugins}
-        </>
-      ),
+      body: mine,
     };
   };
   const localOrigins = originSections('local', localTypes);
@@ -434,7 +395,9 @@ export function CustomizationsList({
       { folder: null, label: 'Workspace' },
       ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string })),
     ];
-    const integrationsCount = (buckets['local:hook']?.[MINE_KEY] ?? 0) + (buckets['local:mcp']?.[MINE_KEY] ?? 0);
+    const integrationsCount =
+      (buckets['local:hook']?.[MINE_KEY] ?? 0) + (buckets['local:mcp']?.[MINE_KEY] ?? 0) + (showsType('plugin') ? (counts['local:plugin'] ?? 0) : 0);
+    const integrationsProblems = (['hook', 'mcp', 'plugin'] as const).reduce((sum, type) => sum + (showsType(type) ? (problemCounts[`local:${type}`] ?? 0) : 0), 0);
     return origins.map(({ folder, label }) => {
       const scoped = { ...localScope, folder };
       const instruction = folder === null ? workspaceInstructions.find((i) => i.folder === undefined) : folderInstructionOf(folder);
@@ -458,11 +421,12 @@ export function CustomizationsList({
           {folder === null ? workspaceInstructionRows(base + 1) : folderInstructionRow(folder, base + 1)}
           {showsType('skill') && <EntityTreeGroup kind="skill" label="Skills" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
           {showsType('agent') && <EntityTreeGroup kind="agent" label="Agents" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
-          {folder === null && (showsType('hook') || showsType('mcp')) && (
+          {folder === null && (showsType('hook') || showsType('mcp') || showsType('plugin')) && (
             <PersistedGroup
               glyph={ENTITY_GROUP_ICONS.mcp}
               label="Integrações"
               count={integrationsCount}
+              problems={integrationsProblems}
               storageKey={groupKey('local', 'folder:shared:integrations')}
               testId="type-local-integrations"
               forceOpen={searching}
@@ -471,6 +435,7 @@ export function CustomizationsList({
               muted={integrationsCount === 0}
             >
               {localTypes({ kind: 'bucket', key: MINE_KEY, depth: base + 2 }, ['hook', 'mcp'])}
+              {pluginRows('local', base + 2)}
             </PersistedGroup>
           )}
         </PersistedGroup>
@@ -495,7 +460,6 @@ export function CustomizationsList({
       {routing.multi && localScope ? (
         <>
           {originGroups()}
-          {localOrigins.plugins}
         </>
       ) : (
         localOrigins.body

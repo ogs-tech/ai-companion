@@ -241,7 +241,7 @@ recover from their own main-process store.
 
 `openEditors.get` reads `open-editors.json` from the data dir of the **active context**: the open workspace's, or
 Global's at Início. A missing or corrupt file is "nothing was open", never an error. `openEditors.save` drops every
-malformed or duplicate-id tab itself before writing, because the file is hand-editable and nothing in it is trusted. The `file` and `file-preview` tabs may carry `pinned: true` (only `true` is ever written); array order is tab order.
+malformed or duplicate-id tab itself before writing, because the file is hand-editable and nothing in it is trusted. The `file` and `file-preview` tabs may carry `pinned: true` (only `true` is ever written); array order is tab order. A `config` tab carries `page` (a Config page id such as `language` or `harness:claude`); the renderer shows a stale id as an unknown page rather than dropping it.
 
 ### `skill`
 

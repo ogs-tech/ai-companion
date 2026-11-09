@@ -53,7 +53,9 @@ import {
   type WorkspaceHistoryEntry,
 } from '../../lib/workspace-history-store.js';
 import { shortcutFor } from '../../lib/shortcut-labels.js';
-import { registerAreaOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
+import { registerAreaOpener, registerConfigOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
+import { ConfigPage } from '../config/ConfigPage.js';
+import { DEFAULT_CONFIG_PAGE, configPageOfTabId, configTabId, findConfigPage } from '../config/config-pages.js';
 import { publishWorkspacePanels, registerWorkspaceShellCommands } from '../../lib/workspace-shell-store.js';
 import {
   closeBrowserTab,
@@ -403,9 +405,12 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(kind);
   };
 
+
   useEffect(() => {
     registerAreaOpener(openAreaTab);
-    return () => registerAreaOpener(null);
+    return () => {
+      registerAreaOpener(null);
+    };
   });
 
   // A browser tab is identity-keyed by its own `tabId` (a `sessionId` for one
@@ -919,6 +924,29 @@ export function WorkspaceScreen(): React.ReactElement {
     });
   };
 
+  // Config pages are singleton Workbench tabs too, one fixed id per page.
+  // Global settings: every scope's Config tabs edit the same thing.
+  const lastConfigPageRef = useRef<string>(DEFAULT_CONFIG_PAGE);
+  const openConfigPage = (page: string): void => {
+    const id = configTabId(page);
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'config', page }]));
+    setActiveTabId(id);
+  };
+  // Header button and ⌘,: show the Config view and focus a page (last one in front, else the default).
+  const openConfigView = (page?: string): void => {
+    setExplorerView('config');
+    if (explorerCollapsed) toggleExplorerPanel();
+    openConfigPage(page ?? lastConfigPageRef.current);
+  };
+  const activeConfigPage = activeTabId.startsWith('config:') ? configPageOfTabId(activeTabId) : null;
+  useEffect(() => {
+    if (activeConfigPage !== null) lastConfigPageRef.current = activeConfigPage;
+  }, [activeConfigPage]);
+  useEffect(() => {
+    registerConfigOpener(openConfigView);
+    return () => registerConfigOpener(null);
+  });
+
   const toggleControlPanel = (): void => {
     const panel = controlPanelRef.current;
     if (!panel) return;
@@ -1093,6 +1121,18 @@ export function WorkspaceScreen(): React.ReactElement {
         render: () => areaScreen,
       };
     }
+    if (tab.kind === 'config') {
+      const pageDef = findConfigPage(tab.page);
+      return {
+        id: tab.id,
+        glyph: pageDef?.glyph ?? Eye,
+        label: pageDef?.label ?? 'Configurações',
+        breadcrumb: `Configurações › ${pageDef?.label ?? tab.page}`,
+        dense: true,
+        onClose: () => closeTab(tab.id),
+        render: () => <ConfigPage page={tab.page} />,
+      };
+    }
     if (tab.kind === 'browser') {
       // The label tracks the tab's live url (kept in `browser-tabs-store.ts`,
       // updated by `BrowserPane` as it navigates) rather than anything
@@ -1214,7 +1254,10 @@ export function WorkspaceScreen(): React.ReactElement {
     label: a.label,
     glyph: a.glyph,
     active: activeTabId === a.area,
-    onClick: () => openAreaTab(a.area),
+    onClick: () => {
+      if (explorerView === 'config') setExplorerView('files');
+      openAreaTab(a.area);
+    },
     ...(a.area === 'diagnostico' && healthReport && healthReport.worst !== 'ok'
       ? { severity: healthReport.worst === 'error' ? ('error' as const) : ('warning' as const) }
       : {}),
@@ -1350,7 +1393,7 @@ export function WorkspaceScreen(): React.ReactElement {
         activeTab === undefined || activeLabel === undefined
           ? null
           : {
-              title: activeTab.kind === 'git-diff' ? `${activeTab.path} (diff)` : activeLabel,
+              title: activeTab.kind === 'git-diff' ? `${activeTab.path} (diff)` : activeTab.kind === 'config' ? `Configurações · ${activeLabel}` : activeLabel,
               dirty: activeDirty,
               editable: isEditableTab(activeTab),
               savedAt: savedAtRef.current.get(activeTab.id) ?? null,
@@ -1461,6 +1504,8 @@ export function WorkspaceScreen(): React.ReactElement {
               onOpenGitDiff={openGitDiffTab}
               view={explorerView}
               onViewChange={setExplorerView}
+              activeConfigPage={activeConfigPage}
+              onOpenConfigPage={openConfigPage}
               onCollapse={toggleExplorerPanel}
             />
           </SidePanel>

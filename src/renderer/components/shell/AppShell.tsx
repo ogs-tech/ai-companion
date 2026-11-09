@@ -12,14 +12,14 @@ import { ShortcutsDialog } from './ShortcutsDialog.js';
 import { useContextNavigation } from '../../hooks/use-context-navigation.js';
 import { useUiPreferences } from '../../hooks/use-ui-settings.js';
 import { hasActiveEditor } from '../../lib/editor-navigation.js';
+import { openConfig } from '../../lib/workspace-area-store.js';
 
 interface AppShellProps {
-  onOpenSettings: () => void;
   healthSeverity?: 'ok' | 'warning' | 'error';
   children: ReactNode;
 }
 
-export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellProps): React.ReactElement {
+export function AppShell({ healthSeverity, children }: AppShellProps): React.ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteIntent, setPaletteIntent] = useState<PaletteIntent>('commands');
   // A fresh key per opening resets the palette's query and mode.
@@ -54,7 +54,7 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
   useMenuCommand('go-to-line', () => {
     if (hasActiveEditor()) openPalette('line');
   });
-  useMenuCommand('open-settings', onOpenSettings);
+  useMenuCommand('open-settings', () => openConfig());
   useMenuCommand('toggle-word-wrap', () => prefs.setWordWrap(!prefs.wordWrap));
   useMenuCommand('show-shortcuts', () => setShortcutsOpen(true));
   useMenuCommand('theme-system', () => setTheme('system'));
@@ -92,7 +92,7 @@ export function AppShell({ onOpenSettings, healthSeverity, children }: AppShellP
       data-testid="main-screen"
       sx={{ height: '100vh', overflow: 'hidden', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}
     >
-      <TopNav onOpenSettings={onOpenSettings} onOpenCommandPalette={() => openPalette('commands')} onOpenWorkspacePicker={() => openPalette('workspaces')} />
+      <TopNav onOpenCommandPalette={() => openPalette('commands')} onOpenWorkspacePicker={() => openPalette('workspaces')} />
       <Box data-testid="app-shell" sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Box component="main" sx={{ flexGrow: 1, minWidth: 0, overflowY: 'auto' }}>
           {children}

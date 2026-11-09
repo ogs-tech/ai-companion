@@ -44,7 +44,7 @@ const setupRoute = (overrides: Record<string, unknown> = {}) => {
 describe('<Main> — shell navigation', () => {
   it('renders the Workspace overview as the landing screen inside the shell', async () => {
     setupRoute();
-    render(<Main onOpenSettings={() => undefined} />);
+    render(<Main />);
 
     expect(await screen.findByTestId('workspace-screen')).toBeInTheDocument();
     expect(screen.getByTestId('app-shell')).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe('<Main> — shell navigation', () => {
 
   it('lists Customizations inline on the Workspace overview, with an empty state', async () => {
     setupRoute();
-    render(<Main onOpenSettings={() => undefined} />);
+    render(<Main />);
 
     // Wait for the Default-branch landmark first — until `workspace.getActive`
     // resolves, the screen briefly renders the non-default (FolderTree) shape.
@@ -65,7 +65,7 @@ describe('<Main> — shell navigation', () => {
 
   it('opens Starter Pack as a Workbench tab from the Explorer Panel', async () => {
     setupRoute();
-    render(<Main onOpenSettings={() => undefined} />);
+    render(<Main />);
 
     // Same landmark wait as above — the pinned area rows only exist once the
     // Default-branch (HomeNavList) shape has settled.
@@ -77,7 +77,7 @@ describe('<Main> — shell navigation', () => {
 
   it('does not render linked repos UI in the landing view', async () => {
     setupRoute();
-    render(<Main onOpenSettings={() => undefined} />);
+    render(<Main />);
 
     await screen.findByTestId('workspace-screen');
     expect(screen.queryByRole('button', { name: /add repo/i })).toBeNull();

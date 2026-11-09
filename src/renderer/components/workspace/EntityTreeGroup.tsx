@@ -2,16 +2,15 @@ import { useState } from 'react';
 import { Stack } from '@mui/material';
 import { Eye, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
-import { OriginMeta } from './OriginMeta.js';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
-import { SyncDot } from '../ds/SyncDot.js';
-import { useEntitySyncStates } from '../../hooks/use-entity-sync-states.js';
+import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { useEntityHealth } from '../../hooks/use-entity-health.js';
+import { countProblems } from '../../lib/entity-health.js';
 import { DetectedRows, useDetectedItems } from './DetectedTreeGroup.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { MINE_KEY, OriginGroups, type OriginView } from './OriginGroups.js';
-import { RowMenuButton } from './RowMenuButton.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
-import { ENTITY_GROUP_ICONS, ENTITY_ACCENT_COLOR } from '../shell/nav.js';
+import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { useCustomizationList, useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
@@ -50,6 +49,8 @@ interface EntityTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
+  /** Reports how many of the rows have a problem in some channel. */
+  onProblems?: (count: number) => void;
   /** Takes part in a cross-type origin view — see `OriginView`. */
   view?: OriginView;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
@@ -80,7 +81,7 @@ export function seedNewEntity(kind: 'skill' | 'agent', localScope: LocalScope | 
   } as Skill | Agent;
 }
 
-export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', origin = 'all', onCount, view, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
+export function EntityTreeGroup({ kind, label, localScope, inherited = false, depth = 0, flat = false, query = '', origin = 'all', onCount, onProblems, view, onEdit, onPreview, onProperties, onNewAction }: EntityTreeGroupProps): React.ReactElement {
   const { data } = useCustomizationList(kind, `${kind}.list`);
   const invalidate = useInvalidateCustomization();
   const items = data ?? [];
@@ -109,7 +110,10 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
     .sort((a, b) => a.name.localeCompare(b.name));
   const groupTestId = inherited ? `inherited-${kind}` : kind;
 
+  const health = useEntityHealth();
+  const problems = countProblems(health, visible.map((item) => item.urn));
   useReportCount(visible.length + detected.length, onCount);
+  useReportCount(problems, onProblems);
 
   // Census views only count; a bucket view lists one origin — detected items are the user's own.
   const showDetected = view?.kind !== 'census' && (view?.kind !== 'bucket' || view.key === MINE_KEY);
@@ -131,8 +135,6 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
   // mode, where there is no group header and they take its place.
   const subDepth = flat ? depth : depth + 1;
 
-  const syncStates = useEntitySyncStates();
-
   const renderRow = (item: Entity, rowDepth: number): React.ReactElement => (
     <TreeGroupRow
       key={item.urn}
@@ -142,20 +144,15 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
       mono
       depth={rowDepth}
       muted={inherited}
-      accentColor={ENTITY_ACCENT_COLOR[kind]}
       onClick={() => onEdit(kind, item as Skill | Agent, false)}
       onContextMenu={(e) => rowMenu.openMenu(e, item as Skill | Agent)}
       badge={
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <SessionsUsingBadge usage={{ kind: kind === 'skill' ? 'skill' : 'agent', name: item.name }} testId={`tree-${groupTestId}-using-${item.name}`} />
           <SessionStatusBadge anchor={{ kind: 'entity', urn: item.urn }} />
-          {syncStates[item.urn] && <SyncDot state={syncStates[item.urn]!} />}
-          <OriginMeta {...(item.source.kind === 'plugin' ? { pluginId: item.source.pluginId } : {})} />
+          <ChannelWarning urn={item.urn} channels={health.get(item.urn) ?? []} />
         </Stack>
       }
-      // Row click already opens this item in the editor tab; the "⋯"
-      // menu carries everything else (preview, properties, delete).
-      actions={<RowMenuButton testId={`tree-${kind}-menu-${item.name}`} label={`Ações de ${item.name}`} onOpen={(e) => rowMenu.openMenu(e, item as Skill | Agent)} />}
     />
   );
 
@@ -166,6 +163,7 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
         glyph={ENTITY_GROUP_ICONS[kind]}
         label={label}
         count={visible.length + detected.length}
+        problems={problems}
         depth={depth}
         flat={flat}
         {...(inherited ? {} : { onCreate: startCreate, createLabel: `Novo ${kind === 'skill' ? 'skill' : 'agent'}` })}

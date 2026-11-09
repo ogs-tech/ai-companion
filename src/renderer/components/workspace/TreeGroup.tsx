@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
+import { Box, Collapse, List, Stack, Tooltip, Typography } from '@mui/material';
 import { Plus, type LucideIcon } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { TreeRow } from '../ds/TreeRow.js';
+import { ProblemCount } from '../ds/ChannelWarning.js';
 
 interface TreeGroupProps {
   testId: string;
@@ -10,6 +11,8 @@ interface TreeGroupProps {
   label: string;
   /** Omitted for a group whose "rows" are other `TreeGroup`s rather than counted items — e.g. "Integrações" wrapping Hooks/MCP/Plugins, each of which already carries its own count. */
   count?: number;
+  /** Items inside with a problem in some channel — shown as `N ⚠` before the count, only when above zero. */
+  problems?: number;
   onCreate?: () => void;
   createLabel?: string;
   /** Tree nesting level, matching FolderTree's `TreeNode` indent formula (`pl: 1.5 + depth * 2`) — for a group pinned inside a folder node rather than at the tree's own top level. Defaults to `0` (today's `pl: 1.5`). */
@@ -26,7 +29,7 @@ interface TreeGroupProps {
  * styled to match FolderTree's own folder rows so the tree reads as one
  * structure rather than a nav list bolted onto a file browser.
  */
-export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, depth = 0, defaultExpanded = false, flat = false, children }: TreeGroupProps): React.ReactElement {
+export function TreeGroup({ testId, glyph, label, count, problems = 0, onCreate, createLabel, depth = 0, defaultExpanded = false, flat = false, children }: TreeGroupProps): React.ReactElement {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const pl = 1.5 + depth * 2;
 
@@ -43,9 +46,7 @@ export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, 
         labelVariant="group"
         onClick={() => setExpanded((v) => !v)}
         actionsVisibility="always"
-        {...(count !== undefined
-          ? { badge: <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography> }
-          : {})}
+        {...(count !== undefined ? { badge: <FolderCounts problems={problems} count={count} /> } : {})}
         actions={
           // Fixed-width whether or not this kind offers a create action, so every
           // group's count chip lands in the same column instead of drifting
@@ -96,20 +97,28 @@ export function TreeGroup({ testId, glyph, label, count, onCreate, createLabel, 
   );
 }
 
+/** `N ⚠` (only when N > 0) then the total, right-aligned on a folder row. */
+function FolderCounts({ problems, count }: { problems: number; count: number }): React.ReactElement {
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
+      <ProblemCount count={problems} />
+      <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>
+    </Stack>
+  );
+}
+
 interface TreeGroupRowProps {
   testId: string;
   glyph: LucideIcon;
   primary: React.ReactNode;
-  /** Small trailing chip/badge, e.g. a plugin origin badge or a "Global" tag. */
+  /** Small trailing chip/badge, e.g. the `⚠ Cursor` channel warning. */
   badge?: React.ReactNode;
   onClick?: () => void;
-  /** Right-click on the row — e.g. to open a "Preview" context menu. */
+  /** Right-click on the row — the home of edit/delete/etc.: a row reveals nothing on hover. */
   onContextMenu?: (e: React.MouseEvent) => void;
-  /** Trailing hover actions (edit/delete/etc.), stopPropagation'd from onClick. */
-  actions?: React.ReactNode;
+  /** Folder chevron — for a row that expands inline (a plugin). */
+  chevron?: 'expanded' | 'collapsed';
   muted?: boolean;
-  /** Left-edge color spine marking this row's kind — the same signature used by WorkbenchCanvas's tab strip, so a session row here and a tab there read as one visual system. */
-  accentColor?: string;
   disabled?: boolean;
   /** See `TreeGroup`'s own `depth`. Defaults to `0`. */
   depth?: number;
@@ -118,13 +127,10 @@ interface TreeGroupRowProps {
 }
 
 /**
- * A dense entity row inside a `TreeGroup`, styled like a FolderTree file row.
- * `actions` (delete/etc.) stay invisible until the row is hovered or focused
- * — kept reachable by keyboard via `:focus-within`, not just mouse hover —
- * so a row reads as calm as a plain file/agent name until the user actually
- * means to act on it.
+ * A dense entity row inside a `TreeGroup`, styled like a FolderTree file row: icon + name, and a
+ * badge only when there is something to say. Hover changes nothing — actions live in the context menu.
  */
-export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, actions, muted, accentColor, disabled, depth = 0, mono }: TreeGroupRowProps): React.ReactElement {
+export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, chevron, muted, disabled, depth = 0, mono }: TreeGroupRowProps): React.ReactElement {
   return (
     <TreeRow
       testId={testId}
@@ -132,8 +138,7 @@ export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContext
       glyph={glyph}
       primary={primary}
       badge={badge}
-      actions={actions}
-      {...(accentColor !== undefined ? { accentColor } : {})}
+      {...(chevron ? { chevron } : {})}
       {...(onClick ? { onClick } : {})}
       {...(onContextMenu ? { onContextMenu } : {})}
       {...(muted !== undefined ? { muted } : {})}
@@ -148,6 +153,8 @@ interface TreeSubGroupProps {
   glyph: LucideIcon;
   label: string;
   count: number;
+  /** Items inside with a problem — see `TreeGroup`'s `problems`. */
+  problems?: number;
   /** Indent level of the header row — see `TreeGroup`'s `depth`. */
   depth: number;
   expanded: boolean;
@@ -162,7 +169,7 @@ interface TreeSubGroupProps {
  * Controlled (`expanded`/`onToggle`) so the parent can persist the choice and
  * force it open while a search is active.
  */
-export function TreeSubGroup({ testId, glyph, label, count, depth, expanded, onToggle, muted = false, children }: TreeSubGroupProps): React.ReactElement {
+export function TreeSubGroup({ testId, glyph, label, count, problems = 0, depth, expanded, onToggle, muted = false, children }: TreeSubGroupProps): React.ReactElement {
   return (
     <>
       <TreeRow
@@ -173,7 +180,7 @@ export function TreeSubGroup({ testId, glyph, label, count, depth, expanded, onT
         primary={label}
         onClick={onToggle}
         muted={muted}
-        badge={<Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>}
+        badge={<FolderCounts problems={problems} count={count} />}
       />
       <Collapse in={expanded} unmountOnExit>
         <List disablePadding>{children}</List>

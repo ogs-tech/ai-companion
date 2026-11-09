@@ -5,6 +5,7 @@ import type { Scope } from '../../ports/scope.js';
 import type { GeneratedFilePlanEntry } from '../adapter-manager.js';
 import type { GeneratedFileState } from '../file-materializer.js';
 import type { HealthCollector } from './health-collector.js';
+import { channelOf } from './channel.js';
 
 /** Minimal slices of the collaborators this collector needs. */
 export interface GeneratedFilePlanner {
@@ -78,6 +79,8 @@ export class GeneratedFileCollector implements HealthCollector {
         severity: verdict.severity,
         title: verdict.title,
         target: entry.destination,
+        entityUrn: entry.entityUrn,
+        ...channelOf(entry.adapterId),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),
       });

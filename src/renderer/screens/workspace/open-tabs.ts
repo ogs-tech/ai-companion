@@ -19,6 +19,7 @@ export type OpenTab =
   | { id: string; kind: 'terminal'; terminalId: string }
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
   | { id: string; kind: 'history' }
+  | { id: string; kind: 'config'; page: string }
   | { id: string; kind: 'browser'; tabId: string }
   | { id: string; kind: 'git-diff'; path: string; source: GitDiffSource }
   | { id: string; kind: WorkspaceAreaTab };
@@ -52,6 +53,8 @@ export function toPersisted(tabs: readonly OpenTab[]): PersistedTab[] {
         return [{ id: tab.id, kind: 'git-diff', path: tab.path, source: tab.source }];
       case 'history':
         return [{ id: tab.id, kind: 'history' }];
+      case 'config':
+        return [{ id: tab.id, kind: 'config', page: tab.page }];
       case 'browser':
         return []; // recovered from the main process by `reconcileBrowserTabs`
       default:
@@ -91,6 +94,8 @@ export async function restoreTabs(saved: readonly PersistedTab[], ctx: RestoreCo
           return { id: tab.id, kind: 'git-diff', path: tab.path, source: tab.source };
         case 'history':
           return { id: tab.id, kind: 'history' };
+        case 'config':
+          return { id: tab.id, kind: 'config', page: tab.page };
         case 'area':
           return { id: tab.id, kind: tab.area };
       }
