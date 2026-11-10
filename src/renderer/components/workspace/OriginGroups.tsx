@@ -114,6 +114,8 @@ interface PersistedGroupProps {
   count: number;
   /** Items inside with a problem in some channel — `N ⚠` before the count. */
   problems?: number;
+  /** Entity kinds whose channels this group speaks for: shows a mark per integrated channel instead of the bare `N ⚠`. */
+  channelKinds?: readonly string[];
   /** Persistence key — one per workspace, section and group. */
   storageKey: string;
   testId: string;
@@ -128,10 +130,10 @@ interface PersistedGroupProps {
 }
 
 /** A collapsible group whose open state is remembered: a type ("Skills") or the "Plugins" block of the flat Control Panel list. */
-export function PersistedGroup({ glyph, label, count, problems = 0, storageKey, testId, forceOpen, depth, defaultOpen, muted = false, children }: PersistedGroupProps): React.ReactElement {
+export function PersistedGroup({ glyph, label, count, problems = 0, channelKinds, storageKey, testId, forceOpen, depth, defaultOpen, muted = false, children }: PersistedGroupProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);
   return (
-    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} problems={problems} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)} muted={muted}>
+    <TreeSubGroup testId={testId} glyph={glyph} label={label} count={count} problems={problems} channelKinds={channelKinds} depth={depth} expanded={forceOpen || stored} onToggle={() => setStored(!stored)} muted={muted}>
       {children}
     </TreeSubGroup>
   );

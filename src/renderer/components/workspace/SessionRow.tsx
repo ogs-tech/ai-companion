@@ -1,7 +1,7 @@
-import { Box, Skeleton, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
+import { Box, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
 import type { ChannelId } from '../../../shared/channel.js';
 import { ContextBar } from '../ContextBar.js';
-import { StateGlyph } from '../SessionStateMark.js';
+import { ChannelStateMark } from '../ChannelStateMark.js';
 import type { SessionMetrics } from '../../../shared/session-metrics.js';
 import type { SessionAttention } from '../../../shared/session.js';
 import {
@@ -27,12 +27,11 @@ export function rateLimitText(limit: NonNullable<SessionMetrics['rateLimit']>, n
   return `Limite de uso · volta em ${minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`}`;
 }
 
-const pulse = keyframes`50% { opacity: 0.35; }`;
 const shimmer = keyframes`50% { opacity: 0.45; }`;
 
 export interface SessionRowProps {
   label: string;
-  /** Which harness runs (or ran) the session — shown before the model. */
+  /** Which channel runs (or ran) the session — drawn as the row's mark. */
   harness: ChannelId;
   /** Where a session from another scope runs ("Acme", "Início"); absent for the scope being looked at. */
   scopeName?: string | undefined;
@@ -114,8 +113,9 @@ export function SessionRow({
   const working = state === 'working';
   const dimmed = state === 'exited';
   const model =
-    running && !history ? 'iniciando…' : history?.model ? formatModel(history.model) : null;
-  const harnessText = [scopeName, harness, model].filter(Boolean).join(' · ');
+    running && !history ? 'Iniciando…' : history?.model ? formatModel(history.model) : null;
+  // The channel is the row's mark, not a word: line two reads "modelo · o que faz agora".
+  const harnessText = [scopeName, model].filter(Boolean).join(' · ');
   const costLabel = history ? formatCostUsd(history.costUsd) : null;
 
   return (
@@ -176,21 +176,16 @@ export function SessionRow({
           data-testid={`${testId}-indicator`}
           data-state={state}
           sx={{
-            width: 14,
+            width: 18,
             flexShrink: 0,
-            ...(estimated ? { border: '1px dashed currentColor', borderRadius: '50%' } : {}),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             height: '1.2rem',
             color: INDICATOR_COLORS[state],
-            // Only "precisa de você" moves: if everything blinks, nothing is urgent.
-            '@media (prefers-reduced-motion: no-preference)': needsInput
-              ? { animation: `${pulse} 1.2s infinite` }
-              : {},
           }}
         >
-          <StateGlyph state={state} />
+          <ChannelStateMark channel={harness} state={state} size={14} estimated={estimated} breathing={running && !history} />
         </Box>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
@@ -201,14 +196,7 @@ export function SessionRow({
             >
               {label}
             </Typography>
-            {costLabel === null ? (
-              <Skeleton
-                variant="text"
-                width={34}
-                sx={{ flexShrink: 0 }}
-                data-testid={`${testId}-cost-pending`}
-              />
-            ) : (
+            {costLabel === null ? null : (
               <Tooltip title={describeCostSource(history!.costSource, harness)}>
                 <Typography
                   component="span"

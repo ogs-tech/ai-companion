@@ -54,6 +54,7 @@ import {
 } from '../../lib/workspace-history-store.js';
 import { shortcutFor } from '../../lib/shortcut-labels.js';
 import { registerAreaOpener, registerConfigOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
+import { registerPaletteActions } from '../../lib/palette-actions-store.js';
 import { ConfigPage } from '../config/ConfigPage.js';
 import { DEFAULT_CONFIG_PAGE, configPageOfTabId, configTabId, findConfigPage } from '../config/config-pages.js';
 import { publishWorkspacePanels, registerWorkspaceShellCommands } from '../../lib/workspace-shell-store.js';
@@ -792,6 +793,30 @@ export function WorkspaceScreen(): React.ReactElement {
     })();
   };
 
+  // "Perguntar à IA" in the command palette: a fresh session in `channel` whose
+  // input holds the question as an unsent draft — the user reviews it and
+  // presses Enter, same contract as `startNewActionSession`.
+  const startDraftSession = (anchor: SessionAnchor, harness: ChannelId, draft: string): void => {
+    void (async () => {
+      try {
+        const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor, harness });
+        openSessionTab(session);
+        void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+        const write = (): void => void callIpc('session.write', { sessionId: session.sessionId, data: draft });
+        if (session.outputBuffer) {
+          write();
+        } else {
+          const unsubscribe = window.api.session.onOutput(session.sessionId, () => {
+            unsubscribe();
+            write();
+          });
+        }
+      } catch (err) {
+        setToast({ variant: 'error', message: errorMessage(err) });
+      }
+    })();
+  };
+
   const newActionFromResolvedPath = (anchor: SessionAnchor, resolvePath: () => Promise<string>): void => {
     void (async () => {
       try {
@@ -945,6 +970,17 @@ export function WorkspaceScreen(): React.ReactElement {
   useEffect(() => {
     registerConfigOpener(openConfigView);
     return () => registerConfigOpener(null);
+  });
+
+  // The command palette (above this screen) opens sessions and customizations,
+  // and starts a session with a draft question, through these.
+  useEffect(() => {
+    registerPaletteActions({
+      openSession: openSessionAnywhere,
+      openEntity: (kind, entity) => openEntityTab(kind, entity, false),
+      startSession: ({ prompt, channel }) => startDraftSession(currentAnchor, channel, prompt),
+    });
+    return () => registerPaletteActions(null);
   });
 
   const toggleControlPanel = (): void => {
@@ -1162,6 +1198,7 @@ export function WorkspaceScreen(): React.ReactElement {
       return {
         id: tab.id,
         ...(tabSession ? { sessionState: rowStateOf(tabSession) } : {}),
+        ...(tabHarness ? { sessionChannel: tabHarness } : {}),
         ...(tabDetail ? { sessionDetail: tabDetail } : {}),
         glyph: tabHarness ? harnessGlyph(tabHarness) : SquareTerminal,
         label: tab.label,

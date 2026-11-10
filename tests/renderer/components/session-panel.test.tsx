@@ -202,6 +202,16 @@ describe('<SessionPanel>', () => {
       await waitFor(() => expect(screen.getByTestId('session-state')).toHaveTextContent('Trabalhando'));
     });
 
+    it('names the channel and model on the right of the status line, with cost marked as an estimate for Cursor', async () => {
+      const live = snapshot({ activity: 'idle', harness: 'cursor', metrics: { model: 'gpt-5', costUsd: 0.31 } });
+      call.mockImplementation(async (method: string) => ok(method === 'session.list' ? [live] : live));
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
+      await waitFor(() => expect(screen.getByTestId('session-channel')).toHaveTextContent('Cursor'));
+      expect(screen.getByTestId('session-channel')).toHaveAttribute('data-channel', 'cursor');
+      expect(screen.getByTestId('session-model')).toHaveTextContent('gpt-5');
+      expect(screen.getByTestId('session-cost')).toHaveTextContent('~US$ 0.31');
+    });
+
     it('shows Ocioso with an "iniciando" detail until the first output chunk, even when the status lookup found nothing', async () => {
       call.mockImplementation(async () => ok(null));
       renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);

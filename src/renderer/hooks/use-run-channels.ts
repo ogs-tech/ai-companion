@@ -24,6 +24,6 @@ export function useRunChannels(): { options: RunHarnessOption[]; refresh: () => 
   });
   const options = CHANNEL_IDS.filter(
     (id) => channelSupports(id, 'run') && (settings?.adapters[id]?.enabled ?? id === 'claude'),
-  ).map((id) => ({ id, available: installed?.includes(id) ?? id === 'claude' }));
+  ).map((id) => ({ id, available: Array.isArray(installed) ? installed.includes(id) : id === 'claude' }));
   return { options, refresh: () => void refetch() };
 }

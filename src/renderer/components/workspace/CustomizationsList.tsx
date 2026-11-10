@@ -283,6 +283,7 @@ export function CustomizationsList({
           label={g.label}
           count={count}
           problems={problems}
+          channelKinds={g.types}
           storageKey={groupKey(section, `type:${g.id}`)}
           testId={`type-${section}-${g.id}`}
           forceOpen={searching}

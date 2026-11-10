@@ -63,7 +63,7 @@ Closing tabs with unsaved changes asks first: **Salvar alterações em `nome`?**
 |---|---|
 | Open a file by name | `⌘P` (menu **Editar → Abrir arquivo por nome…**). Fuzzy match on the path; with an empty field it lists recent files. Enter opens the first result. |
 | Jump to a line | `⌘G`, or type `:` in the palette, then the line number. Works only with an editor tab in front. |
-| Command palette | `⌘K` (or the button in the top bar) lists screens and actions: **Visão geral**, **Abrir pasta…**, **Abrir arquivo…**, **Ir para workspace…**, **Ir para Início**, and so on. `⇧⌘P` opens it with `>` already typed. |
+| Search everything | `⌘K` (or the search field in the top bar) searches sessions, skills and agents, files of the open workspace and actions in grouped sections; with nothing typed it lists the sessions that are live (the ones waiting on you first). ↑↓ moves the selection, Enter opens it. A prefix narrows it to one section: `@` files, `#` sessions, `/` skills and agents, `>` actions (`⇧⌘P` opens with `>` already typed). The last row, **Perguntar ao Claude**, starts a new session in the channel shown in the chip beside the field (the first enabled one installed) with your text typed as an unsent draft; `⌘↵` does it even when a result is selected. The top-bar field shows a badge when sessions are waiting on you. |
 | Search inside the file | `⌘F` in the editor. |
 | Search the whole project | `⇧⌘F`, or **Buscar** in the Explorer rail. Toggles: **Aa** (case), **ab** (whole word), **.\*** (regular expression). Results are grouped by file; click one to open the file at that line. The list is capped at 2,000 results and says so. |
 

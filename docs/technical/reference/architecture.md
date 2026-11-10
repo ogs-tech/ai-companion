@@ -353,7 +353,7 @@ One shell in every scope — **rail = where I am · section header = what I see 
 
 Every context change is reachable from the StatusBar's `ContextSwitcher` (Início · Recentes, up to 5 by
 `Workspace.lastOpenedAt` excluding the current one · Todos os workspaces · Abrir pasta… · Remover este
-workspace…), ⌘K (`CommandPalette`: Abrir pasta…, Ir para workspace…, Ir para Início, Visão geral), the
+workspace…), ⌘K (`CommandPalette`, a grouped search over sessions, skills/agents, files and these actions; it reaches WorkspaceScreen's tabs and session spawning through `lib/palette-actions-store.ts`, and `lib/palette-search.ts` holds the prefix parser and matchers), the
 global ⌘O (`AppShell`), Início's Recentes card and the left panel's workspace rows. All of them go through
 `useContextNavigation` (`hooks/`), which runs the unsaved-tabs guard (`confirmDiscardUnsavedTabs`, i.e.
 `WorkspaceScreen`'s `resetTabs`) before `workspace.switchTo`/`workspace.open`/`workspace.goHome`, and turns a

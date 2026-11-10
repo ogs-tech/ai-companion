@@ -3,8 +3,7 @@ import { useState } from 'react';
 import { Eye, ScrollText, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
 import { SyncDot } from '../ds/SyncDot.js';
-import { ChannelWarning } from '../ds/ChannelWarning.js';
-import { useEntityHealth } from '../../hooks/use-entity-health.js';
+import { ChannelMarks } from '../ds/ChannelMarks.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
@@ -104,7 +103,6 @@ interface InstructionTreeRowProps {
  */
 export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
-  const health = useEntityHealth();
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const invalidate = useInvalidateInstructions();
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -166,7 +164,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
           instruction ? (
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
               <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
-              <ChannelWarning urn={instruction.urn} channels={health.get(instruction.urn) ?? []} />
+              <ChannelMarks scope={{ urn: instruction.urn }} />
             </Stack>
           ) : offered ? (
             <DetectedBadge detected={offered} onApply={() => apply(offered)} busy={importer.isPending} />

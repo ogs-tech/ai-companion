@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CustomizationsList, type CustomizationsListProps } from '../../../../src/renderer/components/workspace/CustomizationsList.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -158,6 +158,7 @@ describe('CustomizationsList', () => {
       if (method === 'skill.list') return ok([localSkill]);
       if (method === 'hook.list') return ok([hook, { ...hook, id: 'h2' }, { ...hook, id: 'h3' }]);
       if (method === 'instruction.list') return ok([]);
+      if (method === 'settings.get') return ok({ adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } });
       if (method === 'health.getReport') {
         const check = (id: string, urn: string, channel: string) => ({ id, category: 'merge-entry', severity: 'error', title: 't', entityUrn: urn, channel, observedAt: '' });
         return ok({ checks: [check('1', 'urn:hook:h1', 'claude'), check('2', 'urn:hook:h1', 'cursor'), check('3', 'urn:hook:h2', 'cursor')] });
@@ -169,10 +170,16 @@ describe('CustomizationsList', () => {
     await waitFor(() => expect(screen.getByTestId('tree-hook-h1')).toHaveTextContent('⚠ Claude · Cursor'));
     expect(screen.getByTestId('tree-hook-h2')).toHaveTextContent('⚠ Cursor');
     expect(screen.getByTestId('tree-hook-h3')).not.toHaveTextContent('⚠');
-    // Hooks: 2 items fail (h1 in both channels counts once), and Integrações sums its children.
+    // Hooks: 2 items fail (h1 in both channels counts once).
     await waitFor(() => expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('2 ⚠'));
-    expect(screen.getByTestId('tree-subgroup-type-local-integrations')).toHaveTextContent('2 ⚠');
-    expect(screen.getByTestId('tree-subgroup-type-local-skill')).not.toHaveTextContent('⚠');
+    // Integrações speaks per channel: Claude has 1 failing item, Cursor 2; the healthy Skills group shows bare marks.
+    const integrations = within(screen.getByTestId('tree-subgroup-type-local-integrations'));
+    await waitFor(() => expect(integrations.getByTestId('channel-mark-claude')).toHaveTextContent('⚠ 1'));
+    expect(integrations.getByTestId('channel-mark-cursor')).toHaveTextContent('⚠ 2');
+    const skills = within(screen.getByTestId('tree-subgroup-type-local-skill'));
+    expect(skills.getByTestId('channel-mark-claude')).toHaveAttribute('data-ok');
+    expect(skills.getByTestId('channel-mark-cursor')).toHaveAttribute('data-ok');
+    expect(skills.queryByTestId('channel-mark-lmstudio')).not.toBeInTheDocument();
   });
 
   it('shows an empty state when nothing matches', async () => {

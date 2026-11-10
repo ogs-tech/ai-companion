@@ -19,7 +19,7 @@ describe('metricsFromLines', () => {
       'claude',
       0,
     );
-    expect(metrics).toMatchObject({ costUsd: 1.42, contextTokens: 95_005, contextWindow: 200_000, lastAssistantText: 'Want me to run the tests?' });
+    expect(metrics).toMatchObject({ costUsd: 1.42, contextTokens: 95_005, contextWindow: 200_000, model: 'claude-sonnet-5-5', lastAssistantText: 'Want me to run the tests?' });
   });
 
   it('refuses a cost the CLI itself flagged as incomplete', () => {

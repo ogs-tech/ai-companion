@@ -22,7 +22,7 @@ const cursorEntry: SessionHistoryEntry = {
 };
 
 describe('SessionRow', () => {
-  it('shows the harness as text next to the model, not as an icon', () => {
+  it('draws the channel as a mark badged with the state, and keeps only the model as text', () => {
     renderWithTheme(
       <SessionRow
         label="api"
@@ -33,8 +33,12 @@ describe('SessionRow', () => {
         testId="row"
       />,
     );
-    expect(screen.getByText('cursor · gpt-5')).toBeInTheDocument();
-    expect(screen.queryByTestId('harness-mark-cursor')).toBeNull();
+    expect(screen.getByText('gpt-5')).toBeInTheDocument();
+    expect(screen.queryByText(/cursor/i)).toBeNull();
+    const indicator = screen.getByTestId('row-indicator');
+    expect(indicator).toHaveAttribute('data-state', 'exited');
+    // The channel mark and the state badge are two svgs in one indicator, not two icons side by side.
+    expect(indicator.querySelectorAll('svg').length).toBe(2);
   });
 
   it('shows a dash for a Cursor session’s cost, never $0', () => {

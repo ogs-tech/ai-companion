@@ -1,5 +1,7 @@
 import { keyframes } from '@mui/material';
 import { SessionStateMark } from '../SessionStateMark.js';
+import { ChannelStateMark } from '../ChannelStateMark.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import { FILTER_LABELS } from '../../lib/session-attention.js';
 import type { SessionRowState } from '../../lib/session-attention.js';
 import { Fragment, useEffect, useRef, useState } from 'react';
@@ -35,6 +37,8 @@ export interface WorkbenchTab {
   dense?: boolean;
   /** A session tab's live state: shown as the four-state mark beside the label. */
   sessionState?: SessionRowState;
+  /** The channel a session tab runs on: with `sessionState`, the tab draws one channel mark badged with the state instead of two icons. */
+  sessionChannel?: ChannelId;
   /** What that state is about ("Edit · 12 s", "Permissão: Bash") — appended to the state name in the tab's tooltip. */
   sessionDetail?: string;
   /** Unsaved-changes indicator — a small dot next to the label, same signal a `closeTab`/scope-switch discard guard reads to decide whether to confirm. */
@@ -64,6 +68,13 @@ function tabTooltip(tab: WorkbenchTab): string {
 }
 
 function TabGlyph({ tab }: { tab: WorkbenchTab }): React.ReactElement {
+  if (tab.sessionState && tab.sessionChannel) {
+    return (
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', pr: 0.5 }}>
+        <ChannelStateMark channel={tab.sessionChannel} state={tab.sessionState} testId={`workbench-tab-state-${tab.id}`} size={14} />
+      </Box>
+    );
+  }
   return (
     <Box component="span" sx={(theme) => ({ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: toneColor(theme, tab.glyphTone) ?? 'inherit' })}>
       <Icon glyph={tab.glyph} size={14} />

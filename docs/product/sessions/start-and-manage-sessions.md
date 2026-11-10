@@ -49,7 +49,8 @@ typed (not sent) as your first message.
 - Type as you would in a normal terminal; the CLI's own UI and slash-commands work unchanged.
 - **Paste an image** (⌘V) to attach it: the app saves it under the workspace's `attachments/` folder and
   inserts its path for the CLI.
-- A 24px status line under the terminal shows the session's state, current tool, context and cost
+- A 24px status line under the terminal shows the session's state and current tool on the left, and on the right
+  the channel and model, context and cost (Cursor's cost is marked `~` because it is estimated)
   (see [Read a session's state](read-session-state.md)); if the process fails to start,
   **Tentar novamente** (on that line) respawns it, and **Retomar** resumes a finished one.
 

@@ -25,6 +25,9 @@ import {
 import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
 import { ContextBar } from './ContextBar.js';
+import { ChannelMark } from './ChannelMark.js';
+import { CHANNELS, type ChannelId } from '../../shared/channel.js';
+import { formatModel } from '../lib/format-session-history.js';
 import type { SessionMetrics } from '../../shared/session-metrics.js';
 import { FILTER_LABELS, type SessionRowState } from '../lib/session-attention.js';
 
@@ -158,6 +161,8 @@ interface SessionStatusLineProps {
   detail?: string;
   /** Live cost / context. */
   metrics?: SessionMetrics | undefined;
+  /** The channel running the session: its mark and name sit on the right, before the model. */
+  channel?: ChannelId | undefined;
   action?: React.ReactNode;
 }
 
@@ -166,7 +171,7 @@ const STATUS_LINE_HEIGHT = 24;
 const LINE_MUTED = 'rgba(242, 238, 229, 0.6)';
 
 /** One 24px line flush under the terminal, in the terminal's own colors: state, detail, context, cost, then the action on the right. */
-function SessionStatusLine({ status, detail, metrics, action }: SessionStatusLineProps): React.ReactElement {
+function SessionStatusLine({ status, detail, metrics, channel, action }: SessionStatusLineProps): React.ReactElement {
   const shownDetail = detail ?? status.detail;
   return (
     <Stack
@@ -212,13 +217,24 @@ function SessionStatusLine({ status, detail, metrics, action }: SessionStatusLin
           {shownDetail}
         </Typography>
       )}
-      <ContextBar metrics={metrics} testId="session-context" onDark />
-      {metrics?.costUsd !== undefined && (
-        <Typography component="span" data-testid="session-cost" sx={{ fontSize: '0.75rem', color: LINE_MUTED, flex: 'none' }}>
-          {`US$ ${metrics.costUsd.toFixed(2)}`}
-        </Typography>
-      )}
-      <Box sx={{ ml: 'auto !important', display: 'flex', alignItems: 'center', gap: 0.5, flex: 'none' }}>
+      <Box sx={{ ml: 'auto !important', display: 'flex', alignItems: 'center', gap: 1, flex: 'none', minWidth: 0 }}>
+        {channel && (
+          <Stack direction="row" spacing={0.75} data-testid="session-channel" data-channel={channel} sx={{ alignItems: 'center', flex: 'none' }}>
+            <ChannelMark harness={channel} size={12} />
+            <Typography component="span" sx={{ fontSize: '0.75rem' }}>{CHANNELS[channel].displayName}</Typography>
+            {metrics?.model && (
+              <Typography component="span" data-testid="session-model" sx={{ fontSize: '0.75rem', color: LINE_MUTED }}>
+                {`· ${formatModel(metrics.model)}`}
+              </Typography>
+            )}
+          </Stack>
+        )}
+        <ContextBar metrics={metrics} testId="session-context" onDark />
+        {metrics?.costUsd !== undefined && (
+          <Typography component="span" data-testid="session-cost" sx={{ fontSize: '0.75rem', color: LINE_MUTED, flex: 'none' }}>
+            {`${channel === 'cursor' ? '~' : ''}US$ ${metrics.costUsd.toFixed(2)}`}
+          </Typography>
+        )}
         {action}
       </Box>
     </Stack>
@@ -579,7 +595,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       />
       {/* Always rendered at a fixed height: the terminal never jumps when the
           sessionId resolves or the state changes. */}
-      <SessionStatusLine status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} />
+      <SessionStatusLine status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored ? { channel: stored.harness } : {})} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} />
       <Toast toast={attachmentToast} onDismiss={() => setAttachmentToast(null)} />
     </Box>
   );

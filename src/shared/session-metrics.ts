@@ -4,6 +4,8 @@ import type { ChannelId } from './channel.js';
 export interface SessionMetrics {
   /** The CLI's own running total for the conversation (US$). */
   costUsd?: number;
+  /** The model that wrote the last assistant message, as the transcript names it. */
+  model?: string;
   /** Tokens in the context window after the last assistant message (input + cache). */
   contextTokens?: number;
   /** The model's window; absent when unknown — the bar is then hidden, never guessed. */

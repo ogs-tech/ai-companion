@@ -174,12 +174,27 @@ describe('InstructionTreeRow status', () => {
     renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
     await vi.waitFor(() => expect(call).toHaveBeenCalledWith('health.getReport', expect.anything()));
     expect(screen.queryByTestId('channel-warning')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-problem]')).toBeNull();
     expect(screen.queryByTestId('sync-dot')).not.toBeInTheDocument();
+  });
+
+  it('shows a bare mark for each integrated channel that is in sync, and leaves disabled channels out', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'settings.get') return ok({ adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: true } } });
+      return method === 'health.getReport' ? ok({ checks: [] }) : ok(undefined);
+    });
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
+    expect(await screen.findByTestId('channel-mark-claude')).toHaveAttribute('data-ok');
+    expect(screen.queryByTestId('channel-mark-cursor')).not.toBeInTheDocument();
+    // LM Studio is run-only: there is nothing to sync to it.
+    expect(screen.queryByTestId('channel-mark-lmstudio')).not.toBeInTheDocument();
   });
 
   it('flags only the channel that fails, with a warning and its name', async () => {
     call.mockImplementation(async (method: string) =>
-      method === 'health.getReport'
+      method === 'settings.get'
+        ? ok({ adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } })
+        : method === 'health.getReport'
         ? ok({ checks: [
             { id: 'a', category: 'symlink', severity: 'ok', title: 't', entityUrn: 'urn:instruction:default', channel: 'claude', observedAt: '' },
             { id: 'b', category: 'generated-file', severity: 'error', title: 't', entityUrn: 'urn:instruction:default', channel: 'cursor', observedAt: '' },
@@ -187,6 +202,8 @@ describe('InstructionTreeRow status', () => {
         : ok(undefined),
     );
     renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
-    expect(await screen.findByTestId('channel-warning')).toHaveTextContent('⚠ Cursor');
+    expect(await screen.findByTestId('channel-mark-cursor')).toHaveAttribute('data-problem');
+    expect(screen.getByTestId('channel-mark-cursor')).toHaveAttribute('aria-label', 'Problema em Cursor. Abrir diagnóstico');
+    expect(screen.getByTestId('channel-mark-claude')).toHaveAttribute('data-ok');
   });
 });

@@ -164,7 +164,7 @@ describe('SessionsTreeGroup', () => {
 
       const row = await screen.findByTestId('tree-session-workspace:w1');
       expect(within(row).getByTestId('tree-session-workspace:w1-cost')).toHaveTextContent('$4.40');
-      expect(within(row).getByText('claude · opus-5')).toBeInTheDocument();
+      expect(within(row).getByText('opus-5')).toBeInTheDocument();
     });
 
     it('shows a past conversation that is not in memory at all, titled by the CLI', async () => {
@@ -187,8 +187,10 @@ describe('SessionsTreeGroup', () => {
       render();
 
       const row = await screen.findByTestId('tree-session-workspace:w1');
-      expect(within(row).getByTestId('tree-session-workspace:w1-cost-pending')).toBeInTheDocument();
-      expect(within(row).getByText('claude · iniciando…')).toBeInTheDocument();
+      // No cost yet: nothing is drawn at the right (no empty placeholder pill).
+      expect(within(row).queryByTestId('tree-session-workspace:w1-cost')).toBeNull();
+      expect(within(row).queryByTestId('tree-session-workspace:w1-cost-pending')).toBeNull();
+      expect(within(row).getByText('Iniciando…')).toBeInTheDocument();
     });
 
     it('shows a dash, not a zero, for a conversation whose model has no published rate', async () => {
@@ -531,8 +533,8 @@ describe('SessionsTreeGroup', () => {
         'workspace.list': ok([{ id: 'ws-2', name: 'Beta', rootPath: '/repos/beta', createdAt: '' }]),
       });
       render();
-      expect(await screen.findByTestId('tree-session-workspace:other')).toHaveTextContent('Beta · claude');
-      expect(screen.getByTestId('tree-session-personal')).toHaveTextContent('Início · claude');
+      expect(await screen.findByTestId('tree-session-workspace:other')).toHaveTextContent('Beta');
+      expect(screen.getByTestId('tree-session-personal')).toHaveTextContent('Início');
       // Its own scope's row carries no tag.
       expect(screen.getByTestId('tree-session-workspace:w1')).not.toHaveTextContent('Início');
     });

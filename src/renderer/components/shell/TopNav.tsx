@@ -16,6 +16,8 @@ import {
   toggleWorkspacePanel,
 } from '../../lib/workspace-shell-store.js';
 import { openConfig } from '../../lib/workspace-area-store.js';
+import { useSessions } from '../../hooks/use-sessions.js';
+import { rowStateOf } from '../../lib/session-attention.js';
 
 interface TopNavProps {
   onOpenCommandPalette: () => void;
@@ -23,6 +25,8 @@ interface TopNavProps {
 
 export function TopNav({ onOpenCommandPalette }: TopNavProps): React.ReactElement {
   const paletteShortcut = shortcutFor('command-palette') ?? '';
+  const { data: sessions } = useSessions();
+  const waiting = (sessions ?? []).filter((s) => rowStateOf(s) === 'needs-input').length;
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
   const { explorerCollapsed, controlCollapsed } = useSyncExternalStore(subscribeWorkspacePanels, getWorkspacePanelsSnapshot);
   const explorerLabel = explorerCollapsed ? 'Mostrar painel esquerdo' : 'Ocultar painel esquerdo';
@@ -71,7 +75,7 @@ export function TopNav({ onOpenCommandPalette }: TopNavProps): React.ReactElemen
         <ButtonBase
           data-testid="command-palette-trigger"
           onClick={onOpenCommandPalette}
-          aria-label={`Buscar e navegar (${paletteShortcut})`}
+          aria-label={`Buscar, navegar ou perguntar à IA (${paletteShortcut})`}
           sx={(theme) => ({
             mx: 'auto',
             width: 260,
@@ -91,12 +95,24 @@ export function TopNav({ onOpenCommandPalette }: TopNavProps): React.ReactElemen
           <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
             <Icon glyph={Search} size={13} />
             <Typography component="span" noWrap sx={{ fontSize: 'inherit' }}>
-              Buscar ou ir para…
+              Buscar, ir para ou perguntar…
             </Typography>
           </Stack>
-          <Typography component="span" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem' })}>
-            {paletteShortcut}
-          </Typography>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flex: 'none' }}>
+            {waiting > 0 && (
+              <Typography
+                component="span"
+                data-testid="palette-trigger-attention"
+                aria-label={`${waiting} ${waiting === 1 ? 'sessão pede' : 'sessões pedem'} sua atenção`}
+                sx={{ px: 0.625, borderRadius: 99, bgcolor: 'warning.main', color: 'warning.contrastText', fontSize: '0.625rem', fontWeight: 700, lineHeight: '14px' }}
+              >
+                {waiting}
+              </Typography>
+            )}
+            <Typography component="span" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem' })}>
+              {paletteShortcut}
+            </Typography>
+          </Stack>
         </ButtonBase>
 
         <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>

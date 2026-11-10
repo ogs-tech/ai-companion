@@ -68,7 +68,13 @@ describe('TopNav', () => {
   });
   it('renders the ⌘K trigger as a search field', () => {
     renderWithShell(<TopNav onOpenCommandPalette={noop} />);
-    expect(screen.getByTestId('command-palette-trigger')).toHaveTextContent(/Buscar ou ir para…(⌘|Ctrl\+)K/);
+    expect(screen.getByTestId('command-palette-trigger')).toHaveTextContent(/Buscar, ir para ou perguntar…(⌘|Ctrl\+)K/);
+  });
+  it('badges the trigger with how many sessions are waiting on the user', async () => {
+    call.mockImplementation(async (method: string) =>
+      ok(method === 'session.list' ? [{ sessionId: 's1', status: 'running', activity: 'needs-input' }, { sessionId: 's2', status: 'running', activity: 'working' }] : null));
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
+    expect(await screen.findByTestId('palette-trigger-attention')).toHaveTextContent('1');
   });
   it('keeps the header slim: no theme toggle, no repeated app name', () => {
     renderWithShell(<TopNav onOpenCommandPalette={noop} />);

@@ -74,6 +74,7 @@ export function metricsFromLines(lines: readonly Line[], harness: ChannelId, now
     if (metrics.contextTokens !== undefined && metrics.lastAssistantText !== undefined && metrics.costUsd !== undefined) break;
   }
 
+  if (model !== null) metrics.model = model;
   const window = contextWindowFor(model, harness);
   if (window !== null && metrics.contextTokens !== undefined) metrics.contextWindow = window;
   else delete metrics.contextTokens; // no known window: hide the bar rather than guess

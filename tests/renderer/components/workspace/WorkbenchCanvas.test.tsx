@@ -55,6 +55,14 @@ describe('WorkbenchCanvas session tabs', () => {
     expect(screen.getByTestId('workbench-tab-state-b').querySelector('svg')).not.toBeNull();
   });
 
+  it('draws one channel mark badged with the state, not the channel glyph next to the state mark', () => {
+    renderWithTheme(<WorkbenchCanvas tabs={[sessionTab({ id: 'c', sessionState: 'working', sessionChannel: 'claude' })]} activeTabId={null} onSelect={vi.fn()} />);
+    const badge = screen.getByTestId('workbench-tab-state-c');
+    expect(badge).toHaveAttribute('data-state', 'working');
+    // Channel mark + badge live in one wrapper: the tab holds exactly those two svgs before its label.
+    expect(screen.getByTestId('workbench-tab-c').querySelectorAll('svg').length).toBe(2);
+  });
+
   describe('tab strip', () => {
     const tabs = [sessionTab({ id: 'a', label: 'alpha' }), sessionTab({ id: 'b', label: 'beta' })];
 
