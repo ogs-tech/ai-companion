@@ -3,9 +3,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionPanel, TERMINAL_NEWLINE_SEQUENCE } from '../../../src/renderer/components/SessionPanel.js';
 import {
-  closeBrowserTab,
   getBrowserTabsSnapshot,
-  registerBrowserWorkbenchOpener,
   resetBrowserTabsForTests,
 } from '../../../src/renderer/lib/browser-tabs-store.js';
 import { mockApi, ok, fail, renderWithQuery, type CallSpy } from '../test-utils.js';
@@ -130,7 +128,6 @@ describe('<SessionPanel>', () => {
 
     await waitFor(() => expect(screen.queryByTestId('session-open')).toBeNull());
     expect(screen.getByTestId('session-state')).toBeInTheDocument();
-    expect(screen.getByTestId('session-browser-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('session-terminal')).toBeInTheDocument();
   });
 
@@ -638,88 +635,9 @@ describe('<SessionPanel>', () => {
     });
   });
 
-  describe('browser toggle', () => {
+  describe('browser tab registration', () => {
     afterEach(() => {
       resetBrowserTabsForTests();
-    });
-
-    it('does not render the toggle before a sessionId is known', () => {
-      call.mockImplementation(async () => ok(null));
-      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
-      expect(screen.queryByTestId('session-browser-toggle')).toBeNull();
-    });
-
-    it('clicking the toggle calls browser.enable, registers the tab, and asks the Workbench opener to open it', async () => {
-      const user = userEvent.setup();
-      const opener = vi.fn();
-      registerBrowserWorkbenchOpener(opener);
-      call.mockImplementation(async (method: string) => {
-        if (method === 'session.status') {
-          return ok({
-            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
-            label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
-          });
-        }
-        return ok(null);
-      });
-
-      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
-      const toggle = await screen.findByTestId('session-browser-toggle');
-      await user.click(toggle);
-
-      await waitFor(() => expect(call).toHaveBeenCalledWith('browser.enable', { sessionId: 'sess-1' }));
-      expect(getBrowserTabsSnapshot().tabs).toEqual([{ tabId: 'sess-1', sessionId: 'sess-1', url: '' }]);
-      expect(opener).toHaveBeenCalledWith('sess-1');
-      await waitFor(() => expect(toggle).toHaveAttribute('aria-label', 'Desativar navegador da sessão'));
-    });
-
-    it('disables the toggle while browser.enable is in flight, since it may be restarting the session', async () => {
-      const user = userEvent.setup();
-      let resolveEnable!: () => void;
-      call.mockImplementation(async (method: string) => {
-        if (method === 'session.status') {
-          return ok({
-            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
-            label: 'W', status: 'running', outputBuffer: '', browserEnabled: false,
-          });
-        }
-        if (method === 'browser.enable') {
-          return new Promise((resolve) => {
-            resolveEnable = () => resolve(ok(null));
-          });
-        }
-        return ok(null);
-      });
-
-      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
-      const toggle = await screen.findByTestId('session-browser-toggle');
-      await user.click(toggle);
-
-      expect(toggle).toBeDisabled();
-      resolveEnable();
-      await waitFor(() => expect(toggle).not.toBeDisabled());
-    });
-
-    it('clicking the toggle again calls browser.disable and forgets the tab', async () => {
-      const user = userEvent.setup();
-      call.mockImplementation(async (method: string) => {
-        if (method === 'session.status') {
-          return ok({
-            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
-            label: 'W', status: 'running', outputBuffer: '', browserEnabled: true,
-          });
-        }
-        return ok(null);
-      });
-
-      renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
-      const toggle = await screen.findByTestId('session-browser-toggle');
-      await waitFor(() => expect(getBrowserTabsSnapshot().tabs).toHaveLength(1));
-
-      await user.click(toggle);
-
-      await waitFor(() => expect(call).toHaveBeenCalledWith('browser.disable', { sessionId: 'sess-1' }));
-      expect(getBrowserTabsSnapshot().tabs).toEqual([]);
     });
 
     it('a session attached with the browser already enabled registers its tab without stealing focus or opening the panel', async () => {
@@ -738,30 +656,12 @@ describe('<SessionPanel>', () => {
       await waitFor(() =>
         expect(getBrowserTabsSnapshot().tabs).toEqual([{ tabId: 'sess-1', sessionId: 'sess-1', url: '' }]),
       );
-      expect(await screen.findByTestId('session-browser-toggle')).toHaveAttribute(
-        'aria-label',
-        'Desativar navegador da sessão',
-      );
     });
 
-    it('reflects a browser tab closed elsewhere (its own Workbench tab’s close button) back onto the toggle', async () => {
-      call.mockImplementation(async (method: string) => {
-        if (method === 'session.status') {
-          return ok({
-            sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/ws',
-            label: 'W', status: 'running', outputBuffer: '', browserEnabled: true,
-          });
-        }
-        return ok(null);
-      });
-
+    it('has no browser toggle in the status line', async () => {
+      call.mockImplementation(async () => ok(null));
       renderWithQuery(<SessionPanel anchor={{ kind: 'workspace', workspaceId: 'w1' }} sessionId="sess-1" />);
-      const toggle = await screen.findByTestId('session-browser-toggle');
-      await waitFor(() => expect(toggle).toHaveAttribute('aria-label', 'Desativar navegador da sessão'));
-
-      await closeBrowserTab('sess-1');
-
-      await waitFor(() => expect(toggle).toHaveAttribute('aria-label', 'Ativar navegador da sessão'));
+      expect(screen.queryByTestId('session-browser-toggle')).toBeNull();
     });
   });
 

@@ -8,7 +8,7 @@ import * as ipc from '../../../../src/renderer/lib/ipc.js';
 import { createAppTheme } from '../../../../src/renderer/theme.js';
 import { WorkspaceScreen } from '../../../../src/renderer/screens/workspace/WorkspaceScreen.js';
 import { navigateWorkspaceHistory, resetWorkspaceHistoryForTests } from '../../../../src/renderer/lib/workspace-history-store.js';
-import { openManualTab, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
+import { openManualTab, openSessionTab, resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { toggleWorkspacePanel, type WorkspacePanelSide } from '../../../../src/renderer/lib/workspace-shell-store.js';
 import { setShowHiddenFiles } from '../../../../src/renderer/lib/show-hidden-files-store.js';
 import { mockApi } from '../../test-utils.js';
@@ -232,7 +232,7 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('browser tabs', () => {
-    it('a session’s browser toggle opens a sibling Workbench tab rendering BrowserPane', async () => {
+    it('a session’s browser tab opens as a sibling Workbench tab rendering BrowserPane', async () => {
       const user = userEvent.setup();
       const session = {
         sessionId: 'sess-1', anchor: { kind: 'workspace', workspaceId: 'w1' }, cwd: '/repos/acme',
@@ -249,9 +249,8 @@ describe('WorkspaceScreen', () => {
       await user.click(await screen.findByTestId('workspace-sessions-new'));
       await screen.findByTestId('workbench-tab-session:sess-1');
 
-      await user.click(await screen.findByTestId('session-browser-toggle'));
+      act(() => openSessionTab('sess-1'));
 
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('browser.enable', { sessionId: 'sess-1' }));
       expect(await screen.findByTestId('workbench-tab-browser:sess-1')).toBeInTheDocument();
       // Two sibling tabs now — the terminal is not replaced or hidden by the browser.
       expect(screen.getByTestId('workbench-tab-session:sess-1')).toBeInTheDocument();
@@ -273,7 +272,8 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       await user.click(await screen.findByTestId('workspace-sessions-new'));
-      await user.click(await screen.findByTestId('session-browser-toggle'));
+      await screen.findByTestId('workbench-tab-session:sess-1');
+      act(() => openSessionTab('sess-1'));
       await screen.findByTestId('workbench-tab-browser:sess-1');
 
       await user.click(await screen.findByTestId('workbench-tab-close-browser:sess-1'));

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from 'react';
-import { Box, Button, IconButton, Stack, Tooltip, Typography, keyframes } from '@mui/material';
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
+import { Box, Button, Stack, Typography, keyframes } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
-import { Lock, Globe } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -16,16 +16,11 @@ import {
   type SessionAnchor,
   type SessionSnapshotWithOutput,
 } from '../../shared/session.js';
-import { Icon } from './ds/Icon.js';
 import { StatusPill } from './ds/StatusPill.js';
 import { SessionStateMark } from './SessionStateMark.js';
 import { EmptyState } from './ds/EmptyState.js';
 import {
-  closeSessionTab,
-  getBrowserTabsSnapshot,
-  openSessionTab,
   registerSessionTab,
-  subscribeBrowserTabs,
 } from '../lib/browser-tabs-store.js';
 import { Toast, type ToastMessage } from './Toast.js';
 import { ogs, colorRoles } from '../tokens.js';
@@ -164,15 +159,14 @@ interface SessionStatusLineProps {
   /** Live cost / context. */
   metrics?: SessionMetrics | undefined;
   action?: React.ReactNode;
-  browserToggle?: React.ReactNode;
 }
 
 /** Fixed height, so a state change or a late-arriving sessionId never moves the terminal above it. */
 const STATUS_LINE_HEIGHT = 24;
 const LINE_MUTED = 'rgba(242, 238, 229, 0.6)';
 
-/** One 24px line flush under the terminal, in the terminal's own colors: state, detail, context, cost, then the actions on the right. */
-function SessionStatusLine({ status, detail, metrics, action, browserToggle }: SessionStatusLineProps): React.ReactElement {
+/** One 24px line flush under the terminal, in the terminal's own colors: state, detail, context, cost, then the action on the right. */
+function SessionStatusLine({ status, detail, metrics, action }: SessionStatusLineProps): React.ReactElement {
   const shownDetail = detail ?? status.detail;
   return (
     <Stack
@@ -188,8 +182,6 @@ function SessionStatusLine({ status, detail, metrics, action, browserToggle }: S
         color: ogs.creamInk,
         overflow: 'hidden',
         '& .MuiButton-root': { minHeight: 0, py: 0, lineHeight: '20px', fontSize: '0.75rem', color: 'inherit' },
-        '& .MuiIconButton-root': { p: 0.25 },
-        '& .MuiIconButton-root:not(.MuiIconButton-colorPrimary)': { color: 'inherit' },
       }}
     >
       {status.state === 'error' ? (
@@ -228,7 +220,6 @@ function SessionStatusLine({ status, detail, metrics, action, browserToggle }: S
       )}
       <Box sx={{ ml: 'auto !important', display: 'flex', alignItems: 'center', gap: 0.5, flex: 'none' }}>
         {action}
-        {browserToggle}
       </Box>
     </Stack>
   );
@@ -266,15 +257,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
   const [error, setError] = useState<string | null>(null);
   // The store is the source of truth once it lists this session; local state only bridges the gap before that.
   const stored = useSessionSnapshot(sessionId);
-  // Derived, not local state: the same session's browser can also be turned
-  // off from its Workbench tab's own close button (see browser-tabs-store's
-  // `closeBrowserTab`), so this has to track the shared store rather than a
-  // copy that only this component's own toggle click ever updates.
-  const { tabs: browserTabs } = useSyncExternalStore(subscribeBrowserTabs, getBrowserTabsSnapshot);
-  const browserEnabled = sessionId !== null && browserTabs.some((tab) => tab.tabId === sessionId);
   const [attachmentToast, setAttachmentToast] = useState<ToastMessage | null>(null);
-  /** True while `browser.enable`/`browser.disable` is in flight — that call restarts the session's own `claude` process when it's running, so the toggle is disabled meanwhile rather than letting a second click queue up another restart mid-flight. */
-  const [browserToggling, setBrowserToggling] = useState(false);
 
   // Attaches to a session already running server-side. When the caller
   // already knows a concrete sessionId (every Workbench tab, opened from a
@@ -547,27 +530,6 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     }
   };
 
-  // Restarts the session's own `claude` process on the main-process side when
-  // it's running (the CLI only reads `--mcp-config` at its own startup) — the
-  // toggle is disabled for the duration so a second click can't queue up a
-  // restart on top of one already in flight. On success, opens (or forgets)
-  // this session's own Workbench browser tab — `browserEnabled` above is
-  // derived from that same store, so the icon's color/tooltip follow along.
-  const handleToggleBrowser = async (): Promise<void> => {
-    if (!sessionId) return;
-    const next = !browserEnabled;
-    setBrowserToggling(true);
-    try {
-      await callIpc(next ? 'browser.enable' : 'browser.disable', { sessionId });
-      if (next) openSessionTab(sessionId);
-      else closeSessionTab(sessionId);
-    } catch (err) {
-      setError(err instanceof IpcCallError ? err.message : String(err));
-    } finally {
-      setBrowserToggling(false);
-    }
-  };
-
   // Once a concrete sessionId is known (from the prop, or from an earlier
   // handleOpen), reconnecting means resuming that same session; only a
   // caller that never had one falls back to spawning fresh from the anchor.
@@ -585,37 +547,6 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
         Retomar
       </Button>
     ) : null;
-
-  // Once a concrete sessionId exists, the embedded browser tool can be
-  // toggled regardless of run state (idle/starting has none yet to key it by).
-  // Turning it on opens the session's own tab in the Workbench's tab strip
-  // (WorkspaceScreen) — turning it off tears the tab down, not just hides it
-  // (and can also be done from that tab's own close button), so the label
-  // says "ativar"/"desativar", not "mostrar"/"ocultar".
-  const browserToggle = sessionId ? (
-    <Tooltip
-      title={
-        browserToggling
-          ? 'Reiniciando sessão…'
-          : browserEnabled
-            ? 'Desativar navegador da sessão'
-            : 'Ativar navegador da sessão'
-      }
-    >
-      <span>
-        <IconButton
-          size="small"
-          data-testid="session-browser-toggle"
-          aria-label={browserEnabled ? 'Desativar navegador da sessão' : 'Ativar navegador da sessão'}
-          color={browserEnabled ? 'primary' : 'default'}
-          disabled={browserToggling}
-          onClick={() => void handleToggleBrowser()}
-        >
-          <Icon glyph={Globe} size={14} />
-        </IconButton>
-      </span>
-    </Tooltip>
-  ) : null;
 
   return (
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -648,7 +579,7 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
       />
       {/* Always rendered at a fixed height: the terminal never jumps when the
           sessionId resolves or the state changes. */}
-      <SessionStatusLine status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
+      <SessionStatusLine status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} />
       <Toast toast={attachmentToast} onDismiss={() => setAttachmentToast(null)} />
     </Box>
   );
