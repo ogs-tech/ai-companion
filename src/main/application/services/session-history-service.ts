@@ -1,7 +1,7 @@
 import { workspaceFolders } from '../../../shared/workspace.js';
 import { workspaceHomePath } from '../../../shared/brand-paths.js';
 import { sep } from 'node:path';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import type {
   HistoryFilters,
   HistoryScope,
@@ -92,7 +92,7 @@ export class SessionHistoryService {
     let unpricedCount = 0;
     const perDay = new Map<string, SessionHistoryDayTotal>();
     const models = new Set<string>();
-    const harnesses = new Set<HarnessId>();
+    const harnesses = new Set<ChannelId>();
 
     for (const { entry } of rows) {
       harnesses.add(entry.harness);

@@ -1,4 +1,4 @@
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import type { SessionMetrics } from '../../../shared/session-metrics.js';
 
 /**
@@ -7,7 +7,7 @@ import type { SessionMetrics } from '../../../shared/session-metrics.js';
  */
 export interface TranscriptRef {
   /** Which harness wrote the conversation. */
-  harness: HarnessId;
+  harness: ChannelId;
   /** The `.jsonl` basename — the same UUID the CLI was handed via `--session-id`. */
   conversationId: string;
   filePath: string;

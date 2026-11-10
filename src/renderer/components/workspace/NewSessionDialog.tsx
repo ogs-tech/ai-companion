@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Folder } from 'lucide-react';
 import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
-import { HARNESSES, type HarnessId } from '../../../shared/harness.js';
-import type { RunHarnessOption } from '../../hooks/use-run-harnesses.js';
-import { HarnessMark } from '../HarnessMark.js';
+import { CHANNELS, type ChannelId } from '../../../shared/channel.js';
+import type { RunHarnessOption } from '../../hooks/use-run-channels.js';
+import { ChannelMark } from '../ChannelMark.js';
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -14,7 +14,7 @@ interface NewSessionDialogProps {
   defaultFolder?: string;
   /** Harnesses a session can start in. One (the default) hides the selector. */
   harnesses?: readonly RunHarnessOption[];
-  onStart: (folders: string[], harness: HarnessId) => void;
+  onStart: (folders: string[], harness: ChannelId) => void;
   onCancel: () => void;
 }
 
@@ -33,7 +33,7 @@ export function NewSessionDialog(props: NewSessionDialogProps): React.ReactEleme
 function NewSessionForm({ folders, aliases, defaultFolder, harnesses = CLAUDE_ONLY, onStart, onCancel }: NewSessionDialogProps): React.ReactElement {
   const [ticked, setTicked] = useState<string[]>(() => (folders.length === 0 ? [] : [defaultFolder ?? (folders[0] as string)]));
   // Always opens on Claude (or the first option when Claude is off): the choice is per session, not remembered.
-  const [harness, setHarness] = useState<HarnessId>(() => (harnesses.some((h) => h.id === 'claude') ? 'claude' : (harnesses[0]?.id ?? 'claude')));
+  const [harness, setHarness] = useState<ChannelId>(() => (harnesses.some((h) => h.id === 'claude') ? 'claude' : (harnesses[0]?.id ?? 'claude')));
   const chosen = harnesses.find((h) => h.id === harness);
   const pickFolders = folders.length > 1;
 
@@ -51,13 +51,13 @@ function NewSessionForm({ folders, aliases, defaultFolder, harnesses = CLAUDE_ON
             fullWidth
             size="small"
             value={harness}
-            onChange={(_, next: HarnessId | null) => next && setHarness(next)}
-            aria-label="Harness da sessão"
+            onChange={(_, next: ChannelId | null) => next && setHarness(next)}
+            aria-label="Canal da sessão"
             data-testid="new-session-harness"
             sx={{ mb: 2 }}
           >
             {harnesses.map((option) => (
-              <Tooltip key={option.id} title={option.available ? '' : `${HARNESSES[option.id].displayName} não encontrado neste computador`}>
+              <Tooltip key={option.id} title={option.available ? '' : `${CHANNELS[option.id].displayName} não encontrado neste computador`}>
                 <span style={{ flex: 1, display: 'flex' }}>
                   <ToggleButton
                     value={option.id}
@@ -65,8 +65,8 @@ function NewSessionForm({ folders, aliases, defaultFolder, harnesses = CLAUDE_ON
                     data-testid={`new-session-harness-${option.id}`}
                     sx={{ flex: 1, gap: 1, textTransform: 'none' }}
                   >
-                    <HarnessMark harness={option.id} size={16} />
-                    {HARNESSES[option.id].displayName}
+                    <ChannelMark harness={option.id} size={16} />
+                    {CHANNELS[option.id].displayName}
                   </ToggleButton>
                 </span>
               </Tooltip>

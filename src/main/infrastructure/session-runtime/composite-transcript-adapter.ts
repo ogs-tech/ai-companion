@@ -1,4 +1,4 @@
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import type { SessionMetrics } from '../../../shared/session-metrics.js';
 import type {
   SessionTranscriptPort,
@@ -8,7 +8,7 @@ import type {
 
 /** One history over several harnesses: lists them all and routes each reading to the harness that wrote it. */
 export class CompositeTranscriptAdapter implements SessionTranscriptPort {
-  constructor(private readonly byHarness: Readonly<Partial<Record<HarnessId, SessionTranscriptPort>>>) {}
+  constructor(private readonly byHarness: Readonly<Partial<Record<ChannelId, SessionTranscriptPort>>>) {}
 
   async listRefs(): Promise<TranscriptRef[]> {
     const lists = await Promise.all(Object.values(this.byHarness).map((port) => port.listRefs()));

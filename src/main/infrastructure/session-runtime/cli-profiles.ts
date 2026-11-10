@@ -78,3 +78,18 @@ export const CURSOR_PROFILE: CliProfile = {
   // Cursor's hooks live in ~/.cursor/hooks.json (installed by SessionSignalHooksInstaller).
   signalArgs: () => [],
 };
+
+/**
+ * `lms chat` is a plain chat with a local model: it has no conversation id,
+ * no resume flag, no hooks and no MCP/skill surface. The id is minted here
+ * only so the app can key the session; "resuming" opens a fresh chat.
+ */
+export const LMSTUDIO_PROFILE: CliProfile = {
+  newConversationId: async () => randomUUID(),
+  startArgs: () => ['chat'],
+  resumeArgs: () => ['chat'],
+  missingConversationMarker: null,
+  supportsMcpConfig: false,
+  supportsAddDir: false,
+  signalArgs: () => [],
+};

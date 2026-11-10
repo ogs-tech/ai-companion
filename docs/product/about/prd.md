@@ -13,6 +13,10 @@ updated_at: 2026-11-03
 > [!NOTE]
 > Vocabulary — what a *harness* is, and the `manage`/`run` capabilities this
 > document leans on throughout — in [harness-model.md](../harnesses/harness-model.md).
+>
+> **Vocabulary note (2026-11):** below, "harness" still names the *tool* (Claude Code, Cursor …). That tool is now
+> called a **channel**; "harness" now means the configuration set the app manages. The PRD's body has not been
+> re-worded yet — read each "harness" here as "channel".
 > Stack and technical decisions in [reference/architecture.md](../../technical/reference/architecture.md).
 
 ## 1. Problem

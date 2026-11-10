@@ -10,7 +10,7 @@ import { SettingsService } from '../../../../../src/main/application/services/se
 import type { Settings } from '../../../../../src/shared/settings.js';
 
 const baseSettings: Settings = {
-  adapters: { claude: { enabled: true }, cursor: { enabled: false } },  ui: { theme: 'system' },
+  adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } },  ui: { theme: 'system' },
   language: 'off',
 };
 

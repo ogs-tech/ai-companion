@@ -2,7 +2,7 @@ import type { IpcHandlers } from './dispatcher.js';
 import type { ExternalSessionService } from '../application/services/external-session-service.js';
 import type { ExternalHooksInstaller } from '../application/services/external-hooks-installer.js';
 import type { SessionService } from '../application/services/session-service.js';
-import { HARNESS_IDS, type HarnessId } from '../../shared/harness.js';
+import { CHANNEL_IDS, type ChannelId } from '../../shared/channel.js';
 import type { ExternalSessionsState } from '../../shared/external-session.js';
 import { DomainError } from '../domain/errors.js';
 import { asObject, asString } from './_validators.js';
@@ -12,7 +12,7 @@ export interface ExternalSessionHandlerDeps {
   installer: Pick<ExternalHooksInstaller, 'consent' | 'setConsent' | 'revoke' | 'installed'>;
   sessions: Pick<SessionService, 'adoptConversation'>;
   /** Harnesses whose CLI/config exist on this machine; hooks are only installed for these. */
-  presentHarnesses: () => Promise<readonly HarnessId[]>;
+  presentHarnesses: () => Promise<readonly ChannelId[]>;
   /** The renderer reports which session tab is focused, so a notification can be silenced for it. */
   setFocusedSession: (sessionId: string | null) => void;
   /** Called after any consent change so main can restart the notifier / emit a push. */
@@ -23,8 +23,8 @@ export function buildExternalSessionHandlers(deps: ExternalSessionHandlerDeps): 
   const state = async (): Promise<ExternalSessionsState> => {
     const consent = await deps.installer.consent();
     const hooksInstalled = Object.fromEntries(
-      await Promise.all(HARNESS_IDS.map(async (id) => [id, await deps.installer.installed(id)] as const)),
-    ) as Record<HarnessId, boolean>;
+      await Promise.all(CHANNEL_IDS.map(async (id) => [id, await deps.installer.installed(id)] as const)),
+    ) as Record<ChannelId, boolean>;
     return { consent, hooksInstalled, sessions: consent === 'unset' ? [] : deps.external.list() };
   };
 

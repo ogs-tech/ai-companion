@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { Menu, MenuItem, Tooltip } from '@mui/material';
 import { Plug, Puzzle, Terminal, Webhook, type LucideIcon } from 'lucide-react';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { useEntityHealth } from '../../hooks/use-entity-health.js';
 import { countProblems } from '../../lib/entity-health.js';
@@ -224,7 +224,7 @@ interface PluginFolderProps {
   depth: number;
   muted: boolean;
   tooltip: string;
-  channels: readonly HarnessId[];
+  channels: readonly ChannelId[];
   onContextMenu: (e: React.MouseEvent) => void;
 }
 

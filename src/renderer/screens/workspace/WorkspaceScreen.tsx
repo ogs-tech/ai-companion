@@ -74,9 +74,9 @@ import { SessionFileBanner } from '../../components/workspace/SessionFileBanner.
 import { rowStateOf, sessionStateDetail } from '../../lib/session-attention.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
-import { useRunHarnesses } from '../../hooks/use-run-harnesses.js';
-import type { HarnessId } from '../../../shared/harness.js';
-import { harnessGlyph } from '../../components/HarnessMark.js';
+import { useRunChannels } from '../../hooks/use-run-channels.js';
+import type { ChannelId } from '../../../shared/channel.js';
+import { harnessGlyph } from '../../components/ChannelMark.js';
 import { NewSessionDialog } from '../../components/workspace/NewSessionDialog.js';
 import { useFolderRouting } from '../../hooks/use-folder-routing.js';
 import { useEntityChangeInvalidation } from '../../hooks/use-entity-change-invalidation.js';
@@ -887,7 +887,7 @@ export function WorkspaceScreen(): React.ReactElement {
 
   // The "+" in the Sessões panel header: always a fresh session (coexisting
   // with any already open for the same anchor) wherever the user currently is.
-  const spawnSession = (anchor: SessionAnchor, harness: HarnessId = 'claude'): void => {
+  const spawnSession = (anchor: SessionAnchor, harness: ChannelId = 'claude'): void => {
     void (async () => {
       try {
         const session = await callIpc<SessionSnapshotWithOutput>('session.spawn', { anchor, harness });
@@ -900,7 +900,7 @@ export function WorkspaceScreen(): React.ReactElement {
   };
   // A multi-folder workspace asks which folders the session sees; otherwise it starts right away.
   const [newSessionOpen, setNewSessionOpen] = useState(false);
-  const runHarnesses = useRunHarnesses();
+  const runHarnesses = useRunChannels();
   // The dialog also opens when a second harness is enabled, so the harness can be chosen.
   const handleNewSession = (): void => {
     if ((activeWorkspace && folderRouting.multi) || runHarnesses.options.length > 1) {

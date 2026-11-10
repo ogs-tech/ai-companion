@@ -10,7 +10,7 @@ import { useCustomizationList } from '../../../hooks/use-customization-list.js';
 import { useMcpList } from '../../../hooks/use-mcp-list.js';
 import { useSettings } from '../../../hooks/use-settings.js';
 import { formatCostUsd } from '../../../lib/format-session-history.js';
-import { HARNESSES, HARNESS_IDS } from '../../../../shared/harness.js';
+import { CHANNELS, CHANNEL_IDS } from '../../../../shared/channel.js';
 import type { SessionSnapshot } from '../../../../shared/session.js';
 import type { Severity } from '../../../../shared/health.js';
 
@@ -101,7 +101,7 @@ export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics }
         <OverviewRow testId="overview-global-mcp" primary="MCP servers" trailing={<Count n={mcpServers?.length} />} />
         {settings && (
           <Stack direction="row" spacing={1.5} sx={{ mt: 0.75, flexWrap: 'wrap' }}>
-            {HARNESS_IDS.map((id) => {
+            {CHANNEL_IDS.map((id) => {
               const enabled = settings.adapters[id]?.enabled ?? false;
               return (
                 <Typography
@@ -110,7 +110,7 @@ export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics }
                   data-enabled={enabled}
                   sx={{ fontSize: '0.75rem', color: enabled ? 'text.primary' : 'text.disabled' }}
                 >
-                  {HARNESSES[id].displayName} {enabled ? '✓' : '—'}
+                  {CHANNELS[id].displayName} {enabled ? '✓' : '—'}
                 </Typography>
               );
             })}

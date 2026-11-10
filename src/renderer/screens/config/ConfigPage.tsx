@@ -1,14 +1,14 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useSettingsState } from '../../hooks/use-settings-state.js';
 import { SessionsSettingsSection } from '../settings/SessionsSettingsSection.js';
-import { isHarnessId } from '../../../shared/harness.js';
+import { isChannelId } from '../../../shared/channel.js';
 import { DangerPage } from './DangerPage.js';
 import { EditorPage } from './EditorPage.js';
 import { GitHubPage } from './GitHubPage.js';
-import { HarnessPage } from './HarnessPage.js';
+import { ChannelPage } from './ChannelPage.js';
 import { GitIgnorePage } from './GitIgnorePage.js';
 import { LanguagePage } from './LanguagePage.js';
-import { HARNESS_PAGE_PREFIX, type ConfigPageId } from './config-pages.js';
+import { CHANNEL_PAGE_PREFIX, type ConfigPageId } from './config-pages.js';
 
 function SessionsPage(): React.ReactElement {
   const { settings, publish } = useSettingsState();
@@ -34,9 +34,9 @@ export function ConfigPage({ page }: { page: ConfigPageId }): React.ReactElement
       </Box>
     );
   }
-  if (page.startsWith(HARNESS_PAGE_PREFIX)) {
-    const id = page.slice(HARNESS_PAGE_PREFIX.length);
-    if (isHarnessId(id)) return <HarnessPage harnessId={id} />;
+  if (page.startsWith(CHANNEL_PAGE_PREFIX)) {
+    const id = page.slice(CHANNEL_PAGE_PREFIX.length);
+    if (isChannelId(id)) return <ChannelPage harnessId={id} />;
   }
   switch (page) {
     case 'sessions':

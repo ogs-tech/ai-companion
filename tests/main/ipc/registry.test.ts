@@ -34,7 +34,7 @@ import type { OpenEditorsService } from '../../../src/main/application/services/
 const baseSettings = (overrides: Partial<Settings> = {}): Settings => ({
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },  ui: { theme: 'system' },
   language: 'off',
   ...overrides,

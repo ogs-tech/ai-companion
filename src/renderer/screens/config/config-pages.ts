@@ -1,7 +1,7 @@
 import { Bell, Bot, EyeOff, KeyRound, Languages, PencilLine, TriangleAlert, type LucideIcon } from 'lucide-react';
-import { HARNESSES, HARNESS_IDS, isHarnessId } from '../../../shared/harness.js';
+import { CHANNELS, CHANNEL_IDS, isChannelId } from '../../../shared/channel.js';
 
-/** Fixed per page — `harness:<id>`, `sessions`, `editor`, `language`, `github`, `danger`. */
+/** Fixed per page — `channel:<id>`, `sessions`, `editor`, `language`, `github`, `danger`. */
 export type ConfigPageId = string;
 
 export interface ConfigPageDef {
@@ -16,8 +16,8 @@ export interface ConfigGroupDef {
   pages: readonly ConfigPageDef[];
 }
 
-export const HARNESS_PAGE_PREFIX = 'harness:';
-export const DEFAULT_CONFIG_PAGE: ConfigPageId = `${HARNESS_PAGE_PREFIX}${HARNESS_IDS[0] ?? 'claude'}`;
+export const CHANNEL_PAGE_PREFIX = 'channel:';
+export const DEFAULT_CONFIG_PAGE: ConfigPageId = `${CHANNEL_PAGE_PREFIX}${CHANNEL_IDS[0] ?? 'claude'}`;
 
 export const configTabId = (page: ConfigPageId): string => `config:${page}`;
 export const isConfigTabId = (id: string): boolean => id.startsWith('config:');
@@ -30,9 +30,9 @@ const showDanger = (): boolean => window.api?.isDev === true;
 export function configGroups(): ConfigGroupDef[] {
   const groups: ConfigGroupDef[] = [
     {
-      id: 'harnesses',
-      label: 'Harnesses',
-      pages: HARNESS_IDS.map((id) => ({ id: `${HARNESS_PAGE_PREFIX}${id}`, label: HARNESSES[id].displayName, glyph: Bot })),
+      id: 'channels',
+      label: 'Canais',
+      pages: CHANNEL_IDS.map((id) => ({ id: `${CHANNEL_PAGE_PREFIX}${id}`, label: CHANNELS[id].displayName, glyph: Bot })),
     },
     { id: 'sessions', label: 'Sessões', pages: [{ id: 'sessions', label: 'Sessões', glyph: Bell }] },
     {
@@ -57,5 +57,5 @@ export function findConfigPage(page: ConfigPageId): ConfigPageDef | undefined {
     .find((p) => p.id === page);
 }
 
-export const harnessIdOfPage = (page: ConfigPageId): string | null =>
-  page.startsWith(HARNESS_PAGE_PREFIX) && isHarnessId(page.slice(HARNESS_PAGE_PREFIX.length)) ? page.slice(HARNESS_PAGE_PREFIX.length) : null;
+export const channelIdOfPage = (page: ConfigPageId): string | null =>
+  page.startsWith(CHANNEL_PAGE_PREFIX) && isChannelId(page.slice(CHANNEL_PAGE_PREFIX.length)) ? page.slice(CHANNEL_PAGE_PREFIX.length) : null;

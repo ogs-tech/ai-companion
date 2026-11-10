@@ -1,4 +1,4 @@
-import { HARNESSES, HARNESS_IDS, type HarnessId } from './harness.js';
+import { CHANNELS, CHANNEL_IDS, type ChannelId } from './channel.js';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -76,8 +76,8 @@ export function resolveGitIgnoreMode(settings: Settings | null | undefined): Git
 }
 
 export interface Settings {
-  /** One entry per known harness — see `harness.ts` for the registry. */
-  adapters: Record<HarnessId, AdapterSettings>;
+  /** One entry per known harness — see `channel.ts` for the registry. */
+  adapters: Record<ChannelId, AdapterSettings>;
   ui: UiSettings;
   language: LanguagePreference;
   /**
@@ -120,10 +120,10 @@ export type WorkspacePath = (typeof WorkspacePaths)[number];
  * A fresh `adapters` block, one entry per registered harness at its own
  * `defaultEnabled`. Returns a new object on every call — callers persist it.
  */
-export function defaultAdapterSettings(): Record<HarnessId, AdapterSettings> {
+export function defaultAdapterSettings(): Record<ChannelId, AdapterSettings> {
   return Object.fromEntries(
-    HARNESS_IDS.map((id) => [id, { enabled: HARNESSES[id].defaultEnabled }]),
-  ) as Record<HarnessId, AdapterSettings>;
+    CHANNEL_IDS.map((id) => [id, { enabled: CHANNELS[id].defaultEnabled }]),
+  ) as Record<ChannelId, AdapterSettings>;
 }
 
 export function getDefaults(): Settings {

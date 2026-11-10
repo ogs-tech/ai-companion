@@ -1,19 +1,19 @@
 ---
-title: Enable or disable a harness
+title: Enable or disable a channel
 description: Turn syncing to Cursor (or Claude Code) on and off, and clean up what the app wrote there.
 ---
 
-# Enable or disable a harness
+# Enable or disable a channel
 
-Each harness the app can `manage` has an on/off switch. Claude Code is on by default; Cursor is off. Turning
-one on materializes every entity of the active workspace into that harness and makes it available for new
+Each channel the app can `manage` has an on/off switch. Claude Code is on by default; Cursor is off. Turning
+one on materializes every entity of the active workspace into that channel and makes it available for new
 sessions; turning it off can remove everything the app put there and hides it from new sessions and the
 session history. Paths: [Adapter targets](../../technical/reference/adapter-targets.md).
 
 ## Enable Cursor
 
-1. Open **Settings** (gear icon, top right).
-2. Under **Adapters**, switch **Cursor** on.
+1. Open **Config** (⌘, or the header button) → **Canais** → **Cursor**.
+2. If Cursor is not installed or signed in yet, use **Instalar** / **Entrar** on that page first; **Ativar Cursor** appears once both are done. Tick it.
 
 The app immediately syncs every skill, agent, instruction, MCP server and hook of the **active workspace**
 into `~/.cursor/…` and `<repo>/.cursor/…`: workspace instructions become `.cursor/rules/<name>.mdc`, and MCP
@@ -28,7 +28,7 @@ written to Cursor at all; it stays active in Claude Code and the **Sync report**
 
 Skills, agents, MCP servers and hooks that already exist in `~/.cursor/` (or `<repo>/.cursor/`) appear as
 **Detectados** rows. Import one from its row menu (**Importar**) and it becomes managed by the app and is
-written to every enabled harness. See
+written to every enabled channel. See
 [Adapter targets → Detected items and import](../../technical/reference/adapter-targets.md#detected-items-and-import).
 
 ## Start a Cursor session
@@ -45,17 +45,17 @@ How a Cursor session differs from a Claude one:
   shows the session as **Ocioso** instead of **Pergunta**. See
   [Read a session's state](../sessions/read-session-state.md).
 - **Context** — shown as an estimate, marked `~`.
-- **History** — Cursor conversations appear in **Histórico** with a **Cursor** harness chip and can be
+- **History** — Cursor conversations appear in **Histórico** with a **Cursor** channel chip and can be
   resumed from there; see [Review past sessions and cost](../sessions/session-history-and-cost.md).
 - **Outside the app** — Cursor sessions started in another terminal are listed too; exact state needs the
   hooks installed in `~/.cursor/hooks.json` (see [Watch sessions running outside the app](../sessions/watch-external-sessions.md)).
 
-## Disable a harness
+## Disable a channel
 
-1. **Settings** → **Adapters** → switch it off.
+1. **Config** → **Canais** → **Cursor** → clear **Ativar Cursor**.
 2. The dialog shows how many links the app manages there. Choose:
    - **Sim, remover N symlinks** — removes the app's symlinks and its marker-owned generated files
-     for that harness. Real files at those paths, and generated files without the app's marker, are left
+     for that channel. Real files at those paths, and generated files without the app's marker, are left
      alone.
    - **Não, apenas desabilitar** — stops future syncing; everything already there stays.
    - **Cancelar**.
@@ -64,7 +64,7 @@ Disabling never touches the canonical files in the data dir, so re-enabling late
 
 ## Re-sync everything
 
-There is no "sync now" button. Toggle the harness off (**Não, apenas desabilitar**) and back on: enabling
+There is no "sync now" button. Toggle the channel off (**Não, apenas desabilitar**) and back on: enabling
 always runs a full sync of the active workspace. Saving an entity re-syncs just that entity.
 
 ## Check the result

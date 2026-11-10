@@ -11,8 +11,17 @@ import type { TerminalSnapshotWithOutput } from '../../../shared/terminal.js';
 
 const TERMINAL_XTERM_THEME = { background: ogs.ink, foreground: ogs.cream, cursor: ogs.cream };
 
+/** Which IPC methods back this panel — workspace terminals by default; the Config setup dialog points at `channelSetup.*`. */
+export interface TerminalPanelIpc {
+  write: string;
+  resize: string;
+  status: string;
+}
+const WORKSPACE_TERMINAL_IPC: TerminalPanelIpc = { write: 'terminal.write', resize: 'terminal.resize', status: 'terminal.status' };
+
 interface TerminalPanelProps {
   terminalId: string;
+  ipc?: TerminalPanelIpc;
   /** Skips resize/fit while the tab is hidden — a hidden container reports zero size. */
   visible?: boolean;
 }
@@ -23,7 +32,7 @@ interface TerminalPanelProps {
  * restart gives the terminal a new `generation`, which callers use as part of
  * this component's `key` so the replay starts over.
  */
-export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps): React.ReactElement {
+export function TerminalPanel({ terminalId, ipc = WORKSPACE_TERMINAL_IPC, visible = true }: TerminalPanelProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -45,7 +54,7 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
     fitAddonRef.current = fitAddon;
 
     const inputDisposable = terminal.onData((data) => {
-      void callIpc('terminal.write', { terminalId, data });
+      void callIpc(ipc.write, { terminalId, data });
     });
     // Live chunks are dropped until the replay lands: push events and the
     // `terminal.status` reply share one ordered channel, so anything received
@@ -61,7 +70,7 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
       terminal.write(`\r\n\x1b[2m[processo encerrado${exitCode === null ? '' : ` — código ${exitCode}`}]\x1b[0m\r\n`);
     });
     let disposed = false;
-    void callIpc<TerminalSnapshotWithOutput | null>('terminal.status', { terminalId })
+    void callIpc<Pick<TerminalSnapshotWithOutput, 'outputBuffer'> | null>(ipc.status, { terminalId })
       .then((snapshot) => {
         if (disposed) return;
         if (snapshot?.outputBuffer) terminal.write(snapshot.outputBuffer);
@@ -79,7 +88,7 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
       batcher.cancel();
       terminal.dispose();
     };
-  }, [terminalId]);
+  }, [terminalId, ipc]);
 
   useEffect(() => {
     // Each resize makes the PTY raise SIGWINCH, and many CLIs redraw their whole
@@ -93,7 +102,7 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
       const key = `${dims.cols}x${dims.rows}`;
       if (key === lastSent) return;
       lastSent = key;
-      void callIpc('terminal.resize', { terminalId, cols: dims.cols, rows: dims.rows });
+      void callIpc(ipc.resize, { terminalId, cols: dims.cols, rows: dims.rows });
     };
     syncSize();
     window.addEventListener('resize', syncSize);
@@ -103,7 +112,7 @@ export function TerminalPanel({ terminalId, visible = true }: TerminalPanelProps
       window.removeEventListener('resize', syncSize);
       resizeObserver.disconnect();
     };
-  }, [terminalId, visible]);
+  }, [terminalId, ipc, visible]);
 
   useEffect(() => {
     if (visible) terminalRef.current?.focus();

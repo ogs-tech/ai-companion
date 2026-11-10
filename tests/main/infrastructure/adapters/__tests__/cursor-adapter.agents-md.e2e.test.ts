@@ -45,7 +45,7 @@ const scopeDeps = {
 };
 
 const settings: Settings = {
-  adapters: { claude: { enabled: true }, cursor: { enabled: true } },  ui: { theme: 'system' }, language: 'off',
+  adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } },  ui: { theme: 'system' }, language: 'off',
 };
 
 const pluginRoot = join('/home/u', '.cursor', 'plugins', CURSOR_PLUGIN_ID);

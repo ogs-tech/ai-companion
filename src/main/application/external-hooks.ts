@@ -1,4 +1,4 @@
-import type { HarnessId } from '../../shared/harness.js';
+import type { ChannelId } from '../../shared/channel.js';
 import { SIGNAL_FILE_ENV } from './session-activity.js';
 import type { SessionSignal } from './ports/session-signal-port.js';
 
@@ -15,7 +15,7 @@ export const EXTERNAL_CONSENT_MARKER = 'signals/external-enabled';
  * stdin JSON rides along as the payload (cwd, tool_input.file_path, …).
  * `$HOME` expands in the harness's shell, so no path is baked in.
  */
-function externalHook(harness: HarnessId, event: 'working' | 'idle' | 'notification' | 'tool' | 'session-start' | 'session-end'): string {
+function externalHook(harness: ChannelId, event: 'working' | 'idle' | 'notification' | 'tool' | 'session-start' | 'session-end'): string {
   const dir = `"$HOME/.ai-companion/signals"`;
   return [
     `IN=$(tr -d '\\n\\r')`,
@@ -52,7 +52,7 @@ export const CURSOR_EXTERNAL_HOOKS = {
 export const CLAUDE_EXTERNAL_NOTIFICATION_MATCHER = 'permission_prompt|elicitation_dialog';
 
 /** Parses one external signal-file line, keeping the payload for every event (cwd lives there). */
-export function parseExternalLine(line: string): { harness: HarnessId; signal: SessionSignal } | null {
+export function parseExternalLine(line: string): { harness: ChannelId; signal: SessionSignal } | null {
   const text = line.trim();
   if (text === '') return null;
   let raw: unknown;

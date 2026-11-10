@@ -1,12 +1,12 @@
 import { Box } from '@mui/material';
 import { channelNames } from '../../lib/entity-health.js';
 import { openDiagnosticsFor } from '../../lib/diagnostics-focus.js';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 
 interface ChannelWarningProps {
   /** The item the warning belongs to; the click opens Diagnósticos on it. */
   urn: string;
-  channels: readonly HarnessId[];
+  channels: readonly ChannelId[];
 }
 
 /**

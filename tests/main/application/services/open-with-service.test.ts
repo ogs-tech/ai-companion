@@ -19,7 +19,7 @@ const fakeLauncher = (overrides: Partial<AppLauncherPort> = {}): AppLauncherPort
 });
 
 const baseSettings = (): Settings => ({
-  adapters: { claude: { enabled: true }, cursor: { enabled: false } },
+  adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } },
   ui: { theme: 'system' },
   language: 'off',
 });

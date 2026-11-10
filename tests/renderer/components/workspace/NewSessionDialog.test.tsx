@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NewSessionDialog } from '../../../../src/renderer/components/workspace/NewSessionDialog.js';
 import { renderWithTheme } from '../../test-utils.js';
-import type { RunHarnessOption } from '../../../../src/renderer/hooks/use-run-harnesses.js';
+import type { RunHarnessOption } from '../../../../src/renderer/hooks/use-run-channels.js';
 
 const FOLDERS = ['/r/web', '/r/api'];
 const ALIASES = { '/r/web': 'web', '/r/api': 'api' };

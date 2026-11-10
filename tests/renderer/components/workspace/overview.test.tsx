@@ -84,7 +84,7 @@ describe('HomeOverview', () => {
       'skill.list': [entity('a'), entity('b')],
       'agent.list': [entity('c')],
       'mcp.list': [],
-      'settings.get': { ui: { theme: 'light' }, adapters: { claude: { enabled: true }, cursor: { enabled: false } }, language: 'off' },
+      'settings.get': { ui: { theme: 'light' }, adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } }, language: 'off' },
     });
     renderHome();
     await waitFor(() => expect(screen.getByTestId('overview-global-instruction')).toHaveTextContent('configurada'));

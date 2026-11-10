@@ -32,7 +32,7 @@ const baseSettings = (
 ): Settings => ({
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
     ...overrides,
   },  ui: { theme: 'system' },
   language: 'off',

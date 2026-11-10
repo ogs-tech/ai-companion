@@ -29,7 +29,7 @@ const scopeDeps = {
   workspaceService: { get: async () => { throw new Error('not stubbed'); } },
 };
 const settings: Settings = {
-  adapters: { claude: { enabled: false }, cursor: { enabled: true } },  ui: { theme: 'system' }, language: 'off',
+  adapters: { claude: { enabled: false }, cursor: { enabled: true }, lmstudio: { enabled: false } },  ui: { theme: 'system' }, language: 'off',
 };
 
 const pluginRoot = join('/home/u', '.cursor', 'plugins', CURSOR_PLUGIN_ID);

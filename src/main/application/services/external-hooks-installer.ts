@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import type { ExternalConsent } from '../../../shared/external-session.js';
 import type { MergeTarget } from '../ports/adapter.js';
 import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
@@ -50,7 +50,7 @@ export class ExternalHooksInstaller {
   }
 
   /** `exact`: write the marker and install the entries of the harnesses present; `estimated`: remove anything we installed and remember the choice. */
-  async setConsent(mode: 'exact' | 'estimated', harnesses: readonly HarnessId[]): Promise<void> {
+  async setConsent(mode: 'exact' | 'estimated', harnesses: readonly ChannelId[]): Promise<void> {
     await this.fs.mkdir(join(this.home, '.ai-companion', 'signals'), { recursive: true });
     await this.fs.writeFile(this.consentFile, `${mode}\n`);
     if (mode === 'estimated') {
@@ -65,7 +65,7 @@ export class ExternalHooksInstaller {
   }
 
   /** At startup under `exact` consent: installs entries a newer app version added (e.g. SessionEnd), so an existing install keeps up without re-asking. Idempotent. */
-  async heal(harnesses: readonly HarnessId[]): Promise<void> {
+  async heal(harnesses: readonly ChannelId[]): Promise<void> {
     if ((await this.consent()) !== 'exact') return;
     for (const harness of harnesses) {
       if (await this.installed(harness)) continue;
@@ -80,7 +80,7 @@ export class ExternalHooksInstaller {
     await this.fs.remove(this.consentFile);
   }
 
-  async installed(harness: HarnessId): Promise<boolean> {
+  async installed(harness: ChannelId): Promise<boolean> {
     const entries = this.entries(harness);
     if (entries.length === 0) return false;
     for (const entry of entries) {
@@ -95,7 +95,7 @@ export class ExternalHooksInstaller {
     }
   }
 
-  private entries(harness: HarnessId): HookEntry[] {
+  private entries(harness: ChannelId): HookEntry[] {
     if (harness === 'claude') {
       const file = join(this.home, '.claude', 'settings.json');
       return Object.entries(CLAUDE_EXTERNAL_HOOKS).map(([event, command]) => {

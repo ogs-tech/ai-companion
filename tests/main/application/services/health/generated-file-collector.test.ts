@@ -7,7 +7,7 @@ import type { Settings } from '../../../../../src/shared/settings.js';
 
 const clock = new FixedClock(new Date('2026-07-02T10:00:00.000Z'));
 const settings = (over: Partial<Settings>): Settings => ({
-  adapters: { claude: { enabled: true }, cursor: { enabled: false } },  ui: { theme: 'system' }, language: 'off', ...over,
+  adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } },  ui: { theme: 'system' }, language: 'off', ...over,
 });
 
 const make = (opts: {
@@ -50,7 +50,7 @@ describe('GeneratedFileCollector', () => {
     const collector = make({
       plan: [],
       state: 'ok',
-      settings: settings({ adapters: { claude: { enabled: true }, cursor: { enabled: false } } }),
+      settings: settings({ adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } } }),
     });
     expect(await collector.collect('personal')).toEqual([]);
   });
@@ -59,7 +59,7 @@ describe('GeneratedFileCollector', () => {
     const collector = make({
       plan: [],
       state: 'ok',
-      settings: settings({ adapters: { claude: { enabled: true }, cursor: { enabled: true } } }),
+      settings: settings({ adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } }),
     });
     expect(await collector.collect('personal')).toEqual([]);
   });

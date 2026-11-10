@@ -3,13 +3,13 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigTree } from '../../../../src/renderer/components/workspace/ConfigTree.js';
 import { configGroups, configTabId, configPageOfTabId, findConfigPage, DEFAULT_CONFIG_PAGE } from '../../../../src/renderer/screens/config/config-pages.js';
-import { HARNESS_IDS } from '../../../../src/shared/harness.js';
+import { CHANNEL_IDS } from '../../../../src/shared/channel.js';
 import { renderWithShell } from '../../test-utils.js';
 
 describe('config pages registry', () => {
-  it('gives every registered harness a leaf under Harnesses', () => {
-    const harnesses = configGroups().find((g) => g.id === 'harnesses');
-    expect(harnesses?.pages.map((p) => p.id)).toEqual(HARNESS_IDS.map((id) => `harness:${id}`));
+  it('gives every registered channel a leaf under Canais', () => {
+    const channels = configGroups().find((g) => g.id === 'channels');
+    expect(channels?.pages.map((p) => p.id)).toEqual(CHANNEL_IDS.map((id) => `channel:${id}`));
   });
 
   it('puts Idioma and GitHub under App', () => {

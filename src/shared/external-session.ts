@@ -1,4 +1,4 @@
-import type { HarnessId } from './harness.js';
+import type { ChannelId } from './channel.js';
 import type { SessionSnapshot } from './session.js';
 
 /**
@@ -16,7 +16,7 @@ export interface ExternalSession
   extends Pick<SessionSnapshot, 'activity' | 'activitySince' | 'attention' | 'activityDetail' | 'editingFile' | 'changedFiles' | 'usedAt'> {
   /** The harness's own conversation id (Claude: transcript basename; Cursor: chat id) or `<harness>-proc:<pid>` for a process with no signal. */
   id: string;
-  harness: HarnessId;
+  harness: ChannelId;
   cwd: string | null;
   /** Folder name of `cwd`, or the id's prefix when unknown. */
   label: string;
@@ -34,7 +34,7 @@ export interface ExternalSession
 export interface ExternalSessionsState {
   consent: ExternalConsent;
   /** Per harness: whether the signal hook entry is currently installed. */
-  hooksInstalled: Record<HarnessId, boolean>;
+  hooksInstalled: Record<ChannelId, boolean>;
   sessions: ExternalSession[];
 }
 

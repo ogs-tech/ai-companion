@@ -7,7 +7,7 @@ import { getDefaults, type Settings } from '../../../../src/shared/settings.js';
 const baseSettings = (): Settings => ({
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },  ui: { theme: 'system' },
   language: 'off',
 });
@@ -200,7 +200,7 @@ describe('SettingsService — cursor adapter', () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const service = new SettingsService(stubRepo({ save }));
     const withCursor: Settings = {
-      adapters: { claude: { enabled: true }, cursor: { enabled: true } },      ui: { theme: 'system' },
+      adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } },      ui: { theme: 'system' },
       language: 'off',
     };
 

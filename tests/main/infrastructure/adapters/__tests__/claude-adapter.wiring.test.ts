@@ -28,7 +28,7 @@ const skillPersonal: Skill = {
 const buildSettings = (claudeEnabled: boolean): Settings => ({
   adapters: {
     claude: { enabled: claudeEnabled },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },  ui: { theme: 'system' },
   language: 'off',
 });

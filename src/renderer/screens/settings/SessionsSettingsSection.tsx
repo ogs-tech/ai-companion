@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Button, Checkbox, FormControlLabel, FormGroup, Paper, Stack, Typography } from '@mui/material';
 import { Kicker } from '../../components/ds/Kicker.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import { HARNESSES } from '../../../shared/harness.js';
+import { CHANNELS } from '../../../shared/channel.js';
 import { resolveSessionSettings, type Settings, type SessionSettings } from '../../../shared/settings.js';
 import type { ExternalSessionsState } from '../../../shared/external-session.js';
 
@@ -83,7 +83,7 @@ export function SessionsSettingsSection({ settings, onSaved }: Props): React.Rea
           {external.consent === 'exact' &&
             (Object.keys(external.hooksInstalled) as Array<keyof typeof external.hooksInstalled>).map((id) => (
               <Typography key={id} variant="caption" sx={{ display: 'block' }} data-testid={`signal-health-${id}`}>
-                {`${HARNESSES[id].displayName}: ${external.hooksInstalled[id] ? 'instalado (sessões já abertas só reportam após recarregar o assistente)' : 'não instalado'}`}
+                {`${CHANNELS[id].displayName}: ${external.hooksInstalled[id] ? 'instalado (sessões já abertas só reportam após recarregar o assistente)' : 'não instalado'}`}
               </Typography>
             ))}
           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>

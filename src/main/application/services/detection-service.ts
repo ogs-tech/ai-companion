@@ -35,7 +35,7 @@ interface Location {
   folder?: string;
 }
 
-const HARNESSES: ReadonlyArray<{ id: DetectedHarness; dir: string }> = [
+const CHANNELS: ReadonlyArray<{ id: DetectedHarness; dir: string }> = [
   { id: 'claude', dir: '.claude' },
   { id: 'cursor', dir: '.cursor' },
 ];
@@ -60,7 +60,7 @@ export class DetectionService {
     const takenInstructionNames = new Set((await this.deps.entities.list('instruction')).map((e) => e.name));
     for (const location of this.locations()) {
       if (kinds.includes('instruction')) found.push(...(await this.instructions(location, takenInstructionNames)));
-      for (const harness of HARNESSES) {
+      for (const harness of CHANNELS) {
         if (kinds.includes('skill')) found.push(...(await this.skills(location, harness)));
         if (kinds.includes('agent')) found.push(...(await this.agents(location, harness)));
         if (kinds.includes('mcp')) found.push(...(await this.mcps(location, harness)));
@@ -182,7 +182,7 @@ export class DetectionService {
 
   // ---- skills / agents -------------------------------------------------------
 
-  private async skills(loc: Location, h: (typeof HARNESSES)[number]): Promise<DetectedEntity[]> {
+  private async skills(loc: Location, h: (typeof CHANNELS)[number]): Promise<DetectedEntity[]> {
     const root = join(loc.base, h.dir, 'skills');
     const out: DetectedEntity[] = [];
     for (const name of await this.names(root)) {
@@ -209,7 +209,7 @@ export class DetectionService {
     return out;
   }
 
-  private async agents(loc: Location, h: (typeof HARNESSES)[number]): Promise<DetectedEntity[]> {
+  private async agents(loc: Location, h: (typeof CHANNELS)[number]): Promise<DetectedEntity[]> {
     const root = join(loc.base, h.dir, 'agents');
     const out: DetectedEntity[] = [];
     for (const file of await this.names(root)) {
@@ -234,7 +234,7 @@ export class DetectionService {
 
   // ---- MCP -------------------------------------------------------------------
 
-  private async mcps(loc: Location, h: (typeof HARNESSES)[number]): Promise<DetectedEntity[]> {
+  private async mcps(loc: Location, h: (typeof CHANNELS)[number]): Promise<DetectedEntity[]> {
     const file =
       h.id === 'cursor'
         ? join(loc.base, '.cursor', 'mcp.json')
@@ -256,7 +256,7 @@ export class DetectionService {
 
   // ---- hooks -----------------------------------------------------------------
 
-  private async hooks(loc: Location, h: (typeof HARNESSES)[number]): Promise<DetectedEntity[]> {
+  private async hooks(loc: Location, h: (typeof CHANNELS)[number]): Promise<DetectedEntity[]> {
     if (h.id === 'claude') {
       const file = join(loc.base, '.claude', 'settings.json');
       const field = (await this.readJson(file))?.['hooks'];

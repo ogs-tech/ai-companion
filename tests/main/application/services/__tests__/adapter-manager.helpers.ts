@@ -15,7 +15,7 @@ export const DEFAULT_WORKSPACE_PATH = '/workspace';
 export const defaultSettings: Settings = {
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },  ui: { theme: 'system' },
   language: 'off',
 };

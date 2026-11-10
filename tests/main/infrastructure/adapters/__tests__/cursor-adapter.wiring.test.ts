@@ -12,7 +12,7 @@ const skill: Skill = {
 };
 
 const settings = (cursorEnabled: boolean): Settings => ({
-  adapters: { claude: { enabled: true }, cursor: { enabled: cursorEnabled } },  ui: { theme: 'system' },
+  adapters: { claude: { enabled: true }, cursor: { enabled: cursorEnabled }, lmstudio: { enabled: false } },  ui: { theme: 'system' },
   language: 'off',
 });
 

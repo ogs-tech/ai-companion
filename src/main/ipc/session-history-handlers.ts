@@ -2,7 +2,7 @@ import type { IpcHandlers } from './dispatcher.js';
 import type { SessionHistoryService } from '../application/services/session-history-service.js';
 import type { SessionService } from '../application/services/session-service.js';
 import type { HistoryFilters, HistoryScope } from '../../shared/session-history.js';
-import { isHarnessId, type HarnessId } from '../../shared/harness.js';
+import { isChannelId, type ChannelId } from '../../shared/channel.js';
 import { asObject, asString } from './_validators.js';
 import { DomainError } from '../domain/errors.js';
 
@@ -32,13 +32,13 @@ function asHistoryFilters(value: unknown, field: string): HistoryFilters {
   if (obj['models'] !== undefined) filters.models = asStringArray(obj['models'], `${field}.models`);
   if (obj['harnesses'] !== undefined) {
     const ids = asStringArray(obj['harnesses'], `${field}.harnesses`);
-    const unknown = ids.find((id) => !isHarnessId(id));
+    const unknown = ids.find((id) => !isChannelId(id));
     if (unknown !== undefined)
       throw new DomainError(
         'validation',
         `Invalid '${field}.harnesses': unknown harness '${unknown}'`,
       );
-    filters.harnesses = ids as HarnessId[];
+    filters.harnesses = ids as ChannelId[];
   }
   if (obj['from'] !== undefined) filters.from = asString(obj['from'], `${field}.from`);
   if (obj['to'] !== undefined) filters.to = asString(obj['to'], `${field}.to`);

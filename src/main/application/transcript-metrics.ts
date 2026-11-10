@@ -1,5 +1,5 @@
 import { contextWindowFor, type SessionMetrics } from '../../shared/session-metrics.js';
-import type { HarnessId } from '../../shared/harness.js';
+import type { ChannelId } from '../../shared/channel.js';
 
 type Line = Record<string, unknown>;
 
@@ -38,7 +38,7 @@ function resetOf(text: string): number | undefined {
  * context bar, its last sentence, and a rate-limit error entry when the last
  * turn ended on one. Pure: no I/O.
  */
-export function metricsFromLines(lines: readonly Line[], harness: HarnessId, now: number): SessionMetrics {
+export function metricsFromLines(lines: readonly Line[], harness: ChannelId, now: number): SessionMetrics {
   const metrics: SessionMetrics = {};
   let model: string | null = null;
 

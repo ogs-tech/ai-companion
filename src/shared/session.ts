@@ -1,4 +1,4 @@
-import type { HarnessId } from './harness.js';
+import type { ChannelId } from './channel.js';
 import type { SessionMetrics } from './session-metrics.js';
 
 export type SessionStatus = 'running' | 'exited';
@@ -68,7 +68,7 @@ export interface SessionUsage {
 export interface SessionSnapshot {
   sessionId: string;
   /** The harness whose CLI runs this session. */
-  harness: HarnessId;
+  harness: ChannelId;
   /**
    * The conversation's id as the harness's CLI knows it. For Claude it is a
    * UUID minted at spawn and handed to the CLI via `--session-id`, which makes

@@ -26,8 +26,8 @@ import type {
   SessionHistoryEntry,
 } from '../../../shared/session-history.js';
 import type { SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
-import { HarnessMark } from '../../components/HarnessMark.js';
-import { HARNESSES, type HarnessId } from '../../../shared/harness.js';
+import { ChannelMark } from '../../components/ChannelMark.js';
+import { CHANNELS, type ChannelId } from '../../../shared/channel.js';
 
 interface SessionHistoryTabProps {
   /** The scope the panel is showing — what `Só este projeto` means here. */
@@ -52,7 +52,7 @@ export function SessionHistoryTab({
   const hasProject = projectScope !== null && projectScope.kind !== 'all';
   const [projectOnly, setProjectOnly] = useState(hasProject);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [selectedHarness, setSelectedHarness] = useState<HarnessId | null>(null);
+  const [selectedHarness, setSelectedHarness] = useState<ChannelId | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [period, setPeriod] = useState<PeriodId>(DEFAULT_PERIOD);
   const [customFrom, setCustomFrom] = useState('');
@@ -143,13 +143,13 @@ export function SessionHistoryTab({
         },
         {
           key: 'harness',
-          label: 'Harness',
+          label: 'Canal',
           sortable: true,
           width: 110,
           render: (item) => (
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-              <HarnessMark harness={item.harness} size={13} />
-              <span>{HARNESSES[item.harness].displayName}</span>
+              <ChannelMark harness={item.harness} size={13} />
+              <span>{CHANNELS[item.harness].displayName}</span>
             </Stack>
           ),
         },
@@ -301,8 +301,8 @@ export function SessionHistoryTab({
             key={harness}
             size="small"
             data-testid={`filter-harness-${harness}`}
-            icon={<HarnessMark harness={harness} size={12} />}
-            label={HARNESSES[harness].displayName}
+            icon={<ChannelMark harness={harness} size={12} />}
+            label={CHANNELS[harness].displayName}
             color={selectedHarness === harness ? 'primary' : 'default'}
             variant={selectedHarness === harness ? 'filled' : 'outlined'}
             onClick={() => setSelectedHarness((current) => (current === harness ? null : harness))}

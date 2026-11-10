@@ -7,7 +7,7 @@ export const externalSessionsQueryKey = ['external-sessions'] as const;
 
 const EMPTY: ExternalSessionsState = {
   consent: 'unset',
-  hooksInstalled: { claude: false, cursor: false },
+  hooksInstalled: { claude: false, cursor: false, lmstudio: false },
   sessions: [],
 };
 

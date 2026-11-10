@@ -1,4 +1,4 @@
-import type { HarnessId } from './harness.js';
+import type { ChannelId } from './channel.js';
 
 export type Severity = 'ok' | 'warning' | 'error';
 
@@ -16,7 +16,7 @@ export interface HealthCheck {
   /** URN of the customization this check is about (`urn:skill:x`, `urn:hook:y`, `urn:plugin:z`), when it concerns one — the key the customizations tree joins on. */
   entityUrn?: string;
   /** The harness (channel) this check concerns. Absent for checks that are not channel-specific. */
-  channel?: HarnessId;
+  channel?: ChannelId;
   /** Actionable hint, e.g. "Run /mcp to authenticate". */
   remediation?: string;
   /** ISO timestamp, stamped by the service via ClockPort. */

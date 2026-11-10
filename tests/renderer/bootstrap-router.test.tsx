@@ -8,7 +8,7 @@ import type { Settings } from '../../src/shared/settings.js';
 const validSettings: Settings = {
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },  ui: { theme: 'system' },
   language: 'off',
 };

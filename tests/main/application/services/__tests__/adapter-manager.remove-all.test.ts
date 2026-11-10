@@ -24,7 +24,7 @@ describe('AdapterManager.removeAll', () => {
       ...defaultSettings,
       adapters: {
         claude: { enabled: false },
-        cursor: { enabled: false },
+        cursor: { enabled: false }, lmstudio: { enabled: false },
       },
     };
     const { manager, registerEntity, fs } = await setupAdapterManager([adapter], disabled);

@@ -9,6 +9,8 @@ import type { InstructionService } from '../application/services/instruction-ser
 import type { SessionService } from '../application/services/session-service.js';
 import type { FileBrowserService } from '../application/services/file-browser-service.js';
 import { buildSessionHandlers } from './session-handlers.js';
+import { buildChannelSetupHandlers } from './channel-setup-handlers.js';
+import type { ChannelSetupService } from '../application/services/channel-setup-service.js';
 import { buildExternalSessionHandlers, type ExternalSessionHandlerDeps } from './external-session-handlers.js';
 import { buildBrowserHandlers } from './browser-handlers.js';
 import type { EmbeddedBrowserPort } from '../application/ports/embedded-browser-port.js';
@@ -70,6 +72,8 @@ export interface IpcDeps {
   sessionService: SessionService;
   /** Sessions running outside the app + consent; omitted where the feature is not wired (tests). */
   externalSessions?: ExternalSessionHandlerDeps;
+  /** Install / sign-in for each channel; omitted where the feature is not wired (tests). */
+  channelSetup?: ChannelSetupService;
   embeddedBrowserPort: EmbeddedBrowserPort;
   sessionHistoryService: SessionHistoryService;
   workspaceService: WorkspaceService;
@@ -122,6 +126,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     instructionService,
     sessionService,
     externalSessions,
+    channelSetup,
     embeddedBrowserPort,
     sessionHistoryService,
     workspaceService,
@@ -250,6 +255,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildInstructionHandlers(instructionService),
     ...buildSessionHandlers(sessionService),
     ...(externalSessions ? buildExternalSessionHandlers(externalSessions) : {}),
+    ...(channelSetup ? buildChannelSetupHandlers(channelSetup) : {}),
     ...buildBrowserHandlers(sessionService, embeddedBrowserPort),
     ...buildSessionHistoryHandlers(sessionHistoryService, sessionService),
     ...buildWorkspaceHandlers(workspaceService, workspaceActivation, fileBrowserService, {

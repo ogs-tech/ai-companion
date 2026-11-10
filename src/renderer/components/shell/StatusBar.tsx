@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Box, Tooltip } from '@mui/material';
 import { Activity, CircleAlert, GitBranch } from 'lucide-react';
-import { HARNESSES, HARNESS_IDS } from '../../../shared/harness.js';
+import { CHANNELS, CHANNEL_IDS } from '../../../shared/channel.js';
 import { Icon } from '../ds/Icon.js';
 import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 import { gitStatusOptions } from '../../hooks/use-git.js';
@@ -41,7 +41,7 @@ const timeFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '
 /** The sync verdict plus which harness adapters are on ("Claude Code ✓ · Cursor —"). */
 function syncTooltip(severity: HealthSeverity, settings: ReturnType<typeof useSettings>['data']): string {
   if (!settings) return SYNC_TOOLTIP[severity];
-  const adapters = HARNESS_IDS.map((id) => `${HARNESSES[id].displayName} ${settings.adapters[id]?.enabled === true ? '✓' : '—'}`).join(' · ');
+  const adapters = CHANNEL_IDS.map((id) => `${CHANNELS[id].displayName} ${settings.adapters[id]?.enabled === true ? '✓' : '—'}`).join(' · ');
   return `${SYNC_TOOLTIP[severity]} ${adapters}`;
 }
 

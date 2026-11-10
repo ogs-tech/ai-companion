@@ -70,7 +70,7 @@ import { FsSessionSignalAdapter } from './infrastructure/session-signals/fs-sess
 import { SessionService } from './application/services/session-service.js';
 import { SessionSignalHooksInstaller } from './application/services/session-signal-hooks-installer.js';
 import { MergeMaterializer } from './application/services/merge-materializer.js';
-import { CURSOR_PROFILE } from './infrastructure/session-runtime/cli-profiles.js';
+import { CURSOR_PROFILE, LMSTUDIO_PROFILE } from './infrastructure/session-runtime/cli-profiles.js';
 import { CompositeTranscriptAdapter } from './infrastructure/session-runtime/composite-transcript-adapter.js';
 import { NodeSqliteCursorChatStore } from './infrastructure/session-runtime/node-sqlite-cursor-chat-store.js';
 import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-cursor-transcript-adapter.js';
@@ -103,8 +103,10 @@ import { FsExternalSignalAdapter } from './infrastructure/external-sessions/fs-e
 import { FsClaudeTranscriptWatch } from './infrastructure/external-sessions/fs-claude-transcript-watch.js';
 import { PsProcessScanAdapter } from './infrastructure/external-sessions/ps-process-scan-adapter.js';
 import { EXTERNAL_SESSIONS_CHANNEL } from '../shared/external-session.js';
-import type { HarnessId } from '../shared/harness.js';
+import type { ChannelId } from '../shared/channel.js';
 import { buildHandlers } from './ipc/registry.js';
+import { ChannelSetupService } from './application/services/channel-setup-service.js';
+import { ExecChannelProbe } from './infrastructure/channel/exec-channel-probe.js';
 import { createDispatcher } from './ipc/dispatcher.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -423,6 +425,13 @@ async function wireIpc(): Promise<void> {
       CURSOR_PROFILE,
       [join(home, '.local', 'bin')],
     ),
+    // `lms` lives in ~/.lmstudio/bin once LM Studio has bootstrapped it.
+    lmstudio: new NodePtySessionAdapter(
+      'lms',
+      () => ({ ...process.env, PATH: [process.env['PATH'], join(home, '.lmstudio', 'bin')].filter(Boolean).join(delimiter) }),
+      LMSTUDIO_PROFILE,
+      [join(home, '.lmstudio', 'bin')],
+    ),
   };
 
   const sharedDeps = {
@@ -560,6 +569,21 @@ async function wireIpc(): Promise<void> {
   };
   attachTerminalBridges(workspaceScoped);
 
+  // Install / sign-in terminals for the Config > Canais pages. Global: it works at Início, so it sits outside the
+  // per-scope graph and streams over the same `terminal:*` push channels (the renderer filters by terminalId).
+  const channelBinDirs = [join(home, '.local', 'bin'), join(home, '.lmstudio', 'bin'), '/opt/homebrew/bin', '/usr/local/bin'];
+  const channelSetup = new ChannelSetupService(new ExecChannelProbe(channelBinDirs), new NodePtyTerminalAdapter(), {
+    shell: process.env['SHELL'] ?? (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'),
+    cwd: home,
+    env: () => ({
+      ...(process.env as Record<string, string>),
+      PATH: [process.env['PATH'], ...channelBinDirs].filter(Boolean).join(delimiter),
+    }),
+    openExternal: (url) => shellPort.openExternal(url),
+  });
+  channelSetup.onOutput((event) => mainWindow?.webContents.send(TERMINAL_OUTPUT_CHANNEL, event));
+  channelSetup.onExit((event) => mainWindow?.webContents.send(TERMINAL_EXIT_CHANNEL, event));
+
   const attachEntityWatch = (services: WorkspaceScopedServices): void => {
     services.entityWatchService.onEntityChanged((event) => {
       mainWindow?.webContents.send(ENTITY_CHANGED_CHANNEL, event);
@@ -571,6 +595,7 @@ async function wireIpc(): Promise<void> {
   app.on('before-quit', (event) => {
     if (event.defaultPrevented) return; // Quit not approved yet — see desktop-shell.
     sessionService.killAll();
+    channelSetup.killAll();
     externalSessions.dispose();
     sessionMetrics.dispose();
     workspaceScoped.terminalService.killAll();
@@ -649,8 +674,8 @@ async function wireIpc(): Promise<void> {
   sessionService.onExit(() => void sessionNotifier.evaluate());
   app.on('browser-window-focus', () => externalSessions.setVisible(true));
   app.on('browser-window-blur', () => externalSessions.setVisible(false));
-  const presentExternalHarnesses = async (): Promise<HarnessId[]> => {
-    const present: HarnessId[] = [];
+  const presentExternalHarnesses = async (): Promise<ChannelId[]> => {
+    const present: ChannelId[] = [];
     if (await sessionRuntimes.claude.isAvailable()) present.push('claude');
     if (await sessionRuntimes.cursor.isAvailable()) present.push('cursor');
     return present;
@@ -689,6 +714,7 @@ async function wireIpc(): Promise<void> {
     instructionService: workspaceScoped.instructionService,
     sessionService,
     externalSessions: externalSessionHandlers,
+    channelSetup,
     embeddedBrowserPort: embeddedBrowserAdapter,
     sessionHistoryService: workspaceScoped.sessionHistoryService,
     workspaceService,

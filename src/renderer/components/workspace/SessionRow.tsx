@@ -1,5 +1,5 @@
 import { Box, Skeleton, Stack, Tooltip, Typography, alpha, keyframes } from '@mui/material';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import { ContextBar } from '../ContextBar.js';
 import { StateGlyph } from '../SessionStateMark.js';
 import type { SessionMetrics } from '../../../shared/session-metrics.js';
@@ -33,7 +33,7 @@ const shimmer = keyframes`50% { opacity: 0.45; }`;
 export interface SessionRowProps {
   label: string;
   /** Which harness runs (or ran) the session — shown before the model. */
-  harness: HarnessId;
+  harness: ChannelId;
   /** Where a session from another scope runs ("Acme", "Início"); absent for the scope being looked at. */
   scopeName?: string | undefined;
   /** One of the four attention states; drives the indicator, the left bar and the dimming. */

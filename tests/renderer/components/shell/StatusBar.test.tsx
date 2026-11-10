@@ -9,7 +9,7 @@ import { registerAreaOpener } from '../../../../src/renderer/lib/workspace-area-
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 const SETTINGS = {
   ui: { theme: 'light' },
-  adapters: { claude: { enabled: true }, cursor: { enabled: false } },
+  adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } },
   language: 'off',
 };
 

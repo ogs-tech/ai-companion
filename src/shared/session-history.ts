@@ -1,4 +1,4 @@
-import type { HarnessId } from './harness.js';
+import type { ChannelId } from './channel.js';
 
 /**
  * Which conversations a history query covers. `workspace` matches a
@@ -14,7 +14,7 @@ export interface HistoryFilters {
   /** Model ids, as the transcripts spell them. Empty or absent means every model. */
   models?: string[];
   /** Harness ids. Empty or absent means every harness. */
-  harnesses?: HarnessId[];
+  harnesses?: ChannelId[];
   /** ISO date (inclusive), matched against when the conversation last moved. */
   from?: string;
   /** ISO date (inclusive). */
@@ -38,7 +38,7 @@ export type CostSource =
 /** One past conversation, as a history row sees it. */
 export interface SessionHistoryEntry {
   /** Which harness's CLI recorded the conversation. */
-  harness: HarnessId;
+  harness: ChannelId;
   conversationId: string;
   /** The CLI's own name for it, or the opening of its last prompt; `null` when it has neither. */
   title: string | null;
@@ -88,7 +88,7 @@ export interface SessionHistoryStats {
   /** Every model appearing in scope, for the filter pills. */
   models: string[];
   /** Every harness appearing in scope, for the filter pills. */
-  harnesses: HarnessId[];
+  harnesses: ChannelId[];
 }
 
 export interface SessionHistoryQuery {

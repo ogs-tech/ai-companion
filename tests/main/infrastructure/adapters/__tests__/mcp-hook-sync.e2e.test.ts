@@ -20,7 +20,7 @@ const mcp: McpEntity = { ...base, urn: 'urn:mcp:gh', kind: 'mcp', name: 'gh', de
 const hookOk: HookEntity = { ...base, urn: 'urn:hook:a', kind: 'hook', name: 'a', event: 'PreToolUse', matcher: 'Bash', handler: { type: 'command', command: './a.sh' }, enabled: true };
 const hookSkipped: HookEntity = { ...base, urn: 'urn:hook:n', kind: 'hook', name: 'n', event: 'Notification', handler: { type: 'command', command: './n.sh' }, enabled: true };
 
-const settings: Settings = { adapters: { claude: { enabled: true }, cursor: { enabled: true } }, ui: { theme: 'system' }, language: 'off' };
+const settings: Settings = { adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } }, ui: { theme: 'system' }, language: 'off' };
 const deps = { workspaceService: { get: async () => { throw new Error('unused'); } } };
 
 async function setup(entities: Array<McpEntity | HookEntity>) {

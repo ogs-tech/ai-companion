@@ -473,7 +473,7 @@ describe('SessionHistoryService', () => {
       ref: { harness: 'cursor', conversationId: id, filePath: `/chats/${id}/meta.json`, cwd: '/repos/acme', modifiedAt: '', mtimeMs: 2_000_000, sizeBytes: 10 },
       usage: { title: 'Criar Readme', unpriced: true, models: [], reportedCostUsd: null, startedAt: '2026-11-02T10:00:00.000Z', endedAt: '2026-11-02T10:05:00.000Z', durationMs: null },
     });
-    const withCursor = { adapters: { claude: { enabled: true }, cursor: { enabled: true } } };
+    const withCursor = { adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } };
 
     it('reports a Cursor chat with no cost or model — unknown, never zero', async () => {
       const { service } = setup([cursorChat('chat-1')], withCursor);
@@ -502,7 +502,7 @@ describe('SessionHistoryService', () => {
     });
 
     it('leaves a harness out of the history while it is switched off in Settings', async () => {
-      const { service } = setup([cursorChat('chat-1'), transcript({ id: 'c1' })], { adapters: { claude: { enabled: true }, cursor: { enabled: false } } });
+      const { service } = setup([cursorChat('chat-1'), transcript({ id: 'c1' })], { adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } } });
 
       const page = await service.list({ scope: ALL });
 

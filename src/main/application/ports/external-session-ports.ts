@@ -1,9 +1,9 @@
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import type { SessionSignal } from './session-signal-port.js';
 
 /** A hook signal written by a session the app did not spawn. */
 export interface ExternalSignal {
-  harness: HarnessId;
+  harness: ChannelId;
   /** The harness's conversation id, taken from the file name the hook wrote to. */
   id: string;
   signal: SessionSignal;
@@ -19,7 +19,7 @@ export interface ExternalSignalSourcePort {
 /** A transcript that just grew: only its tail was read. */
 export interface TranscriptChange {
   id: string;
-  harness: HarnessId;
+  harness: ChannelId;
   cwd: string | null;
   /** Epoch ms of the file's last modification. */
   modifiedAt: number;
@@ -38,7 +38,7 @@ export interface TranscriptWatchPort {
 
 export interface LiveProcess {
   pid: number;
-  harness: HarnessId;
+  harness: ChannelId;
   cwd: string | null;
   /** Hosting terminal / editor, from the process ancestry. */
   terminal: string | null;

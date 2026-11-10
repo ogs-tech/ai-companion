@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { LiveProcess, ProcessScanPort } from '../../application/ports/external-session-ports.js';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 
 const run = promisify(execFile);
 
@@ -25,7 +25,7 @@ const TERMINALS: ReadonlyArray<[RegExp, string]> = [
 ];
 
 /** Which harness a command line is, or `null`. Matches the executable, not an argument that merely contains "claude". */
-export function harnessOf(command: string): HarnessId | null {
+export function harnessOf(command: string): ChannelId | null {
   const exe = command.trim().split(/\s+/)[0] ?? '';
   const base = exe.split('/').pop() ?? '';
   if (base === 'claude') return 'claude';
@@ -62,7 +62,7 @@ export class PsProcessScanAdapter implements ProcessScanPort {
       const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
       if (match) rows.set(Number(match[1]), { pid: Number(match[1]), ppid: Number(match[2]), command: match[3] ?? '' });
     }
-    const found: Array<{ row: Row; harness: HarnessId; terminal: string | null }> = [];
+    const found: Array<{ row: Row; harness: ChannelId; terminal: string | null }> = [];
     for (const row of rows.values()) {
       const harness = harnessOf(row.command);
       if (!harness) continue;

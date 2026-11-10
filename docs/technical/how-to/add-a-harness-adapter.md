@@ -1,12 +1,12 @@
 ---
-title: Add a harness adapter
-description: Contributor guide — give a new harness the `manage` capability so the app materializes skills, agents and instructions into it.
+title: Add a channel adapter
+description: Contributor guide — give a new channel the `manage` capability so the app materializes skills, agents and instructions into it.
 ---
 
-# Add a harness adapter
+# Add a channel adapter
 
 > **Audience:** contributors. Read [the harness model](../../product/harnesses/harness-model.md) first — it defines
-> what qualifies as a harness and why `manage` and `run` are separate. This guide covers `manage` only.
+> what qualifies as a channel and why `manage` and `run` are separate. This guide covers `manage` only.
 
 Running example: Cursor (`src/main/infrastructure/adapters/cursor-adapter.ts`).
 
@@ -19,7 +19,7 @@ becomes the adapter, and later a section of [Adapter targets](../reference/adapt
 
 ## 2. Register the harness
 
-In `src/shared/harness.ts`, add the id to `HarnessId` and an entry to `HARNESSES`:
+In `src/shared/channel.ts`, add the id to `ChannelId` and an entry to `CHANNELS`:
 
 ```ts
 acme: {
@@ -31,7 +31,7 @@ acme: {
 ```
 
 That is all the settings side needs. Defaults, `settings.json` validation and the **Settings → Adapters**
-toggle all derive from `HARNESSES`, and `SettingsService` backfills the new key into existing users'
+toggle all derive from `CHANNELS`, and `SettingsService` backfills the new key into existing users'
 `settings.json` at its `defaultEnabled` value on load.
 
 ## 3. Implement the `Adapter` port
@@ -39,7 +39,7 @@ toggle all derive from `HARNESSES`, and `SettingsService` backfills the new key 
 Create `src/main/infrastructure/adapters/<id>-adapter.ts` implementing `Adapter`
 (`src/main/application/ports/adapter.ts`):
 
-- `adapterId` — must equal the `HarnessId`; `AdapterManager` looks up `settings.adapters[adapterId]`.
+- `adapterId` — must equal the `ChannelId`; `AdapterManager` looks up `settings.adapters[adapterId]`.
 - `resolveEntityDestinations({ entity })` — return one `AdapterDestination` per path the harness should see:
   - branch on `entity.kind`, then on `entity.scopes[0]`;
   - `personal` → under the injected `homedir` (never call `os.homedir()` yourself);

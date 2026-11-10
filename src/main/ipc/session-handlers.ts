@@ -2,7 +2,7 @@ import type { IpcHandlers } from './dispatcher.js';
 import type { SessionService } from '../application/services/session-service.js';
 import type { SessionAnchor } from '../../shared/session.js';
 import { asObject, asString, asStringArray } from './_validators.js';
-import { HARNESS_IDS, isHarnessId, type HarnessId } from '../../shared/harness.js';
+import { CHANNEL_IDS, isChannelId, type ChannelId } from '../../shared/channel.js';
 import { DomainError } from '../domain/errors.js';
 
 function asRawString(value: unknown, field: string): string {
@@ -35,9 +35,9 @@ function asSessionAnchor(value: unknown, field: string): SessionAnchor {
   );
 }
 
-function asHarness(value: unknown, field: string): HarnessId {
-  if (typeof value === 'string' && isHarnessId(value)) return value;
-  throw new DomainError('validation', `Invalid '${field}': expected one of ${HARNESS_IDS.join(' | ')}`);
+function asHarness(value: unknown, field: string): ChannelId {
+  if (typeof value === 'string' && isChannelId(value)) return value;
+  throw new DomainError('validation', `Invalid '${field}': expected one of ${CHANNEL_IDS.join(' | ')}`);
 }
 
 export function buildSessionHandlers(service: SessionService): IpcHandlers {

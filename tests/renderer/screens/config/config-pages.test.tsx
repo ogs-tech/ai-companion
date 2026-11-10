@@ -10,7 +10,7 @@ const render = (ui: React.ReactElement) => renderWithShell(ui);
 const baseSettings: Settings = {
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },  ui: { theme: 'system' },
   language: 'off',
 };
@@ -35,6 +35,7 @@ const setupRoute = (
     if (method === 'adapter.setEnabled') return Promise.resolve(ok({ syncReport: [] }));
     if (method === 'adapter.countDestinations') return Promise.resolve(ok({ count: 0 }));
     if (method === 'adapter.syncAll' || method === 'adapter.removeAll') return Promise.resolve(ok([]));
+    if (method === 'channelSetup.status') return Promise.resolve(ok({ channelId: 'claude', installed: true, version: '1.0', signedIn: true }));
     return Promise.resolve(ok(undefined));
   });
 };
@@ -43,9 +44,9 @@ describe('<ConfigPage> — toggles', () => {
   it('toggling claude off calls adapter.countDestinations and opens modal', async () => {
     const user = userEvent.setup();
     setupRoute();
-    render(<ConfigPage page="harness:claude" />);
+    render(<ConfigPage page="channel:claude" />);
 
-    const toggle = await screen.findByLabelText('Claude');
+    const toggle = await screen.findByLabelText('Ativar Claude');
     await user.click(toggle);
 
     await waitFor(() =>
@@ -62,13 +63,13 @@ describe('<ConfigPage> — toggles', () => {
       ...baseSettings,
       adapters: {
         claude: { enabled: false },
-        cursor: { enabled: false },
+        cursor: { enabled: false }, lmstudio: { enabled: false },
       },
     };
     setupRoute(initial);
-    render(<ConfigPage page="harness:claude" />);
+    render(<ConfigPage page="channel:claude" />);
 
-    const toggle = await screen.findByLabelText('Claude');
+    const toggle = await screen.findByLabelText('Ativar Claude');
     await user.click(toggle);
 
     await waitFor(() =>
@@ -80,9 +81,9 @@ describe('<ConfigPage> — toggles', () => {
 describe('<ConfigPage> — no per-adapter default scope', () => {
   it('does not render a default scope <select> for any adapter', async () => {
     setupRoute();
-    render(<ConfigPage page="harness:claude" />);
+    render(<ConfigPage page="channel:claude" />);
 
-    await screen.findByLabelText('Claude');
+    await screen.findByLabelText('Ativar Claude');
 
     expect(screen.queryByLabelText(/default scope/i)).toBeNull();
   });
@@ -91,12 +92,12 @@ describe('<ConfigPage> — no per-adapter default scope', () => {
     const user = userEvent.setup();
     const initial: Settings = {
       ...baseSettings,
-      adapters: { claude: { enabled: false }, cursor: { enabled: false } },
+      adapters: { claude: { enabled: false }, cursor: { enabled: false }, lmstudio: { enabled: false } },
     };
     setupRoute(initial);
-    render(<ConfigPage page="harness:claude" />);
+    render(<ConfigPage page="channel:claude" />);
 
-    await user.click(await screen.findByLabelText('Claude'));
+    await user.click(await screen.findByLabelText('Ativar Claude'));
 
     await waitFor(() =>
       expect(

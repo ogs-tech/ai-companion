@@ -8,7 +8,7 @@ describe('getDefaults', () => {
     expect(defaults).toEqual({
       adapters: {
         claude: { enabled: true },
-        cursor: { enabled: false },
+        cursor: { enabled: false }, lmstudio: { enabled: false },
       },
       ui: { theme: 'system' },
       language: 'off',

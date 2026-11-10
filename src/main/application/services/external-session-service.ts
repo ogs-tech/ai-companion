@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import type { HarnessId } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
 import {
   EXTERNAL_SCAN_HIDDEN_MS,
   EXTERNAL_SCAN_VISIBLE_MS,
@@ -236,7 +236,7 @@ export class ExternalSessionService {
     this.emit();
   }
 
-  private create(id: string, harness: HarnessId, cwd: string | null, precision: ExternalSession['precision'], now: number, terminal?: string): ExternalSession {
+  private create(id: string, harness: ChannelId, cwd: string | null, precision: ExternalSession['precision'], now: number, terminal?: string): ExternalSession {
     return {
       id,
       harness,

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { basename, join, sep } from 'node:path';
-import type { HarnessId } from '../../../shared/harness.js';
-import { harnessSupports, HARNESSES } from '../../../shared/harness.js';
+import type { ChannelId } from '../../../shared/channel.js';
+import { channelSupports, CHANNELS } from '../../../shared/channel.js';
 import type { PermissionDecision, SessionAnchor, SessionSnapshot, SessionSnapshotWithOutput, SessionStatus } from '../../../shared/session.js';
 import type { SessionMetrics } from '../../../shared/session-metrics.js';
 import { MAX_SESSION_ATTACHMENT_BYTES, sessionAnchorKey } from '../../../shared/session.js';
@@ -84,7 +84,7 @@ export class SessionService {
 
   constructor(
     private entityService: EntityService,
-    private readonly runtimes: Readonly<Partial<Record<HarnessId, SessionRuntimePort>>>,
+    private readonly runtimes: Readonly<Partial<Record<ChannelId, SessionRuntimePort>>>,
     private readonly embeddedBrowser: EmbeddedBrowserPort,
     private workspacePath: string,
     private readonly scopeDeps: {
@@ -199,10 +199,10 @@ export class SessionService {
   }
 
   /** The runtime for a harness, or a validation error when it can't run sessions. */
-  private runtimeFor(harness: HarnessId): SessionRuntimePort {
+  private runtimeFor(harness: ChannelId): SessionRuntimePort {
     const runtime = this.runtimes[harness];
-    if (!runtime || !harnessSupports(harness, 'run')) {
-      throw new DomainError('validation', `${HARNESSES[harness].displayName} cannot run sessions`, {
+    if (!runtime || !channelSupports(harness, 'run')) {
+      throw new DomainError('validation', `${CHANNELS[harness].displayName} cannot run sessions`, {
         reason: 'harness_cannot_run',
         harness,
       });
@@ -211,9 +211,9 @@ export class SessionService {
   }
 
   /** Which harnesses have a runnable CLI on this machine right now. */
-  async availableHarnesses(): Promise<HarnessId[]> {
+  async availableHarnesses(): Promise<ChannelId[]> {
     const entries = await Promise.all(
-      (Object.entries(this.runtimes) as Array<[HarnessId, SessionRuntimePort]>).map(
+      (Object.entries(this.runtimes) as Array<[ChannelId, SessionRuntimePort]>).map(
         async ([harness, runtime]) => [harness, await runtime.isAvailable()] as const,
       ),
     );
@@ -235,7 +235,7 @@ export class SessionService {
     return { ...session, outputBuffer: (this.outputBuffers.get(session.sessionId) ?? []).join('') };
   }
 
-  async spawn(anchor: SessionAnchor, harness: HarnessId = 'claude'): Promise<SessionSnapshotWithOutput> {
+  async spawn(anchor: SessionAnchor, harness: ChannelId = 'claude'): Promise<SessionSnapshotWithOutput> {
     if (anchor.kind !== 'entity') return this.launch(randomUUID(), anchor, harness);
 
     const sessionId = sessionAnchorKey(anchor);
@@ -307,7 +307,7 @@ export class SessionService {
     conversationId: string;
     cwd: string;
     label: string;
-    harness?: HarnessId;
+    harness?: ChannelId;
   }): Promise<SessionSnapshotWithOutput> {
     const harness = input.harness ?? 'claude';
     const sessionId = input.conversationId;
@@ -344,7 +344,7 @@ export class SessionService {
     return adoptPromise;
   }
 
-  private async launch(sessionId: string, anchor: SessionAnchor, requested: HarnessId): Promise<SessionSnapshotWithOutput> {
+  private async launch(sessionId: string, anchor: SessionAnchor, requested: ChannelId): Promise<SessionSnapshotWithOutput> {
     const { cwd, label, folders } = await this.resolveAnchor(anchor);
     if (folders.length > 1) this.sessionFolders.set(sessionId, folders);
     else this.sessionFolders.delete(sessionId);
@@ -385,19 +385,19 @@ export class SessionService {
     return this.withOutput(session);
   }
 
-  private async newConversationId(harness: HarnessId, cwd: string): Promise<string> {
+  private async newConversationId(harness: ChannelId, cwd: string): Promise<string> {
     try {
       return await this.runtimeFor(harness).newConversationId(cwd);
     } catch (err) {
       if (err instanceof DomainError) throw err;
       throw ioError({
-        message: `Failed to start a ${HARNESSES[harness].displayName} session: ${(err as Error).message}`,
+        message: `Failed to start a ${CHANNELS[harness].displayName} session: ${(err as Error).message}`,
         details: { reason: 'session_spawn_failed' },
       });
     }
   }
 
-  private async spawnPty(sessionId: string, harness: HarnessId, cwd: string, conversation: ConversationTarget): Promise<void> {
+  private async spawnPty(sessionId: string, harness: ChannelId, cwd: string, conversation: ConversationTarget): Promise<void> {
     const mcpConfigPath = this.browserMcpConfigPaths.get(sessionId);
     const addDirs = this.sessionFolders.get(sessionId);
     const runtime = this.runtimeFor(harness);
@@ -414,7 +414,7 @@ export class SessionService {
       });
     } catch (err) {
       throw ioError({
-        message: `Failed to start a ${HARNESSES[harness].displayName} session: ${(err as Error).message}`,
+        message: `Failed to start a ${CHANNELS[harness].displayName} session: ${(err as Error).message}`,
         details: { reason: 'session_spawn_failed' },
       });
     }

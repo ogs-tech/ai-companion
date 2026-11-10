@@ -50,7 +50,7 @@ const scopeDeps = {
 const buildSettings = (): Settings => ({
   adapters: {
     claude: { enabled: true },
-    cursor: { enabled: false },
+    cursor: { enabled: false }, lmstudio: { enabled: false },
   },
   ui: { theme: 'system' },
   language: 'off',

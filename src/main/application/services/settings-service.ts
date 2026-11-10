@@ -8,11 +8,11 @@ import {
   type LanguagePreference,
 } from '../../../shared/settings.js';
 import {
-  HARNESSES,
-  HARNESS_IDS,
-  isHarnessId,
-  type HarnessId,
-} from '../../../shared/harness.js';
+  CHANNELS,
+  CHANNEL_IDS,
+  isChannelId,
+  type ChannelId,
+} from '../../../shared/channel.js';
 import type { SettingsRepository } from '../ports/settings-repository.js';
 import { DomainError } from '../../domain/errors.js';
 
@@ -20,25 +20,25 @@ const stripLegacyFields = (settings: Settings): Settings => {
   // Drops fields from older on-disk shapes (adapter keys for harnesses no longer in
   // the registry — e.g. the removed `copilot` one — legacy per-adapter `defaultScope`,
   // the retired global `linkedRepos` array) by rebuilding the `adapters` block from
-  // HARNESS_IDS, and backfills any harness the settings file predates at that
+  // CHANNEL_IDS, and backfills any harness the settings file predates at that
   // harness's own `defaultEnabled`.
   const adapters = settings.adapters as unknown as Partial<
-    Record<HarnessId, Record<string, unknown>>
+    Record<ChannelId, Record<string, unknown>>
   >;
   const { linkedRepos: _unused, ...rest } = settings as Settings & { linkedRepos?: unknown };
   void _unused;
   return {
     ...rest,
     adapters: Object.fromEntries(
-      HARNESS_IDS.map((id) => {
+      CHANNEL_IDS.map((id) => {
         const entry = adapters[id];
         const enabled =
           typeof entry?.['enabled'] === 'boolean'
             ? (entry['enabled'] as boolean)
-            : HARNESSES[id].defaultEnabled;
+            : CHANNELS[id].defaultEnabled;
         return [id, { enabled }];
       }),
-    ) as Record<HarnessId, AdapterSettings>,
+    ) as Record<ChannelId, AdapterSettings>,
   };
 };
 
@@ -104,11 +104,11 @@ function assertValidSettings(value: unknown): asserts value is Settings {
 
   const adapters = asRecord(s['adapters'], "Missing or invalid 'adapters'");
   const adapterKeys = Object.keys(adapters);
-  for (const id of HARNESS_IDS) {
+  for (const id of CHANNEL_IDS) {
     if (!adapterKeys.includes(id)) invalid(`'adapters' must contain the '${id}' adapter`);
   }
   for (const key of adapterKeys) {
-    if (!isHarnessId(key)) invalid(`Unknown adapter '${key}'`);
+    if (!isChannelId(key)) invalid(`Unknown adapter '${key}'`);
     const entry = asRecord(adapters[key], `'adapters.${key}' must be an object`);
     if (typeof entry['enabled'] !== 'boolean') {
       invalid(`'adapters.${key}.enabled' must be a boolean`);

@@ -1,4 +1,4 @@
-import type { HarnessId } from './harness.js';
+import type { ChannelId } from './channel.js';
 
 /** Live numbers read off a session's transcript; every field is absent until the transcript says it. */
 export interface SessionMetrics {
@@ -22,7 +22,7 @@ const WINDOWS: ReadonlyArray<[RegExp, number]> = [
   [/gpt-5/i, 400_000],
 ];
 
-export function contextWindowFor(model: string | null | undefined, harness: HarnessId): number | null {
+export function contextWindowFor(model: string | null | undefined, harness: ChannelId): number | null {
   if (!model) return null;
   // The Claude CLI only ever runs Claude models; for anything else the table decides.
   for (const [pattern, window] of WINDOWS) if (pattern.test(model)) return window;

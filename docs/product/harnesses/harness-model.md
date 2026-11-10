@@ -1,132 +1,132 @@
 ---
-title: The harness model
-description: What a harness is, why this app organizes itself around that word, and the two capabilities — manage and run — it declares per harness.
+title: Harnesses and channels
+description: What a harness is (the configuration set that steers an agent), what a channel is (the tool it reaches you through), and the two capabilities — manage and run — declared per channel.
 created_at: 2026-09-17
-updated_at: 2026-09-17
+updated_at: 2026-11-10
 ---
 
-# The harness model
+# Harnesses and channels
 
 > This is the vocabulary doc. Every other document in `docs/` assumes the words
-> defined here. The executable counterpart is `src/shared/harness.ts` — the
-> registry that turns these definitions into the list the app actually ships.
+> defined here. The executable counterpart is `src/shared/channel.ts` — the
+> registry that turns these definitions into the list of channels the app ships.
 
-## What a harness is
+Two words, two layers:
 
-**A harness is the program that turns a language model into an agent that works
-on your code.** The model thinks; the harness acts.
+- **Harness** — the whole set of configuration that makes a language model work
+  as an agent on your code: **skills, agents, instructions, MCP servers and
+  hooks.** It is what this app manages, once, in `~/.ai-companion/` and in each
+  workspace's `.ai-companion/`.
+- **Channel** — a tool the harness reaches an agent through: **Claude, Cursor,
+  LM Studio.** Each channel has its own on-disk surface and, sometimes, a CLI
+  this app can run. Config > **Canais** lists them.
 
-A language model, on its own, only produces text. It does not open files, run
-tests or commit. What does that is the program around it: it decides what goes
-into the context, offers the tools (read a file, edit it, run a command),
-executes what the model asked for, feeds the result back, and repeats — until
-the task is done. That program is the harness.
+The model thinks; the harness steers it; the channel is where the work happens.
+One harness, many channels — the same skill can reach Claude and Cursor without
+being written twice.
 
-Claude Code is a harness. Cursor is another. Codex CLI, Gemini CLI and Copilot
-are others. They can all run **the same model underneath** and still behave
-completely differently, because an agent's behaviour is decided by its harness,
-not by its model.
+> **Vocabulary change (2026-11).** Earlier versions of these docs called the
+> tool itself "the harness" (Claude Code *is* a harness). That now names the
+> configuration set; the tools are **channels**. In code, `ChannelId`,
+> `CHANNELS` and `src/shared/channel.ts` replace `ChannelId`, `CHANNELS` and
+> `src/shared/channel.ts`. Persisted and IPC field names (`settings.adapters`,
+> `SessionSnapshot.harness`, `adapter.*`, `session.*`) are unchanged on purpose:
+> renaming them would need a data migration.
 
-## Why that word
+## Why "harness"
 
-*Harness* is the tack that straps a horse to a cart. It generates no force of
-its own; it converts the horse's force into useful, steerable motion. Without
-one, the horse is just as strong and just as useless for pulling a load.
+A harness is the tack that straps a horse to a cart. It generates no force of
+its own; it converts the horse's force into useful, steerable motion. The model
+is the force; the configuration is what aims it at your repository. Two
+different harnesses on the same model pull different loads — which is why this
+app exists: to keep that configuration in one place instead of once per tool.
 
-That is the relationship exactly. The model is the force; the harness is what
-aims it at your repository. Two different harnesses on the same horse pull
-different loads — which is why switching harness changes your working day even
-when the model stays the same.
+## What makes something a channel
 
-The term reaches software by a different route — a *test harness* is the
-scaffolding that runs the code under test — but the tack image explains it
-better to someone who has heard neither.
+A channel is listed in the registry because the app can do at least one of two
+things for it:
 
-## The boundary test
+1. **Manage** — it has an **on-disk configuration surface** (the files it reads
+   for instructions, skills, agents, MCP, hooks) that the app can materialize
+   into. This is exactly what the `Adapter` port consumes:
+   `resolveEntityDestinations` only needs to know which paths a channel reads.
+2. **Run** — it exposes a **CLI** the app can spawn inside a PTY and observe.
 
-A definition is only useful when it settles hard cases. Something is a harness,
-for our purposes, when all three hold:
+And the user installs it on their own machine. That excludes:
 
-1. **It runs the agentic loop** — model → tool → result → model, until done.
-2. **It has its own on-disk configuration surface** — files it reads to learn
-   its instructions, skills and agents.
-3. **The user installs it on their own machine.**
-
-Which excludes:
-
-| Not a harness | What it is |
+| Not a channel | What it is |
 |---|---|
-| Opus 5, GPT-5 | the **engine** — the force, not the tack |
-| The Anthropic API | the **plumbing** — transport, no loop, no config |
-| An MCP server | a **tool** the harness exposes to the model |
-| A skill, an instruction | **content** the harness consumes |
+| Opus 5, GPT-5 | the **engine** — the model itself |
+| The Anthropic API | the **plumbing** — transport, no config, no CLI |
+| An MCP server | a **tool** a channel exposes to the model |
+| A skill, an instruction | **content** of the harness |
 | ChatGPT, claude.ai | a **chat** — no access to your disk, no config in files |
-
-That last cut is what gives the word commercial value. "Adapters for the main AI
-tools" is vague — does Copilot autocomplete count? Does ChatGPT? **"Adapters for
-the main harnesses" names exactly the market this app serves:** the tools that
-read configuration off your disk.
-
-Criterion 2 is not incidental. It is precisely what the `Adapter` port consumes:
-`resolveEntityDestinations` only ever needs to know which paths a given harness
-reads. Anything passing criterion 2 is adaptable today, with no new machinery
-beyond its own adapter.
 
 ## The two capabilities
 
-For each harness in the registry, this app declares what it can do:
+- **`manage`** — this app owns the channel's customization files and
+  materializes the harness into that channel's own config surface.
+- **`run`** — this app can spawn and observe that channel's own sessions. Only
+  a channel that exposes a **CLI** qualifies; a GUI-only tool would be
+  `manage`-only.
 
-- **`manage`** — this app owns the harness's customization files (skills,
-  agents, instructions) and materializes them into that harness's own config
-  surface. Every listed harness supports this; it is the reason it is listed.
-- **`run`** — this app can spawn and observe that harness's own sessions. Only
-  a harness that exposes its agentic loop as a **CLI** qualifies.
-
-The asymmetry follows straight from the boundary test rather than being
-arbitrary. Every harness runs the loop (criterion 1), but only some expose that
-loop as a command-line program that can be spawned inside a PTY. Claude Code
-(`claude`) and Cursor (`cursor-agent`, the Cursor Agent CLI) both do, so both
-have `run`. Cursor's GUI runs the same loop inside its own process, which stays
-out of reach — only the CLI is driven. A harness with no CLI would stay
-`manage`-only.
-
-**`manage` is the baseline; `run` is depth.** Most harnesses will only ever
-offer `manage`, and that is where breadth of coverage lives. A manage-only
-harness is not a second-class citizen — it is the normal case.
+**`manage` is the baseline for tools that read config off disk; `run` is
+depth.** The two are independent: Claude and Cursor have both, and **LM Studio
+is run-only** — `lms chat` talks to a local model but there are no skills,
+agents or instructions on disk to sync, and no loop beyond a plain chat.
 
 ## What the app supports today
 
-| Harness | manage | run | Surface |
+| Channel | manage | run | Surface |
 |---|:---:|:---:|---|
-| **Claude Code** | ✅ | ✅ | `~/.claude/`, `<repo>/.claude/`, `~/AGENTS.md` · the `claude` CLI and its JSONL transcripts |
-| **Cursor** | ✅ (opt-in, off by default) | ✅ (same switch) | `~/.cursor/`, `<repo>/.cursor/`, a generated `AGENTS.md` per repo · the `cursor-agent` CLI and its chat metadata (`~/.cursor/chats/`) — cost is estimated from the chat text in `store.db` (model is real, tokens are not recorded) |
+| **Claude** | ✅ | ✅ | `~/.claude/`, `<repo>/.claude/`, `~/AGENTS.md` · the `claude` CLI and its JSONL transcripts |
+| **Cursor** | ✅ (opt-in, off by default) | ✅ (same switch) | `~/.cursor/`, `<repo>/.cursor/`, a generated rule per workspace instruction · the `cursor-agent` CLI and its chat metadata (`~/.cursor/chats/`) — cost is estimated from the chat text in `store.db` (model is real, tokens are not recorded) |
+| **LM Studio** | — | ✅ (opt-in, off by default) | the `lms` CLI (`lms chat` in a PTY). No resume, no history, no cost: a session is a fresh chat |
 
-Source of truth: `HARNESSES` in `src/shared/harness.ts`. Default settings,
-settings validation and the Config view's harness pages all derive from it, so
+Source of truth: `CHANNELS` in `src/shared/channel.ts`. Default settings,
+settings validation and the Config view's channel pages all derive from it, so
 the table above cannot drift from the code without the tests noticing.
 
-## Adding a harness
+## Install and sign in from the app
 
-1. **Check the boundary test.** If it fails criterion 2, there is nothing to
-   adapt and it does not belong in the registry.
-2. **Add an entry to `HARNESSES`** (`src/shared/harness.ts`) with its
-   `displayName`, its `capabilities` and its `defaultEnabled`. A new harness
-   defaults to `false`: enabling a sync target is the user's decision.
-3. **Implement the `Adapter` port** under
+Each channel's page in Config > Canais shows where it stands — **installed**,
+**signed in**, **enabled** — and offers one button for the next step:
+
+| Step | Button | What happens |
+|---|---|---|
+| Not installed | **Instalar** | Runs the vendor's install command in a visible terminal dialog (you can type into it). Claude: `curl -fsSL https://claude.ai/install.sh \| bash`; Cursor: `curl https://cursor.com/install -fsS \| bash`. LM Studio's CLI ships inside the LM Studio app, so **Baixar LM Studio** opens the download page instead; open the app once so `lms` is available. |
+| Installed, signed out | **Entrar** | Runs `claude auth login` / `cursor-agent login` in the same dialog. The app never sees credentials; the CLI stores them itself. LM Studio has no account, so it has no sign-in step. |
+| Ready | **Ativar** | The channel's switch appears only when it is installed and signed in, so there is no half-working state to enable. |
+
+Status is read with the channel's own CLI (`--version`, `claude auth status`,
+`cursor-agent status`) and re-checked when the app regains focus and when the
+terminal dialog closes. Commands come from `CHANNELS[id].setup`, never from the
+renderer.
+
+## Adding a channel
+
+1. **Decide the capabilities.** It needs an on-disk config surface (`manage`)
+   and/or a CLI to run (`run`). If it has neither, it does not belong.
+2. **Add an entry to `CHANNELS`** (`src/shared/channel.ts`) with its
+   `displayName`, `capabilities`, `defaultEnabled` and `setup` (binary, version
+   args, install command or download URL, and the sign-in command + status
+   check, or `auth: null`). A new channel defaults to `false`: enabling a sync
+   target is the user's decision.
+3. **For `manage`: implement the `Adapter` port** under
    `src/main/infrastructure/adapters/`, mapping each `Entity` kind to that
-   harness's paths via `resolveEntityDestinations`. Prefer `strategy:
-   'symlink'`; reach for `strategy: 'write'` only when the harness's format
-   cannot be a symlink, and then always with an `ownershipMarker` so
-   `FileMaterializer` never overwrites a file the app does not own.
-4. **Wire it into the `AdapterManager`'s adapter map** in
-   `buildWorkspaceScopedServices` (`src/main/application/workspace-scoped-services.ts`),
-   rebuilt on every activation (opening/switching a workspace, or going home to
-   Início).
+   channel's paths via `resolveEntityDestinations`. Prefer `strategy:
+   'symlink'`; reach for `strategy: 'write'` only when the format cannot be a
+   symlink, and then always with an `ownershipMarker` so `FileMaterializer`
+   never overwrites a file the app does not own. Wire it into the
+   `AdapterManager`'s adapter map in `buildWorkspaceScopedServices`
+   (`src/main/application/workspace-scoped-services.ts`). A run-only channel
+   skips this step.
+4. **For `run`: add a `CliProfile`** (`src/main/infrastructure/session-runtime/cli-profiles.ts`)
+   and a `NodePtySessionAdapter` entry in `sessionRuntimes` (`src/main/index.ts`).
+5. **Add a mark** in `ChannelMark.tsx` (the only place the renderer needs a
+   per-channel asset).
 
-Step by step, with tests: [Add a harness adapter](../../technical/how-to/add-a-harness-adapter.md).
-
-Adding `run` to a harness is a larger piece of work and is not covered by these
-steps — see the named debt below.
+Step by step, with tests: [Add a channel adapter](../../technical/how-to/add-a-harness-adapter.md).
 
 ## Named debt: the ports still say "Claude"
 
@@ -145,7 +145,7 @@ clearest example is `FsClaudeTranscriptAdapter` reading a conversation from a
 re-appends `cost-state` and `ai-title` on every turn. That is an *observed*
 contract, never a published one. It belongs pinned to one harness.
 
-Generalizing the naming (`SessionRuntimePort` → `HarnessSessionPort`, and so on)
+Generalizing the naming (`SessionRuntimePort` → `ChannelSessionPort`, and so on)
 touches 38 files and 92 occurrences across four ports, with no behaviour change.
 It is a mechanical rename and deserves its own commit, not a ride along with a
 feature.
@@ -153,6 +153,6 @@ feature.
 ## See also
 
 - [PRD](../about/prd.md) — who this is for and what it promises.
-- [Architecture](../../technical/reference/architecture.md) — where harness adapters sit in
+- [Architecture](../../technical/reference/architecture.md) — where channel adapters sit in
   the hexagonal layout.
 - [Entity schema](../../technical/reference/customization-schema.md) — what gets managed.

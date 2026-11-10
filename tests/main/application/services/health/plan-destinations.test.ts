@@ -40,7 +40,7 @@ const scopeDeps = {
 
 const settingsWith = (over: Partial<Settings> = {}): Settings => ({
   ...getDefaults(),
-  adapters: { claude: { enabled: true }, cursor: { enabled: false } },
+  adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: false } },
   ...over,
 });
 
