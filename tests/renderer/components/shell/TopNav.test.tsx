@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TopNav } from '../../../../src/renderer/components/shell/TopNav.js';
 import {
@@ -32,16 +32,11 @@ afterEach(() => {
 const noop = () => undefined;
 
 describe('TopNav', () => {
-  it('renders the context switcher', async () => {
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
-    await waitFor(() => expect(screen.getByTestId('context-switcher')).toHaveTextContent('Início'));
-  });
-
   it('toggles the side panels through the registered shell commands and reflects their state', async () => {
     const user = userEvent.setup();
     const togglePanel = vi.fn();
     registerWorkspaceShellCommands({ focusOverview: vi.fn(), togglePanel });
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
 
     await user.click(screen.getByTestId('workspace-toggle-files'));
     await user.click(screen.getByTestId('workspace-toggle-customizations'));
@@ -56,7 +51,7 @@ describe('TopNav', () => {
     const onOpenSettings = vi.fn();
     registerConfigOpener(onOpenSettings);
     const onOpenCommandPalette = vi.fn();
-    renderWithShell(<TopNav onOpenCommandPalette={onOpenCommandPalette} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={onOpenCommandPalette} />);
     await userEvent.click(screen.getByTestId('nav-settings'));
     await userEvent.click(screen.getByTestId('command-palette-trigger'));
     expect(onOpenSettings).toHaveBeenCalledOnce();
@@ -64,31 +59,31 @@ describe('TopNav', () => {
     registerConfigOpener(null);
   });
   it('no longer renders the OGS brand line (moved to the footer)', () => {
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
     expect(screen.queryByText(/TECNOLOGIA BRASIL/i)).not.toBeInTheDocument();
   });
   it('no longer renders the sync pill (moved to the status bar)', () => {
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
     expect(screen.queryByTestId('status-pill-sync')).not.toBeInTheDocument();
   });
   it('renders the ⌘K trigger as a search field', () => {
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
     expect(screen.getByTestId('command-palette-trigger')).toHaveTextContent(/Buscar ou ir para…(⌘|Ctrl\+)K/);
   });
   it('keeps the header slim: no theme toggle, no repeated app name', () => {
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
     expect(screen.queryByTestId('theme-toggle')).not.toBeInTheDocument();
     expect(screen.queryByText('AI Companion')).not.toBeInTheDocument();
   });
 
   it('has no browser button: the Navegador lives in the Explorer and the Workbench "+"', () => {
-    renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+    renderWithShell(<TopNav onOpenCommandPalette={noop} />);
     expect(screen.queryByTestId('nav-browser-toggle')).not.toBeInTheDocument();
   });
 
   describe('history back/forward', () => {
     it('renders both buttons disabled when there is no Workbench history', () => {
-      renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+      renderWithShell(<TopNav onOpenCommandPalette={noop} />);
       expect(screen.getByTestId('nav-history-back')).toBeDisabled();
       expect(screen.getByTestId('nav-history-forward')).toBeDisabled();
     });
@@ -97,7 +92,7 @@ describe('TopNav', () => {
       registerWorkspaceHistoryApplier(vi.fn());
       pushWorkspaceHistoryEntry({ workspaceId: 'w1', activeTabId: null });
       pushWorkspaceHistoryEntry({ workspaceId: 'w1', activeTabId: 'a1' });
-      renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+      renderWithShell(<TopNav onOpenCommandPalette={noop} />);
       expect(screen.getByTestId('nav-history-back')).toBeEnabled();
       expect(screen.getByTestId('nav-history-forward')).toBeDisabled();
     });
@@ -108,7 +103,7 @@ describe('TopNav', () => {
       const scopeEntry = { workspaceId: 'w1', activeTabId: null };
       pushWorkspaceHistoryEntry(scopeEntry);
       pushWorkspaceHistoryEntry({ workspaceId: 'w1', activeTabId: 'a1' });
-      renderWithShell(<TopNav onOpenCommandPalette={noop} onOpenWorkspacePicker={noop} />);
+      renderWithShell(<TopNav onOpenCommandPalette={noop} />);
       await userEvent.click(screen.getByTestId('nav-history-back'));
       expect(applier).toHaveBeenCalledWith(scopeEntry);
     });

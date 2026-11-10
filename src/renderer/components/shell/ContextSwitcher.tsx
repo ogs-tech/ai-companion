@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ButtonBase, Divider, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tooltip, Typography } from '@mui/material';
-import { ChevronDown, Folder, FolderMinus, FolderOpen, FolderPlus, House, Trash2 } from 'lucide-react';
+import { ChevronDown, Folder, FolderOpen, FolderPlus, House, Trash2 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { Toast, type ToastMessage } from '../Toast.js';
+import { WorkspaceFolderRow } from './WorkspaceFolderRow.js';
 import { RenameWorkspaceDialog } from './RenameWorkspaceDialog.js';
 import { WorkspaceRemoveConfirmDialog } from './WorkspaceRemoveConfirmDialog.js';
 import { recentWorkspaces, useContextNavigation } from '../../hooks/use-context-navigation.js';
@@ -23,8 +24,8 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * The TopNav's "where am I" control: `🏠 Início ▾` or `📁 <name> ▾`. Its menu
- * is the one place to change context — Início, the latest recents, "Todos…"
+ * The status bar's "where am I" control: `🏠 Início ▾` or `📁 <name> ▾`. Its
+ * menu opens upward and is the one place to change context — Início, the latest recents, "Todos…"
  * (the palette's list), open a folder, remove the open workspace. The workspace root path lives
  * only in this button's tooltip.
  */
@@ -46,6 +47,8 @@ export function ContextSwitcher({ onOpenAllWorkspaces }: ContextSwitcherProps): 
   // Captured when the dialog opens, so a context change underneath can't retarget it.
   const [pendingRemoval, setPendingRemoval] = useState<Workspace | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  // The folder whose removal was armed by the first click; the second click confirms.
+  const [armedFolder, setArmedFolder] = useState<string | null>(null);
 
   const isHome = activeWorkspace === null;
   const currentId = activeWorkspace?.id ?? null;
@@ -53,6 +56,7 @@ export function ContextSwitcher({ onOpenAllWorkspaces }: ContextSwitcherProps): 
 
   const closeMenus = (): void => {
     setMenuAnchor(null);
+    setArmedFolder(null);
   };
 
   const run = (action: () => Promise<unknown>): void => {
@@ -96,31 +100,41 @@ export function ContextSwitcher({ onOpenAllWorkspaces }: ContextSwitcherProps): 
 
   return (
     <>
-      <Tooltip title={isHome ? 'Global' : (activeWorkspace ? workspaceFolders(activeWorkspace).join('\n') : '')}>
+      <Tooltip placement="top" title={isHome ? 'Global' : (activeWorkspace ? workspaceFolders(activeWorkspace).join('\n') : '')}>
         <ButtonBase
           data-testid="context-switcher"
           aria-haspopup="menu"
           aria-label={`Contexto: ${label}`}
           onClick={(e) => setMenuAnchor(e.currentTarget)}
-          sx={(theme) => ({
-            gap: 0.75,
-            px: 1,
-            height: 26,
-            borderRadius: `${theme.ogs.radius.sm}px`,
+          sx={{
+            gap: 0.5,
+            px: 0.75,
+            // Sits in the 24px status bar: full bar height is the hit area; the negative margin keeps the label where the old plain text was.
+            ml: -0.75,
+            height: 24,
             color: 'text.primary',
             maxWidth: 240,
+            fontSize: '0.6875rem',
             '&:hover': { bgcolor: 'action.hover' },
-          })}
+            '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+          }}
         >
-          <Icon glyph={isHome ? House : Folder} size={15} />
-          <Typography component="span" noWrap sx={{ fontSize: '0.8125rem', fontWeight: 500 }}>
+          <Icon glyph={isHome ? House : Folder} size={12} />
+          <Typography component="span" noWrap sx={{ fontSize: 'inherit', fontWeight: 500 }}>
             {label}
           </Typography>
-          <Icon glyph={ChevronDown} size={14} />
+          <Icon glyph={ChevronDown} size={12} />
         </ButtonBase>
       </Tooltip>
 
-      <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeMenus} data-testid="context-switcher-menu">
+      <Menu
+        anchorEl={menuAnchor}
+        open={menuAnchor !== null}
+        onClose={closeMenus}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        data-testid="context-switcher-menu"
+      >
         <MenuItem data-testid="context-switcher-home" selected={isHome} onClick={() => run(goHome)}>
           <ListItemIcon><Icon glyph={House} size={16} /></ListItemIcon>
           <ListItemText>Início</ListItemText>
@@ -145,29 +159,37 @@ export function ContextSwitcher({ onOpenAllWorkspaces }: ContextSwitcherProps): 
             <ListItemText>Todos…</ListItemText>
           </MenuItem>
         )}
+        {activeWorkspace && [
+          <Divider key="folders-divider" />,
+          workspaceFolders(activeWorkspace).length > 1 && (
+            <ListSubheader key="folders-header" sx={{ lineHeight: '28px' }}>
+              {`Pastas deste workspace (${workspaceFolders(activeWorkspace).length})`}
+            </ListSubheader>
+          ),
+          ...(workspaceFolders(activeWorkspace).length > 1
+            ? workspaceFolders(activeWorkspace).map((folder) => (
+                <WorkspaceFolderRow
+                  key={folder}
+                  name={basename(folder)}
+                  removable
+                  armed={armedFolder === folder}
+                  onArm={() => setArmedFolder(folder)}
+                  onCancel={() => setArmedFolder((current) => (current === folder ? null : current))}
+                  onConfirm={() => run(() => handleRemoveFolder(activeWorkspace, folder))}
+                />
+              ))
+            : []),
+          <MenuItem key="add-folder" data-testid="context-switcher-add-folder" onClick={() => run(handleAddFolder)}>
+            <ListItemIcon><Icon glyph={FolderPlus} size={16} /></ListItemIcon>
+            <ListItemText>{workspaceFolders(activeWorkspace).length > 1 ? 'Adicionar pasta…' : 'Adicionar pasta ao workspace…'}</ListItemText>
+          </MenuItem>,
+        ]}
         <Divider />
         <MenuItem data-testid="context-switcher-open-folder" onClick={() => run(openFolder)}>
           <ListItemIcon><Icon glyph={FolderOpen} size={16} /></ListItemIcon>
           <ListItemText>Criar workspace…</ListItemText>
           <Typography variant="caption" sx={{ color: 'text.secondary', ml: 2 }}>⌘O</Typography>
         </MenuItem>
-        {activeWorkspace && (
-          <MenuItem data-testid="context-switcher-add-folder" onClick={() => run(handleAddFolder)}>
-            <ListItemIcon><Icon glyph={FolderPlus} size={16} /></ListItemIcon>
-            <ListItemText>Adicionar pasta ao workspace…</ListItemText>
-          </MenuItem>
-        )}
-        {activeWorkspace && workspaceFolders(activeWorkspace).length > 1 &&
-          workspaceFolders(activeWorkspace).map((folder) => (
-            <MenuItem
-              key={folder}
-              data-testid={`context-switcher-remove-folder-${basename(folder)}`}
-              onClick={() => run(() => handleRemoveFolder(activeWorkspace, folder))}
-            >
-              <ListItemIcon><Icon glyph={FolderMinus} size={16} /></ListItemIcon>
-              <ListItemText>Remover pasta «{basename(folder)}» do workspace</ListItemText>
-            </MenuItem>
-          ))}
         {activeWorkspace && (
           <MenuItem
             data-testid="context-switcher-remove"

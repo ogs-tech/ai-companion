@@ -32,19 +32,19 @@ afterEach(() => {
 
 describe('StatusBar', () => {
   it('renders as the global status bar', () => {
-    renderWithShell(<StatusBar />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
     expect(screen.getByTestId('status-bar')).toBeInTheDocument();
   });
 
-  it('shows the workspace name, and nothing on the left at Início', async () => {
-    renderWithShell(<StatusBar />);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.getActive', {}));
-    expect(screen.queryByTestId('status-workspace')).not.toBeInTheDocument();
+  it('always shows the context switcher — "Início" at Início, with no branch', async () => {
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId('context-switcher')).toHaveTextContent('Início'));
+    expect(screen.queryByTestId('status-branch')).not.toBeInTheDocument();
   });
 
   it('flags unsaved changes of the active file, then the time it was saved', () => {
     publishShellStatus({ tab: { title: 'a.md', dirty: true, editable: true, savedAt: null } });
-    const { unmount } = renderWithShell(<StatusBar />);
+    const { unmount } = renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
     expect(screen.getByTestId('status-save-state')).toHaveTextContent('Alterações não salvas');
     act(() => publishShellStatus({ tab: { title: 'a.md', dirty: false, editable: true, savedAt: Date.now() } }));
     expect(screen.getByTestId('status-save-state')).toHaveTextContent(/^Salvo às \d{2}:\d{2}$/);
@@ -52,7 +52,7 @@ describe('StatusBar', () => {
   });
 
   it('shows the cursor position only when an editor published one', () => {
-    renderWithShell(<StatusBar />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
     expect(screen.queryByTestId('status-cursor')).not.toBeInTheDocument();
     act(() => publishShellStatus({ cursor: { line: 3, column: 12 } }));
     expect(screen.getByTestId('status-cursor')).toHaveTextContent('Ln 3, Col 12');
@@ -67,7 +67,7 @@ describe('StatusBar', () => {
     });
     const handler = vi.fn();
     const off = onMenuCommand('go-needs-attention', handler);
-    renderWithShell(<StatusBar />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
     const item = await screen.findByTestId('status-needs-you');
     expect(item).toHaveTextContent('1 sessão precisa de você');
     await userEvent.click(item);
@@ -76,21 +76,21 @@ describe('StatusBar', () => {
   });
 
   it('renders the sync entry with the health severity and its label', () => {
-    renderWithShell(<StatusBar healthSeverity="warning" />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} healthSeverity="warning" />);
     const sync = screen.getByTestId('status-pill-sync');
     expect(sync).toHaveAttribute('data-variant', 'warning');
     expect(sync).toHaveTextContent('atenção');
   });
 
   it('hides the sync entry when there is no health severity yet', () => {
-    renderWithShell(<StatusBar />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
     expect(screen.queryByTestId('status-pill-sync')).not.toBeInTheDocument();
   });
 
   it('clicking the sync entry opens the Diagnóstico Workbench tab', async () => {
     const opener = vi.fn();
     registerAreaOpener(opener);
-    renderWithShell(<StatusBar healthSeverity="error" />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} healthSeverity="error" />);
     await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.getActive', {}));
 
     await userEvent.click(screen.getByTestId('status-pill-sync'));
@@ -105,7 +105,7 @@ describe('StatusBar', () => {
       if (method === 'session.list') return ok([{ sessionId: 's1', status: 'running', activity: 'idle' }]);
       return ok(null);
     });
-    renderWithShell(<StatusBar healthSeverity="ok" />);
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} healthSeverity="ok" />);
     await screen.findByTestId('status-pill-sync');
     expect(screen.queryByTestId('status-adapter-claude')).not.toBeInTheDocument();
     expect(screen.queryByTestId('status-idle')).not.toBeInTheDocument();

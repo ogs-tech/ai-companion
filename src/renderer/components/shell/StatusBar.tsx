@@ -4,6 +4,7 @@ import { Box, Tooltip } from '@mui/material';
 import { Activity, CircleAlert, GitBranch } from 'lucide-react';
 import { CHANNELS, CHANNEL_IDS } from '../../../shared/channel.js';
 import { Icon } from '../ds/Icon.js';
+import { ContextSwitcher } from './ContextSwitcher.js';
 import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
 import { gitStatusOptions } from '../../hooks/use-git.js';
 import { useSessions } from '../../hooks/use-sessions.js';
@@ -15,6 +16,8 @@ import { getShellStatus, subscribeShellStatus } from '../../lib/shell-status-sto
 type HealthSeverity = 'ok' | 'warning' | 'error';
 
 interface StatusBarProps {
+  /** The switcher's "Todos…": opens the palette on its workspace list. */
+  onOpenWorkspacePicker: () => void;
   healthSeverity?: HealthSeverity;
 }
 
@@ -65,15 +68,15 @@ function buttonProps(onActivate: () => void): {
 }
 
 /**
- * The one global status bar. Left: where you are (workspace, git branch).
+ * The one global status bar. Left: where you are — the workspace switcher (also the way back to Início) and the git branch.
  * Right, only what changes what you do next: cursor and save state (only with
  * an editor active), one sessions summary with "precisa de você" first (click →
  * jumps to it), then sync health (click → Diagnóstico). Which harness adapters
  * are on lives in the sync tooltip and in Configurações; idle sessions are not
- * information and are not counted. Layout controls live in the header.
+ * information and are not counted. Layout controls live in the header; the context switcher lives here.
  * Every item is derived from state that already exists; nothing here detects anything.
  */
-export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElement {
+export function StatusBar({ healthSeverity, onOpenWorkspacePicker }: StatusBarProps): React.ReactElement {
   const navigate = useAreaNavigation();
   const { data: settings } = useSettings();
   const { data: workspace } = useActiveWorkspace();
@@ -106,15 +109,11 @@ export function StatusBar({ healthSeverity }: StatusBarProps): React.ReactElemen
         overflow: 'hidden',
       }}
     >
-      {inWorkspace && (
-        <Box component="span" data-testid="status-workspace" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {workspace.name}
-          {branch !== null && branch !== undefined && (
-            <Box component="span" data-testid="status-branch" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, ml: 1.25, verticalAlign: 'bottom' }}>
-              <Icon glyph={GitBranch} size={12} />
-              {branch}
-            </Box>
-          )}
+      <ContextSwitcher onOpenAllWorkspaces={onOpenWorkspacePicker} />
+      {branch !== null && branch !== undefined && (
+        <Box component="span" data-testid="status-branch" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+          <Icon glyph={GitBranch} size={12} />
+          {branch}
         </Box>
       )}
 

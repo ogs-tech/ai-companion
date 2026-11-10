@@ -15,16 +15,13 @@ import {
   subscribeWorkspacePanels,
   toggleWorkspacePanel,
 } from '../../lib/workspace-shell-store.js';
-import { ContextSwitcher } from './ContextSwitcher.js';
 import { openConfig } from '../../lib/workspace-area-store.js';
 
 interface TopNavProps {
   onOpenCommandPalette: () => void;
-  /** The switcher's "Todos…": opens the palette on its workspace list. */
-  onOpenWorkspacePicker: () => void;
 }
 
-export function TopNav({ onOpenCommandPalette, onOpenWorkspacePicker }: TopNavProps): React.ReactElement {
+export function TopNav({ onOpenCommandPalette }: TopNavProps): React.ReactElement {
   const paletteShortcut = shortcutFor('command-palette') ?? '';
   const { canGoBack, canGoForward } = useSyncExternalStore(subscribeWorkspaceHistory, getWorkspaceHistorySnapshot);
   const { explorerCollapsed, controlCollapsed } = useSyncExternalStore(subscribeWorkspacePanels, getWorkspacePanelsSnapshot);
@@ -68,7 +65,6 @@ export function TopNav({ onOpenCommandPalette, onOpenWorkspacePicker }: TopNavPr
               </IconButton>
             </span>
           </Tooltip>
-          <ContextSwitcher onOpenAllWorkspaces={onOpenWorkspacePicker} />
         </Stack>
 
         {/* Search-field-shaped ⌘K trigger — same onClick, it only looks like an input. */}

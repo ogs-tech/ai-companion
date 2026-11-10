@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ContextSwitcher } from '../../../../src/renderer/components/shell/ContextSwitcher.js';
+import { FOLDER_REMOVE_CONFIRM_DELAY_MS } from '../../../../src/renderer/components/shell/WorkspaceFolderRow.js';
 import { registerWorkspaceShellCommands } from '../../../../src/renderer/lib/workspace-shell-store.js';
 import { registerUnsavedTabsGuard } from '../../../../src/renderer/lib/workspace-tabs-guard.js';
 import { recentWorkspaces } from '../../../../src/renderer/hooks/use-context-navigation.js';
@@ -196,18 +197,43 @@ describe('ContextSwitcher', () => {
       expect(within(menu).queryByTestId('context-switcher-add-folder')).not.toBeInTheDocument();
     });
 
-    it('lists a remove action per folder once there are several, and not before', async () => {
+    it('removes a folder in two steps: the first click only arms the row, "Remover" confirms', async () => {
       const user = userEvent.setup();
       setup(MULTI, { 'workspace.removeFolder': ACME });
       const menu = await openMenu(user, /Contexto: Acme/);
       await user.click(within(menu).getByTestId('context-switcher-remove-folder-api'));
+      expect(within(menu).getByTestId('context-switcher-folder-api')).toHaveTextContent('Remover api?');
+      expect(call).not.toHaveBeenCalledWith('workspace.removeFolder', expect.anything());
+
+      await new Promise((resolve) => setTimeout(resolve, FOLDER_REMOVE_CONFIRM_DELAY_MS + 50));
+      await user.click(within(menu).getByTestId('context-switcher-remove-folder-confirm-api'));
       await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.removeFolder', { id: 'w1', path: '/repos/api' }));
     });
 
-    it('shows no remove-folder action for a single-folder workspace', async () => {
+    it('ignores a confirm click that lands right after arming (double-click)', async () => {
+      const user = userEvent.setup();
+      setup(MULTI, { 'workspace.removeFolder': ACME });
+      const menu = await openMenu(user, /Contexto: Acme/);
+      await user.click(within(menu).getByTestId('context-switcher-remove-folder-api'));
+      await user.click(within(menu).getByTestId('context-switcher-remove-folder-confirm-api'));
+      expect(call).not.toHaveBeenCalledWith('workspace.removeFolder', expect.anything());
+    });
+
+    it('"Cancelar" disarms the row without removing anything', async () => {
+      const user = userEvent.setup();
+      setup(MULTI, { 'workspace.removeFolder': ACME });
+      const menu = await openMenu(user, /Contexto: Acme/);
+      await user.click(within(menu).getByTestId('context-switcher-remove-folder-api'));
+      await user.click(within(menu).getByTestId('context-switcher-remove-folder-cancel-api'));
+      expect(within(menu).getByTestId('context-switcher-remove-folder-api')).toBeInTheDocument();
+      expect(call).not.toHaveBeenCalledWith('workspace.removeFolder', expect.anything());
+    });
+
+    it('lists no folder section for a single-folder workspace', async () => {
       const user = userEvent.setup();
       setup(ACME);
       const menu = await openMenu(user, /Contexto: Acme/);
+      expect(within(menu).queryByText(/Pastas deste workspace/)).not.toBeInTheDocument();
       expect(within(menu).queryByTestId('context-switcher-remove-folder-acme')).not.toBeInTheDocument();
     });
 

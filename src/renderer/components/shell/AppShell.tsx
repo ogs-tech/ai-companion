@@ -92,13 +92,13 @@ export function AppShell({ healthSeverity, children }: AppShellProps): React.Rea
       data-testid="main-screen"
       sx={{ height: '100vh', overflow: 'hidden', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}
     >
-      <TopNav onOpenCommandPalette={() => openPalette('commands')} onOpenWorkspacePicker={() => openPalette('workspaces')} />
+      <TopNav onOpenCommandPalette={() => openPalette('commands')} />
       <Box data-testid="app-shell" sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Box component="main" sx={{ flexGrow: 1, minWidth: 0, overflowY: 'auto' }}>
           {children}
         </Box>
       </Box>
-      <StatusBar {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
+      <StatusBar onOpenWorkspacePicker={() => openPalette('workspaces')} {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <CommandPalette key={paletteKey} open={paletteOpen} intent={paletteIntent} onClose={() => setPaletteOpen(false)} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

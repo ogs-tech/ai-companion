@@ -329,7 +329,7 @@ Same shell in both contexts; the content changes, the positions don't:
 
 | Region | Role | Início | Workspace |
 |---|---|---|---|
-| TopNav | context switcher (`ContextSwitcher`) | `🏠 Início ▾` | `📁 <name> ▾` (root path in the tooltip) |
+| StatusBar (footer, left) | context switcher (`ContextSwitcher`, menu opens upward) | `🏠 Início ▾` | `📁 <name> ▾` + `⎇ branch` (root path in the tooltip) |
 | Left panel (`ExplorerPanelContent`) | **where** | Rail: Workspaces · Starter Pack · Marketplaces · Diagnóstico; body is the workspaces list (`WorkspacesList`) | Rail: Arquivos · Git · Terminais; body is that view over the workspace's 1..N folders |
 | Workbench (`WorkbenchCanvas`) | **work** | pinned Visão geral (`HomeOverview`) + tabs | pinned Visão geral (`WorkspaceOverview`) + tabs |
 | Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Sessões + Workspace customizations, with "Do Global" |
@@ -344,14 +344,14 @@ switch (`resetTabs`) falls back to it, and ⌘0 activates it. Its cards are read
 
 One shell in every scope — **rail = where I am · section header = what I see · body = content**; only the body changes with the scope.
 
-- **Rail** (`ExplorerRail`, a list of `RailItem`s the caller builds). Início: the four app destinations, which open their page on the canvas (Diagnóstico carries a severity dot). Workspace: Arquivos · Git (changed-file count) · Terminais (running count). There is no Início button — the TopNav switcher is the way back. Clicking the active workspace item collapses the panel.
+- **Rail** (`ExplorerRail`, a list of `RailItem`s the caller builds). Início: the four app destinations, which open their page on the canvas (Diagnóstico carries a severity dot). Workspace: Arquivos · Git (changed-file count) · Terminais (running count). There is no Início button — the status-bar switcher is the way back. Clicking the active workspace item collapses the panel.
 - **Section header** (`SectionHeader` / `SectionAction` in `components/ds/ContainerChrome.tsx`): kicker title, quiet count, right-aligned actions, optional collapse chevron — the left panel's counterpart of the right panel's `ContainerHeader`.
 - **Body.** A single-folder workspace is the N=1 case of a multi-folder one (`WorkspaceExplorer` in `ExplorerPanelContent.tsx`, parameterised by `folderRoutingFor`). Arquivos: *Editores abertos* + *Arquivos* (👁 ⟳); with several folders the top-level rows are the folders with `⎇ branch` and a changes pill (`RepoMeta`), clean ones dimmed. Git, one folder (`SingleRepoGitView`): header `⎇ branch ⟳ ⋯`, **Staged** (unstage all) and **Changes** (stage all, discard all) sections, and one pinned **Commit (n)** (`CommitBar`, disabled until something is staged). Git, several folders (`RepositoriesView`): one list, dirty folders open with their files and a per-folder "Commit (folder)…", clean ones collapsed, folders without git one muted line that runs `git init` on click. Terminais: grouped by folder in a multi-folder workspace.
 - Folders have no colour anywhere in the UI: identity is the folder name (and a neutral folder icon). The only colour left on a folder row is the changes pill; terminals keep their status colour.
 
 ### Workspace switching navigation
 
-Every context change is reachable from the TopNav's `ContextSwitcher` (Início · Recentes, up to 5 by
+Every context change is reachable from the StatusBar's `ContextSwitcher` (Início · Recentes, up to 5 by
 `Workspace.lastOpenedAt` excluding the current one · Todos os workspaces · Abrir pasta… · Remover este
 workspace…), ⌘K (`CommandPalette`: Abrir pasta…, Ir para workspace…, Ir para Início, Visão geral), the
 global ⌘O (`AppShell`), Início's Recentes card and the left panel's workspace rows. All of them go through
