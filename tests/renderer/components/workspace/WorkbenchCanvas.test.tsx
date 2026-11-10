@@ -63,9 +63,9 @@ describe('WorkbenchCanvas session tabs', () => {
       expect(screen.getByTestId('workbench-tabs')).not.toContainElement(screen.getByTestId('workbench-new'));
     });
 
-    it('reserves the breadcrumb row even when the active tab has no path', () => {
+    it('renders no breadcrumb row when the active tab has no path', () => {
       renderWithTheme(<WorkbenchCanvas tabs={tabs} activeTabId="a" onSelect={vi.fn()} />);
-      expect(screen.getByTestId('workbench-breadcrumb')).toBeEmptyDOMElement();
+      expect(screen.queryByTestId('workbench-breadcrumb')).toBeNull();
     });
 
     it('offers "all tabs" only when the strip overflows, and selects from it', async () => {

@@ -1150,7 +1150,7 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('workbench-breadcrumb')).toHaveTextContent('Acme › INSTRUCTIONS');
     });
 
-    it('keeps the breadcrumb row but empty for a session tab', async () => {
+    it('renders no breadcrumb row for a session tab', async () => {
       const user = userEvent.setup();
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
         if (method === 'workspace.getActive') return projectWorkspace;
@@ -1164,7 +1164,7 @@ describe('WorkspaceScreen', () => {
       renderScreen();
       await user.click(await screen.findByTestId('workspace-sessions-new'));
       await screen.findByTestId('workbench-tab-session:sess-w1');
-      expect(screen.getByTestId('workbench-breadcrumb')).toBeEmptyDOMElement();
+      expect(screen.queryByTestId('workbench-breadcrumb')).toBeNull();
     });
   });
 

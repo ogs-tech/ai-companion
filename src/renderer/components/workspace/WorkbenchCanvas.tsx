@@ -341,8 +341,8 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
           </MenuItem>
         ))}
       </Menu>
-      {/* The row is always there, so content does not jump between tabs with and without a path. */}
-      {tabs.length > 0 && (
+      {/* Only tabs with a path get the row; an empty bar above a terminal reads as a glitch. */}
+      {activeTab?.breadcrumb != null && (
         <Box
           data-testid="workbench-breadcrumb"
           sx={(theme) => ({
