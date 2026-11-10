@@ -14,7 +14,7 @@ describe('config pages registry', () => {
 
   it('puts Idioma and GitHub under App', () => {
     const app = configGroups().find((g) => g.id === 'app');
-    expect(app?.pages.map((p) => p.id)).toEqual(['editor', 'language', 'github']);
+    expect(app?.pages.map((p) => p.id)).toEqual(['editor', 'git-ignore', 'language', 'github']);
   });
 
   it('hides the danger zone outside dev builds', () => {

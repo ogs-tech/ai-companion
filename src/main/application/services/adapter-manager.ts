@@ -31,6 +31,8 @@ export interface AdapterManagerDeps {
   adapters: Map<string, Adapter>;
   /** The data dir holding an entity's canonical files (Global or the active workspace's) — see `ScopedEntityRepository.dataDirFor`. */
   entityDataDir: (entity: Entity) => string;
+  /** Runs after a sync wrote destinations (best-effort; errors are swallowed) — e.g. to refresh git-ignore rules. */
+  afterSync?: () => Promise<void>;
 }
 
 export interface SymlinkPlanEntry {
@@ -111,7 +113,14 @@ export class AdapterManager {
         }
       }
     }
+    await this.deps.afterSync?.().catch(() => undefined);
     return results;
+  }
+
+  /** Absolute paths of every symlink and generated file the sync creates (merge entries live in shared JSON, so they're excluded). */
+  async managedPaths(): Promise<string[]> {
+    const [links, files] = await Promise.all([this.planDestinations(), this.planGeneratedFiles()]);
+    return [...links.map((l) => l.destination), ...files.map((f) => f.destination)];
   }
 
   async syncEntity(command: SyncEntityCommand): Promise<SyncResult[]> {
@@ -130,6 +139,7 @@ export class AdapterManager {
         results.push(await this.syncDestination(adapter.adapterId, source, destination));
       }
     }
+    await this.deps.afterSync?.().catch(() => undefined);
     return results;
   }
 

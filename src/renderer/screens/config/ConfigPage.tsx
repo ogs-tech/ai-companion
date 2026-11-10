@@ -6,6 +6,7 @@ import { DangerPage } from './DangerPage.js';
 import { EditorPage } from './EditorPage.js';
 import { GitHubPage } from './GitHubPage.js';
 import { HarnessPage } from './HarnessPage.js';
+import { GitIgnorePage } from './GitIgnorePage.js';
 import { LanguagePage } from './LanguagePage.js';
 import { HARNESS_PAGE_PREFIX, type ConfigPageId } from './config-pages.js';
 
@@ -44,6 +45,8 @@ export function ConfigPage({ page }: { page: ConfigPageId }): React.ReactElement
       return <EditorPage />;
     case 'language':
       return <LanguagePage />;
+    case 'git-ignore':
+      return <GitIgnorePage />;
     case 'github':
       return <GitHubPage />;
     case 'danger':

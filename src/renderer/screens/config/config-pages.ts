@@ -1,4 +1,4 @@
-import { Bell, Bot, KeyRound, Languages, PencilLine, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { Bell, Bot, EyeOff, KeyRound, Languages, PencilLine, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { HARNESSES, HARNESS_IDS, isHarnessId } from '../../../shared/harness.js';
 
 /** Fixed per page — `harness:<id>`, `sessions`, `editor`, `language`, `github`, `danger`. */
@@ -40,6 +40,7 @@ export function configGroups(): ConfigGroupDef[] {
       label: 'App',
       pages: [
         { id: 'editor', label: 'Editor e Explorer', glyph: PencilLine },
+        { id: 'git-ignore', label: 'Git e arquivos gerados', glyph: EyeOff },
         { id: 'language', label: 'Idioma', glyph: Languages },
         { id: 'github', label: 'GitHub', glyph: KeyRound },
       ],

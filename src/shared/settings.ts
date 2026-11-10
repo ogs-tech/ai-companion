@@ -58,6 +58,23 @@ export function resolveSessionSettings(settings: Settings | null | undefined): R
   };
 }
 
+/**
+ * Where the app hides the files it generates inside a workspace's git repo:
+ * `off` touches nothing, `local` writes `.git/info/exclude` (never shows in a
+ * diff), `gitignore` writes the repo's own `.gitignore` (shared with the team).
+ */
+export type GitIgnoreMode = 'off' | 'local' | 'gitignore';
+export const GIT_IGNORE_MODES: readonly GitIgnoreMode[] = ['off', 'local', 'gitignore'];
+
+export interface GitSettings {
+  /** Default `local`. */
+  ignoreManagedFiles?: GitIgnoreMode;
+}
+
+export function resolveGitIgnoreMode(settings: Settings | null | undefined): GitIgnoreMode {
+  return settings?.git?.ignoreManagedFiles ?? 'local';
+}
+
 export interface Settings {
   /** One entry per known harness — see `harness.ts` for the registry. */
   adapters: Record<HarnessId, AdapterSettings>;
@@ -87,6 +104,8 @@ export interface Settings {
   openWith?: Record<string, string>;
   /** Session-status preferences; absent = all defaults. */
   sessions?: SessionSettings;
+  /** Git preferences; absent = defaults. */
+  git?: GitSettings;
 }
 
 export const WorkspacePaths = [

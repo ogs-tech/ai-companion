@@ -1,6 +1,7 @@
 import {
   getDefaults,
   SESSION_SETTING_KEYS,
+  GIT_IGNORE_MODES,
   type AdapterSettings,
   type Settings,
   type ThemeMode,
@@ -80,7 +81,7 @@ const LANGUAGE_PREFERENCES: readonly LanguagePreference[] = [
   'en',
   'es',
 ];
-const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing', 'openWith', 'sessions'];
+const SETTINGS_FIELDS: readonly string[] = ['adapters', 'ui', 'language', 'pricing', 'openWith', 'sessions', 'git'];
 
 const invalid = (message: string): never => {
   throw new DomainError('validation', message);
@@ -152,6 +153,12 @@ function assertValidSettings(value: unknown): asserts value is Settings {
   for (const [key, flag] of Object.entries(sessions)) {
     if (!(SESSION_SETTING_KEYS as readonly string[]).includes(key)) invalid(`Unknown settings field 'sessions.${key}'`);
     if (typeof flag !== 'boolean') invalid(`'sessions.${key}' must be a boolean`);
+  }
+
+  const git = s['git'] === undefined ? {} : asRecord(s['git'], "Invalid 'git'");
+  for (const [key, value] of Object.entries(git)) {
+    if (key !== 'ignoreManagedFiles') invalid(`Unknown settings field 'git.${key}'`);
+    if (!(GIT_IGNORE_MODES as readonly unknown[]).includes(value)) invalid(`'git.ignoreManagedFiles' must be one of ${GIT_IGNORE_MODES.join(', ')}`);
   }
 
   const openWith = s['openWith'] === undefined ? {} : asRecord(s['openWith'], "Invalid 'openWith'");

@@ -14,6 +14,7 @@ import type { Workspace } from '../../shared/workspace.js';
 import { FsEntityRepository } from '../infrastructure/entity/fs-entity-repository.js';
 import { ScopedEntityRepository, type DataDirRepository } from './entity/scoped-entity-repository.js';
 import { AdapterManager } from './services/adapter-manager.js';
+import { GitIgnoreService } from './services/git-ignore-service.js';
 import { EntityService } from './services/entity-service.js';
 import { EntityValidator } from './services/entity-validator.js';
 import { SkillService } from './services/skill-service.js';
@@ -74,6 +75,7 @@ export interface WorkspaceScopedServices {
   symlinkManager: SymlinkManager;
   fileMaterializer: FileMaterializer;
   adapterManager: AdapterManager;
+  gitIgnoreService: GitIgnoreService;
   entityService: EntityService;
   detectionService: DetectionService;
   skillService: SkillService;
@@ -151,17 +153,22 @@ export function buildWorkspaceScopedServices(
               }),
         },
   );
-  const adapterManager = new AdapterManager({
+  const adapterManager: AdapterManager = new AdapterManager({
     settingsService,
     entityRepository,
     symlinkManager,
     fileMaterializer,
     mergeMaterializer,
     entityDataDir: (entity) => entityRepository.dataDirFor(entity),
+    afterSync: (): Promise<void> => gitIgnoreService.apply(),
     adapters: new Map<string, Adapter>([
       [claudeAdapter.adapterId, claudeAdapter],
       [cursorAdapter.adapterId, cursorAdapter],
     ]),
+  });
+
+  const gitIgnoreService: GitIgnoreService = new GitIgnoreService(nodeFsAdapter, settingsService, activeWorkspace, {
+    managedPaths: (): Promise<string[]> => adapterManager.managedPaths(),
   });
 
   const entityValidator = new EntityValidator();
@@ -235,7 +242,7 @@ export function buildWorkspaceScopedServices(
   );
 
   return {
-    entityRepository, symlinkManager, fileMaterializer, adapterManager, entityService, detectionService,
+    entityRepository, symlinkManager, fileMaterializer, adapterManager, gitIgnoreService, entityService, detectionService,
     skillService, agentService, instructionService, sessionHistoryService,
     healthService, workspaceTeardownService, entityWatchService, launchConfigService, terminalService, openEditorsService,
     gitService, commitMessageService,

@@ -600,6 +600,9 @@ async function wireIpc(): Promise<void> {
     }
   };
   settingsService.onSaved((settings) => void syncInlineMarker(settings).catch(() => {}));
+  // Changing the git-ignore mode (or any setting) re-applies the rules to the open workspace; the app's start does the same.
+  settingsService.onSaved(() => void workspaceScoped.gitIgnoreService.apply());
+  void workspaceScoped.gitIgnoreService.apply();
   void settingsService.load().then(syncInlineMarker).catch(() => {});
 
   // Cost / context / rate limit of app-spawned sessions, refreshed when their transcript can have grown.
@@ -743,6 +746,7 @@ async function wireIpc(): Promise<void> {
       activeWorkspace = target;
       const scope = await scopeFor(target);
       workspaceScoped = buildWorkspaceScopedServices(scope, sharedDeps);
+      void workspaceScoped.gitIgnoreService.apply();
       fileBrowserService = fileBrowserFor(target);
       await rebuildFileServices();
       sessionService.rebind({
