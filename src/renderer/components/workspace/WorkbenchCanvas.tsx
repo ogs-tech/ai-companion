@@ -2,14 +2,16 @@ import { keyframes } from '@mui/material';
 import { SessionStateMark } from '../SessionStateMark.js';
 import { FILTER_LABELS } from '../../lib/session-attention.js';
 import type { SessionRowState } from '../../lib/session-attention.js';
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Box, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import { TREE_DRAG_TYPE, readTreeDrag } from '../../lib/tree-drag.js';
-import { Plus, X, type LucideIcon } from 'lucide-react';
+import { ChevronDown, Plus, X, type LucideIcon } from 'lucide-react';
 import { PANEL_HEADER_HEIGHT } from '../ds/ContainerChrome.js';
 import { Icon } from '../ds/Icon.js';
 import { toneColor, type FileTone } from '../../lib/file-icon.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
+
+const BREADCRUMB_HEIGHT = 26;
 
 export interface WorkbenchTab {
   id: string;
@@ -95,13 +97,40 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const [newAnchor, setNewAnchor] = useState<HTMLElement | null>(null);
   const hasNewMenu = (newMenu?.length ?? 0) > 0;
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const [allAnchor, setAllAnchor] = useState<HTMLElement | null>(null);
+
+  // The strip scrolls, so the active tab must never sit out of sight.
+  useEffect(() => {
+    if (activeTabId === null) return;
+    const el = Array.from(stripRef.current?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? []).find((node) => node.dataset.tabId === activeTabId);
+    el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [activeTabId, tabs.length]);
+
+  // Offer "all tabs" only when some are actually hidden.
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const measure = (): void => setOverflowing(strip.scrollWidth > strip.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [tabs]);
   return (
     <Box data-testid="workbench-canvas" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
       {(tabs.length > 0 || hasNewMenu) && (
         <Stack
           direction="row"
+          sx={{ height: PANEL_HEADER_HEIGHT, boxSizing: 'border-box', alignItems: 'center', borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
+        >
+        <Stack
+          ref={stripRef}
+          direction="row"
           data-testid="workbench-tabs"
-          sx={{ px: 1, height: PANEL_HEADER_HEIGHT, boxSizing: 'border-box', alignItems: 'center', gap: 0.375, borderBottom: 1, borderColor: 'divider', overflowX: 'auto', flexShrink: 0 }}
+          sx={{ pl: 1, pr: 0.5, height: '100%', flex: 1, minWidth: 0, alignItems: 'center', gap: 0.375, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
         >
           {tabs.map((tab) => {
             const active = tab.id === activeTabId;
@@ -116,6 +145,7 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
                   aria-pressed={active}
                   aria-label={tab.dirty ? `${tab.label} (não salvo)` : tab.label}
                   data-testid={`workbench-tab-${tab.id}`}
+                  data-tab-id={tab.id}
                   onClick={() => onSelect(tab.id)}
                   onAuxClick={(e) => {
                     if (e.button === 1 && tab.onClose) {
@@ -243,6 +273,23 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
               </Fragment>
             );
           })}
+        </Stack>
+        <Stack direction="row" sx={{ flex: 'none', alignItems: 'center', gap: 0.25, pl: 0.5, pr: 1 }}>
+          {overflowing && (
+            <Tooltip title="Todas as abas">
+              <IconButton
+                size="small"
+                data-testid="workbench-all-tabs"
+                aria-label="Todas as abas"
+                aria-haspopup="menu"
+                onClick={(e) => setAllAnchor(e.currentTarget)}
+                sx={{ p: 0.5, color: 'text.secondary', gap: 0.25, borderRadius: 1 }}
+              >
+                <Icon glyph={ChevronDown} size={14} />
+                <Typography component="span" sx={{ fontSize: '0.7rem' }}>{tabs.length}</Typography>
+              </IconButton>
+            </Tooltip>
+          )}
           {hasNewMenu && (
             <Tooltip title="Novo…">
               <IconButton
@@ -258,7 +305,24 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
             </Tooltip>
           )}
         </Stack>
+        </Stack>
       )}
+      <Menu open={allAnchor !== null} anchorEl={allAnchor} onClose={() => setAllAnchor(null)}>
+        {tabs.map((tab) => (
+          <MenuItem
+            key={tab.id}
+            selected={tab.id === activeTabId}
+            data-testid={`workbench-all-tabs-${tab.id}`}
+            onClick={() => {
+              setAllAnchor(null);
+              onSelect(tab.id);
+            }}
+          >
+            <ListItemIcon><Icon glyph={tab.glyph} size={14} /></ListItemIcon>
+            <ListItemText primary={tab.label} />
+          </MenuItem>
+        ))}
+      </Menu>
       <Menu open={newAnchor !== null} anchorEl={newAnchor} onClose={() => setNewAnchor(null)}>
         {(newMenu ?? []).map((action) => (
           <MenuItem
@@ -277,12 +341,18 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
           </MenuItem>
         ))}
       </Menu>
-      {activeTab?.breadcrumb && (
+      {/* The row is always there, so content does not jump between tabs with and without a path. */}
+      {tabs.length > 0 && (
         <Box
           data-testid="workbench-breadcrumb"
           sx={(theme) => ({
             px: 1.5,
-            py: 0.5,
+            height: BREADCRUMB_HEIGHT,
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
             bgcolor: 'background.paper',
             borderBottom: 1,
             borderColor: 'divider',
@@ -292,7 +362,7 @@ export function WorkbenchCanvas({ tabs, activeTabId, onSelect, onReorder, tabMen
             color: 'text.secondary',
           })}
         >
-          {activeTab.breadcrumb}
+          {activeTab?.breadcrumb}
         </Box>
       )}
       <RowContextMenu state={menu.state} onClose={menu.closeMenu} actions={menu.state ? (tabMenu?.(menu.state.target) ?? []) : []} />

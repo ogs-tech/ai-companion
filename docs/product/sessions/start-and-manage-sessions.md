@@ -49,8 +49,9 @@ typed (not sent) as your first message.
 - Type as you would in a normal terminal; the CLI's own UI and slash-commands work unchanged.
 - **Paste an image** (⌘V) to attach it: the app saves it under the workspace's `attachments/` folder and
   inserts its path for the CLI.
-- The tab header shows the session's state (see [Read a session's state](read-session-state.md)); if the
-  process fails to start, **Tentar novamente** respawns it.
+- A 24px status line under the terminal shows the session's state, current tool, context, cost and the
+  browser toggle (see [Read a session's state](read-session-state.md)); if the process fails to start,
+  **Tentar novamente** (on that line) respawns it, and **Retomar** resumes a finished one.
 
 A link the CLI opens on its own (`/login`, an MCP sign-in) appears as a tab in the embedded browser, not
 in your default browser. It only applies to sessions started by the app; if the app's link channel is
@@ -67,6 +68,10 @@ The conversation resumes automatically, but whatever the CLI was doing at that i
 The top bar's **Abrir navegador** button opens a standalone browser tab, unrelated to any session.
 
 ## Stop, resume, remove
+
+Closing the tab of a **running** session only minimizes it (the tab's button reads **Minimizar**): the
+process keeps running, and keeps spending, until you stop it. Reopen it from the **Sessões** list. Closing
+the tab of a finished session just closes it.
 
 In the **Sessões** list:
 

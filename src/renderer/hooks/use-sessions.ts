@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
+import { mostUrgentState, rowStateOf, type SessionRowState } from '../lib/session-attention.js';
 import { buildFileMarks, sessionsUsing, type FileMark, type UsingSession } from '../lib/session-usage.js';
-import { sessionAnchorKey, type SessionAnchor, type SessionSnapshot, type SessionStatus, type SessionUsage } from '../../shared/session.js';
+import { sessionAnchorKey, type SessionAnchor, type SessionSnapshot, type SessionUsage } from '../../shared/session.js';
 
 export const sessionsQueryKey = ['sessions'] as const;
 
@@ -30,19 +31,16 @@ export function useSessions(): UseQueryResult<SessionSnapshot[]> {
 }
 
 /**
- * This anchor's aggregate live/exited status, or `undefined` when it has no
- * known session — the lookup behind every `SessionStatusBadge`. `entity`
- * anchors have at most one matching session, so this is behaviorally
- * identical to an exact `sessionId` match; `workspace`/`project` anchors can
- * have several coexisting sessions, so any one of them running is enough to
- * report `running`.
+ * This anchor's most urgent session state (needs-input > working > idle >
+ * exited), or `undefined` when it has no known session — the lookup behind
+ * every `SessionStatusBadge`. `entity` anchors have at most one matching
+ * session; `workspace`/`project` anchors can have several, and the row shows
+ * the one that most needs the user.
  */
-export function useSessionStatus(anchor: SessionAnchor): SessionStatus | undefined {
+export function useSessionStatus(anchor: SessionAnchor): SessionRowState | undefined {
   const { data } = useSessions();
   const key = sessionAnchorKey(anchor);
-  const matches = data?.filter((session) => sessionAnchorKey(session.anchor) === key) ?? [];
-  if (matches.some((session) => session.status === 'running')) return 'running';
-  return matches.length > 0 ? 'exited' : undefined;
+  return mostUrgentState((data ?? []).filter((session) => sessionAnchorKey(session.anchor) === key).map((session) => rowStateOf(session)));
 }
 
 /**

@@ -32,19 +32,29 @@ describe('SessionStatusBadge', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows an "Ativa" pill for a running session', async () => {
-    call.mockImplementation(async () => ok([snapshot({ status: 'running' })]));
+  it.each([
+    ['running', undefined, 'Ocioso', 'idle'],
+    ['running', 'working', 'Trabalhando', 'working'],
+    ['running', 'needs-input', 'Pergunta', 'needs-input'],
+    ['exited', undefined, 'Fechado', 'exited'],
+  ] as const)('shows the %s/%s session as "%s"', async (status, activity, label, state) => {
+    call.mockImplementation(async () => ok([snapshot({ status, ...(activity ? { activity } : {}) })]));
     renderWithQuery(<SessionStatusBadge anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
-    const pill = await screen.findByTestId('status-pill-session-status-entity:urn:skill:foo');
-    expect(pill).toHaveTextContent('Ativa');
-    expect(pill).toHaveAttribute('data-variant', 'running');
+    const badge = await screen.findByTestId('session-status-entity:urn:skill:foo');
+    expect(badge).toHaveTextContent(label);
+    expect(badge).toHaveAttribute('data-state', state);
   });
 
-  it('shows an "Fechado" pill for an exited session', async () => {
-    call.mockImplementation(async () => ok([snapshot({ status: 'exited' })]));
-    renderWithQuery(<SessionStatusBadge anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} />);
-    const pill = await screen.findByTestId('status-pill-session-status-entity:urn:skill:foo');
-    expect(pill).toHaveTextContent('Fechado');
-    expect(pill).toHaveAttribute('data-variant', 'exited');
+  it('shows the most urgent state when several sessions share the anchor', async () => {
+    const anchor = { kind: 'workspace', workspaceId: 'w1' } as const;
+    call.mockImplementation(async () =>
+      ok([
+        snapshot({ sessionId: 'a', anchor, status: 'exited' }),
+        snapshot({ sessionId: 'b', anchor, status: 'running', activity: 'working' }),
+        snapshot({ sessionId: 'c', anchor, status: 'running', activity: 'needs-input' }),
+      ]),
+    );
+    renderWithQuery(<SessionStatusBadge anchor={anchor} />);
+    expect(await screen.findByText('Pergunta')).toBeInTheDocument();
   });
 });

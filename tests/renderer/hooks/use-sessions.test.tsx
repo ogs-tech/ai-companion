@@ -36,7 +36,7 @@ describe('useSessionStatus', () => {
       method === 'session.list' ? ok([snapshot({ status: 'running' })]) : ok(undefined),
     );
     const { result } = renderHook(() => useSessionStatus({ kind: 'entity', urn: 'urn:skill:foo' }), { wrapper });
-    await waitFor(() => expect(result.current).toBe('running'));
+    await waitFor(() => expect(result.current).toBe('idle'));
   });
 
   it('returns undefined when no session matches the anchor', async () => {
@@ -55,18 +55,18 @@ describe('useSessionStatus', () => {
     expect(result.current).toBeUndefined();
   });
 
-  it('aggregates to "running" when one session for the anchor is running and another has exited', async () => {
+  it('aggregates to the live state when one session for the anchor is running and another has exited', async () => {
     const anchor = { kind: 'workspace' as const, workspaceId: 'w1' };
     call.mockImplementation(async (method: string) =>
       method === 'session.list'
         ? ok([
             snapshot({ sessionId: 'sess-1', anchor, label: 'W', status: 'exited' }),
-            snapshot({ sessionId: 'sess-2', anchor, label: 'W (2)', status: 'running' }),
+            snapshot({ sessionId: 'sess-2', anchor, label: 'W (2)', status: 'running', activity: 'working' }),
           ])
         : ok(undefined),
     );
     const { result } = renderHook(() => useSessionStatus(anchor), { wrapper });
-    await waitFor(() => expect(result.current).toBe('running'));
+    await waitFor(() => expect(result.current).toBe('working'));
   });
 
   it('aggregates to "exited" when every session sharing the anchor has exited', async () => {

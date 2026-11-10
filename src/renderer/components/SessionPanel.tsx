@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from 'react';
 import { Box, Button, IconButton, Stack, Tooltip, Typography, keyframes } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
-import { SquareTerminal, Lock, Globe } from 'lucide-react';
+import { Lock, Globe } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -16,7 +16,6 @@ import {
   type SessionAnchor,
   type SessionSnapshotWithOutput,
 } from '../../shared/session.js';
-import { Kicker } from './ds/Kicker.js';
 import { Icon } from './ds/Icon.js';
 import { StatusPill } from './ds/StatusPill.js';
 import { SessionStateMark } from './SessionStateMark.js';
@@ -158,7 +157,7 @@ function attachmentRefData(paths: string[]): string {
   return `${paths.map((path) => `@${escapeAttachmentPath(path)}`).join(' ')} `;
 }
 
-interface SessionHeaderProps {
+interface SessionStatusLineProps {
   status: HeaderStatus;
   /** Current tool while working ("Edit CartService.ts"); wins over the status's own detail. */
   detail?: string;
@@ -168,55 +167,69 @@ interface SessionHeaderProps {
   browserToggle?: React.ReactNode;
 }
 
-function SessionHeader({ status, detail, metrics, action, browserToggle }: SessionHeaderProps): React.ReactElement {
+/** Fixed height, so a state change or a late-arriving sessionId never moves the terminal above it. */
+const STATUS_LINE_HEIGHT = 24;
+const LINE_MUTED = 'rgba(242, 238, 229, 0.6)';
+
+/** One 24px line flush under the terminal, in the terminal's own colors: state, detail, context, cost, then the actions on the right. */
+function SessionStatusLine({ status, detail, metrics, action, browserToggle }: SessionStatusLineProps): React.ReactElement {
   const shownDetail = detail ?? status.detail;
   return (
     <Stack
       direction="row"
-      sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', rowGap: 1 }}
+      spacing={1.5}
+      data-testid="session-status-line"
+      sx={{
+        height: STATUS_LINE_HEIGHT,
+        flex: 'none',
+        alignItems: 'center',
+        px: 1.25,
+        bgcolor: 'rgba(255, 255, 255, 0.06)',
+        color: ogs.creamInk,
+        overflow: 'hidden',
+        '& .MuiButton-root': { minHeight: 0, py: 0, lineHeight: '20px', fontSize: '0.75rem', color: 'inherit' },
+        '& .MuiIconButton-root': { p: 0.25 },
+        '& .MuiIconButton-root:not(.MuiIconButton-colorPrimary)': { color: 'inherit' },
+      }}
     >
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Icon glyph={SquareTerminal} size={16} />
-        <Kicker>Sessão</Kicker>
-      </Stack>
-      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-        {status.state === 'error' ? (
-          <StatusPill variant="error" label={status.label} testId="session" />
-        ) : (
-          <Stack direction="row" spacing={0.75} data-testid="session-state" data-state={status.state} sx={{ alignItems: 'center' }}>
-            <SessionStateMark state={status.state} breathing={status.starting === true} />
-            <Typography component="span" sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>
-              {status.label}
-            </Typography>
-          </Stack>
-        )}
-        {shownDetail && (
-          <Typography
-            component="span"
-            noWrap
-            data-testid="session-detail"
-            sx={{
-              fontSize: '0.75rem',
-              color: 'text.secondary',
-              maxWidth: 260,
-              '@media (prefers-reduced-motion: no-preference)': {
-                animation: `${fadeIn} 0.2s ease-out`,
-                ...(status.starting && !detail ? { '&::after': { content: '""', display: 'inline-block', width: '1.2em', textAlign: 'left', animation: `${dots} 1.2s steps(4, end) infinite` } } : {}),
-              },
-            }}
-          >
-            {shownDetail}
+      {status.state === 'error' ? (
+        <StatusPill variant="error" label={status.label} testId="session" />
+      ) : (
+        <Stack direction="row" spacing={0.75} data-testid="session-state" data-state={status.state} sx={{ alignItems: 'center', flex: 'none' }}>
+          <SessionStateMark state={status.state} size={11} breathing={status.starting === true} />
+          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600 }}>
+            {status.label}
           </Typography>
-        )}
-        <ContextBar metrics={metrics} testId="session-context" />
-        {metrics?.costUsd !== undefined && (
-          <Typography component="span" data-testid="session-cost" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-            {`US$ ${metrics.costUsd.toFixed(2)}`}
-          </Typography>
-        )}
-        {browserToggle}
+        </Stack>
+      )}
+      {shownDetail && (
+        <Typography
+          component="span"
+          noWrap
+          data-testid="session-detail"
+          sx={{
+            fontSize: '0.75rem',
+            color: LINE_MUTED,
+            minWidth: 0,
+            '@media (prefers-reduced-motion: no-preference)': {
+              animation: `${fadeIn} 0.2s ease-out`,
+              ...(status.starting && !detail ? { '&::after': { content: '""', display: 'inline-block', width: '1.2em', textAlign: 'left', animation: `${dots} 1.2s steps(4, end) infinite` } } : {}),
+            },
+          }}
+        >
+          {shownDetail}
+        </Typography>
+      )}
+      <ContextBar metrics={metrics} testId="session-context" onDark />
+      {metrics?.costUsd !== undefined && (
+        <Typography component="span" data-testid="session-cost" sx={{ fontSize: '0.75rem', color: LINE_MUTED, flex: 'none' }}>
+          {`US$ ${metrics.costUsd.toFixed(2)}`}
+        </Typography>
+      )}
+      <Box sx={{ ml: 'auto !important', display: 'flex', alignItems: 'center', gap: 0.5, flex: 'none' }}>
         {action}
-      </Stack>
+        {browserToggle}
+      </Box>
     </Stack>
   );
 }
@@ -225,13 +238,13 @@ function SessionHeader({ status, detail, metrics, action, browserToggle }: Sessi
 export function SessionPanelLocked(): React.ReactElement {
   return (
     <Box data-testid="session-panel-locked">
-      <SessionHeader status={{ state: 'exited', label: 'Disponível após salvar' }} />
       <EmptyState
         glyph={Lock}
         title="Salve para abrir uma sessão"
         description="Um terminal claude fica ancorado a este item assim que ele existir de verdade."
         testId="session-locked"
       />
+      <SessionStatusLine status={{ state: 'exited', label: 'Disponível após salvar' }} />
     </Box>
   );
 }
@@ -598,27 +611,14 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
           disabled={browserToggling}
           onClick={() => void handleToggleBrowser()}
         >
-          <Icon glyph={Globe} size={16} />
+          <Icon glyph={Globe} size={14} />
         </IconButton>
       </span>
     </Tooltip>
   ) : null;
 
-  // The header carries an action (Abrir sessão / Tentar novamente / Retomar)
-  // for idle, error, or exited states, and the browser toggle for any state
-  // that has a concrete sessionId — a running session with no toggle yet
-  // (the sessionId hasn't resolved) drops the header entirely so the terminal
-  // fills the whole tab, reading as a real terminal instead of a themed app
-  // panel with a chrome bar on top.
-  const showHeader = action !== null || browserToggle !== null;
-
   return (
     <Box data-testid="session-panel" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {showHeader && (
-        <Box sx={{ px: 2, pt: 2 }}>
-          <SessionHeader status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
-        </Box>
-      )}
       {error && (
         <Typography color="error" data-testid="session-error" sx={{ mx: 2, mb: 1.5, flexShrink: 0 }}>
           {error}
@@ -646,6 +646,9 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
           overflow: 'hidden',
         }}
       />
+      {/* Always rendered at a fixed height: the terminal never jumps when the
+          sessionId resolves or the state changes. */}
+      <SessionStatusLine status={headerStatusFor(stored ? stored.status : status, stored ? stored.activity : activity)} metrics={stored?.metrics} {...(stored?.activity === 'working' && stored.activityDetail ? { detail: stored.activityDetail } : {})} action={action} browserToggle={browserToggle} />
       <Toast toast={attachmentToast} onDismiss={() => setAttachmentToast(null)} />
     </Box>
   );

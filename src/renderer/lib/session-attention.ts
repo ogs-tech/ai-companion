@@ -34,6 +34,14 @@ export function rowStateOf(live: SessionSnapshot | null): SessionRowState {
   return live.activity ?? 'idle';
 }
 
+/** The most urgent of several states (needs-input > working > idle > exited); `undefined` for none. */
+export function mostUrgentState(states: readonly SessionRowState[]): SessionRowState | undefined {
+  return states.reduce<SessionRowState | undefined>(
+    (best, s) => (best === undefined || STATE_ORDER[s] < STATE_ORDER[best] ? s : best),
+    undefined,
+  );
+}
+
 /** With no filter every session is listed, encerradas last; each chip narrows to one state. */
 export function matchesFilter(state: SessionRowState, filter: SessionFilter | null): boolean {
   return filter === null || state === filter;

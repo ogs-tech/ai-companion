@@ -5,7 +5,7 @@ description: The four session states (Pergunta, Trabalhando, Ocioso, Fechado), t
 
 ## Read a session's state
 
-The list, the tabs, the status bar and the session header use the same four states. The shape carries the
+The list, the tabs, the status bar, the session's status line and the badge on workspace, skill, agent and instruction rows use the same four states. A row with several sessions shows the most urgent one (Pergunta, then Trabalhando, Ocioso, Fechado). The shape carries the
 meaning; colour only reinforces it.
 
 | State | Mark | Meaning |

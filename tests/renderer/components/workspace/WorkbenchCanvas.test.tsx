@@ -54,4 +54,38 @@ describe('WorkbenchCanvas session tabs', () => {
     expect(screen.getByTestId('workbench-tab-state-a')).toHaveAttribute('data-state', 'exited');
     expect(screen.getByTestId('workbench-tab-state-b').querySelector('svg')).not.toBeNull();
   });
+
+  describe('tab strip', () => {
+    const tabs = [sessionTab({ id: 'a', label: 'alpha' }), sessionTab({ id: 'b', label: 'beta' })];
+
+    it('keeps the "+" outside the scrolling strip', () => {
+      renderWithTheme(<WorkbenchCanvas tabs={tabs} activeTabId="a" onSelect={vi.fn()} newMenu={[{ key: 'x', label: 'Novo', glyph: SquareTerminal, onSelect: vi.fn() }]} />);
+      expect(screen.getByTestId('workbench-tabs')).not.toContainElement(screen.getByTestId('workbench-new'));
+    });
+
+    it('reserves the breadcrumb row even when the active tab has no path', () => {
+      renderWithTheme(<WorkbenchCanvas tabs={tabs} activeTabId="a" onSelect={vi.fn()} />);
+      expect(screen.getByTestId('workbench-breadcrumb')).toBeEmptyDOMElement();
+    });
+
+    it('offers "all tabs" only when the strip overflows, and selects from it', async () => {
+      const onSelect = vi.fn();
+      const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900);
+      const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
+      try {
+        renderWithTheme(<WorkbenchCanvas tabs={tabs} activeTabId="a" onSelect={onSelect} />);
+        await userEvent.click(await screen.findByTestId('workbench-all-tabs'));
+        await userEvent.click(await screen.findByTestId('workbench-all-tabs-b'));
+        expect(onSelect).toHaveBeenCalledWith('b');
+      } finally {
+        scrollWidth.mockRestore();
+        clientWidth.mockRestore();
+      }
+    });
+
+    it('hides "all tabs" when nothing overflows', () => {
+      renderWithTheme(<WorkbenchCanvas tabs={tabs} activeTabId="a" onSelect={vi.fn()} />);
+      expect(screen.queryByTestId('workbench-all-tabs')).toBeNull();
+    });
+  });
 });

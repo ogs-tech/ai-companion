@@ -43,7 +43,7 @@ describe('InstructionTreeRow session badge', () => {
     renderWithShell(
       <InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(await screen.findByText('Ativa')).toBeInTheDocument();
+    expect(await screen.findByText('Ocioso')).toBeInTheDocument();
   });
 
   it('shows no badge when the instruction has never had a session', async () => {
@@ -51,14 +51,14 @@ describe('InstructionTreeRow session badge', () => {
       <InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />,
     );
     await screen.findByTestId('personal-instruction-row');
-    expect(screen.queryByText('Ativa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ocioso')).not.toBeInTheDocument();
   });
 
   it('shows no badge when there is no instruction yet (not saved)', () => {
     renderWithShell(
       <InstructionTreeRow kind="personal" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.queryByText('Ativa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ocioso')).not.toBeInTheDocument();
   });
 });
 

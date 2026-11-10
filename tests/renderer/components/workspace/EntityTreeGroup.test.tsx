@@ -147,10 +147,10 @@ describe('EntityTreeGroup', () => {
     await user.click(await screen.findByTestId('tree-group-skill'));
 
     const activeRow = await screen.findByTestId('tree-skill-personal-skill');
-    expect(within(activeRow).getByTestId('status-pill-session-status-entity:urn:skill:personal-skill')).toHaveTextContent('Ativa');
+    expect(within(activeRow).getByTestId('session-status-entity:urn:skill:personal-skill')).toHaveTextContent('Ocioso');
 
     const idleRow = await screen.findByTestId('tree-skill-workspace-skill');
-    expect(within(idleRow).queryByText('Ativa')).not.toBeInTheDocument();
+    expect(within(idleRow).queryByTestId('session-status-entity:urn:skill:workspace-skill')).not.toBeInTheDocument();
   });
 
   it('does not offer a delete action for a plugin-provided item, but the row still opens it (read-only) in the editor tab', async () => {
