@@ -94,7 +94,7 @@ Each channel's page in Config > Canais shows where it stands — **installed**,
 
 | Step | Button | What happens |
 |---|---|---|
-| Not installed | **Instalar** | Runs the vendor's install command in a visible terminal dialog (you can type into it). Claude: `curl -fsSL https://claude.ai/install.sh \| bash`; Cursor: `curl https://cursor.com/install -fsS \| bash`. LM Studio's CLI ships inside the LM Studio app, so **Baixar LM Studio** opens the download page instead; open the app once so `lms` is available. |
+| Not installed | **Instalar** | Runs the vendor's install command in a visible terminal dialog (you can type into it). Claude: `curl -fsSL https://claude.ai/install.sh \| bash`; Cursor: `curl https://cursor.com/install -fsS \| bash`. LM Studio: `curl -fsSL https://lmstudio.ai/install.sh \| bash` installs the headless `llmster` + `lms` into `~/.lmstudio/bin` (not the GUI app). |
 | Installed, signed out | **Entrar** | Runs `claude auth login` / `cursor-agent login` in the same dialog. The app never sees credentials; the CLI stores them itself. LM Studio has no account, so it has no sign-in step. |
 | Ready | **Ativar** | The channel's switch appears only when it is installed and signed in, so there is no half-working state to enable. |
 

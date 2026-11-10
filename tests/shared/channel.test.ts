@@ -39,7 +39,7 @@ describe('channel registry', () => {
       if (setup.auth !== null) expect(setup.auth.statusArgs.length).toBeGreaterThan(0);
     }
     expect(CHANNELS.lmstudio.setup.auth).toBeNull();
-    expect(CHANNELS.lmstudio.setup.install.kind).toBe('download');
+    expect(CHANNELS.lmstudio.setup.install).toEqual({ kind: 'command', command: 'curl -fsSL https://lmstudio.ai/install.sh | bash' });
   });
 
   it('declares a non-empty display name per harness', () => {

@@ -1,116 +1,51 @@
-import {
-  test,
-  expect,
-  _electron as electron,
-  type ElectronApplication,
-  type Page,
-} from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { expect, launchApp, writeFile, type AppSession } from './fixtures/app.js';
 
-// A schema-valid `default` global instruction with two H2 sections and NO
-// <language> block. Six non-empty body lines → the "6 lines" chip.
-const SEED_GI = `---
-name: default
-type: global-instruction
-description: Test profile for staleness repro.
-scopes:
-  - personal
-version: 0.1.0
-createdAt: 2026-01-01T00:00:00.000Z
-updatedAt: 2026-01-01T00:00:00.000Z
----
-# Global instructions
+// Picking a language in Config > Idioma must write the <language> block into the personal instruction on disk
+// (the file Claude/Cursor are then synced from), not just remember the choice in settings.
+// Replaces the old Global-Instructions staleness spec, whose screens (nav-biblioteca, the line-count chip) no longer exist.
+
+const SEED_INSTRUCTION = `# Global instructions
 
 Intro line for the test profile.
 
 ## How to work with me
 
 - Reply concisely.
-
-## Engineering defaults
-
-- TDD where it fits.
 `;
 
-const SEED_SETTINGS = JSON.stringify(
-  { adapters: { claude: { enabled: true } }, ui: { theme: 'system' }, language: 'off' },
-  null,
-  2,
-);
-
-let app: ElectronApplication;
-let page: Page;
-let giPath: string;
-
-const linesOf = (text: string): string | undefined => /(\d+)\s+lines/.exec(text)?.[1];
+let session: AppSession;
+let instructionPath: string;
 
 test.beforeAll(async () => {
-  const home = mkdtempSync(join(tmpdir(), 'sde-e2e-'));
-  const ws = join(home, '.ai-companion');
-  mkdirSync(join(ws, 'global-instructions'), { recursive: true });
-  mkdirSync(join(home, '.claude'), { recursive: true });
-  giPath = join(ws, 'global-instructions', 'default.md');
-  writeFileSync(giPath, SEED_GI, 'utf8');
-  writeFileSync(join(ws, 'settings.json'), SEED_SETTINGS, 'utf8');
-
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  env.HOME = home;
-  delete env.ELECTRON_RENDERER_URL; // force the production loadFile path
-
-  app = await electron.launch({ args: [join(process.cwd(), 'out', 'main', 'index.js')], env });
-  page = await app.firstWindow();
-  await page.waitForSelector('[data-testid="main-screen"]', { timeout: 30_000 });
+  session = await launchApp({
+    seed: (home) => {
+      instructionPath = join(home, '.ai-companion', 'instructions', 'default.md');
+      writeFile(instructionPath, SEED_INSTRUCTION);
+    },
+  });
 });
 
 test.afterAll(async () => {
-  await app?.close();
+  await session?.close();
 });
 
-test('language change in Settings is reflected in Global Instructions on return', async () => {
-  // 1. Visit Global Instructions — this populates the react-query cache.
-  await page.click('[data-testid="nav-biblioteca"]');
-  await page.waitForSelector('[data-testid="nav-global-instructions"]');
-  await page.click('[data-testid="nav-global-instructions"]');
-  await page.waitForSelector('[data-testid="global-instruction-configured"]');
-  const before = await page.locator('[data-testid="global-instruction-configured"]').innerText();
-  const linesBefore = linesOf(before);
-  expect(linesBefore, 'should render a line count').toBeTruthy();
-  expect(readFileSync(giPath, 'utf8'), 'no block on disk yet').not.toContain('<language>');
+test('choosing a language writes the <language> block into the personal instruction', async () => {
+  const { page } = session;
+  expect(readFileSync(instructionPath, 'utf8'), 'no block on disk yet').not.toContain('<language>');
 
-  // 2. Settings → set language to Português (pt-BR).
-  await page.click('[data-testid="nav-settings"]');
-  await page.waitForSelector('[data-testid="settings-screen"]');
+  await page.getByTestId('nav-settings').click();
+  await page.getByTestId('config-leaf-language').click();
+  await page.getByTestId('config-page-language').waitFor();
+
   await page.getByRole('combobox', { name: 'Language' }).click();
   await page.getByRole('option', { name: 'Português (pt-BR)' }).click();
   await expect(page.getByRole('combobox', { name: 'Language' })).toHaveText(/Português/);
 
-  // 3. Disk truth: setLanguage DID write the <language> block to default.md.
-  await expect
-    .poll(() => readFileSync(giPath, 'utf8').includes('<language>'), { timeout: 10_000 })
-    .toBe(true);
-  expect(readFileSync(giPath, 'utf8')).toContain('pt-BR');
-
-  // 4. Back to Global Instructions, well within the 30s staleTime.
-  await page.getByRole('button', { name: 'Voltar' }).click();
-  await page.waitForSelector('[data-testid="main-screen"]');
-  await page.click('[data-testid="nav-biblioteca"]');
-  await page.waitForSelector('[data-testid="nav-global-instructions"]');
-  await page.click('[data-testid="nav-global-instructions"]');
-  await page.waitForSelector('[data-testid="global-instruction-configured"]');
-
-  // refetchOnMount:'always' refetches in the background (stale-while-revalidate):
-  // the cached count renders first, then updates to the on-disk truth — the body
-  // grew by the 3-line <language> block. Poll until it reflects the change.
-  const panel = page.locator('[data-testid="global-instruction-configured"]');
-  await expect
-    .poll(async () => Number(linesOf(await panel.innerText())), { timeout: 10_000 })
-    .toBeGreaterThan(Number(linesBefore));
-
-  const linesAfter = linesOf(await panel.innerText());
-  console.log(
-    `[fixed] lines before=${linesBefore} after=${linesAfter} diskHasBlock=${readFileSync(giPath, 'utf8').includes('<language>')}`,
-  );
+  await expect.poll(() => readFileSync(instructionPath, 'utf8').includes('<language>'), { timeout: 10_000 }).toBe(true);
+  const body = readFileSync(instructionPath, 'utf8');
+  expect(body).toContain('pt-BR');
+  expect(body, 'the user text survives the rewrite').toContain('Reply concisely.');
 });

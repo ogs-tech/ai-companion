@@ -56,12 +56,7 @@ export async function launch(demo: Demo): Promise<{ app: ElectronApplication; pa
   return { app, page };
 }
 
-/** Makes the native folder picker return `path` without showing it. */
-export async function stubFolderPicker(app: ElectronApplication, path: string): Promise<void> {
-  await app.evaluate(({ dialog }, p) => {
-    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [p] })) as typeof dialog.showOpenDialog;
-  }, path);
-}
+export { stubFolderPicker } from '../../e2e/fixtures/app.js';
 
 /** Outlines `target` with a numbered badge, for the duration of `fn` (so the capture includes it). */
 export async function withHighlight(page: Page, target: Locator, label: string, fn: () => Promise<void>): Promise<void> {

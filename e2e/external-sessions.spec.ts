@@ -1,8 +1,8 @@
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { expect, launchApp, type AppSession } from './fixtures/app.js';
 
 // External sessions (Claude running in the user's own terminal), end to end:
 // the REAL hook commands the app installed into ~/.claude/settings.json run in
@@ -23,22 +23,13 @@ interface StateDto {
   sessions: ExternalSessionDto[];
 }
 
-let app: ElectronApplication;
-let page: Page;
+let session: AppSession;
 let home: string;
 let hooks: Record<string, string>;
 
 const CWD = '/tmp/e2e-project';
 
-async function call<T>(method: string, params?: unknown): Promise<T> {
-  const result = await page.evaluate(
-    ([m, p]) => (window as unknown as { api: { call: (m: string, p: unknown) => Promise<unknown> } }).api.call(m as string, p),
-    [method, params ?? null] as const,
-  );
-  const r = result as { ok: boolean; data?: T; error?: { message: string } };
-  if (!r.ok) throw new Error(`${method} failed: ${r.error?.message}`);
-  return r.data as T;
-}
+const call = <T>(method: string, params?: unknown): Promise<T> => session.call<T>(method, params);
 
 const state = (): Promise<StateDto> => call<StateDto>('externalSession.state');
 const sessions = async (): Promise<ExternalSessionDto[]> => (await state()).sessions;
@@ -68,25 +59,8 @@ function fire(event: string, sessionId: string, extra: Record<string, unknown> =
 }
 
 test.beforeAll(async () => {
-  home = mkdtempSync(join(tmpdir(), 'ai-companion-e2e-sessions-'));
-  mkdirSync(join(home, '.claude'), { recursive: true });
-  mkdirSync(join(home, '.ai-companion'), { recursive: true });
-  writeFileSync(
-    join(home, '.ai-companion', 'settings.json'),
-    JSON.stringify({ adapters: { claude: { enabled: true } }, ui: { theme: 'system' }, language: 'off' }),
-  );
-
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  env.HOME = home;
-  delete env.ELECTRON_RENDERER_URL;
-  env.AI_COMPANION_CDP_PORT = '9334'; // the dev app owns the default 9333
-
-  // Own userData: the single-instance lock lives there, so a running dev app cannot swallow this launch.
-  const userData = mkdtempSync(join(tmpdir(), 'ai-companion-e2e-userdata-'));
-  app = await electron.launch({ args: [join(process.cwd(), 'out', 'main', 'index.js'), `--user-data-dir=${userData}`], env });
-  page = await app.firstWindow();
-  await page.waitForSelector('[data-testid="main-screen"]', { timeout: 30_000 });
+  session = await launchApp();
+  home = session.home;
 
   const after = await call<StateDto>('externalSession.setConsent', { mode: 'exact' });
   expect(after.consent).toBe('exact');
@@ -94,7 +68,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await app?.close();
+  await session?.close();
 });
 
 test.describe.configure({ mode: 'serial' });
@@ -129,7 +103,7 @@ test('a permission prompt asks for the user; the next prompt clears it', async (
 
 test('idle_prompt notifications never read as "needs you"', async () => {
   fire('Notification', 'fresh', { notification_type: 'idle_prompt', message: 'Claude is waiting for your input' });
-  await page.waitForTimeout(500);
+  await session.page.waitForTimeout(500);
   expect((await byId('fresh'))?.activity).toBe('idle');
 });
 
@@ -137,14 +111,14 @@ test('SessionStart on a known conversation (resume/compact) does not reset a tur
   fire('UserPromptSubmit', 'fresh');
   await expect.poll(async () => (await byId('fresh'))?.activity).toBe('working');
   fire('SessionStart', 'fresh', { source: 'compact' });
-  await page.waitForTimeout(500);
+  await session.page.waitForTimeout(500);
   expect((await byId('fresh'))?.activity).toBe('working');
   fire('Stop', 'fresh');
   await expect.poll(async () => (await byId('fresh'))?.activity).toBe('idle');
 });
 
 test('an idle session stays idle: no extra conversation appears', async () => {
-  await page.waitForTimeout(1_000);
+  await session.page.waitForTimeout(1_000);
   expect((await sessions()).filter((s) => s.cwd === CWD).map((s) => s.id)).toEqual(['fresh']);
 });
 

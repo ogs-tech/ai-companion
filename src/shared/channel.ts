@@ -100,7 +100,7 @@ export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
     },
   },
   // Run-only: `lms` serves and chats with local models but has no skills, agents or instructions on disk to manage,
-  // and no account to sign in to. Its CLI ships inside the LM Studio app, so "install" means getting the app.
+  // and no account to sign in to. The vendor script installs the headless `llmster` + `lms` into ~/.lmstudio/bin (not the GUI app).
   lmstudio: {
     id: 'lmstudio',
     displayName: 'LM Studio',
@@ -109,7 +109,7 @@ export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
     setup: {
       bin: 'lms',
       versionArgs: ['version'],
-      install: { kind: 'download', url: 'https://lmstudio.ai/download' },
+      install: { kind: 'command', command: 'curl -fsSL https://lmstudio.ai/install.sh | bash' },
       auth: null,
     },
   },

@@ -1,22 +1,10 @@
-import {
-  test,
-  expect,
-  _electron as electron,
-  type ElectronApplication,
-  type Page,
-} from '@playwright/test';
+import { test } from '@playwright/test';
 import ExcelJS from 'exceljs';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { expect, launchApp, seedWorkspaceRegistry, type AppSession } from './fixtures/app.js';
 
 const WORKBOOK_NAME = 'calculator_catalog.xlsx';
-
-const SEED_SETTINGS = JSON.stringify(
-  { adapters: { claude: { enabled: true } }, ui: { theme: 'system' }, language: 'off' },
-  null,
-  2,
-);
 
 /**
  * A miniature of the reported workbook: every formula cell is written without
@@ -78,73 +66,35 @@ async function writeFixtureWorkbook(path: string): Promise<void> {
     formula: 'SUMIFS($E$23:$E$24,$A$23:$A$24,$A5,$C$23:$C$24,"não")',
   } as ExcelJS.CellFormulaValue;
 
+  mkdirSync(dirname(path), { recursive: true });
   await workbook.xlsx.writeFile(path);
 }
 
-let app: ElectronApplication;
-let page: Page;
+let session: AppSession;
 
 test.beforeAll(async () => {
-  // A throwaway HOME, plus a non-default workspace rooted at a scratch folder
-  // inside it — the Explorer Panel only renders a FolderTree outside the
-  // default ("Global") workspace, which shows the workspace list instead.
-  const home = mkdtempSync(join(tmpdir(), 'xlsx-e2e-'));
-  const ws = join(home, '.ai-companion');
-  const projectRoot = join(home, 'studio');
-  mkdirSync(ws, { recursive: true });
-  mkdirSync(join(home, '.claude'), { recursive: true });
-  mkdirSync(projectRoot, { recursive: true });
-  writeFileSync(join(ws, 'settings.json'), SEED_SETTINGS, 'utf8');
-  await writeFixtureWorkbook(join(projectRoot, WORKBOOK_NAME));
-  writeFileSync(
-    join(ws, 'workspaces.json'),
-    JSON.stringify(
-      {
-        workspaces: [
-          {
-            id: 'default',
-            name: 'Default',
-            rootPath: home,
-            isDefault: true,
-            createdAt: '2026-01-01T00:00:00.000Z',
-          },
-          {
-            id: 'studio',
-            name: 'Studio',
-            rootPath: projectRoot,
-            isDefault: false,
-            createdAt: '2026-01-01T00:00:00.000Z',
-          },
-        ],
-        activeWorkspaceId: 'studio',
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  );
-
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  env.HOME = home;
-  delete env.ELECTRON_RENDERER_URL; // force the production loadFile path
-
-  app = await electron.launch({ args: [join(process.cwd(), 'out', 'main', 'index.js')], env });
-  page = await app.firstWindow();
-  await page.waitForSelector('[data-testid="workspace-screen"]', { timeout: 30_000 });
+  // The workspace is opened at launch through the registry: the file tree only exists inside a workspace
+  // (Início shows the workspaces list instead).
+  session = await launchApp({
+    seed: async (home) => {
+      const projectRoot = join(home, 'studio');
+      await writeFixtureWorkbook(join(projectRoot, WORKBOOK_NAME));
+      seedWorkspaceRegistry(home, [{ id: 'studio', name: 'Studio', rootPath: projectRoot }], 'studio');
+    },
+  });
 });
 
 test.afterAll(async () => {
-  await app?.close();
+  await session?.close();
 });
 
 test('previews every uncached formula as its computed value, never as formula text', async () => {
-  await page.waitForSelector('[data-testid="folder-tree"]', { timeout: 15_000 });
-  await page.getByText(WORKBOOK_NAME, { exact: true }).first().click();
-  await page.waitForSelector('[data-testid="spreadsheet-preview"]', { timeout: 20_000 });
+  await session.page.waitForSelector('[data-testid="folder-tree"]', { timeout: 15_000 });
+  await session.page.getByText(WORKBOOK_NAME, { exact: true }).first().click();
+  await session.page.waitForSelector('[data-testid="spreadsheet-preview"]', { timeout: 20_000 });
 
-  await page.getByRole('tab', { name: 'Catálogo' }).click();
-  const grid = page.locator('[data-testid="spreadsheet-preview"]');
+  await session.page.getByRole('tab', { name: 'Catálogo' }).click();
+  const grid = session.page.locator('[data-testid="spreadsheet-preview"]');
 
   // F11 = ROUND(18*300/5,0)*5 = 5400, reached through a nested parse.
   await expect(grid).toContainText('5400');

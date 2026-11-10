@@ -178,10 +178,10 @@ describe('<ChannelPage> — install and sign-in steps', () => {
     expect(await screen.findByTestId('channel-setup-dialog')).toBeInTheDocument();
   });
 
-  it('shows no sign-in step for LM Studio and offers the app download', async () => {
+  it('shows no sign-in step for LM Studio and offers the scripted install', async () => {
     setupRoute({ 'channelSetup.status': ok({ channelId: 'lmstudio', installed: false, signedIn: null }) });
     render(<ConfigPage page="channel:lmstudio" />);
-    expect(await screen.findByRole('button', { name: 'Baixar LM Studio' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Instalar' })).toBeInTheDocument();
     expect(screen.queryByText('Entrar na conta')).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChannelSetupService } from '../../../../src/main/application/services/channel-setup-service.js';
+import { CHANNELS } from '../../../../src/shared/channel.js';
 import type { ChannelProbePort, ProbeResult } from '../../../../src/main/application/ports/channel-probe-port.js';
 import type { TerminalPort } from '../../../../src/main/application/ports/terminal-port.js';
 
@@ -46,8 +47,15 @@ describe('ChannelSetupService.status', () => {
 describe('ChannelSetupService.start', () => {
   it('opens the vendor page for a download-style install, without a terminal', async () => {
     const { service, openExternal, port } = setup(probeReturning(() => ({ found: false, exitCode: null, output: '' })));
-    expect(await service.start('lmstudio', 'install')).toEqual({ kind: 'opened', url: 'https://lmstudio.ai/download' });
-    expect(openExternal).toHaveBeenCalledWith('https://lmstudio.ai/download');
+    const { setup: channelSetup } = CHANNELS.lmstudio;
+    const original = channelSetup.install;
+    (channelSetup as { install: unknown }).install = { kind: 'download', url: 'https://example.test/download' };
+    try {
+      expect(await service.start('lmstudio', 'install')).toEqual({ kind: 'opened', url: 'https://example.test/download' });
+    } finally {
+      (channelSetup as { install: unknown }).install = original;
+    }
+    expect(openExternal).toHaveBeenCalledWith('https://example.test/download');
     expect(port.spawn).not.toHaveBeenCalled();
   });
 
