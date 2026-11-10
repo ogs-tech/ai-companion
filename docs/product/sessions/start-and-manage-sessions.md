@@ -49,8 +49,8 @@ typed (not sent) as your first message.
 - Type as you would in a normal terminal; the CLI's own UI and slash-commands work unchanged.
 - **Paste an image** (⌘V) to attach it: the app saves it under the workspace's `attachments/` folder and
   inserts its path for the CLI.
-- A 24px status line under the terminal shows the session's state, current tool, context, cost and the
-  browser toggle (see [Read a session's state](read-session-state.md)); if the process fails to start,
+- A 24px status line under the terminal shows the session's state, current tool, context and cost
+  (see [Read a session's state](read-session-state.md)); if the process fails to start,
   **Tentar novamente** (on that line) respawns it, and **Retomar** resumes a finished one.
 
 A link the CLI opens on its own (`/login`, an MCP sign-in) appears as a tab in the embedded browser, not
@@ -59,8 +59,8 @@ unavailable, the link opens in the default browser as usual.
 
 ## Give the session a browser
 
-Click the session's globe button (**Ativar navegador da sessão**). The session gets a browser embedded in
-the app, exposed to Claude as an MCP server, so it can open pages, click and read them while you watch.
+The status line no longer has a browser button, so the app has no control to turn a session's browser on.
+A session that already has it enabled keeps its browser, embedded in the app and exposed to Claude as an MCP server, so it can open pages, click and read them while you watch.
 
 Turning the browser on or off **restarts** the `claude` process (the CLI only reads MCP config at startup).
 The conversation resumes automatically, but whatever the CLI was doing at that instant is interrupted.
