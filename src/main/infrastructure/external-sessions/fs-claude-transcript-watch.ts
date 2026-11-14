@@ -58,6 +58,9 @@ export function titleFromTail(text: string): string | null {
   return custom ?? generated;
 }
 
+/** How long to wait before looking again for a `projects` dir that did not exist at start. */
+const RETRY_START_MS = 3000;
+
 /**
  * Fallback with no hooks: one recursive watcher on `~/.claude/projects`, reading
  * only the last ~8 KB of a transcript that changed. State derived from this is
@@ -68,6 +71,7 @@ export class FsClaudeTranscriptWatch implements TranscriptWatchPort {
   private watcher: FSWatcher | null = null;
   private readonly paths = new Map<string, string>();
   private readonly lastRead = new Map<string, number>();
+  private retry: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly projectsDir: string) {}
 
@@ -83,11 +87,19 @@ export class FsClaudeTranscriptWatch implements TranscriptWatchPort {
       });
       this.watcher.on('error', () => {});
     } catch {
-      // No ~/.claude/projects yet (Claude never ran): nothing to watch.
+      // No ~/.claude/projects yet (Claude never ran on this machine): look again soon, because the first
+      // session the app starts creates it and its title / state would otherwise never be seen until a restart.
+      this.retry = setTimeout(() => {
+        this.retry = null;
+        void this.start();
+      }, RETRY_START_MS);
+      this.retry.unref();
     }
   }
 
   stop(): void {
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = null;
     this.watcher?.close();
     this.watcher = null;
     this.lastRead.clear();

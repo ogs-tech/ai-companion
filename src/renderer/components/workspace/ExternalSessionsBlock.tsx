@@ -24,17 +24,7 @@ export function ExternalConsentBanner(): React.ReactElement {
     <Alert
       severity="info"
       data-testid="external-consent-banner"
-      sx={{ mx: 0.75, mb: 0.75, alignItems: 'flex-start' }}
-      action={
-        <Stack direction="row" spacing={0.5}>
-          <Button size="small" color="inherit" onClick={() => choose('estimated')} data-testid="external-consent-estimated">
-            Só estimado
-          </Button>
-          <Button size="small" variant="outlined" color="inherit" onClick={() => choose('exact')} data-testid="external-consent-exact">
-            Ativar
-          </Button>
-        </Stack>
-      }
+      sx={{ mx: 0.75, mb: 0.75, alignItems: 'flex-start', '& .MuiAlert-message': { minWidth: 0, flex: 1 } }}
     >
       <Typography variant="body2" sx={{ fontWeight: 600 }}>
         Ver o estado exato de sessões fora do app
@@ -42,6 +32,15 @@ export function ExternalConsentBanner(): React.ReactElement {
       <Typography variant="caption" sx={{ display: 'block' }}>
         Adiciona hooks de estado a <code>~/.claude/settings.json</code> e <code>~/.cursor/hooks.json</code> (só as entradas do app; removível em Configurações).
       </Typography>
+      {/* Below the text, not in the Alert's `action` slot: that slot sits beside the message and squeezes it to one word per line in a narrow panel. */}
+      <Stack direction="row" spacing={0.5} useFlexGap sx={{ mt: 0.75, flexWrap: 'wrap' }}>
+        <Button size="small" color="inherit" onClick={() => choose('estimated')} data-testid="external-consent-estimated">
+          Só estimado
+        </Button>
+        <Button size="small" variant="outlined" color="inherit" onClick={() => choose('exact')} data-testid="external-consent-exact">
+          Ativar
+        </Button>
+      </Stack>
       {error && (
         <Typography variant="caption" color="error" role="alert">
           {error}

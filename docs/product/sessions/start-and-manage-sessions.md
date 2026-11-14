@@ -81,6 +81,14 @@ In the **Sessões** list:
 - **Apagar** (trash) — kills it if needed and removes the row. The transcript on disk is untouched; you
   can still resume it from history.
 
+### Starting over with `/clear`
+
+Typing `/clear` in a workspace or Início session ends that session and opens a fresh one in the same folder
+and channel, already focused. The old row stays in the list as finished and its conversation remains
+resumable. Claude reports the command itself; for Cursor (and `/new`, `/new-chat`, `/newchat`) the app
+recognises the line you typed and submitted. If you edit the line with the arrow keys or paste into it, the
+app cannot tell and the session carries on as before. LM Studio has no such command.
+
 Workspace and Início sessions keep running when you switch to another workspace; each is shown under the
 scope that owns it. They end when the app quits, when their workspace is deleted or its folder changes,
 and — for sessions opened from a skill, agent or instruction — when you switch workspace. Their

@@ -69,6 +69,8 @@ export function seedWorkspaceRegistry(home: string, workspaces: Array<{ id: stri
   );
 }
 
+const SLOW_MS = Number(process.env.E2E_SLOW_MS ?? 0) || 0;
+
 /** Boots the built app (`out/main/index.js`) against a throwaway HOME and userData dir. Run `npm run build` first. */
 export async function launchApp(options: LaunchOptions = {}): Promise<AppSession> {
   const home = mkdtempSync(join(tmpdir(), 'ai-companion-e2e-'));
@@ -107,6 +109,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<AppSession
       [method, params ?? null] as const,
     )) as { ok: boolean; data?: T; error?: { message: string } };
     if (!result.ok) throw new Error(`${method} failed: ${result.error?.message}`);
+    if (SLOW_MS > 0) await page.waitForTimeout(SLOW_MS); // watch the real window: E2E_SLOW_MS=1000 npx playwright test …
     return result.data as T;
   };
   return { app, page, home, stubDir, call, close: () => app.close() };

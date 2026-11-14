@@ -409,6 +409,11 @@ export function SessionPanel({ anchor, sessionId: sessionIdProp, visible = true 
     };
   }, [sessionId]);
 
+  // Opening or switching to a session tab puts the keyboard in its terminal, as the Terminais panel does.
+  useEffect(() => {
+    if (visible && sessionId) terminalRef.current?.focus();
+  }, [visible, sessionId]);
+
   useEffect(() => {
     // A hidden container (kept mounted in the background so its scrollback
     // survives) reports zero size — fitting against that would shrink the

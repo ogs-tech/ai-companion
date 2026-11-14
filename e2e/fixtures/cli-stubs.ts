@@ -9,6 +9,15 @@ import { join } from 'node:path';
 export interface CliStub {
   /** `false` leaves the status command failing until `<bin> <login>` runs (the stub's login creates the marker). */
   signedIn: boolean;
+  /**
+   * Makes the stub a tiny interactive "conversation" when launched as a session (any args beyond the probes):
+   * prints `stub-<bin> ready`, then per stdin line writes the same signal lines the real hooks would to
+   * `$AI_COMPANION_SIGNAL_FILE` — `working` → `echo: <line>` → `idle`. Two magic lines: `ask` raises a
+   * permission prompt, `perm` raises an answerable one (a `permission` signal for `Bash: npm test`, then waits for
+   * the app's `<signal file>.decision` like the real hook and echoes `decision: allow|deny`), `/clear` announces a
+   * new conversation (`session-start`, `source: clear`).
+   */
+  interactive?: boolean;
 }
 
 const DIRS_APP_ALSO_PROBES = ['/opt/homebrew/bin', '/usr/local/bin'];
@@ -23,12 +32,44 @@ interface StubShape {
   statusArgs: string;
   signedInOutput: string;
   loginArgs: string;
+  /** Extra `case` arms (shell) for subcommands a channel's runtime calls before launching the session. */
+  extraArms?: string;
 }
 
 const SHAPES: Record<string, StubShape> = {
-  'cursor-agent': { versionArg: '--version', statusArgs: 'status', signedInOutput: 'Logged in as e2e@example.com', loginArgs: 'login' },
+  'cursor-agent': {
+    versionArg: '--version',
+    statusArgs: 'status',
+    signedInOutput: 'Logged in as e2e@example.com',
+    loginArgs: 'login',
+    // `CURSOR_PROFILE.newConversationId`: the last stdout line is the chat id.
+    extraArms: `  "create-chat") uuidgen; exit 0 ;;\n`,
+  },
+  // Run-only channel: no account, so the status probe always succeeds.
+  lms: { versionArg: 'version', statusArgs: 'status', signedInOutput: 'ok', loginArgs: 'login' },
   claude: { versionArg: '--version', statusArgs: 'auth status', signedInOutput: '{ "loggedIn": true }', loginArgs: 'auth login' },
 };
+
+function interactiveLoop(bin: string): string {
+  return `F="$AI_COMPANION_SIGNAL_FILE"
+emit() { [ -n "$F" ] && printf '%s\\n' "$1" >> "$F"; }
+echo "stub-${bin} ready"
+while IFS= read -r line; do
+  case "$line" in
+    ask) emit '{"event":"notification","payload":{"notification_type":"permission_prompt","message":"Allow Bash?"}}' ;;
+    perm)
+      rm -f "$F.decision"
+      emit '{"event":"permission","payload":{"tool_name":"Bash","tool_input":{"command":"npm test"}}}'
+      i=0; while [ $i -lt 100 ] && [ ! -f "$F.decision" ]; do sleep 0.1; i=$((i+1)); done
+      D=$(cat "$F.decision" 2>/dev/null); rm -f "$F.decision"
+      emit '{"event":"working"}'; echo "decision: \${D:-none}"; emit '{"event":"idle"}' ;;
+    /clear) emit '{"event":"session-start","payload":{"source":"clear","session_id":"'"$(uuidgen)"'"}}' ;;
+    *) emit '{"event":"working"}'; echo "echo: $line"; emit '{"event":"idle"}' ;;
+  esac
+done
+exit 0
+`;
+}
 
 /** Writes one executable per entry into `dir`; `signedIn` is a marker file next to it. Returns nothing — PATH does the rest. */
 export function writeCliStubs(dir: string, stubs: Record<string, CliStub>): void {
@@ -45,8 +86,8 @@ case "$*" in
     if [ -f "${marker}" ]; then echo '${shape.signedInOutput}'; exit 0; fi
     echo "not signed in"; exit 1 ;;
   "${shape.loginArgs}") touch "${marker}"; echo "signed in (e2e stub)"; exit 0 ;;
-esac
-echo "unexpected args: $*" >&2; exit 2
+${shape.extraArms ?? ''}esac
+${stub.interactive ? interactiveLoop(bin) : ''}echo "unexpected args: $*" >&2; exit 2
 `;
     const path = join(dir, bin);
     writeFileSync(path, script);

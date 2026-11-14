@@ -13,6 +13,7 @@ interface MockTerminal {
   open: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
   loadAddon: ReturnType<typeof vi.fn>;
+  focus: ReturnType<typeof vi.fn>;
   onData: ReturnType<typeof vi.fn>;
   attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
   _onDataCb: ((data: string) => void) | undefined;
@@ -27,6 +28,7 @@ vi.mock('@xterm/xterm', () => {
     open = vi.fn();
     dispose = vi.fn();
     loadAddon = vi.fn();
+    focus = vi.fn();
     registerLinkProvider = vi.fn();
     _onDataCb: ((data: string) => void) | undefined;
     _keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
@@ -194,6 +196,17 @@ describe('<SessionPanel>', () => {
       status: 'running',
       browserEnabled: false,
       ...extra,
+    });
+
+    it('puts the keyboard in the terminal of a visible session, and not of one kept hidden in the background', async () => {
+      call.mockImplementation(async () => ok(snapshot()));
+      const hidden = renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" visible={false} />);
+      await waitFor(() => expect(mockTerminalInstances.length).toBeGreaterThan(0));
+      expect(mockTerminalInstances.at(-1)?.focus).not.toHaveBeenCalled();
+      hidden.unmount();
+
+      renderWithQuery(<SessionPanel anchor={{ kind: 'entity', urn: 'urn:skill:foo' }} sessionId="s1" />);
+      await waitFor(() => expect(mockTerminalInstances.at(-1)?.focus).toHaveBeenCalled());
     });
 
     it('shows "Trabalhando" when the attached session reports activity working', async () => {

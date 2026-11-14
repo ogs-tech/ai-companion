@@ -169,6 +169,15 @@ export function SessionsTreeGroup({
     activityByPrev.current = next;
     if (settled) void queryClient.invalidateQueries({ queryKey: ['session-history'] });
   }, [liveSessions, queryClient]);
+  // A live row with no transcript entry yet shows "Untitled · Iniciando…". Its title/model only arrive with the
+  // history, and a session that never goes working→idle (a long first turn, a CLI without hooks) would not trigger
+  // the reload above, so keep looking while any row is unmatched.
+  const hasUnmatchedLive = rows.some((r) => r.live?.status === 'running' && !r.history);
+  useEffect(() => {
+    if (!hasUnmatchedLive) return undefined;
+    const timer = setInterval(() => void queryClient.invalidateQueries({ queryKey: ['session-history'] }), 4000);
+    return () => clearInterval(timer);
+  }, [hasUnmatchedLive, queryClient]);
   const counts = useMemo(() => {
     const loaded = countByFilter([...rows.map((r) => r.state), ...externalList.map(externalStateOf)]);
     // History arrives page by page, so the loaded rows undercount. Every
