@@ -54,6 +54,21 @@ function interactiveLoop(bin: string): string {
   return `F="$AI_COMPANION_SIGNAL_FILE"
 emit() { [ -n "$F" ] && printf '%s\\n' "$1" >> "$F"; }
 echo "stub-${bin} ready"
+# The real CLI writes <home>/.claude/projects/<cwd slug>/<--session-id>.jsonl once a prompt is sent: the cwd, the
+# model's usage and a title it generates from the first prompt. Without it the app has no history entry to name the
+# session after (its row would stay "Untitled", the tab generic). The title here is just the first prompt, clipped.
+SID=""; prev=""; for a in "$@"; do [ "$prev" = "--session-id" ] && SID="$a"; prev="$a"; done
+transcript() {
+  [ -n "$SID" ] || return 0
+  d="$HOME/.claude/projects/$(pwd | tr '/.' '--')"; mkdir -p "$d"
+  f="$d/$SID.jsonl"; first=1; [ -f "$f" ] && first=0
+  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  title=$(printf '%s' "$1" | tr -d '"\\\\' | cut -c1-60)
+  [ $first = 1 ] && printf '%s\\n' '{"type":"user","cwd":"'"$(pwd)"'","timestamp":"'"$ts"'"}' >> "$f"
+  printf '%s\\n' '{"type":"assistant","timestamp":"'"$ts"'","message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":10,"output_tokens":5}}}' >> "$f"
+  [ $first = 1 ] && printf '%s\\n' '{"type":"ai-title","aiTitle":"'"$title"'"}' >> "$f"
+  return 0
+}
 while IFS= read -r line; do
   case "$line" in
     ask) emit '{"event":"notification","payload":{"notification_type":"permission_prompt","message":"Allow Bash?"}}' ;;
@@ -64,7 +79,7 @@ while IFS= read -r line; do
       D=$(cat "$F.decision" 2>/dev/null); rm -f "$F.decision"
       emit '{"event":"working"}'; echo "decision: \${D:-none}"; emit '{"event":"idle"}' ;;
     /clear) emit '{"event":"session-start","payload":{"source":"clear","session_id":"'"$(uuidgen)"'"}}' ;;
-    *) emit '{"event":"working"}'; echo "echo: $line"; emit '{"event":"idle"}' ;;
+    *) emit '{"event":"working"}'; transcript "$line"; echo "echo: $line"; emit '{"event":"idle"}' ;;
   esac
 done
 exit 0

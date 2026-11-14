@@ -13,3 +13,6 @@ playwright-report/
 
 # Claude Code session worktrees (never commit embedded repos)
 .claude/worktrees/
+
+# Personal Claude Code preferences
+CLAUDE.local.md

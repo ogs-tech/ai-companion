@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { Group, Panel, usePanelRef } from 'react-resizable-panels';
@@ -73,6 +73,8 @@ import { useInvalidateCustomization } from '../../hooks/use-customization-list.j
 import { requestObserve } from '../../lib/external-observe-store.js';
 import { SessionFileBanner } from '../../components/workspace/SessionFileBanner.js';
 import { rowStateOf, sessionStateDetail } from '../../lib/session-attention.js';
+import { defaultHistoryFilters } from '../../lib/history-period.js';
+import { useSessionHistory } from '../../hooks/use-session-history.js';
 import { useSessions, sessionsQueryKey } from '../../hooks/use-sessions.js';
 import { useCreateTerminal, useTerminals } from '../../hooks/use-terminals.js';
 import { useRunChannels } from '../../hooks/use-run-channels.js';
@@ -889,6 +891,16 @@ export function WorkspaceScreen(): React.ReactElement {
   const sessionsScope: HistoryScope = activeWorkspace
     ? { kind: 'workspace', workspaceId: activeWorkspace.id }
     : { kind: 'all' };
+  // Same query as the Sessões list (same scope and period → one shared cache entry), so a tab is named
+  // by the conversation's CLI title exactly like its row is.
+  const tabHistoryFilters = useMemo(() => defaultHistoryFilters(new Date()), []);
+  const tabHistory = useSessionHistory(sessionsScope, tabHistoryFilters);
+  const titleByConversation = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const page of tabHistory.data?.pages ?? [])
+      for (const entry of page?.entries ?? []) if (entry.title) titles.set(entry.conversationId, entry.title);
+    return titles;
+  }, [tabHistory.data]);
 
   // One fixed id, so "Ver todas" focuses the tab that is already open rather
   // than stacking a second copy of the same dashboard beside it.
@@ -1216,8 +1228,13 @@ export function WorkspaceScreen(): React.ReactElement {
         ...(tabHarness ? { sessionChannel: tabHarness } : {}),
         ...(tabDetail ? { sessionDetail: tabDetail } : {}),
         glyph: tabHarness ? harnessGlyph(tabHarness) : SquareTerminal,
-        // Live: the CLI names the conversation after the tab opened.
-        label: tabSession?.label ?? tab.label,
+        // The CLI names a workspace/Início conversation after the tab opened; entity-anchored ones keep their anchor's name.
+        label:
+          (tabSession && (tabSession.anchor.kind === 'workspace' || tabSession.anchor.kind === 'personal')
+            ? titleByConversation.get(tabSession.conversationId)
+            : undefined) ??
+          tabSession?.label ??
+          tab.label,
         closeLabel: running ? 'Minimizar' : 'Fechar',
         // Manages its own edge-to-edge spacing (padding only around the
         // header, none around the terminal itself) — the canvas's own p:2
@@ -1601,6 +1618,7 @@ export function WorkspaceScreen(): React.ReactElement {
               sessionsScope={sessionsScope}
               onOpenSession={openSessionAnywhere}
               onSessionRemoved={removeSessionTab}
+              focusedSessionId={focusedId}
               onSeeAllSessions={openHistoryTab}
               canStartSession={activeWorkspace !== undefined}
               onNewSession={handleNewSession}

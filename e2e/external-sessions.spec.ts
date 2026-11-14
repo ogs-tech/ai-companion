@@ -59,7 +59,7 @@ function fire(event: string, sessionId: string, extra: Record<string, unknown> =
 }
 
 test.beforeAll(async () => {
-  session = await launchApp();
+  session = await launchApp({ externalConsent: 'unset' });
   home = session.home;
 
   const after = await call<StateDto>('externalSession.setConsent', { mode: 'exact' });

@@ -181,6 +181,24 @@ describe('SessionsTreeGroup', () => {
       expect(within(row).getByText('Uma sessão antiga')).toBeInTheDocument();
     });
 
+    it('marks only the row of the session whose tab is in front as current', async () => {
+      route({ 'session.list': ok([runningSession]), 'sessionHistory.list': ok(page([])) });
+
+      render({ focusedSessionId: runningSession.sessionId });
+
+      const row = await screen.findByTestId('tree-session-workspace:w1');
+      expect(row).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('marks no row as current when another tab is in front', async () => {
+      route({ 'session.list': ok([runningSession]), 'sessionHistory.list': ok(page([])) });
+
+      render({ focusedSessionId: null });
+
+      const row = await screen.findByTestId('tree-session-workspace:w1');
+      expect(row).not.toHaveAttribute('aria-current');
+    });
+
     it('waits on the cost instead of showing a wrong one for a session spawned seconds ago', async () => {
       route({ 'session.list': ok([runningSession]), 'sessionHistory.list': ok(page([])) });
 
@@ -190,6 +208,19 @@ describe('SessionsTreeGroup', () => {
       // No cost yet: nothing is drawn at the right (no empty placeholder pill).
       expect(within(row).queryByTestId('tree-session-workspace:w1-cost')).toBeNull();
       expect(within(row).queryByTestId('tree-session-workspace:w1-cost-pending')).toBeNull();
+      // Idle with no transcript is a session waiting for its first prompt, not one "starting" forever.
+      expect(within(row).queryByText('Iniciando…')).toBeNull();
+    });
+
+    it('says "Iniciando…" only while a turn runs and its transcript is not on disk yet', async () => {
+      route({
+        'session.list': ok([{ ...runningSession, activity: 'working' as const }]),
+        'sessionHistory.list': ok(page([])),
+      });
+
+      render();
+
+      const row = await screen.findByTestId('tree-session-workspace:w1');
       expect(within(row).getByText('Iniciando…')).toBeInTheDocument();
     });
 

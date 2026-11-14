@@ -29,7 +29,8 @@ export function ExternalConsentBanner(): React.ReactElement {
       <Typography variant="body2" sx={{ fontWeight: 600 }}>
         Ver o estado exato de sessões fora do app
       </Typography>
-      <Typography variant="caption" sx={{ display: 'block' }}>
+      {/* A path has no spaces to wrap at: let it break anywhere rather than run past the panel's edge. */}
+      <Typography variant="caption" sx={{ display: 'block', '& code': { overflowWrap: 'anywhere' } }}>
         Adiciona hooks de estado a <code>~/.claude/settings.json</code> e <code>~/.cursor/hooks.json</code> (só as entradas do app; removível em Configurações).
       </Typography>
       {/* Below the text, not in the Alert's `action` slot: that slot sits beside the message and squeezes it to one word per line in a narrow panel. */}

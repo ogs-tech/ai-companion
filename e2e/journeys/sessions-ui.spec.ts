@@ -58,6 +58,21 @@ test('the + button starts a session straight away (one channel, one folder) and 
   await expect(page.getByTestId('new-session-dialog')).toHaveCount(0);
 });
 
+test('a row is "Untitled" with no model until the first prompt, then takes the CLI title and model', async () => {
+  const { page } = session;
+  const created = await startFromUi();
+  const row = page.getByTestId(`tree-session-${created.sessionId}`);
+
+  await expect(row).toContainText('Untitled');
+  await expect(row).not.toContainText('Iniciando');
+
+  await type(created.sessionId, 'Fix the login bug');
+  await expect(row).toContainText('Fix the login bug');
+  await expect(page.getByTestId(`workbench-tab-session:${created.sessionId}`)).toContainText('Fix the login bug');
+  await expect(row).not.toContainText('Untitled');
+  await expect(row).not.toContainText('Iniciando');
+});
+
 test('Encerrar stops the session and leaves a row that can only be deleted', async () => {
   const { page } = session;
   const created = await startFromUi();

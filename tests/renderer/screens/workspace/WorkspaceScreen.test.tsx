@@ -231,6 +231,40 @@ describe('WorkspaceScreen', () => {
     expect(await screen.findByTestId('session-panel')).toBeInTheDocument();
   });
 
+  it('names a workspace session tab after the CLI title once the transcript has one, like its row', async () => {
+    const user = userEvent.setup();
+    const live = {
+      sessionId: 'sess-w1', conversationId: 'conv-w1', anchor: { kind: 'workspace', workspaceId: 'w1' }, scopeId: 'w1',
+      cwd: '/repos/acme', label: 'Acme 1', status: 'running', outputBuffer: '', browserEnabled: false,
+    };
+    let titled = false;
+    (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
+      if (method === 'workspace.getActive') return projectWorkspace;
+      if (method === 'workspace.listDir') return [];
+      if (method === 'session.list') return [live];
+      if (method === 'session.spawn' || method === 'session.status') return live;
+      if (method === 'sessionHistory.list') {
+        return {
+          entries: titled ? [{ conversationId: 'conv-w1', harness: 'claude', title: 'Fix the login bug', cwd: '/repos/acme', model: null, costUsd: 0, costSource: 'estimated', inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, startedAt: '2026-11-14T10:00:00Z', endedAt: '2026-11-14T10:01:00Z', durationMs: 1 }] : [],
+          nextCursor: null,
+          total: titled ? 1 : 0,
+        };
+      }
+      return undefined;
+    });
+    renderScreen();
+    await user.click(await screen.findByTestId('workspace-sessions-new'));
+    const tab = await screen.findByTestId('workbench-tab-session:sess-w1');
+    expect(tab).toHaveTextContent('Acme 1');
+
+    titled = true;
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['session-history'] });
+    });
+
+    await waitFor(() => expect(screen.getByTestId('workbench-tab-session:sess-w1')).toHaveTextContent('Fix the login bug'));
+  });
+
   describe('browser tabs', () => {
     it('a session’s browser tab opens as a sibling Workbench tab rendering BrowserPane', async () => {
       const user = userEvent.setup();

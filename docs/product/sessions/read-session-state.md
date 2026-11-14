@@ -8,7 +8,7 @@ description: The four session states (Pergunta, Trabalhando, Ocioso, Fechado), t
 The list, the tabs, the status bar, the session's status line and the badge on workspace, skill, agent and instruction rows use the same four states. A row with several sessions shows the most urgent one (Pergunta, then Trabalhando, Ocioso, Fechado). The shape carries the
 meaning; colour only reinforces it.
 
-In session tabs and in the Sessões list the state is a badge on the corner of the channel's own mark (Claude, Cursor, LM Studio), so each session carries one icon: the channel says who runs it, the badge says how it is. A row's second line reads "model · what it is doing"; "Iniciando…" stands in for the model until the first transcript exists, and no cost is drawn until there is one.
+In session tabs and in the Sessões list the state is a badge on the corner of the channel's own mark (Claude, Cursor, LM Studio), so each session carries one icon: the channel says who runs it, the badge says how it is. A row's second line reads "model · what it is doing"; "Iniciando…" stands in for the model only while a turn is running and its first transcript is not on disk yet (an idle session with no transcript shows no model at all), and no cost is drawn until there is one.
 
 | State | Mark | Meaning |
 |---|---|---|

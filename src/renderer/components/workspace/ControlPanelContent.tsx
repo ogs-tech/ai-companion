@@ -15,6 +15,8 @@ interface ControlPanelContentProps extends CustomizationsListProps {
   sessionsScope: HistoryScope;
   onOpenSession: (session: SessionOpenTarget) => void;
   onSessionRemoved: (sessionId: string) => void;
+  /** The session whose Workbench tab is in front, so its row can say "this one". */
+  focusedSessionId?: string | null;
   onSeeAllSessions: () => void;
   canStartSession: boolean;
   onNewSession: () => void;
@@ -33,6 +35,7 @@ export function ControlPanelContent({
   sessionsScope,
   onOpenSession,
   onSessionRemoved,
+  focusedSessionId = null,
   onSeeAllSessions,
   canStartSession,
   onNewSession,
@@ -88,7 +91,7 @@ export function ControlPanelContent({
               // SessionsTreeGroup owns its own internal scroll box, so its footer
               // stays pinned below the rows.
               <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                <SessionsTreeGroup scope={sessionsScope} onOpen={onOpenSession} onRemoved={onSessionRemoved} onSeeAll={onSeeAllSessions} />
+                <SessionsTreeGroup scope={sessionsScope} onOpen={onOpenSession} onRemoved={onSessionRemoved} focusedSessionId={focusedSessionId} onSeeAll={onSeeAllSessions} />
               </Box>
             )}
           </Box>

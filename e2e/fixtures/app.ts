@@ -19,6 +19,11 @@ export interface LaunchOptions {
   cli?: Record<string, CliStub>;
   /** Window size; the Explorer's Git toolbar needs the wide default. */
   size?: { width: number; height: number };
+  /**
+   * The one-time "see sessions outside the app" banner covers the top of the Sessões list and would sit in the way of
+   * every journey, so it starts answered (`estimated` installs nothing). A journey about the banner or the hooks asks for `unset`.
+   */
+  externalConsent?: 'unset' | 'estimated';
   /** Distinct per spec file only if specs ever run in parallel; the dev app owns 9333. */
   cdpPort?: number;
 }
@@ -76,6 +81,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<AppSession
   const home = mkdtempSync(join(tmpdir(), 'ai-companion-e2e-'));
   mkdirSync(join(home, '.claude'), { recursive: true });
   writeFile(join(home, '.ai-companion', 'settings.json'), JSON.stringify({ ...DEFAULT_SETTINGS, ...options.settings }, null, 2));
+  if ((options.externalConsent ?? 'estimated') === 'estimated') writeFile(join(home, '.ai-companion', 'signals', 'external-consent'), 'estimated');
   await options.seed?.(home);
 
   const env: Record<string, string> = {};

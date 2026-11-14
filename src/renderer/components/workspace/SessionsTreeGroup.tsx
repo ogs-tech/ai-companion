@@ -44,6 +44,8 @@ interface SessionsTreeGroupProps {
   onOpen: (session: SessionSnapshot) => void;
   /** Called after a session is apagada, so the caller can close its Workbench tab too, if one is open. */
   onRemoved?: (sessionId: string) => void;
+  /** The session whose tab is in front: its row is drawn selected. */
+  focusedSessionId?: string | null;
   /** Opens the `Histórico` tab, where the same data gets a dashboard and filters. */
   onSeeAll?: () => void;
 }
@@ -112,6 +114,7 @@ export function SessionsTreeGroup({
   scope,
   onOpen,
   onRemoved,
+  focusedSessionId = null,
   onSeeAll,
 }: SessionsTreeGroupProps): React.ReactElement {
   const { data: liveSessions } = useSessions();
@@ -444,6 +447,7 @@ export function SessionsTreeGroup({
               metrics={row.live?.metrics}
               now={now}
               history={row.history}
+              selected={row.live !== null && row.live.sessionId === focusedSessionId}
               onOpen={() => void handleOpen(row)}
               actions={
                 row.live ? (

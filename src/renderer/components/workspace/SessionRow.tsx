@@ -57,6 +57,8 @@ export interface SessionRowProps {
   now?: number;
   /** The transcript's reading of this conversation; absent while a just-spawned session has yet to write one. */
   history: SessionHistoryEntry | null;
+  /** This session's tab is the one in front of the Workbench. */
+  selected?: boolean;
   onOpen: () => void;
   /** Hover/focus actions (stop/delete), shown in place of the time on line two; stopPropagation'd from the row itself. */
   actions?: React.ReactNode;
@@ -104,16 +106,18 @@ export function SessionRow({
   estimated = false,
   now,
   history,
+  selected = false,
   onOpen,
   actions,
   testId,
 }: SessionRowProps): React.ReactElement {
-  const running = state !== 'exited';
   const needsInput = state === 'needs-input';
   const working = state === 'working';
   const dimmed = state === 'exited';
-  const model =
-    running && !history ? 'Iniciando…' : history?.model ? formatModel(history.model) : null;
+  // "Iniciando…" is only true while a turn runs and its transcript is not on disk yet. An idle session with no
+  // transcript is waiting for a first prompt (or belongs to a channel that keeps none), so it says nothing.
+  const startingUp = working && !history;
+  const model = startingUp ? 'Iniciando…' : history?.model ? formatModel(history.model) : null;
   // The channel is the row's mark, not a word: line two reads "modelo · o que faz agora".
   const harnessText = [scopeName, model].filter(Boolean).join(' · ');
   const costLabel = history ? formatCostUsd(history.costUsd) : null;
@@ -123,6 +127,7 @@ export function SessionRow({
       component="button"
       type="button"
       data-testid={testId}
+      aria-current={selected ? 'true' : undefined}
       onClick={onOpen}
       sx={(theme) => ({
         position: 'relative',
@@ -135,7 +140,11 @@ export function SessionRow({
         // show activity; the indicator glyph and its accessible name carry
         // every state for everyone else. Blue lives on the glyph alone.
         borderLeft: '3px solid transparent',
-        bgcolor: needsInput ? alpha(theme.palette.warning.main, 0.07) : 'transparent',
+        bgcolor: needsInput
+          ? alpha(theme.palette.warning.main, 0.07)
+          : selected
+            ? theme.palette.action.selected
+            : 'transparent',
         '&::before':
           needsInput || working
             ? {
@@ -185,7 +194,7 @@ export function SessionRow({
             color: INDICATOR_COLORS[state],
           }}
         >
-          <ChannelStateMark channel={harness} state={state} size={14} estimated={estimated} breathing={running && !history} />
+          <ChannelStateMark channel={harness} state={state} size={14} estimated={estimated} breathing={startingUp} />
         </Box>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
