@@ -5,6 +5,7 @@ import {
   countByFilter,
   formatIdleFor,
   formatWait,
+  liveSortAt,
   matchesFilter,
   rowStateOf,
   sessionStateDetail,
@@ -60,6 +61,19 @@ describe('compareRows', () => {
       { id: 'idle', state: 'idle', sortAt: 3, waitingSince: null },
     ] as const;
     expect([...rows].sort(compareRows).map((r) => r.id)).toEqual(['need-old', 'need-new', 'work-new', 'work-old', 'idle', 'exited']);
+  });
+});
+
+describe('liveSortAt', () => {
+  it('uses the last activity change while running, so the transcript mtime cannot reshuffle the row', () => {
+    expect(liveSortAt(live({ activity: 'working', activitySince: 500 }), 9_000)).toBe(500);
+  });
+  it('uses the close time once exited, not the last message', () => {
+    expect(liveSortAt(live({ status: 'exited', endedAt: 800 }), 100)).toBe(800);
+  });
+  it('falls back to the transcript, then to "just spawned" (top)', () => {
+    expect(liveSortAt(live({}), 300)).toBe(300);
+    expect(liveSortAt(live({}), null)).toBe(Number.MAX_SAFE_INTEGER);
   });
 });
 

@@ -64,6 +64,16 @@ interface Sortable {
   waitingSince: number | null;
 }
 
+/**
+ * Recency of a live session's row. A running one counts from its last activity
+ * change (stable while it works, unlike the transcript's mtime); an exited one
+ * from the moment it closed. Transcript time is only the fallback.
+ */
+export function liveSortAt(live: SessionSnapshot, transcriptEndedAt: number | null): number {
+  const own = live.status === 'running' ? live.activitySince : live.endedAt;
+  return own ?? transcriptEndedAt ?? Number.MAX_SAFE_INTEGER;
+}
+
 /** State group first; longest-waiting first inside needs-input, newest first elsewhere. */
 export function compareRows(a: Sortable, b: Sortable): number {
   if (a.state !== b.state) return STATE_ORDER[a.state] - STATE_ORDER[b.state];

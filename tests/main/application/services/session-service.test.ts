@@ -209,6 +209,16 @@ describe('SessionService', () => {
     expect(service.status(session.sessionId)?.status).toBe('exited');
   });
 
+  it('stamps endedAt on exit so the list can order closed sessions by close time', async () => {
+    const { service, base } = setup();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    expect(service.status(session.sessionId)?.endedAt).toBeUndefined();
+    const before = Date.now();
+    service.kill(session.sessionId);
+    expect(service.status(session.sessionId)?.endedAt).toBeGreaterThanOrEqual(before);
+  });
+
   it('remove kills a running session and purges it from list', async () => {
     const { service, base, claudeSession } = setup();
     await base.save({ entity: skill('foo'), isCreate: true });

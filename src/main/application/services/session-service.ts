@@ -135,8 +135,7 @@ export class SessionService {
         if (this.restarting.has(sessionId)) return;
         const session = this.sessions.get(sessionId);
         if (session) {
-          session.status = 'exited';
-          this.clearActivity(session);
+          this.markExited(session);
         }
         for (const listener of this.exitListeners) listener(sessionId, 'exited', exitCode);
       });
@@ -170,9 +169,17 @@ export class SessionService {
   private startActivity(session: SessionSnapshot): void {
     session.activity = 'idle';
     session.activitySince = Date.now();
+    delete session.endedAt;
     delete session.attention;
     delete session.activityDetail;
     this.outputTails.delete(session.sessionId);
+  }
+
+  /** Marks the session exited and stamps when, so the list can order closed sessions by close time. */
+  private markExited(session: SessionSnapshot): void {
+    session.status = 'exited';
+    session.endedAt = Date.now();
+    this.clearActivity(session);
   }
 
   private clearActivity(session: SessionSnapshot): void {
@@ -539,8 +546,7 @@ export class SessionService {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
     this.runtimeOf(sessionId)?.kill(sessionId);
-    session.status = 'exited';
-    this.clearActivity(session);
+    this.markExited(session);
   }
 
   /**
@@ -615,8 +621,7 @@ export class SessionService {
         // The old PTY is already dead and the replacement never came up —
         // this session really is exited now, and nothing else will report it
         // since `restarting` is suppressing the stale exit event above.
-        session.status = 'exited';
-        this.clearActivity(session);
+        this.markExited(session);
         for (const listener of this.exitListeners) listener(sessionId, 'exited', -1);
         throw err;
       } finally {
@@ -668,8 +673,7 @@ export class SessionService {
     for (const [sessionId, session] of this.sessions) {
       if (session.scopeId === scopeId && session.status === 'running') {
         this.runtimeOf(sessionId)?.kill(sessionId);
-        session.status = 'exited';
-        this.clearActivity(session);
+        this.markExited(session);
       }
     }
   }
@@ -683,8 +687,7 @@ export class SessionService {
     for (const [sessionId, session] of this.sessions) {
       if (session.anchor.kind === 'entity' && session.status === 'running') {
         this.runtimeOf(sessionId)?.kill(sessionId);
-        session.status = 'exited';
-        this.clearActivity(session);
+        this.markExited(session);
       }
     }
   }
@@ -693,8 +696,7 @@ export class SessionService {
     for (const [sessionId, session] of this.sessions) {
       if (session.status === 'running') {
         this.runtimeOf(sessionId)?.kill(sessionId);
-        session.status = 'exited';
-        this.clearActivity(session);
+        this.markExited(session);
       }
     }
   }

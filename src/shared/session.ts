@@ -104,6 +104,8 @@ export interface SessionSnapshot {
   activity?: SessionActivity;
   /** Epoch ms of the last `activity` change — drives "precisa de você · <duração>" for `needs-input`. */
   activitySince?: number;
+  /** Epoch ms the process exited. Set only while `status === 'exited'`; cleared when the session is resumed. */
+  endedAt?: number;
   /** Set only while `activity === 'needs-input'`. */
   attention?: SessionAttention;
   /** Set only while `activity === 'working'` and a hook reported the tool: `Edit CartService.ts`. */

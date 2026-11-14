@@ -25,6 +25,7 @@ import {
   compareRows,
   countByFilter,
   FILTER_LABELS,
+  liveSortAt,
   matchesFilter,
   rowStateOf,
   SESSION_FILTERS,
@@ -615,9 +616,9 @@ function mergeRows(
       status: session.status,
       live: session,
       history: entry,
-      // A session with no transcript yet was spawned seconds ago, so it sorts
-      // to the top rather than to the bottom.
-      sortAt: entry ? Date.parse(entry.endedAt) : Number.MAX_SAFE_INTEGER,
+      // With no timestamp at all (no transcript yet) it was spawned seconds
+      // ago, so it sorts to the top rather than to the bottom.
+      sortAt: liveSortAt(session, entry ? Date.parse(entry.endedAt) : null),
     });
   }
 
