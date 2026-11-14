@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SessionService } from '../../../../src/main/application/services/session-service.js';
+import { SessionService, type ConversationTitleSource } from '../../../../src/main/application/services/session-service.js';
 import { EntityService } from '../../../../src/main/application/services/entity-service.js';
 import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/entity/in-memory-entity-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
@@ -59,6 +59,7 @@ const setup = (options?: {
   maxBufferChars?: number;
   extraFolders?: string[];
   signals?: SessionSignalPort;
+  titles?: ConversationTitleSource;
 }) => {
   const repo = new InMemoryEntityRepository();
   const adapterManager = {
@@ -151,7 +152,7 @@ describe('SessionService', () => {
     const { service } = setup();
     const session = await service.spawn({ kind: 'personal' });
     expect(session.cwd).toBe('/home/u');
-    expect(session.label).toBe('Início');
+    expect(session.label).toBe('Untitled');
   });
 
   it('spawn reuses the existing live session for the same anchor (idempotent open)', async () => {
@@ -318,8 +319,8 @@ describe('SessionService', () => {
     const wsSession = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
     const homeSession = await service.spawn({ kind: 'personal' });
     expect(entitySession.label).toBe('foo');
-    expect(wsSession.label).toBe('W');
-    expect(homeSession.label).toBe('Início');
+    expect(wsSession.label).toBe('Untitled');
+    expect(homeSession.label).toBe('Untitled');
   });
 
   it('list returns an empty array before any session is spawned', () => {
@@ -384,27 +385,7 @@ describe('SessionService concurrent workspace/personal sessions', () => {
     expect(claudeSession.spawnCalls).toHaveLength(1);
   });
 
-  it('labels the first session for an anchor plainly, and numbers subsequent ones', async () => {
-    const { service } = setup();
-    const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'w1' };
-    const first = await service.spawn(anchor);
-    const second = await service.spawn(anchor);
-    const third = await service.spawn(anchor);
-    expect(first.label).toBe('W');
-    expect(second.label).toBe('W (2)');
-    expect(third.label).toBe('W (3)');
-  });
 
-  it('does not reuse an ordinal once the session holding it is removed', async () => {
-    const { service } = setup();
-    const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'w1' };
-    const first = await service.spawn(anchor);
-    const second = await service.spawn(anchor);
-    await service.remove(second.sessionId);
-    const third = await service.spawn(anchor);
-    expect(first.label).toBe('W');
-    expect(third.label).toBe('W (3)');
-  });
 
   it('spawn for a workspace/personal anchor starts a brand-new conversation, never reattaching to a sibling sharing the cwd', async () => {
     const { service, claudeSession } = setup();
@@ -458,14 +439,6 @@ describe('SessionService concurrent workspace/personal sessions', () => {
     });
   });
 
-  it('ordinal counters for different anchors are independent', async () => {
-    const { service } = setup();
-    await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
-    const secondWs = await service.spawn({ kind: 'workspace', workspaceId: 'w1' });
-    const firstHome = await service.spawn({ kind: 'personal' });
-    expect(secondWs.label).toBe('W (2)');
-    expect(firstHome.label).toBe('Início');
-  });
 });
 
 describe('SessionService.resume', () => {
@@ -517,15 +490,6 @@ describe('SessionService.resume', () => {
     expect(claudeSession.spawnCalls).toHaveLength(1);
   });
 
-  it('resume never bumps the anchor ordinal counter', async () => {
-    const { service, claudeSession } = setup();
-    const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'w1' };
-    const first = await service.spawn(anchor);
-    claudeSession.simulateExit(first.sessionId, 0);
-    await service.resume(first.sessionId);
-    const second = await service.spawn(anchor);
-    expect(second.label).toBe('W (2)');
-  });
 
   it('reattaches to the exact conversation it is relaunching, by id', async () => {
     const { service, claudeSession } = setup();
@@ -1175,16 +1139,43 @@ describe('SessionService activity', () => {
     expect(changes).toEqual([sessionId, sessionId]);
   });
 
-  it('follows the conversation to the new session_id after /clear, without touching the activity', async () => {
+  it('follows a new session_id that is not a /clear (compact, resume) without replacing the session', async () => {
     const { service, signals, changes } = withSignals();
     const { sessionId, conversationId } = await service.spawn(anchor);
-    signals.emit(sessionId, { event: 'session-start', payload: { session_id: 'new-id', source: 'clear' } });
+    signals.emit(sessionId, { event: 'session-start', payload: { session_id: 'new-id', source: 'compact' } });
     expect(service.status(sessionId)?.conversationId).toBe('new-id');
     expect(service.status(sessionId)?.activity).toBe('idle');
     expect(changes).toHaveLength(1);
     signals.emit(sessionId, { event: 'session-start', payload: { session_id: 'new-id' } });
     expect(changes).toHaveLength(1);
     expect(conversationId).not.toBe('new-id');
+  });
+
+  it('ends the session on /clear and starts a fresh Untitled one in its place', async () => {
+    const { service, signals, claudeSession } = withSignals();
+    const replaced: Array<[string, string]> = [];
+    service.onReplaced((oldId, next) => replaced.push([oldId, next.sessionId]));
+    const old = await service.spawn(anchor);
+    signals.emit(old.sessionId, { event: 'session-start', payload: { session_id: 'new-id', source: 'clear' } });
+    await vi.waitFor(() => expect(replaced).toHaveLength(1));
+    const [oldId, newId] = replaced[0] as [string, string];
+    expect(oldId).toBe(old.sessionId);
+    expect(newId).not.toBe(old.sessionId);
+    expect(claudeSession.killed).toContain(old.sessionId);
+    expect(service.status(old.sessionId)?.status).toBe('exited');
+    expect(service.status(newId)).toMatchObject({ status: 'running', label: 'Untitled', anchor, harness: 'claude' });
+    expect(service.status(newId)?.conversationId).not.toBe(old.conversationId);
+  });
+
+  it('does not replace an entity-anchored session on /clear', async () => {
+    const { service, signals, base } = withSignals();
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const replaced: string[] = [];
+    service.onReplaced((oldId) => replaced.push(oldId));
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    signals.emit(session.sessionId, { event: 'session-start', payload: { session_id: 'new-id', source: 'clear' } });
+    expect(service.status(session.sessionId)).toMatchObject({ status: 'running', conversationId: 'new-id' });
+    expect(replaced).toEqual([]);
   });
 
   it('ignores an idle_prompt notification instead of crying wolf', async () => {
@@ -1362,5 +1353,88 @@ describe('SessionService permission answers and metrics', () => {
     service.setMetrics(sessionId, { costUsd: 2 });
     expect(service.status(sessionId)?.metrics).toEqual({ costUsd: 2 });
     expect(changes).toHaveLength(2);
+  });
+});
+
+describe('SessionService titles and /clear without hooks', () => {
+  const anchor: SessionAnchor = { kind: 'workspace', workspaceId: 'ws-1' };
+
+  it('renames a workspace session when the CLI titles its conversation', async () => {
+    let emit: (change: { id: string; title?: string }) => void = () => {};
+    const { service } = setup({ titles: { onChange: (l) => (emit = l) } });
+    const changes: string[] = [];
+    service.onActivity((id) => changes.push(id));
+    const session = await service.spawn(anchor);
+    expect(session.label).toBe('Untitled');
+    emit({ id: session.conversationId });
+    expect(service.status(session.sessionId)?.label).toBe('Untitled');
+    emit({ id: session.conversationId, title: 'Fix the login bug' });
+    expect(service.status(session.sessionId)?.label).toBe('Fix the login bug');
+    expect(changes).toEqual([session.sessionId]);
+    emit({ id: session.conversationId, title: 'Fix the login bug' });
+    expect(changes).toHaveLength(1);
+  });
+
+  it('keeps an entity-anchored session named after its entity', async () => {
+    let emit: (change: { id: string; title?: string }) => void = () => {};
+    const { service, base } = setup({ titles: { onChange: (l) => (emit = l) } });
+    await base.save({ entity: skill('foo'), isCreate: true });
+    const session = await service.spawn(entityAnchor(entityUrn('skill', 'foo')));
+    emit({ id: session.conversationId, title: 'Something else' });
+    expect(service.status(session.sessionId)?.label).toBe('foo');
+  });
+
+  const withCursor = () => {
+    const ctx = setup();
+    const cursorRuntime = new FakeSessionRuntimePort();
+    const service = new SessionService(
+      ctx.base,
+      { claude: ctx.claudeSession, cursor: cursorRuntime },
+      ctx.embeddedBrowser,
+      WORKSPACE,
+      {
+        workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) },
+        activeWorkspace: null,
+        homedir: '/home/u',
+      },
+      ctx.fs,
+    );
+    return { service, cursorRuntime, claudeSession: ctx.claudeSession };
+  };
+
+  it('replaces a Cursor session when /clear (or an alias) is typed and submitted', async () => {
+    const { service, cursorRuntime } = withCursor();
+    const replaced: string[] = [];
+    service.onReplaced((oldId) => replaced.push(oldId));
+    const old = await service.spawn(anchor, 'cursor');
+    service.write(old.sessionId, '/cl');
+    service.write(old.sessionId, 'ear');
+    expect(replaced).toEqual([]);
+    service.write(old.sessionId, '\r');
+    await vi.waitFor(() => expect(replaced).toEqual([old.sessionId]));
+    expect(cursorRuntime.killed).toContain(old.sessionId);
+    expect(service.list().filter((s) => s.status === 'running')).toHaveLength(1);
+  });
+
+  it('does not treat a longer line, an edited line or an escape sequence as /clear', async () => {
+    const { service } = withCursor();
+    const replaced: string[] = [];
+    service.onReplaced((oldId) => replaced.push(oldId));
+    const session = await service.spawn(anchor, 'cursor');
+    service.write(session.sessionId, '/clear now\r');
+    service.write(session.sessionId, '/clearx\x7f\x1b[D\r');
+    service.write(session.sessionId, 'please /clear\r');
+    await Promise.resolve();
+    expect(replaced).toEqual([]);
+  });
+
+  it('leaves a Claude session alone when /clear is typed: its hook is the signal', async () => {
+    const { service } = withCursor();
+    const replaced: string[] = [];
+    service.onReplaced((oldId) => replaced.push(oldId));
+    const session = await service.spawn(anchor);
+    service.write(session.sessionId, '/clear\r');
+    await Promise.resolve();
+    expect(replaced).toEqual([]);
   });
 });

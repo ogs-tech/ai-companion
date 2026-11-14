@@ -17,7 +17,7 @@ if you will only publish public plugins).
 
 ## Store it
 
-1. Open **Settings** (gear icon) → **GitHub**.
+1. Open **Configurações** (⌘, or the left rail) → **GitHub**.
 2. Paste the token into **GitHub Personal Access Token** and click **Salvar**.
 
 The status changes to **Configurado**. The token is encrypted with Electron `safeStorage` (backed by the

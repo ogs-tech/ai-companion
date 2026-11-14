@@ -17,6 +17,7 @@ export function mockApi(): CallSpy {
     onAnyExit: vi.fn(() => () => {}),
     onAnyActivity: vi.fn(() => () => {}),
     onOpenRequest: vi.fn(() => () => {}),
+    onReplaced: vi.fn(() => () => {}),
   };
   const externalSession = { onChanged: vi.fn(() => () => {}) };
   const entity = {

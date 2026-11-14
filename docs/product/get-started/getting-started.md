@@ -82,7 +82,7 @@ You're ready when:
 
 - The context switcher in the TopNav shows the folder's name, and the **Visão geral** tab lists **Git**,
   **Sessões** and **Instruction do workspace** cards.
-- **Settings** (gear icon) → **Adapters** shows Claude switched on.
+- **Configurações** (⌘, or the left rail) → **Adapters** shows Claude switched on.
 
   ![Settings → Adapters](../../assets/screenshots/settings/01-settings.png)
 

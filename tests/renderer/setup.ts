@@ -70,6 +70,7 @@ if (typeof (window as unknown as { api?: unknown }).api === 'undefined') {
       onAnyExit: () => () => {},
       onAnyActivity: () => () => {},
       onOpenRequest: () => () => {},
+      onReplaced: () => () => {},
     },
     externalSession: { onChanged: () => () => {} },
     externalLink: { onOpen: () => () => {} },

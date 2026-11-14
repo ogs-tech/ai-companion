@@ -196,7 +196,7 @@ export function SessionsTreeGroup({
     () => {
       if (history.hasNextPage && !history.isFetchingNextPage) void history.fetchNextPage();
     },
-    history.hasNextPage === true && filter === 'exited',
+    history.hasNextPage === true,
   );
 
   const invalidate = async (): Promise<void> => {

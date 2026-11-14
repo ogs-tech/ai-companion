@@ -20,6 +20,10 @@ import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.j
 import { resolveScopePath } from '../resolve-scope-path.js';
 import { appendToScrollback, DEFAULT_MAX_SCROLLBACK_CHARS } from '../scrollback-buffer.js';
 import { DomainError, ioError } from '../../domain/errors.js';
+import { CLEAR_COMMANDS, ClearCommandDetector } from '../session-clear-detector.js';
+
+/** What the session label starts as for a workspace / Início session, until the CLI names the conversation. */
+export const UNTITLED_LABEL = 'Untitled';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -35,6 +39,12 @@ const CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/;
 export type SessionOutputListener = (sessionId: string, chunk: string) => void;
 export type SessionActivityListener = (sessionId: string) => void;
 export type SessionStatusListener = (sessionId: string, status: SessionStatus, exitCode: number) => void;
+export type SessionReplacedListener = (oldSessionId: string, session: SessionSnapshotWithOutput) => void;
+
+/** Where the CLI's own conversation titles come from (a transcript watcher). */
+export interface ConversationTitleSource {
+  onChange(listener: (change: { id: string; title?: string }) => void): void;
+}
 
 /**
  * Session identity is kind-conditional. `entity` anchors keep the original
@@ -58,13 +68,14 @@ export class SessionService {
   private readonly outputListeners: SessionOutputListener[] = [];
   private readonly exitListeners: SessionStatusListener[] = [];
   private readonly activityListeners: SessionActivityListener[] = [];
+  private readonly replacedListeners: SessionReplacedListener[] = [];
+  /** Per-session keystroke trackers for channels that have no `/clear` hook. */
+  private readonly clearDetectors = new Map<string, ClearCommandDetector>();
   /** Recent PTY output per Cursor session, for the approval-prompt heuristic. */
   private readonly outputTails = new Map<string, string>();
   private readonly signals: SessionSignalPort | undefined;
   private readonly outputBuffers = new Map<string, string[]>();
   private readonly maxBufferChars: number;
-  /** Per-anchor count of `workspace`/`personal` sessions ever spawned — numbers the label suffix, never reused even after that session is removed. */
-  private readonly ordinals = new Map<string, number>();
   /**
    * The `--mcp-config` path handed back by `embeddedBrowser.create` for each
    * `browserEnabled` session — survives `kill` (so a `resume` reuses the same
@@ -95,15 +106,22 @@ export class SessionService {
     },
     private readonly fs: Pick<WritableFileSystemPort, 'mkdir' | 'writeFile'> &
       Pick<FileSystemPort, 'lstat' | 'readlink' | 'symlink' | 'unlink' | 'readdir' | 'pathExists'>,
-    options?: { maxBufferChars?: number; signals?: SessionSignalPort },
+    options?: { maxBufferChars?: number; signals?: SessionSignalPort; titles?: ConversationTitleSource },
   ) {
     this.maxBufferChars = options?.maxBufferChars ?? DEFAULT_MAX_SCROLLBACK_CHARS;
     this.signals = options?.signals;
     this.signals?.onSignal((sessionId, signal) => {
-      if (signal.event === 'session-start') this.followConversation(sessionId, signal.payload);
+      if (signal.event === 'session-start') {
+        if (signal.payload?.['source'] === 'clear' && this.isReplaceable(sessionId)) {
+          void this.replaceAfterClear(sessionId).catch(() => {});
+          return;
+        }
+        this.followConversation(sessionId, signal.payload);
+      }
       const change = interpretSignal(signal);
       if (change) this.setActivity(sessionId, change);
     });
+    options?.titles?.onChange((change) => this.applyTitle(change.id, change.title));
     for (const runtime of Object.values(this.runtimes)) {
       runtime.onData((sessionId, chunk) => {
         this.appendToBuffer(sessionId, chunk);
@@ -352,8 +370,7 @@ export class SessionService {
     // is the anchor key, so reopening an exited one reuses the same slot.
     // `workspace`/`personal` arrive with a freshly minted sessionId every time.
     const previous = this.sessions.get(sessionId);
-    const finalLabel =
-      previous?.label ?? (anchor.kind === 'entity' ? label : this.nextOrdinalLabel(anchor, label));
+    const finalLabel = previous?.label ?? (anchor.kind === 'entity' ? label : UNTITLED_LABEL);
     // Reopening keeps the conversation it already had; a genuinely new
     // session names a brand-new one. Either way the id is known before the
     // process starts, so the transcript can be matched to the session.
@@ -420,14 +437,6 @@ export class SessionService {
     }
   }
 
-  /** First session for an anchor keeps the plain label; each later one gets a numbered suffix, computed once at spawn time. */
-  private nextOrdinalLabel(anchor: SessionAnchor, baseLabel: string): string {
-    const key = sessionAnchorKey(anchor);
-    const ordinal = (this.ordinals.get(key) ?? 0) + 1;
-    this.ordinals.set(key, ordinal);
-    return ordinal === 1 ? baseLabel : `${baseLabel} (${ordinal})`;
-  }
-
   write(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return;
@@ -435,6 +444,52 @@ export class SessionService {
     if (session.activity === 'needs-input' && isAnswerInput(data)) this.setActivity(sessionId, { activity: 'working' });
     this.outputTails.delete(sessionId);
     this.runtimeOf(sessionId)?.write(sessionId, data);
+    if (this.detectClearCommand(session, data)) void this.replaceAfterClear(sessionId).catch(() => {});
+  }
+
+  /** Channels without a `/clear` hook: spot the command in what the user types. */
+  private detectClearCommand(session: SessionSnapshot, data: string): boolean {
+    const commands = CLEAR_COMMANDS[session.harness];
+    if (!commands || !this.isReplaceable(session.sessionId)) return false;
+    let detector = this.clearDetectors.get(session.sessionId);
+    if (!detector) {
+      detector = new ClearCommandDetector(commands);
+      this.clearDetectors.set(session.sessionId, detector);
+    }
+    return detector.feed(data);
+  }
+
+  /**
+   * Only workspace / Início sessions are replaced: an entity-anchored session's
+   * id *is* its anchor key, so a "new session" would be the same slot again.
+   */
+  private isReplaceable(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    return session?.status === 'running' && session.anchor.kind !== 'entity';
+  }
+
+  /**
+   * `/clear` ends the conversation: the session is killed (it stays listed as
+   * encerrada, its transcript in the history) and a brand-new one — same
+   * anchor, same channel, "Untitled" — takes its place.
+   */
+  private async replaceAfterClear(oldSessionId: string): Promise<void> {
+    const old = this.sessions.get(oldSessionId);
+    if (!old || !this.isReplaceable(oldSessionId)) return;
+    this.kill(oldSessionId);
+    const next = await this.launch(randomUUID(), old.anchor, old.harness);
+    for (const listener of this.replacedListeners) listener(oldSessionId, next);
+  }
+
+  /** The CLI named a conversation: a workspace / Início session wears that name (an entity one keeps its entity's). */
+  private applyTitle(conversationId: string, title: string | undefined): void {
+    if (!title) return;
+    for (const session of this.sessions.values()) {
+      if (session.conversationId !== conversationId || session.status !== 'running') continue;
+      if (session.anchor.kind === 'entity' || session.label === title) continue;
+      session.label = title;
+      for (const listener of this.activityListeners) listener(session.sessionId);
+    }
   }
 
   /**
@@ -510,6 +565,7 @@ export class SessionService {
     this.sessionFolders.delete(sessionId);
     this.outputBuffers.delete(sessionId);
     this.outputTails.delete(sessionId);
+    this.clearDetectors.delete(sessionId);
     await this.signals?.release(sessionId).catch(() => {});
   }
 
@@ -654,6 +710,11 @@ export class SessionService {
 
   onExit(listener: SessionStatusListener): void {
     this.exitListeners.push(listener);
+  }
+
+  /** `/clear` ended a session and a fresh one replaced it. */
+  onReplaced(listener: SessionReplacedListener): void {
+    this.replacedListeners.push(listener);
   }
 
   private async resolveAnchor(anchor: SessionAnchor): Promise<{ cwd: string; label: string; folders: readonly string[] }> {

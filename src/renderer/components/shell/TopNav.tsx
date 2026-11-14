@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import { AppBar, ButtonBase, Divider, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
+import { AppBar, ButtonBase, IconButton, Stack, Toolbar, Tooltip, Typography } from '@mui/material';
 import {
-  ChevronLeft, ChevronRight, PanelLeft, PanelRight, Search, Settings as SettingsGlyph,
+  ChevronLeft, ChevronRight, PanelLeft, PanelRight, Search,
 } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { shortcutFor } from '../../lib/shortcut-labels.js';
@@ -15,7 +15,6 @@ import {
   subscribeWorkspacePanels,
   toggleWorkspacePanel,
 } from '../../lib/workspace-shell-store.js';
-import { openConfig } from '../../lib/workspace-area-store.js';
 import { useSessions } from '../../hooks/use-sessions.js';
 import { rowStateOf } from '../../lib/session-attention.js';
 
@@ -138,22 +137,6 @@ export function TopNav({ onOpenCommandPalette }: TopNavProps): React.ReactElemen
               aria-label={controlLabel}
             >
               <Icon glyph={PanelRight} size={18} />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-
-        <Divider orientation="vertical" flexItem sx={{ my: 1 }} />
-
-        <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
-          <Tooltip title="Configurações">
-            <IconButton
-              data-testid="nav-settings"
-              onClick={() => openConfig()}
-              size="small"
-              sx={{ color: 'text.secondary' }}
-              aria-label="Configurações"
-            >
-              <Icon glyph={SettingsGlyph} size={18} />
             </IconButton>
           </Tooltip>
         </Stack>

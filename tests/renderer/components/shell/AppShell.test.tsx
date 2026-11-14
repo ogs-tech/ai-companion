@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { AppShell } from '../../../../src/renderer/components/shell/AppShell.js';
 import { dispatchMenuCommand } from '../../../../src/renderer/lib/menu-commands.js';
 import { registerConfigOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
@@ -31,11 +30,11 @@ describe('AppShell', () => {
     );
     expect(screen.getByTestId('app-shell')).toBeInTheDocument();
     expect(screen.getByTestId('screen')).toBeInTheDocument();
-    expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
+    expect(screen.queryByTestId('nav-settings')).not.toBeInTheDocument();
     expect(screen.getByTestId('status-bar')).toBeInTheDocument();
   });
 
-  it('opens the Config view via TopNav and the open-settings menu command', async () => {
+  it('opens the Config view via the open-settings menu command', async () => {
     const opener = vi.fn();
     registerConfigOpener(opener);
     renderWithShell(
@@ -43,10 +42,8 @@ describe('AppShell', () => {
         <div data-testid="screen" />
       </AppShell>,
     );
-    await userEvent.click(screen.getByTestId('nav-settings'));
-    expect(opener).toHaveBeenCalledOnce();
     act(() => dispatchMenuCommand('open-settings'));
-    expect(opener).toHaveBeenCalledTimes(2);
+    expect(opener).toHaveBeenCalledOnce();
     registerConfigOpener(null);
   });
 

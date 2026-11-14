@@ -16,6 +16,7 @@ declare global {
         onExit(sessionId: string, listener: (exitCode: number) => void): () => void;
         onAnyExit(listener: (sessionId: string, exitCode: number) => void): () => void;
         onAnyActivity(listener: (sessionId: string) => void): () => void;
+        onReplaced(listener: (event: import('../shared/session.js').SessionReplacedEvent) => void): () => void;
         onOpenRequest(listener: (target: { id: string; external: boolean }) => void): () => void;
       };
       externalSession: {

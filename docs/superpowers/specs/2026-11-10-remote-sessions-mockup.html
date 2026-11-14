@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Companion Remoto Mockups</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: three options, each a row of phone frames that scrolls sideways on narrow screens.
+   Tokens come from the app's own OGS design system (src/renderer/tokens.ts). */
+:root {
+  --ink: #142036;
+  --cream: #F7F4EE;
+  --paper: #FFFFFF;
+  --rail: #F2EEE5;
+  --input: #FBFAF6;
+  --muted: #5A6573;
+  --line: rgba(20,32,54,0.11);
+  --azul: #3D5CC2;
+  --verde: #119350;
+  --ambar: #D9A12C;
+  --erro: #C0392B;
+  --term-bg: #142036;
+  --term-fg: #F2EEE5;
+  --term-dim: #9AA0A8;
+  --sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --stage: #E9E4D8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #F2EEE5; --cream: #0F1828; --paper: #16223A; --rail: #1B2944; --input: #16223A;
+    --muted: #9AA0A8; --line: rgba(255,255,255,0.08);
+    --azul: #5B79E0; --verde: #3FB97A; --ambar: #E5B547; --erro: #E2675A;
+    --term-bg: #0A111E; --stage: #0A111E; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #F2EEE5; --cream: #0F1828; --paper: #16223A; --rail: #1B2944; --input: #16223A;
+  --muted: #9AA0A8; --line: rgba(255,255,255,0.08);
+  --azul: #5B79E0; --verde: #3FB97A; --ambar: #E5B547; --erro: #E2675A;
+  --term-bg: #0A111E; --stage: #0A111E; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--cream); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5;
+  padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1240px; margin: 0 auto; }
+h1 { font-size: 30px; line-height: 1.15; margin: 0 0 8px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 62ch; margin: 0 0 40px; }
+.opt { margin-bottom: 56px; }
+.opt-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+.opt h2 { font-size: 21px; margin: 0; font-weight: 600; }
+.tag { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--verde); color: #fff; }
+.opt p.d { color: var(--muted); margin: 0 0 18px; max-width: 70ch; }
+.pros { display: flex; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+.pros b { color: var(--ink); font-weight: 600; }
+.stage { background: var(--stage); border-radius: 20px; padding: 28px 24px; overflow-x: auto; }
+.row { display: flex; gap: 28px; width: max-content; margin: 0 auto; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+figcaption { font-size: 13px; color: var(--muted); }
+
+/* Phone */
+.phone { width: 270px; height: 560px; border-radius: 34px; background: #0b1220; padding: 8px; box-shadow: 0 12px 32px rgba(20,32,54,0.18); }
+.screen { width: 100%; height: 100%; border-radius: 27px; background: var(--cream); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+.sb { height: 26px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-size: 11px; font-weight: 600; flex: none; }
+.top { display: flex; align-items: center; gap: 8px; padding: 6px 12px 10px; flex: none; }
+.top h3 { margin: 0; font-size: 17px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 999px; background: var(--rail); color: var(--muted); white-space: nowrap; }
+.chip.btn { color: var(--ink); border: 1px solid var(--line); background: var(--paper); }
+.ico { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.body { flex: 1; min-height: 0; overflow: hidden; padding: 0 12px; display: flex; flex-direction: column; gap: 8px; }
+.tabbar { flex: none; display: flex; border-top: 1px solid var(--line); background: var(--paper); padding: 6px 4px 12px; }
+.tabbar div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10.5px; color: var(--muted); font-weight: 500; }
+.tabbar .on { color: var(--azul); font-weight: 600; }
+
+/* Session row */
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.card.hot { border-color: var(--ambar); }
+.r1 { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.run { background: var(--verde); } .dot.ask { background: var(--ambar); } .dot.err { background: var(--erro); }
+.nm { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { font-size: 12px; color: var(--muted); }
+.last { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state { font-size: 11px; font-weight: 600; }
+.state.ask { color: #9a6d00; } .state.run { color: var(--verde); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .state.ask { color: var(--ambar); } }
+:root[data-theme="dark"] .state.ask { color: var(--ambar); }
+.fab { position: absolute; right: 14px; bottom: 70px; background: var(--ink); color: var(--cream); border-radius: 999px; padding: 10px 16px; font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; box-shadow: 0 4px 12px rgba(20,32,54,0.25); }
+.fab.nobar { bottom: 18px; }
+.sect { font-size: 12px; font-weight: 600; color: var(--muted); padding: 4px 2px 0; }
+
+/* Terminal */
+.term { flex: 1; min-height: 0; background: var(--term-bg); color: var(--term-fg); border-radius: 12px; padding: 10px; font-family: var(--mono); font-size: 10.5px; line-height: 1.55; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+.term .dim { color: var(--term-dim); } .term .ok { color: #3FB97A; } .term .am { color: #E5B547; } .term .bl { color: #8aa0f0; }
+.ask-box { margin-top: 6px; border: 1px solid #E5B547; border-radius: 8px; padding: 6px 8px; }
+.keys { display: flex; gap: 6px; padding: 8px 0 0; flex: none; flex-wrap: nowrap; }
+.k { font-size: 12px; font-weight: 600; padding: 8px 0; border-radius: 10px; flex: 1; text-align: center; background: var(--paper); border: 1px solid var(--line); }
+.k.go { background: var(--verde); border-color: var(--verde); color: #fff; }
+.k.no { color: var(--erro); }
+.k.sm { flex: 0 0 38px; font-family: var(--mono); font-size: 11px; }
+.compose { display: flex; gap: 6px; padding: 8px 12px 14px; flex: none; }
+.field { flex: 1; background: var(--input); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; font-size: 13px; color: var(--muted); }
+.send { width: 38px; height: 38px; border-radius: 50%; background: var(--azul); color: #fff; display: grid; place-items: center; flex: none; }
+
+/* Files + git */
+.crumb { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 2px; }
+.list { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.li { display: flex; align-items: center; gap: 9px; padding: 9px 12px; font-size: 13px; border-top: 1px solid var(--line); }
+.li:first-child { border-top: 0; }
+.li .f { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.li .m { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.st { font-family: var(--mono); font-size: 11px; font-weight: 500; width: 16px; text-align: center; flex: none; }
+.st.M { color: var(--ambar); } .st.A { color: var(--verde); } .st.D { color: var(--erro); } .st.Q { color: var(--azul); }
+.branch { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; }
+.branch .sp { flex: 1; }
+.btn-main { background: var(--ink); color: var(--cream); text-align: center; border-radius: 12px; padding: 11px; font-weight: 600; font-size: 14px; }
+.diff { font-family: var(--mono); font-size: 10.5px; background: var(--term-bg); color: var(--term-fg); border-radius: 12px; padding: 10px; line-height: 1.55; }
+.diff .a { color: #3FB97A; } .diff .r { color: #E2675A; } .diff .h { color: #8aa0f0; }
+
+/* Option B: attention-first */
+.hero { background: var(--ink); color: var(--cream); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.hero .t { font-size: 12px; opacity: .75; }
+.hero .q { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.hero .a { display: flex; gap: 8px; }
+.hero .a div { flex: 1; text-align: center; padding: 9px 0; border-radius: 10px; font-weight: 600; font-size: 13px; }
+.hero .y { background: var(--verde); color: #fff; } .hero .n { background: rgba(255,255,255,.14); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero { background: #1B2944; color: #F2EEE5; } }
+:root[data-theme="dark"] .hero { background: #1B2944; color: #F2EEE5; }
+.drawer { position: absolute; inset: auto 0 0 0; background: var(--paper); border-radius: 22px 22px 0 0; border-top: 1px solid var(--line); padding: 10px 14px 18px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 -8px 24px rgba(20,32,54,0.18); }
+.grab { width: 36px; height: 4px; border-radius: 4px; background: var(--line); align-self: center; margin-bottom: 4px; }
+.scrim { position: absolute; inset: 0; background: rgba(10,17,30,.45); }
+.sw { display: flex; gap: 6px; overflow: hidden; padding: 0 12px 8px; flex: none; }
+.sw .chip { padding: 5px 11px; font-size: 12px; }
+.sw .chip.on { background: var(--ink); color: var(--cream); }
+
+.foot { margin-top: 8px; color: var(--muted); font-size: 13px; max-width: 70ch; }
+.foot b { color: var(--ink); }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 10l3 2-3 2M12 15h5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2.2"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="9" r="2.2"/><path d="M7 8.2v7.6M17 11.2c0 3-4 3-8.6 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <h1>Controle remoto das sessões</h1>
+  <p class="lede">Três formas de organizar o celular. Todas abrem no navegador, pela rede privada, com Sessões, Arquivos e Git. A barra de teclas rápidas (Aprovar, Negar, Esc, setas) aparece em todas, porque digitar no terminal pelo celular é a parte mais cansativa. Os textos e nomes são exemplos.</p>
+
+  <!-- ============ OPÇÃO A ============ -->
+  <section class="opt">
+    <div class="opt-head"><h2>A. Três abas</h2><span class="tag">Recomendada</span></div>
+    <p class="d">Barra de baixo com Sessões, Arquivos e Git. Dentro de uma sessão, o terminal ocupa a tela toda.</p>
+    <div class="pros"><span><b>Vantagem:</b> padrão que você já conhece, nada para aprender.</span><span><b>Custo:</b> perceber que uma sessão pediu algo exige estar na aba Sessões.</span></div>
+    <div class="stage"><div class="row">
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><h3>Sessões</h3><span class="chip btn">ai-companion</span></div>
+          <div class="body">
+            <div class="card hot"><div class="r1"><span class="dot ask"></span><span class="nm">Claude · limpar sessão</span><span class="state ask">Aguardando</span></div><div class="sub">feat/session-clear · há 2 min</div><div class="last">Posso rodar npm test?</div></div>
+            <div class="card"><div class="r1"><span class="dot run"></span><span class="nm">Cursor · api-gateway</span><span class="state run">Trabalhando</span></div><div class="sub">main · há 20 s</div><div class="last">editando routes/health.ts</div></div>
+            <div class="card"><div class="r1"><span class="dot"></span><span class="nm">LM Studio · rascunho</span><span class="sub">Parada</span></div><div class="sub">sem repositório · há 1 h</div></div>
+          </div>
+          <div class="fab"><svg class="ico"><use href="#i-plus"/></svg>Nova sessão</div>
+          <div class="tabbar"><div class="on"><svg class="ico"><use href="#i-term"/></svg>Sessões</div><div><svg class="ico"><use href="#i-folder"/></svg>Arquivos</div><div><svg class="ico"><use href="#i-git"/></svg>Git</div></div>
+        </div></div>
+        <figcaption>Lista, com o que precisa de você no topo</figcaption>
+      </figure>
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><svg class="ico"><use href="#i-back"/></svg><h3>Claude · limpar sessão</h3><svg class="ico"><use href="#i-more"/></svg></div>
+          <div class="body">
+            <div class="term">
+              <span class="dim">● Edit src/main/session-clear-detector.ts</span>
+              <span class="ok">  + 24 linhas</span>
+              <span class="dim">● Read tests/main/…detector.test.ts</span>
+              <span>Os testes novos cobrem o /clear.</span>
+              <div class="ask-box"><span class="am">Rodar comando?</span><br>npm test -- session-clear</div>
+            </div>
+            <div class="keys"><div class="k go">Aprovar</div><div class="k no">Negar</div><div class="k sm">Esc</div><div class="k sm">↑</div></div>
+          </div>
+          <div class="compose"><div class="field">Responder…</div><div class="send"><svg class="ico"><use href="#i-send"/></svg></div></div>
+        </div></div>
+        <figcaption>Terminal com teclas rápidas</figcaption>
+      </figure>
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><h3>Arquivos</h3><span class="chip btn">ai-companion</span></div>
+          <div class="body">
+            <div class="crumb">src / main / application</div>
+            <div class="list">
+              <div class="li"><svg class="ico"><use href="#i-folder"/></svg><span class="f">services</span><span class="m">14</span></div>
+              <div class="li"><svg class="ico"><use href="#i-folder"/></svg><span class="f">ports</span><span class="m">9</span></div>
+              <div class="li"><svg class="ico"><use href="#i-file"/></svg><span class="f">session-clear-detector.ts</span><span class="st Q">N</span></div>
+              <div class="li"><svg class="ico"><use href="#i-file"/></svg><span class="f">session-service.ts</span><span class="st M">M</span></div>
+              <div class="li"><svg class="ico"><use href="#i-file"/></svg><span class="f">index.ts</span></div>
+            </div>
+          </div>
+          <div class="tabbar"><div><svg class="ico"><use href="#i-term"/></svg>Sessões</div><div class="on"><svg class="ico"><use href="#i-folder"/></svg>Arquivos</div><div><svg class="ico"><use href="#i-git"/></svg>Git</div></div>
+        </div></div>
+        <figcaption>Arquivos, só leitura</figcaption>
+      </figure>
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><h3>Git</h3><span class="chip btn">ai-companion</span></div>
+          <div class="body">
+            <div class="branch"><svg class="ico"><use href="#i-git"/></svg>main<span class="sp"></span><span class="chip">↑0 ↓0</span></div>
+            <div class="sect">Alterações (4)</div>
+            <div class="list">
+              <div class="li"><span class="st M">M</span><span class="f">session-service.ts</span><span class="m">+42 −6</span></div>
+              <div class="li"><span class="st M">M</span><span class="f">TopNav.tsx</span><span class="m">+9 −2</span></div>
+              <div class="li"><span class="st Q">N</span><span class="f">session-clear-detector.ts</span><span class="m">+24</span></div>
+              <div class="li"><span class="st Q">N</span><span class="f">…detector.test.ts</span><span class="m">+61</span></div>
+            </div>
+            <div class="btn-main">Escrever mensagem de commit</div>
+          </div>
+          <div class="tabbar"><div><svg class="ico"><use href="#i-term"/></svg>Sessões</div><div><svg class="ico"><use href="#i-folder"/></svg>Arquivos</div><div class="on"><svg class="ico"><use href="#i-git"/></svg>Git</div></div>
+        </div></div>
+        <figcaption>Git: ver mudanças e commitar</figcaption>
+      </figure>
+
+    </div></div>
+  </section>
+
+  <!-- ============ OPÇÃO B ============ -->
+  <section class="opt">
+    <div class="opt-head"><h2>B. Tela de atenção</h2></div>
+    <p class="d">A primeira tela mostra só o que está esperando por você, com Aprovar e Negar ali mesmo. Arquivos e Git ficam numa gaveta que sobe de baixo.</p>
+    <div class="pros"><span><b>Vantagem:</b> responde em um toque sem abrir o terminal.</span><span><b>Custo:</b> sem contexto, aprovar às cegas é arriscado; esconder Arquivos e Git atrás de uma gaveta os torna menos descobríveis.</span></div>
+    <div class="stage"><div class="row">
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><h3>Agora</h3><span class="chip btn">ai-companion</span></div>
+          <div class="body">
+            <div class="hero"><div class="t">Claude · limpar sessão</div><div class="q">Rodar npm test -- session-clear?</div><div class="a"><div class="y">Aprovar</div><div class="n">Negar</div></div></div>
+            <div class="sect">Trabalhando</div>
+            <div class="card"><div class="r1"><span class="dot run"></span><span class="nm">Cursor · api-gateway</span></div><div class="last">editando routes/health.ts</div></div>
+            <div class="sect">Paradas</div>
+            <div class="card"><div class="r1"><span class="dot"></span><span class="nm">LM Studio · rascunho</span></div></div>
+          </div>
+          <div class="fab nobar"><svg class="ico"><use href="#i-plus"/></svg>Nova sessão</div>
+        </div></div>
+        <figcaption>Tela inicial</figcaption>
+      </figure>
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><h3>Agora</h3><span class="chip btn">ai-companion</span></div>
+          <div class="body"><div class="hero"><div class="t">Claude · limpar sessão</div><div class="q">Rodar npm test -- session-clear?</div></div></div>
+          <div class="scrim"></div>
+          <div class="drawer">
+            <div class="grab"></div>
+            <div class="li" style="border:0"><svg class="ico"><use href="#i-term"/></svg><span class="f">Todas as sessões</span></div>
+            <div class="li"><svg class="ico"><use href="#i-folder"/></svg><span class="f">Arquivos</span></div>
+            <div class="li"><svg class="ico"><use href="#i-git"/></svg><span class="f">Git</span><span class="chip">4</span></div>
+            <div class="li"><svg class="ico"><use href="#i-lock"/></svg><span class="f">Conexão e dispositivos</span></div>
+          </div>
+        </div></div>
+        <figcaption>Gaveta com Arquivos e Git</figcaption>
+      </figure>
+
+    </div></div>
+  </section>
+
+  <!-- ============ OPÇÃO C ============ -->
+  <section class="opt">
+    <div class="opt-head"><h2>C. Terminal primeiro</h2></div>
+    <p class="d">O celular abre direto na última sessão, em tela cheia. Uma faixa de abas no topo troca de sessão. Arquivos e Git ficam no menu.</p>
+    <div class="pros"><span><b>Vantagem:</b> o mais rápido para quem acompanha uma sessão só.</span><span><b>Custo:</b> ver várias sessões de relance fica pior, e é a opção mais diferente do app do PC.</span></div>
+    <div class="stage"><div class="row">
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><svg class="ico"><use href="#i-more"/></svg><h3>ai-companion</h3><svg class="ico"><use href="#i-plus"/></svg></div>
+          <div class="sw"><span class="chip on">Claude ●</span><span class="chip">Cursor</span><span class="chip">LM Studio</span></div>
+          <div class="body">
+            <div class="term">
+              <span class="dim">● Edit src/main/session-clear-detector.ts</span>
+              <span class="ok">  + 24 linhas</span>
+              <span class="dim">● Read tests/main/…detector.test.ts</span>
+              <span>Os testes novos cobrem o /clear.</span>
+              <div class="ask-box"><span class="am">Rodar comando?</span><br>npm test -- session-clear</div>
+            </div>
+            <div class="keys"><div class="k go">Aprovar</div><div class="k no">Negar</div><div class="k sm">Esc</div><div class="k sm">↑</div></div>
+          </div>
+          <div class="compose"><div class="field">Responder…</div><div class="send"><svg class="ico"><use href="#i-send"/></svg></div></div>
+        </div></div>
+        <figcaption>Abre na sessão que pediu algo</figcaption>
+      </figure>
+
+      <figure>
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>9:41</span><span>Tailscale</span></div>
+          <div class="top"><svg class="ico"><use href="#i-more"/></svg><h3>ai-companion</h3><svg class="ico"><use href="#i-plus"/></svg></div>
+          <div class="body"><div class="term"><span class="dim">…</span></div></div>
+          <div class="scrim"></div>
+          <div class="drawer">
+            <div class="grab"></div>
+            <div class="li" style="border:0"><svg class="ico"><use href="#i-term"/></svg><span class="f">Sessões (3)</span></div>
+            <div class="li"><svg class="ico"><use href="#i-folder"/></svg><span class="f">Arquivos</span></div>
+            <div class="li"><svg class="ico"><use href="#i-git"/></svg><span class="f">Git</span><span class="chip">4</span></div>
+            <div class="li"><svg class="ico"><use href="#i-lock"/></svg><span class="f">Conexão e dispositivos</span></div>
+          </div>
+        </div></div>
+        <figcaption>Menu</figcaption>
+      </figure>
+
+    </div></div>
+  </section>
+
+  <p class="foot"><b>Minha recomendação é a A.</b> Cobre tudo que você pediu com o menor número de ideias novas, e o terminal com teclas rápidas dela serve também para B e C se mudarmos de ideia depois. Segurança é a mesma nas três: rede privada Tailscale mais um código de pareamento na primeira vez que o celular abre a página.</p>
+</div>

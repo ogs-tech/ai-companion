@@ -90,7 +90,7 @@ import { useHealthReport } from '../../hooks/use-health-report.js';
 import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
 import { isPersonalInstruction } from '../../../shared/entity.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
-import type { SessionAnchor, SessionOpenTarget, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
+import type { SessionAnchor, SessionOpenTarget, SessionReplacedEvent, SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 import type { TerminalSnapshot } from '../../../shared/terminal.js';
 import { callIpc } from '../../lib/ipc.js';
 import type { OpenEditorsState } from '../../../shared/open-editors.js';
@@ -323,6 +323,21 @@ export function WorkspaceScreen(): React.ReactElement {
     if (session) openSessionTab(session);
   });
   useEffect(() => window.api.session.onOpenRequest((target) => onNotificationOpen(target)), []);
+
+  // `/clear` ended a session and started a fresh one: its tab becomes the new session's, in front.
+  const onSessionReplaced = useEffectEvent((event: SessionReplacedEvent): void => {
+    const next = event.session;
+    const id = `session:${next.sessionId}`;
+    setOpenTabs((prev) => {
+      const index = prev.findIndex((t) => t.id === `session:${event.oldSessionId}`);
+      const tab = { id, kind: 'session' as const, anchor: next.anchor, sessionId: next.sessionId, label: next.label };
+      if (index < 0) return prev.some((t) => t.id === id) ? prev : [...prev, tab];
+      return prev.map((t, i) => (i === index ? tab : t));
+    });
+    setActiveTabId((current) => (current === `session:${event.oldSessionId}` ? id : current));
+    void queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
+  });
+  useEffect(() => window.api.session.onReplaced((event) => onSessionReplaced(event)), []);
 
   // Main silences a notification for the session whose tab is in front; it needs to know which one that is.
   const focusedSessionId = openTabs.find((t) => t.id === activeTabId && t.kind === 'session');
@@ -1201,7 +1216,8 @@ export function WorkspaceScreen(): React.ReactElement {
         ...(tabHarness ? { sessionChannel: tabHarness } : {}),
         ...(tabDetail ? { sessionDetail: tabDetail } : {}),
         glyph: tabHarness ? harnessGlyph(tabHarness) : SquareTerminal,
-        label: tab.label,
+        // Live: the CLI names the conversation after the tab opened.
+        label: tabSession?.label ?? tab.label,
         closeLabel: running ? 'Minimizar' : 'Fechar',
         // Manages its own edge-to-edge spacing (padding only around the
         // header, none around the terminal itself) — the canvas's own p:2

@@ -7,7 +7,6 @@ import {
   registerWorkspaceHistoryApplier,
   resetWorkspaceHistoryForTests,
 } from '../../../../src/renderer/lib/workspace-history-store.js';
-import { registerConfigOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
 import { resetBrowserTabsForTests } from '../../../../src/renderer/lib/browser-tabs-store.js';
 import { publishWorkspacePanels, registerWorkspaceShellCommands } from '../../../../src/renderer/lib/workspace-shell-store.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -47,16 +46,12 @@ describe('TopNav', () => {
     expect(screen.getByTestId('workspace-toggle-customizations')).toHaveAttribute('data-collapsed', 'false');
   });
 
-  it('opens settings and the command palette via their controls', async () => {
-    const onOpenSettings = vi.fn();
-    registerConfigOpener(onOpenSettings);
+  it('opens the command palette via its control and has no settings button', async () => {
     const onOpenCommandPalette = vi.fn();
     renderWithShell(<TopNav onOpenCommandPalette={onOpenCommandPalette} />);
-    await userEvent.click(screen.getByTestId('nav-settings'));
+    expect(screen.queryByTestId('nav-settings')).not.toBeInTheDocument();
     await userEvent.click(screen.getByTestId('command-palette-trigger'));
-    expect(onOpenSettings).toHaveBeenCalledOnce();
     expect(onOpenCommandPalette).toHaveBeenCalledOnce();
-    registerConfigOpener(null);
   });
   it('no longer renders the OGS brand line (moved to the footer)', () => {
     renderWithShell(<TopNav onOpenCommandPalette={noop} />);

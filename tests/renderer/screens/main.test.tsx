@@ -48,7 +48,6 @@ describe('<Main> — shell navigation', () => {
 
     expect(await screen.findByTestId('workspace-screen')).toBeInTheDocument();
     expect(screen.getByTestId('app-shell')).toBeInTheDocument();
-    expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
   });
 
   it('lists Customizations inline on the Workspace overview, with an empty state', async () => {

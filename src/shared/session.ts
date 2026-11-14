@@ -152,6 +152,16 @@ export const SESSION_EXIT_CHANNEL = 'session:exit' as const;
 /** Push channel main→renderer fired whenever a running session's `activity` changes. */
 export const SESSION_ACTIVITY_CHANNEL = 'session:activity' as const;
 
+/** Push channel main→renderer fired when `/clear` ended a session and a fresh one took its place. */
+export const SESSION_REPLACED_CHANNEL = 'session:replaced' as const;
+
+export interface SessionReplacedEvent {
+  /** The session `/clear` ended; it stays listed as encerrada. */
+  oldSessionId: string;
+  /** The new session, already running. */
+  session: SessionSnapshotWithOutput;
+}
+
 /** One batched push (250 ms window) with every session whose state or detail changed in it. */
 export interface SessionActivityEvent {
   sessionIds: string[];

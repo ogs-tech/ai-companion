@@ -432,6 +432,22 @@ describe('SessionsTreeGroup', () => {
       );
     });
 
+    it('pages with no filter selected, not only under the encerradas filter', async () => {
+      route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })], 'cursor-1')) });
+      render();
+      await screen.findByTestId('tree-session-c1');
+      call.mockClear();
+
+      intersectionObservers.at(-1)?.trigger();
+
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith(
+          'sessionHistory.list',
+          expect.objectContaining({ cursor: 'cursor-1' }),
+        ),
+      );
+    });
+
     it('stops asking once the list has reached its end', async () => {
       route({ 'sessionHistory.list': ok(page([entry({ conversationId: 'c1' })], null)) });
       render();

@@ -77,7 +77,7 @@ import { FsCursorTranscriptAdapter } from './infrastructure/session-runtime/fs-c
 import { EmbeddedBrowserAdapter } from './infrastructure/browser/embedded-browser-adapter.js';
 import type { EmbeddedBrowserPort } from './application/ports/embedded-browser-port.js';
 import { FsClaudeTranscriptAdapter } from './infrastructure/claude-cli/fs-claude-transcript-adapter.js';
-import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL, SESSION_ACTIVITY_BATCH_MS, SESSION_OPEN_REQUEST_CHANNEL } from '../shared/session.js';
+import { SESSION_OUTPUT_CHANNEL, SESSION_EXIT_CHANNEL, SESSION_ACTIVITY_CHANNEL, SESSION_ACTIVITY_BATCH_MS, SESSION_OPEN_REQUEST_CHANNEL, SESSION_REPLACED_CHANNEL } from '../shared/session.js';
 import { ENTITY_CHANGED_CHANNEL } from '../shared/entity.js';
 import { TERMINAL_OUTPUT_CHANNEL, TERMINAL_EXIT_CHANNEL } from '../shared/terminal.js';
 import { FsLaunchConfigReader } from './infrastructure/launch-config/fs-launch-config-reader.js';
@@ -414,6 +414,8 @@ async function wireIpc(): Promise<void> {
   });
   embeddedBrowserPortForReload = embeddedBrowserAdapter;
 
+  // Always on, unlike the external-session watcher (consent-gated): an app session's tab is named from its own transcript.
+  const sessionTitles = new FsClaudeTranscriptWatch(join(home, '.claude', 'projects'));
   const sessionSignals = new FsSessionSignalAdapter(join(workspacePath, 'session-signals'));
 
   const sessionRuntimes = {
@@ -474,8 +476,9 @@ async function wireIpc(): Promise<void> {
     initialScope?.dataDir ?? globalEntities.dataDir,
     { workspaceService, activeWorkspace, homedir: home },
     nodeFsAdapter,
-    { signals: sessionSignals },
+    { signals: sessionSignals, titles: sessionTitles },
   );
+  void sessionTitles.start();
 
   const fileBrowserPort = new NodeFileBrowserAdapter([new NumbersConverterAdapter()]);
   const fileBrowserFor = (workspace: Workspace | null): FileBrowserService | null =>
@@ -548,6 +551,9 @@ async function wireIpc(): Promise<void> {
     });
     sessionService.onExit((sessionId, _status, exitCode) => {
       mainWindow?.webContents.send(SESSION_EXIT_CHANNEL, { sessionId, exitCode });
+    });
+    sessionService.onReplaced((oldSessionId, session) => {
+      mainWindow?.webContents.send(SESSION_REPLACED_CHANNEL, { oldSessionId, session });
     });
   };
   attachSessionBridges();

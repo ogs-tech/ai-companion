@@ -4,11 +4,13 @@ import {
   SESSION_OUTPUT_CHANNEL,
   SESSION_EXIT_CHANNEL,
   SESSION_ACTIVITY_CHANNEL,
+  SESSION_REPLACED_CHANNEL,
   SESSION_OPEN_REQUEST_CHANNEL,
   type SessionOpenRequestEvent,
   type SessionOutputEvent,
   type SessionExitEvent,
   type SessionActivityEvent,
+  type SessionReplacedEvent,
 } from '../shared/session.js';
 import { EXTERNAL_SESSIONS_CHANNEL } from '../shared/external-session.js';
 import { EXTERNAL_LINK_CHANNEL, type ExternalLinkEvent } from '../shared/external-link.js';
@@ -60,6 +62,12 @@ const api = {
       };
       ipcRenderer.on(SESSION_ACTIVITY_CHANNEL, wrapped);
       return () => ipcRenderer.removeListener(SESSION_ACTIVITY_CHANNEL, wrapped);
+    },
+    /** `/clear` ended a session and a fresh one took its place: the UI swaps the tab and focuses it. */
+    onReplaced: (listener: (event: SessionReplacedEvent) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, payload: SessionReplacedEvent): void => listener(payload);
+      ipcRenderer.on(SESSION_REPLACED_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(SESSION_REPLACED_CHANNEL, wrapped);
     },
     /** A notification was clicked: open that session (or observe the external one). */
     onOpenRequest: (listener: (target: SessionOpenRequestEvent) => void): (() => void) => {

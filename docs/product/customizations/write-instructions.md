@@ -58,7 +58,7 @@ row is read-only (edit it from Início).
 
 ## Set the reply language for every session
 
-**Settings** (gear icon) → **Language**. Any value other than **Off** writes a `<language>…</language>`
+**Configurações** (⌘, or the left rail) → **Language**. Any value other than **Off** writes a `<language>…</language>`
 block into the **personal** instruction (and re-syncs it); **Off** removes the block. **Mirror** tells the
 model to reply in whatever language you write in. Code, comments and identifiers are always requested in
 English. The block is plain text in the instruction — you can see and edit it there.
