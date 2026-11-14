@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { expect, launchApp, seedWorkspaceRegistry, type AppSession } from './fixtures/app.js';
+import { expect, launchApp, seedWorkspaceRegistry, type AppSession } from '../../fixtures/app.js';
 
 const WORKBOOK_NAME = 'calculator_catalog.xlsx';
 
@@ -79,7 +79,11 @@ test.beforeAll(async () => {
     seed: async (home) => {
       const projectRoot = join(home, 'studio');
       await writeFixtureWorkbook(join(projectRoot, WORKBOOK_NAME));
-      seedWorkspaceRegistry(home, [{ id: 'studio', name: 'Studio', rootPath: projectRoot }], 'studio');
+      seedWorkspaceRegistry(
+        home,
+        [{ id: 'studio', name: 'Studio', rootPath: projectRoot }],
+        'studio',
+      );
     },
   });
 });
@@ -88,24 +92,26 @@ test.afterAll(async () => {
   await session?.close();
 });
 
-test('previews every uncached formula as its computed value, never as formula text', async () => {
-  await session.page.waitForSelector('[data-testid="folder-tree"]', { timeout: 15_000 });
-  await session.page.getByText(WORKBOOK_NAME, { exact: true }).first().click();
-  await session.page.waitForSelector('[data-testid="spreadsheet-preview"]', { timeout: 20_000 });
+test.describe('Workbench › spreadsheet preview', () => {
+  test('Formulas without a cached value preview as their computed value, never as formula text', async () => {
+    await session.page.waitForSelector('[data-testid="folder-tree"]', { timeout: 15_000 });
+    await session.page.getByText(WORKBOOK_NAME, { exact: true }).first().click();
+    await session.page.waitForSelector('[data-testid="spreadsheet-preview"]', { timeout: 20_000 });
 
-  await session.page.getByRole('tab', { name: 'Catálogo' }).click();
-  const grid = session.page.locator('[data-testid="spreadsheet-preview"]');
+    await session.page.getByRole('tab', { name: 'Catálogo' }).click();
+    const grid = session.page.locator('[data-testid="spreadsheet-preview"]');
 
-  // F11 = ROUND(18*300/5,0)*5 = 5400, reached through a nested parse.
-  await expect(grid).toContainText('5400');
-  // F12 = ROUND(6*200/5,0)*5 = 1200.
-  await expect(grid).toContainText('1200');
-  // E5 = SUMIFS over the "não" rows only = F11 = 5400, and D5 = 18 hours.
-  await expect(grid).toContainText('18');
+    // F11 = ROUND(18*300/5,0)*5 = 5400, reached through a nested parse.
+    await expect(grid).toContainText('5400');
+    // F12 = ROUND(6*200/5,0)*5 = 1200.
+    await expect(grid).toContainText('1200');
+    // E5 = SUMIFS over the "não" rows only = F11 = 5400, and D5 = 18 hours.
+    await expect(grid).toContainText('18');
 
-  // An unresolved cell renders its own formula text in the body, so a bare
-  // function call appearing in the grid is the exact regression signature.
-  await expect(grid).not.toContainText('SUMIFS(');
-  await expect(grid).not.toContainText('INDEX(');
-  await expect(grid).not.toContainText('ROUND(');
+    // An unresolved cell renders its own formula text in the body, so a bare
+    // function call appearing in the grid is the exact regression signature.
+    await expect(grid).not.toContainText('SUMIFS(');
+    await expect(grid).not.toContainText('INDEX(');
+    await expect(grid).not.toContainText('ROUND(');
+  });
 });

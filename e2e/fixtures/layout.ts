@@ -16,14 +16,20 @@ export interface LayoutFault {
  *
  * `allowTruncation` lists test ids whose descendants may end in an ellipsis on purpose (a long session name).
  */
-export async function findLayoutFaults(root: Locator, options: { allowTruncation?: string[] } = {}): Promise<LayoutFault[]> {
+export async function findLayoutFaults(
+  root: Locator,
+  options: { allowTruncation?: string[] } = {},
+): Promise<LayoutFault[]> {
   return root.evaluate((rootEl, allow) => {
     const faults: LayoutFault[] = [];
     const describe = (el: Element): string => {
       const id = el.getAttribute('data-testid');
-      return id ? `[data-testid=${id}]` : `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? `.${el.className.split(' ')[0]}` : ''}`;
+      return id
+        ? `[data-testid=${id}]`
+        : `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? `.${el.className.split(' ')[0]}` : ''}`;
     };
-    const textOf = (el: Element): string => (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    const textOf = (el: Element): string =>
+      (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
     const clipsSideways = (el: Element): boolean => {
       const { overflowX } = getComputedStyle(el);
       return overflowX !== 'visible';
@@ -32,7 +38,8 @@ export async function findLayoutFaults(root: Locator, options: { allowTruncation
       for (let p = el.parentElement; p; p = p.parentElement) if (clipsSideways(p)) return p;
       return null;
     };
-    const isAllowed = (el: Element): boolean => allow.some((id) => el.closest(`[data-testid^="${id}"]`) !== null);
+    const isAllowed = (el: Element): boolean =>
+      allow.some((id) => el.closest(`[data-testid^="${id}"]`) !== null);
     const all = [rootEl, ...Array.from(rootEl.querySelectorAll('*'))];
 
     for (const el of all) {
@@ -41,8 +48,17 @@ export async function findLayoutFaults(root: Locator, options: { allowTruncation
       const style = getComputedStyle(el);
       if (style.visibility === 'hidden' || style.display === 'none') continue;
 
-      if (style.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1 && !isAllowed(el)) {
-        faults.push({ kind: 'truncated', element: describe(el), text: textOf(el), detail: `${el.scrollWidth}px of text in ${el.clientWidth}px` });
+      if (
+        style.textOverflow === 'ellipsis' &&
+        el.scrollWidth > el.clientWidth + 1 &&
+        !isAllowed(el)
+      ) {
+        faults.push({
+          kind: 'truncated',
+          element: describe(el),
+          text: textOf(el),
+          detail: `${el.scrollWidth}px of text in ${el.clientWidth}px`,
+        });
       }
       const clipper = clipperOf(el);
       if (clipper) {
@@ -57,11 +73,18 @@ export async function findLayoutFaults(root: Locator, options: { allowTruncation
         }
       }
       if (rect.right > window.innerWidth + 1 || rect.left < -1) {
-        faults.push({ kind: 'outside-viewport', element: describe(el), text: textOf(el), detail: `spans ${Math.round(rect.left)}–${Math.round(rect.right)}px of a ${window.innerWidth}px window` });
+        faults.push({
+          kind: 'outside-viewport',
+          element: describe(el),
+          text: textOf(el),
+          detail: `spans ${Math.round(rect.left)}–${Math.round(rect.right)}px of a ${window.innerWidth}px window`,
+        });
       }
     }
     // A child cut off by its parent also cuts every descendant: keep the outermost report per element only.
-    return faults.filter((f, i) => faults.findIndex((o) => o.element === f.element && o.kind === f.kind) === i);
+    return faults.filter(
+      (f, i) => faults.findIndex((o) => o.element === f.element && o.kind === f.kind) === i,
+    );
   }, options.allowTruncation ?? []);
 }
 

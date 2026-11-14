@@ -47,7 +47,12 @@ const SHAPES: Record<string, StubShape> = {
   },
   // Run-only channel: no account, so the status probe always succeeds.
   lms: { versionArg: 'version', statusArgs: 'status', signedInOutput: 'ok', loginArgs: 'login' },
-  claude: { versionArg: '--version', statusArgs: 'auth status', signedInOutput: '{ "loggedIn": true }', loginArgs: 'auth login' },
+  claude: {
+    versionArg: '--version',
+    statusArgs: 'auth status',
+    signedInOutput: '{ "loggedIn": true }',
+    loginArgs: 'auth login',
+  },
 };
 
 function interactiveLoop(bin: string): string {
