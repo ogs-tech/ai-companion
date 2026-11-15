@@ -27,7 +27,7 @@ export interface CursorAdapterDeps {
  *
  * - Skills / agents (scope `personal`) → `~/.cursor/{skills,agents}/…` (symlink).
  * - Personal Instruction → materialized as a Cursor local plugin under
- *   `~/.cursor/plugins/ai-companion/` (the "hack": Cursor loads plugin rules at
+ *   `~/.cursor/plugins/air-ide/` (the "hack": Cursor loads plugin rules at
  *   startup and applies rules with `alwaysApply: true` to every conversation,
  *   which is the closest analogue to Claude's home-level CLAUDE.md today —
  *   native `~/.cursor/rules/*.mdc` support is not stable as of this writing).

@@ -1,3 +1,4 @@
+import { brand } from '../../../shared/brand.js';
 import { existsSync } from 'node:fs';
 import { lstat, mkdtemp, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -117,7 +118,7 @@ export class SimpleGitRepoClient implements RepoGitPort {
   async commit(root: string, message: string, amend: boolean): Promise<{ sha: string }> {
     // The message goes through a file, never argv — it would show up in `ps`
     // and could be read as flags. simple-git has no stdin channel for `-F -`.
-    const dir = await mkdtemp(join(tmpdir(), 'ai-companion-commit-'));
+    const dir = await mkdtemp(join(tmpdir(), `${brand.slug}-commit-`));
     try {
       const file = join(dir, 'COMMIT_EDITMSG');
       await writeFile(file, message, 'utf8');

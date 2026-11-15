@@ -24,12 +24,12 @@ export function scopedRepository(options: {
   const workspace =
     options.workspaceId === undefined ? null : (options.workspace ?? new InMemoryEntityRepository());
   const scoped = new ScopedEntityRepository(
-    { repository: global, dataDir: options.globalDataDir ?? '/home/u/.ai-companion' },
+    { repository: global, dataDir: options.globalDataDir ?? '/home/u/.air-ide' },
     workspace === null || options.workspaceId === undefined
       ? null
       : {
           repository: workspace,
-          dataDir: options.workspaceDataDir ?? '/repos/ws/.ai-companion',
+          dataDir: options.workspaceDataDir ?? '/repos/ws/.air-ide',
           workspaceId: options.workspaceId,
         },
   );

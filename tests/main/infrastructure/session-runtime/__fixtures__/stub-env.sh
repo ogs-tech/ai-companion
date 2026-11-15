@@ -1,3 +1,3 @@
 #!/bin/sh
-echo "SOCKET=$AI_COMPANION_LINK_SOCKET"
+echo "SOCKET=$AIR_IDE_LINK_SOCKET"
 echo "HOME=$HOME"

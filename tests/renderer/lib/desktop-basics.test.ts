@@ -33,7 +33,7 @@ describe('describeFailure', () => {
 
 describe('composeWindowTitle', () => {
   it('follows the spec table', () => {
-    expect(composeWindowTitle(base)).toBe('Início — AI Companion');
+    expect(composeWindowTitle(base)).toBe('Início — AIR IDE');
     expect(composeWindowTitle({ ...base, workspaceName: 'acme' })).toBe('acme');
     expect(composeWindowTitle({ ...base, workspaceName: 'acme', tab: tab() })).toBe('a.md — acme');
     expect(composeWindowTitle({ ...base, workspaceName: 'acme', tab: tab({ dirty: true }) })).toBe('a.md ● — acme');

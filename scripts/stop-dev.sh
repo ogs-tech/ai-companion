@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Stop background dev (npm/electron-vite/Electron). Called when quitting AI Companion Dev from the Dock.
+# Stop background dev (npm/electron-vite/Electron). Called when quitting AIR IDE Dev from the Dock.
 set -euo pipefail
 
-LOG_DIR="${HOME}/.ai-companion"
+LOG_DIR="${HOME}/.air-ide"
 SHELL_PID_FILE="${LOG_DIR}/dev-shell.pid"
 PGID_FILE="${LOG_DIR}/dev.pgid"
 LOCK_FILE="${LOG_DIR}/dev.lock"

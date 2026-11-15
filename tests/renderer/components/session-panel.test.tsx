@@ -834,7 +834,7 @@ describe('<SessionPanel>', () => {
       const terminal = await openRunningSession();
       call.mockImplementation(async (method: string) => {
         if (method === 'session.stageAttachment') {
-          return ok({ absolutePath: '/workspace/.ai-companion/attachments/1-abcd-screenshot.png' });
+          return ok({ absolutePath: '/workspace/.air-ide/attachments/1-abcd-screenshot.png' });
         }
         return ok(undefined);
       });
@@ -852,7 +852,7 @@ describe('<SessionPanel>', () => {
       await waitFor(() =>
         expect(call).toHaveBeenCalledWith('session.write', {
           sessionId: 'entity:urn:skill:foo',
-          data: '@/workspace/.ai-companion/attachments/1-abcd-screenshot.png ',
+          data: '@/workspace/.air-ide/attachments/1-abcd-screenshot.png ',
         }),
       );
     });

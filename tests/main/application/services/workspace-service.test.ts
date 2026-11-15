@@ -42,7 +42,7 @@ describe('WorkspaceService', () => {
       const { service, bootstrap } = setup();
       const opened = await service.open('/repos/acme');
       expect(opened).toMatchObject({ name: 'acme', rootPath: '/repos/acme', createdAt: '2026-08-22T10:00:00.000Z' });
-      expect(bootstrap.create).toHaveBeenCalledWith('/repos/acme/.ai-companion');
+      expect(bootstrap.create).toHaveBeenCalledWith('/repos/acme/.air-ide');
       expect(await service.getActive()).toEqual(opened);
       expect(await service.list()).toEqual([opened]);
     });
@@ -94,7 +94,7 @@ describe('WorkspaceService', () => {
     const { service, bootstrap } = setup();
     const created = await service.create({ name: 'Acme', rootPath: '/links/acme' });
     expect(created).toMatchObject({ name: 'Acme', rootPath: '/repos/acme' });
-    expect(bootstrap.create).toHaveBeenCalledWith('/repos/acme/.ai-companion');
+    expect(bootstrap.create).toHaveBeenCalledWith('/repos/acme/.air-ide');
     expect(await service.getActive()).toBeNull();
   });
 
@@ -192,7 +192,7 @@ describe('WorkspaceService', () => {
       const updated = await service.addFolder(ws.id, '/repos/bravo');
       expect(updated.rootPath).toBe('/repos/acme');
       expect(updated.extraFolders).toEqual(['/repos/bravo']);
-      expect(bootstrap.create).toHaveBeenCalledWith('/repos/bravo/.ai-companion');
+      expect(bootstrap.create).toHaveBeenCalledWith('/repos/bravo/.air-ide');
       expect((await service.get(ws.id)).extraFolders).toEqual(['/repos/bravo']);
     });
 

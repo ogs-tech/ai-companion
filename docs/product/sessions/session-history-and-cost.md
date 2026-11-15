@@ -25,7 +25,7 @@ fall back to a bundled price table; a model with no known price shows no cost ra
 
 ## Override a model price
 
-There is no UI for this. Add a `pricing` map to `~/.ai-companion/settings.json`, keyed by model id, in USD
+There is no UI for this. Add a `pricing` map to `~/.air-ide/settings.json`, keyed by model id, in USD
 per million tokens (the values below are placeholders — use your own rates):
 
 ```json

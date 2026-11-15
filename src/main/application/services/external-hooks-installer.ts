@@ -1,3 +1,4 @@
+import { brand } from '../../../shared/brand.js';
 import { join } from 'node:path';
 import type { ChannelId } from '../../../shared/channel.js';
 import type { ExternalConsent } from '../../../shared/external-session.js';
@@ -22,7 +23,7 @@ interface HookEntry {
  * the user's `~/.claude/settings.json` / `~/.cursor/hooks.json` before an
  * explicit accept; every entry goes through {@link MergeMaterializer}, which
  * touches only the entries it owns and can take them out again. The consent
- * marker file (`~/.ai-companion/signals/external-enabled`) is what the hook
+ * marker file (`~/.air-ide/signals/external-enabled`) is what the hook
  * commands check at run time, so removing consent silences them even where an
  * entry could not be removed.
  */
@@ -35,7 +36,7 @@ export class ExternalHooksInstaller {
     private readonly fs: WritableFileSystemPort,
     private readonly home: string,
   ) {
-    const dataDir = join(home, '.ai-companion');
+    const dataDir = join(home, brand.workspaceDirName);
     this.marker = join(dataDir, EXTERNAL_CONSENT_MARKER);
     this.consentFile = join(dataDir, 'signals', 'external-consent');
   }
@@ -51,7 +52,7 @@ export class ExternalHooksInstaller {
 
   /** `exact`: write the marker and install the entries of the harnesses present; `estimated`: remove anything we installed and remember the choice. */
   async setConsent(mode: 'exact' | 'estimated', harnesses: readonly ChannelId[]): Promise<void> {
-    await this.fs.mkdir(join(this.home, '.ai-companion', 'signals'), { recursive: true });
+    await this.fs.mkdir(join(this.home, brand.workspaceDirName, 'signals'), { recursive: true });
     await this.fs.writeFile(this.consentFile, `${mode}\n`);
     if (mode === 'estimated') {
       await this.uninstallEntries();

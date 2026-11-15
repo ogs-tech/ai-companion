@@ -14,7 +14,7 @@ npx playwright test --project=sessions   # one product area, reusing the last bu
 npx playwright test --grep @smoke        # only the main journey of each area
 ```
 
-**Run `npm run build` after any `src/` change** — the tests drive `out/`, not the sources. If a stale Electron blocks the launch, `pkill -f ai-companion-e2e-userdata`.
+**Run `npm run build` after any `src/` change** — the tests drive `out/`, not the sources. If a stale Electron blocks the launch, `pkill -f air-ide-e2e-userdata`.
 
 ## Where things live
 

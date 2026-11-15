@@ -12,7 +12,7 @@ export interface CliStub {
   /**
    * Makes the stub a tiny interactive "conversation" when launched as a session (any args beyond the probes):
    * prints `stub-<bin> ready`, then per stdin line writes the same signal lines the real hooks would to
-   * `$AI_COMPANION_SIGNAL_FILE` — `working` → `echo: <line>` → `idle`. Two magic lines: `ask` raises a
+   * `$AIR_IDE_SIGNAL_FILE` — `working` → `echo: <line>` → `idle`. Two magic lines: `ask` raises a
    * permission prompt, `perm` raises an answerable one (a `permission` signal for `Bash: npm test`, then waits for
    * the app's `<signal file>.decision` like the real hook and echoes `decision: allow|deny`), `/clear` announces a
    * new conversation (`session-start`, `source: clear`).
@@ -56,7 +56,7 @@ const SHAPES: Record<string, StubShape> = {
 };
 
 function interactiveLoop(bin: string): string {
-  return `F="$AI_COMPANION_SIGNAL_FILE"
+  return `F="$AIR_IDE_SIGNAL_FILE"
 emit() { [ -n "$F" ] && printf '%s\\n' "$1" >> "$F"; }
 echo "stub-${bin} ready"
 # The real CLI writes <home>/.claude/projects/<cwd slug>/<--session-id>.jsonl once a prompt is sent: the cwd, the

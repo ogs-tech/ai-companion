@@ -9,7 +9,7 @@ export interface ExternalSignal {
   signal: SessionSignal;
 }
 
-/** One OS-level watcher on `~/.ai-companion/signals/external/`; no polling. */
+/** One OS-level watcher on `~/.air-ide/signals/external/`; no polling. */
 export interface ExternalSignalSourcePort {
   onSignal(listener: (signal: ExternalSignal) => void): void;
   start(): Promise<void>;

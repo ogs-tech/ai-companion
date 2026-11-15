@@ -1,8 +1,9 @@
+import { brand } from '../../shared/brand.js';
 import type { ChannelId } from '../../shared/channel.js';
 import { SIGNAL_FILE_ENV } from './session-activity.js';
 import type { SessionSignal } from './ports/session-signal-port.js';
 
-/** Directory (under `~/.ai-companion`) hooks of sessions outside the app write to, and its consent marker. */
+/** Directory (under `~/.air-ide`) hooks of sessions outside the app write to, and its consent marker. */
 export const EXTERNAL_SIGNALS_DIR = 'signals/external';
 export const EXTERNAL_CONSENT_MARKER = 'signals/external-enabled';
 
@@ -16,7 +17,7 @@ export const EXTERNAL_CONSENT_MARKER = 'signals/external-enabled';
  * `$HOME` expands in the harness's shell, so no path is baked in.
  */
 function externalHook(harness: ChannelId, event: 'working' | 'idle' | 'notification' | 'tool' | 'session-start' | 'session-end'): string {
-  const dir = `"$HOME/.ai-companion/signals"`;
+  const dir = `"$HOME/${brand.workspaceDirName}/signals"`;
   return [
     `IN=$(tr -d '\\n\\r')`,
     `[ -n "$${SIGNAL_FILE_ENV}" ] && exit 0`,

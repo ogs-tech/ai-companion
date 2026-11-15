@@ -1,3 +1,4 @@
+import { brand } from '../../shared/brand.js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { callIpc } from '../lib/ipc.js';
 import { confirmQuit } from '../lib/workspace-tabs-guard.js';
@@ -42,7 +43,7 @@ export function useDesktopBridge(): string | null {
     };
   }, []);
 
-  const title = recovery !== null ? 'AI Companion' : composeWindowTitle(status);
+  const title = recovery !== null ? brand.documentTitle : composeWindowTitle(status);
   const edited = recovery === null && status.tab?.dirty === true;
   useEffect(() => {
     document.title = title;

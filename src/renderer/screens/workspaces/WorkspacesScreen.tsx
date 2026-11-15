@@ -1,3 +1,4 @@
+import { brand } from '../../../shared/brand.js';
 import { useState } from 'react';
 import { Box, Button, List, Stack, Tooltip, Typography } from '@mui/material';
 import { Folder, FolderOpen, FolderSearch, Plus, Trash2 } from 'lucide-react';
@@ -75,7 +76,7 @@ export function WorkspacesScreen(): React.ReactElement {
             Workspaces
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Pastas que você abriu no AI Companion.
+            Pastas que você abriu no {brand.displayName}.
           </Typography>
         </Box>
         <Button

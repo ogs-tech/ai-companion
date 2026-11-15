@@ -1,6 +1,6 @@
 export type EntityKind = 'skill' | 'agent' | 'mcp' | 'instruction' | 'hook';
 
-/** `personal` = Global (`~/.ai-companion`); `workspace` = one open folder, identified by `scopeId`. */
+/** `personal` = Global (`~/.air-ide`); `workspace` = one open folder, identified by `scopeId`. */
 export type Scope = 'personal' | 'workspace';
 
 export type EntityProvenance = 'workspace-managed' | 'claude-code';

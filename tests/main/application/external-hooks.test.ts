@@ -35,10 +35,10 @@ describe('external hook commands (run for real)', () => {
   const run = (command: string, stdin: string, env: Record<string, string> = {}): string =>
     execFileSync('sh', ['-c', command], { input: stdin, env: { PATH: process.env['PATH'] ?? '', HOME: home, ...env }, encoding: 'utf8' });
   const consent = (): void => {
-    mkdirSync(join(home, '.ai-companion', 'signals'), { recursive: true });
-    writeFileSync(join(home, '.ai-companion', 'signals', 'external-enabled'), '');
+    mkdirSync(join(home, '.air-ide', 'signals'), { recursive: true });
+    writeFileSync(join(home, '.air-ide', 'signals', 'external-enabled'), '');
   };
-  const out = (id: string): string => join(home, '.ai-companion', 'signals', 'external', `${id}.jsonl`);
+  const out = (id: string): string => join(home, '.air-ide', 'signals', 'external', `${id}.jsonl`);
 
   it('writes nothing until the consent marker exists', () => {
     run(CLAUDE_EXTERNAL_HOOKS.Stop, '{"session_id":"abc","cwd":"/w"}');
@@ -55,7 +55,7 @@ describe('external hook commands (run for real)', () => {
 
   it('stays silent inside an app-spawned session (its own signal file covers it)', () => {
     consent();
-    run(CLAUDE_EXTERNAL_HOOKS.Stop, '{"session_id":"abc"}', { AI_COMPANION_SIGNAL_FILE: '/tmp/x' });
+    run(CLAUDE_EXTERNAL_HOOKS.Stop, '{"session_id":"abc"}', { AIR_IDE_SIGNAL_FILE: '/tmp/x' });
     expect(existsSync(out('abc'))).toBe(false);
   });
 
@@ -69,7 +69,7 @@ describe('external hook commands (run for real)', () => {
   it('ignores a payload with no session id', () => {
     consent();
     run(CLAUDE_EXTERNAL_HOOKS.Stop, '{"cwd":"/w"}');
-    expect(existsSync(join(home, '.ai-companion', 'signals', 'external'))).toBe(false);
+    expect(existsSync(join(home, '.air-ide', 'signals', 'external'))).toBe(false);
   });
 });
 
@@ -81,11 +81,11 @@ describe('permission hook (run for real)', () => {
   afterEach(() => rmSync(home, { recursive: true, force: true }));
   const permission = SIGNAL_HOOK_COMMANDS.permission;
   const enable = (): void => {
-    mkdirSync(join(home, '.ai-companion', 'signals'), { recursive: true });
-    writeFileSync(join(home, '.ai-companion', INLINE_ANSWER_MARKER), '');
+    mkdirSync(join(home, '.air-ide', 'signals'), { recursive: true });
+    writeFileSync(join(home, '.air-ide', INLINE_ANSWER_MARKER), '');
   };
   it('returns at once, printing nothing, when the inline-answer marker is absent', () => {
-    const out = execFileSync('sh', ['-c', permission], { input: '{"tool_name":"Bash"}', env: { PATH: process.env['PATH'] ?? '', HOME: home, AI_COMPANION_SIGNAL_FILE: join(home, 'sig.jsonl') }, encoding: 'utf8' });
+    const out = execFileSync('sh', ['-c', permission], { input: '{"tool_name":"Bash"}', env: { PATH: process.env['PATH'] ?? '', HOME: home, AIR_IDE_SIGNAL_FILE: join(home, 'sig.jsonl') }, encoding: 'utf8' });
     expect(out).toBe('');
   });
 
@@ -93,7 +93,7 @@ describe('permission hook (run for real)', () => {
     enable();
     const file = join(home, 'sig.jsonl');
     writeFileSync(file, '');
-    const child = execFile('sh', ['-c', permission], { env: { PATH: process.env['PATH'] ?? '', HOME: home, AI_COMPANION_SIGNAL_FILE: file }, encoding: 'utf8' });
+    const child = execFile('sh', ['-c', permission], { env: { PATH: process.env['PATH'] ?? '', HOME: home, AIR_IDE_SIGNAL_FILE: file }, encoding: 'utf8' });
     const done = new Promise<string>((resolve) => {
       let out = '';
       child.stdout?.on('data', (d: string) => (out += d));

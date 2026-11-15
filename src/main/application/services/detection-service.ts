@@ -97,7 +97,7 @@ export class DetectionService {
     return out;
   }
 
-  /** Copies `path` into `~/.ai-companion/_backups/<timestamp>/detected/…`, then removes it. Returns the copy. */
+  /** Copies `path` into `~/.air-ide/_backups/<timestamp>/detected/…`, then removes it. Returns the copy. */
   private async moveToBackup(path: string): Promise<string> {
     const stamp = (this.deps.now?.() ?? new Date()).toISOString().replace(/[:.]/g, '-');
     const rel = relative(this.deps.homedir, path);

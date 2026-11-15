@@ -79,8 +79,8 @@ filter by name or description.
 The editor has no control for this yet. Set it in the canonical file's frontmatter:
 
 1. Close the skill's tab if it is open (saving from a tab opened before your edit would overwrite it).
-2. Open `<data dir>/skills/<name>/SKILL.md` — `~/.ai-companion/skills/<name>/SKILL.md` for a personal
-   skill, `<workspace>/.ai-companion/skills/<name>/SKILL.md` for a workspace one — in any editor.
+2. Open `<data dir>/skills/<name>/SKILL.md` — `~/.air-ide/skills/<name>/SKILL.md` for a personal
+   skill, `<workspace>/.air-ide/skills/<name>/SKILL.md` for a workspace one — in any editor.
 3. Add to the frontmatter:
 
    ```yaml

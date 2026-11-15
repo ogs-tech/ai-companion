@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-LOG_DIR="${HOME}/.ai-companion"
+LOG_DIR="${HOME}/.air-ide"
 LOG_FILE="${LOG_DIR}/dev.log"
 
 # shellcheck disable=SC1091

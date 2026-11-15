@@ -13,7 +13,7 @@ interface BootstrapPort {
 }
 
 /**
- * The workspace registry (`~/.ai-companion/workspaces.json`). A workspace is
+ * The workspace registry (`~/.air-ide/workspaces.json`). A workspace is
  * any folder except the home dir — that one is Global, which is not a
  * workspace. `activeWorkspaceId === null` means Global (Início) is showing.
  *
@@ -114,7 +114,7 @@ export class WorkspaceService {
 
   /**
    * Removes a folder from a workspace. Never touches disk — the folder and its
-   * `.ai-companion/` stay. The last folder cannot go (delete the workspace
+   * `.air-ide/` stay. The last folder cannot go (delete the workspace
    * instead); removing the primary promotes the next folder to `rootPath`.
    */
   async removeFolder(id: string, path: string): Promise<Workspace> {

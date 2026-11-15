@@ -28,7 +28,7 @@ Both live under **Customizations** → the **Integrações** chip.
 3. Save.
 
 Each harness file is rewritten atomically, and its previous version is kept under
-`~/.ai-companion/_backups/`. If an entry with that name already exists and the app did not write it, it is
+`~/.air-ide/_backups/`. If an entry with that name already exists and the app did not write it, it is
 replaced and the **Sync report** shows a conflict with the backup path.
 
 **Arguments, env vars and headers** have no fields in the dialog. Add them by editing the server's entry

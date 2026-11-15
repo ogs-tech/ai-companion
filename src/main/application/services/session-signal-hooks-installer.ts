@@ -4,7 +4,7 @@ import { CURSOR_SIGNAL_HOOKS } from '../session-activity.js';
 /**
  * Cursor reads hooks only from `hooks.json`, never per invocation, so the
  * activity hooks are merged into it once. Each hook is a no-op unless the
- * app's `AI_COMPANION_SIGNAL_FILE` is set, so Cursor outside the app is
+ * app's `AIR_IDE_SIGNAL_FILE` is set, so Cursor outside the app is
  * unaffected. Goes through {@link MergeMaterializer}: only these two entries
  * are touched, every other key of the user's file is left alone.
  */

@@ -13,8 +13,8 @@ entities to, see [Adapter targets](adapter-targets.md); for the shape of the ent
 
 | Dir | What it is |
 |---|---|
-| `~/.ai-companion/` | The **Global data dir** ("Início"). Holds app-global state *and* every `personal` entity. Always loaded, whichever workspace is open. Global is not a workspace — the home dir can't be opened as one. |
-| `<workspace.rootPath>/.ai-companion/` | A **workspace data dir**, one per workspace (any folder the user opened). Holds that workspace's `workspace`-scoped entities. Created when the workspace is registered (`workspace.create`/`workspace.open`) and re-bootstrapped (self-healed) every time it is activated. |
+| `~/.air-ide/` | The **Global data dir** ("Início"). Holds app-global state *and* every `personal` entity. Always loaded, whichever workspace is open. Global is not a workspace — the home dir can't be opened as one. |
+| `<workspace.rootPath>/.air-ide/` | A **workspace data dir**, one per workspace (any folder the user opened). Holds that workspace's `workspace`-scoped entities. Created when the workspace is registered (`workspace.create`/`workspace.open`) and re-bootstrapped (self-healed) every time it is activated. |
 
 The dir name comes from `brand.workspaceDirName` (`src/shared/brand.ts`). On first launch,
 `ProductMigrationService` renames a legacy `~/.superset-ai-app/` (and `~/.cursor/plugins/superset-ai/`)
@@ -22,7 +22,7 @@ to the current names.
 
 ## Global data dir — app-global files
 
-Only ever read from `~/.ai-companion/`, whichever workspace is open.
+Only ever read from `~/.air-ide/`, whichever workspace is open.
 
 | Path | Owner | Contents |
 |---|---|---|
@@ -31,7 +31,7 @@ Only ever read from `~/.ai-companion/`, whichever workspace is open.
 | `plugins/` | `PluginCacheFile` | Personal-scope plugins: imported clones and owned plugins, each with `_meta.json`. |
 | `marketplaces-cache/` | `MarketplaceService` | Personal-scope marketplace clones. |
 | `mcps/<name>.json`, `hooks/<name>.json` | `FsEntityRepository` | Canonical MCP-server and hook entities (JSON; `personal` ones here, `workspace` ones in the workspace's own data dir). |
-| `session-signals/<session>` | `FsSessionSignalAdapter` | Append-only signal file per app-spawned session (`AI_COMPANION_SIGNAL_FILE`); hooks write working / idle / needs-input events here. |
+| `session-signals/<session>` | `FsSessionSignalAdapter` | Append-only signal file per app-spawned session (`AIR_IDE_SIGNAL_FILE`); hooks write working / idle / needs-input events here. |
 | `signals/external/<conversation id>.jsonl` | global hooks in `~/.claude/settings.json` and `~/.cursor/hooks.json` | One file per Claude / Cursor conversation started **outside** the app, read by `FsExternalSignalAdapter`. Written only while the consent marker below exists. |
 | `signals/external-enabled` | `ExternalHooksInstaller` | Consent marker for external-session hooks. Deleted when consent is revoked or set to "só estimado". |
 | `signals/inline-answer-enabled` | session settings | Present only while the *inline answer* setting is on; the blocking `PermissionRequest` hook is a no-op without it. |
@@ -39,7 +39,7 @@ Only ever read from `~/.ai-companion/`, whichever workspace is open.
 | `_backups/<timestamp>/…` | `SymlinkManager`, `FileMaterializer` | Copies of whatever a sync overwrote — always here, whichever workspace is open. Never pruned automatically. |
 | `_backups/migration-v2-<timestamp>/` | `WorkspaceModelMigration` | Pre-migration copies of the project-era files (absolute paths preserved beneath it) plus `log.json`. Written once, by the boot migration. |
 | `bin/open` | `UnixSocketLinkRouter` | Shell shim, rewritten (mode `0755`) on every start. Prepended to a session PTY's `PATH` and set as its `$BROWSER`, so a URL the `claude` CLI opens reaches the app instead of the default browser. Non-`http(s)` or flagged invocations pass straight to `/usr/bin/open`. |
-| `run/link.sock` | `UnixSocketLinkRouter` | Unix socket (mode `0600`, dir `0700`) the shim writes URLs to; removed on quit. Falls back to `$TMPDIR/ai-companion-<uid>/` when the path would exceed macOS's socket-path limit. |
+| `run/link.sock` | `UnixSocketLinkRouter` | Unix socket (mode `0600`, dir `0700`) the shim writes URLs to; removed on quit. Falls back to `$TMPDIR/air-ide-<uid>/` when the path would exceed macOS's socket-path limit. |
 | `dev.lock` | dev launcher | Present only while `npm run dev` runs. |
 
 ## Entity files (every data dir)
@@ -50,7 +50,7 @@ open.
 
 | Path | Owner | Contents |
 |---|---|---|
-| `index.md` | `WorkspaceBootstrapService` | Static "this folder is managed by AI Companion" marker. |
+| `index.md` | `WorkspaceBootstrapService` | Static "this folder is managed by AIR IDE" marker. |
 | `skills/<name>/SKILL.md` | `FsEntityRepository` | Skill — YAML frontmatter + Markdown body. The whole `<name>/` dir is what gets symlinked. |
 | `agents/<name>.md` | `FsEntityRepository` | Agent — YAML frontmatter + system prompt. |
 | `instructions/default.md` | `FsEntityRepository` | The personal instruction (Global only). Frontmatter-free: the file *is* the body. |
@@ -65,11 +65,11 @@ app's editor.
 
 ## Inside a workspace folder
 
-Besides its `.ai-companion/` data dir, the app touches a workspace's folder (`<rootPath>`) only here:
+Besides its `.air-ide/` data dir, the app touches a workspace's folder (`<rootPath>`) only here:
 
 | Path | Contents |
 |---|---|
-| `<rootPath>/.ai-companion/plugins/`, `<rootPath>/.ai-companion/marketplaces-cache/` | Claude Code `project`-tier plugins and marketplace clones, while that workspace is open. |
+| `<rootPath>/.air-ide/plugins/`, `<rootPath>/.air-ide/marketplaces-cache/` | Claude Code `project`-tier plugins and marketplace clones, while that workspace is open. |
 | `<rootPath>/.vscode/launch.json` | **Read only** — the source of Launch Configurations. |
 | `<rootPath>/.git/` | Read and written only through the Git panel's explicit actions (`git.*`). |
 
@@ -84,8 +84,8 @@ writes is surgical — only the keys listed are touched.
 | Path | Keys touched | By |
 |---|---|---|
 | `~/.claude/settings.json` (`project` tier: the open workspace's `<rootPath>/.claude/settings.json`) | `hooks` (app-managed entries only, via the merge sync), `enabledPlugins`, `extraKnownMarketplaces` | `MergeMaterializer`, `PluginInstaller`, `MarketplaceService` (through `ClaudeSettingsFile`) |
-| `~/.claude/plugins/cache/local/<id>` (`project` tier: `<rootPath>/.claude/plugins/cache/local/<id>`) | symlink to the plugin in `~/.ai-companion/plugins/` (or the workspace's) | `PluginInstaller` |
-| `~/.claude/settings.json`, `~/.cursor/hooks.json` (session signals) | `hooks` entries that append to `~/.ai-companion/signals/external/`; installed only after the user accepts "Ver o estado exato de sessões fora do app", removed by revoking consent in Settings → Sessões | `ExternalHooksInstaller` via `MergeMaterializer` |
+| `~/.claude/plugins/cache/local/<id>` (`project` tier: `<rootPath>/.claude/plugins/cache/local/<id>`) | symlink to the plugin in `~/.air-ide/plugins/` (or the workspace's) | `PluginInstaller` |
+| `~/.claude/settings.json`, `~/.cursor/hooks.json` (session signals) | `hooks` entries that append to `~/.air-ide/signals/external/`; installed only after the user accepts "Ver o estado exato de sessões fora do app", removed by revoking consent in Settings → Sessões | `ExternalHooksInstaller` via `MergeMaterializer` |
 | `~/.claude.json` | `mcpServers.<name>` (app-managed entries only) | `MergeMaterializer` (atomic write; the file is backed up to `_backups/` whenever it changes) |
 | `<repo>/.mcp.json` | `mcpServers.<name>` (app-managed entries only) | `MergeMaterializer` |
 | `~/.cursor/mcp.json`, `~/.cursor/hooks.json`, `<repo>/.cursor/{mcp,hooks}.json` | the app-managed entries (Cursor adapter enabled) | `MergeMaterializer` |
@@ -113,8 +113,8 @@ at Início, with no workspace open, it isn't available and those calls fail `val
 ## Factory reset
 
 **Settings → Zona de perigo → Restaurar para estado inicial** (`app.restore`) removes every adapter symlink
-and owned generated file, then Global's whole data dir `~/.ai-companion/` (each workspace's own
-`<rootPath>/.ai-companion/` stays in its folder), and finally
+and owned generated file, then Global's whole data dir `~/.air-ide/` (each workspace's own
+`<rootPath>/.air-ide/` stays in its folder), and finally
 resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to `{}` — **including
 entries you added from Claude Code itself**, not only the app's own — before quitting. Backups live in Global's
-data dir and go with it, so copy `~/.ai-companion/_backups/` out first if you need them.
+data dir and go with it, so copy `~/.air-ide/_backups/` out first if you need them.

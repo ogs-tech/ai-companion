@@ -35,8 +35,8 @@ function isPersonalName(name: string): boolean {
 
 /**
  * One data dir's canonical entity files. Each instance holds a single scope —
- * `personal` for Global (`~/.ai-companion`), `workspace` for one workspace's
- * `<root>/.ai-companion` — and refuses to write any other, a guard against a
+ * `personal` for Global (`~/.air-ide`), `workspace` for one workspace's
+ * `<root>/.air-ide` — and refuses to write any other, a guard against a
  * routing bug in `ScopedEntityRepository` landing a file in the wrong dir.
  */
 export class FsEntityRepository implements EntityRepository {

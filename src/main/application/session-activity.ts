@@ -1,8 +1,9 @@
+import { brand, brandEnv } from '../../shared/brand.js';
 import { usageKey, type SessionAttention, type SessionPermissionRequest, type SessionActivity, type SessionSnapshot, type SessionUsage } from '../../shared/session.js';
 import type { SessionSignal } from './ports/session-signal-port.js';
 
 /** Env var the PTY gets; hooks append their JSON line to the file it names. No-op outside the app. */
-export const SIGNAL_FILE_ENV = 'AI_COMPANION_SIGNAL_FILE';
+export const SIGNAL_FILE_ENV = brandEnv('SIGNAL_FILE');
 
 const GUARD = `[ -z "$${SIGNAL_FILE_ENV}" ]`;
 
@@ -29,13 +30,13 @@ export const INLINE_ANSWER_MARKER = 'signals/inline-answer-enabled';
  * real CLI: the output shape and whether the dialog waits for the hook are from the docs.
  */
 const PERMISSION_BODY = [
-  `[ -f "$HOME/.ai-companion/${INLINE_ANSWER_MARKER}" ] || exit 0`,
+  `[ -f "$HOME/${brand.workspaceDirName}/${INLINE_ANSWER_MARKER}" ] || exit 0`,
   `F="$${SIGNAL_FILE_ENV}"`,
   `rm -f "$F.decision"`,
   `{ printf '{"event":"permission","payload":'; tr -d '\\n\\r'; printf '}\\n'; } >> "$F"`,
   `i=0; while [ $i -lt 100 ]; do if [ -f "$F.decision" ]; then D=$(cat "$F.decision"); rm -f "$F.decision"; ` +
     `if [ "$D" = allow ]; then printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'; ` +
-    `elif [ "$D" = deny ]; then printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Negado no AI Companion"}}}'; fi; exit 0; fi; sleep 0.2; i=$((i+1)); done`,
+    `elif [ "$D" = deny ]; then printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Negado no AIR IDE"}}}'; fi; exit 0; fi; sleep 0.2; i=$((i+1)); done`,
   `exit 0`,
 ].join('; ');
 const PERMISSION_HOOK = `${GUARD} || { ${PERMISSION_BODY}; }; exit 0`;

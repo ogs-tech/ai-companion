@@ -41,14 +41,14 @@ ls -l ~/.claude/skills/
 You will see something like:
 
 ```
-tldr -> /Users/you/.ai-companion/skills/tldr
+tldr -> /Users/you/.air-ide/skills/tldr
 ```
 
 That arrow is the whole trick. The skill lives once, in the app's data dir; Claude Code sees it through a
 symbolic link. Look at the real file:
 
 ```bash
-cat ~/.ai-companion/skills/tldr/SKILL.md
+cat ~/.air-ide/skills/tldr/SKILL.md
 ```
 
 Your name and description are in the YAML frontmatter at the top, the body below it.
@@ -69,11 +69,11 @@ also call it explicitly as `/tldr`.)
 ## 4. Let the agent improve its own skill
 
 1. Right-click `tldr` under **Skills** → **New Action**.
-   A second session opens with `@/Users/you/.ai-companion/skills/tldr/SKILL.md` already typed — not sent yet.
+   A second session opens with `@/Users/you/.air-ide/skills/tldr/SKILL.md` already typed — not sent yet.
 2. Complete the message and press Enter:
 
    ```
-   @/Users/you/.ai-companion/skills/tldr/SKILL.md add a rule: end with a single relevant emoji.
+   @/Users/you/.air-ide/skills/tldr/SKILL.md add a rule: end with a single relevant emoji.
    ```
 
 3. Approve the edit when Claude asks.
@@ -99,11 +99,11 @@ Hover `tldr` under **Skills** and click the trash icon. Then:
 ls -l ~/.claude/skills/
 ```
 
-The link is gone, and so is `~/.ai-companion/skills/tldr`. Your sessions remain in **Histórico**.
+The link is gone, and so is `~/.air-ide/skills/tldr`. Your sessions remain in **Histórico**.
 
 ## What you learned
 
-- A customization lives **once**, in `~/.ai-companion/`, and each harness sees it through a link —
+- A customization lives **once**, in `~/.air-ide/`, and each harness sees it through a link —
   [Why symlinks](../../technical/explanation/why-symlinks.md).
 - Editing it from the app, from a session or from any editor are all the same thing.
 - Sessions are real `claude` processes, and their history and cost come from Claude Code's own records.

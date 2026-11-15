@@ -15,10 +15,10 @@ const setup = () => {
   const scoped = new ScopedEntityRepository(
     { repository: new InMemoryEntityRepository(), dataDir: '/g' },
     {
-      repository: web, dataDir: '/r/web/.ai-companion', workspaceId: 'ws',
+      repository: web, dataDir: '/r/web/.air-ide', workspaceId: 'ws',
       folders: [
-        { folder: '/r/web', repository: web, dataDir: '/r/web/.ai-companion' },
-        { folder: '/r/api', repository: api, dataDir: '/r/api/.ai-companion' },
+        { folder: '/r/web', repository: web, dataDir: '/r/web/.air-ide' },
+        { folder: '/r/api', repository: api, dataDir: '/r/api/.air-ide' },
       ],
       shared: { repository: shared, dataDir: '/h/ws/data' },
     },
@@ -62,7 +62,7 @@ describe('ScopedEntityRepository — multi-folder', () => {
 
   it('dataDirFor follows the entity folder, and refuses a folder outside the workspace', () => {
     const { scoped } = setup();
-    expect(scoped.dataDirFor({ scopes: ['workspace'], folder: '/r/api' })).toBe('/r/api/.ai-companion');
+    expect(scoped.dataDirFor({ scopes: ['workspace'], folder: '/r/api' })).toBe('/r/api/.air-ide');
     expect(scoped.dataDirFor({ scopes: ['workspace'] })).toBe('/h/ws/data');
     expect(() => scoped.dataDirFor({ scopes: ['workspace'], folder: '/elsewhere' })).toThrow(/not a folder/);
   });

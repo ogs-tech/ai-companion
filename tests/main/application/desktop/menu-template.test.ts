@@ -4,7 +4,7 @@ import { SHORTCUTS } from '../../../../src/shared/desktop.js';
 
 const deps = (overrides: Partial<MenuDeps> = {}): MenuDeps => ({
   platform: 'darwin',
-  appName: 'AI Companion',
+  appName: 'AIR IDE',
   recentWorkspaces: [],
   send: vi.fn(),
   openWorkspace: vi.fn(),
@@ -21,14 +21,14 @@ const flatten = (items: MenuItemTemplate[]): MenuItemTemplate[] => items.flatMap
 describe('buildMenuTemplate', () => {
   it('starts with the app menu on macOS only', () => {
     const mac = buildMenuTemplate(deps());
-    expect(labels(mac)).toEqual(['AI Companion', 'Arquivo', 'Editar', 'Exibir', 'Sessões', 'Janela', 'Ajuda']);
+    expect(labels(mac)).toEqual(['AIR IDE', 'Arquivo', 'Editar', 'Exibir', 'Sessões', 'Janela', 'Ajuda']);
     const other = buildMenuTemplate(deps({ platform: 'win32' }));
     expect(labels(other)).toEqual(['Arquivo', 'Editar', 'Exibir', 'Sessões', 'Janela', 'Ajuda']);
   });
 
   it('puts Configurações under the app menu on macOS and under Arquivo elsewhere', () => {
     const mac = buildMenuTemplate(deps());
-    expect(labels(menu(mac, 'AI Companion'))).toContain('Configurações…');
+    expect(labels(menu(mac, 'AIR IDE'))).toContain('Configurações…');
     expect(labels(menu(mac, 'Arquivo')).join()).not.toContain('Configurações');
     const linux = buildMenuTemplate(deps({ platform: 'linux' }));
     expect(labels(menu(linux, 'Arquivo'))).toContain('Configurações');
@@ -73,9 +73,9 @@ describe('buildMenuTemplate', () => {
   });
 
   it('puts Sobre in Ajuda only outside macOS, and never offers updates or docs', () => {
-    expect(labels(menu(buildMenuTemplate(deps()), 'Ajuda'))).not.toContain('Sobre AI Companion');
+    expect(labels(menu(buildMenuTemplate(deps()), 'Ajuda'))).not.toContain('Sobre AIR IDE');
     const help = menu(buildMenuTemplate(deps({ platform: 'win32' })), 'Ajuda');
-    expect(labels(help)).toContain('Sobre AI Companion');
+    expect(labels(help)).toContain('Sobre AIR IDE');
     const all = labels(flatten(buildMenuTemplate(deps()))).join('|');
     expect(all).not.toMatch(/Documentação|atualizações/);
   });
@@ -85,7 +85,7 @@ describe('buildMenuTemplate', () => {
     const showAbout = vi.fn();
     const items = flatten(buildMenuTemplate(deps({ openLogsFolder, showAbout })));
     items.find((i) => i.label === 'Abrir pasta de logs')?.click?.();
-    items.find((i) => i.label === 'Sobre AI Companion')?.click?.();
+    items.find((i) => i.label === 'Sobre AIR IDE')?.click?.();
     expect(openLogsFolder).toHaveBeenCalled();
     expect(showAbout).toHaveBeenCalled();
   });

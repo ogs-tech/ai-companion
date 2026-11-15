@@ -1,6 +1,6 @@
 ---
 title: Getting started
-description: Run ai-companion locally from a fresh clone in under 5 minutes.
+description: Run air-ide locally from a fresh clone in under 5 minutes.
 ---
 
 # Getting started
@@ -18,8 +18,8 @@ description: Run ai-companion locally from a fresh clone in under 5 minutes.
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/ogs-tech/ai-companion.git
-cd ai-companion
+git clone https://github.com/ogs-tech/air-ide.git
+cd air-ide
 npm install
 ```
 
@@ -39,23 +39,23 @@ From the repo root, install the Mac dev shortcut once:
 npm run install:dev-shortcut
 ```
 
-This registers the global CLI **`ai-companion-dev`** and installs **`/Applications/AI Companion Dev.app`** (or `~/Applications/` if `/Applications` is not writable). Finder opens on the app after install — drag it to the Dock.
+This registers the global CLI **`air-ide-dev`** and installs **`/Applications/AIR IDE Dev.app`** (or `~/Applications/` if `/Applications` is not writable). Finder opens on the app after install — drag it to the Dock.
 
-Clicking the Dock icon while dev is already running focuses the open window. Dev starts in the background (no Terminal window). **Right-click** the Dock icon → **Open Terminal** to stream logs — closing that Terminal does **not** stop dev. Use **Quit AI Companion Dev** (Dock menu or ⌘Q on the launcher) to stop the project.
+Clicking the Dock icon while dev is already running focuses the open window. Dev starts in the background (no Terminal window). **Right-click** the Dock icon → **Open Terminal** to stream logs — closing that Terminal does **not** stop dev. Use **Quit AIR IDE Dev** (Dock menu or ⌘Q on the launcher) to stop the project.
 
 If you installed the shortcut before this behavior existed, rerun `npm run install:dev-shortcut` once to refresh the launcher.
 
 Then from anywhere in Terminal:
 
 ```bash
-ai-companion-dev
+air-ide-dev
 ```
 
 ## 3. First launch
 
 There is no setup wizard. On first launch the app:
 
-1. Creates its data dir, `~/.ai-companion/` (renaming a legacy `~/.superset-ai-app/` if one exists).
+1. Creates its data dir, `~/.air-ide/` (renaming a legacy `~/.superset-ai-app/` if one exists).
 2. Writes default settings: Claude Code sync **on**, Cursor sync **off**.
 3. Registers the official plugin marketplace.
 
@@ -67,7 +67,7 @@ customizations, health and recent workspaces, and has no file tree or Git.
 ## 4. Open a folder
 
 Click **Abrir pasta…** (or press **⌘O**) and pick a project folder. It becomes a **workspace**: the app
-creates `<folder>/.ai-companion/` inside it and switches to it.
+creates `<folder>/.air-ide/` inside it and switches to it.
 
 ![The Abrir pasta… button](../../assets/screenshots/getting-started/02-open-folder.png)
 
@@ -86,7 +86,7 @@ You're ready when:
 
   ![Settings → Adapters](../../assets/screenshots/settings/01-settings.png)
 
-- `ls ~/.ai-companion` lists `settings.json` and `workspaces.json`; skills and agents appear under
+- `ls ~/.air-ide` lists `settings.json` and `workspaces.json`; skills and agents appear under
   `skills/` and `agents/` once you create a personal one.
 
 ## What's next
@@ -99,6 +99,6 @@ You're ready when:
 ## Troubleshooting
 
 - **Window doesn't open** — check that no other process is holding port **47173** (dev renderer; see `electron.vite.config.ts`) and rerun `npm run dev`.
-- **I/O error screen** — the app could not create or read `~/.ai-companion/` (permissions, a file in its place, …). Fix the cause, then use the screen's retry button.
+- **I/O error screen** — the app could not create or read `~/.air-ide/` (permissions, a file in its place, …). Fix the cause, then use the screen's retry button.
 - **`npm test` fails to load `node-pty` after running the app** — `npm run dev`/`npm run build` rebuild `node-pty` for Electron's Node ABI. Run `npm install` (or `npm rebuild node-pty`) to restore the host build before testing.
 - **Stale build artifacts** — delete `out/` and rerun.

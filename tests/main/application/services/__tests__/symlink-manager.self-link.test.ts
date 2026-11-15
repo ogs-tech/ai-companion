@@ -8,7 +8,7 @@ import { setupSymlinkManager } from './symlink-manager.helpers.js';
  * (the existing-symlink branch sees `resolvedTarget === sourcePath`) and never heal it.
  */
 describe('SymlinkManager.create with source === destination', () => {
-  const PATH = '/workspace/.ai-companion/index.md';
+  const PATH = '/workspace/.air-ide/index.md';
 
   it('refuses instead of linking a path to itself', async () => {
     const { manager } = setupSymlinkManager();
@@ -20,7 +20,7 @@ describe('SymlinkManager.create with source === destination', () => {
     const { manager } = setupSymlinkManager();
 
     await expect(
-      manager.create({ source: PATH, destination: '/workspace/.ai-companion/./index.md' }),
+      manager.create({ source: PATH, destination: '/workspace/.air-ide/./index.md' }),
     ).rejects.toThrow(DomainError);
   });
 

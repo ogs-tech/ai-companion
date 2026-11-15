@@ -14,7 +14,7 @@ created_at: 2026-11-03
 
 ## Decision
 
-AI Companion evolves from a **harness manager** into an **AI-first IDE**
+AIR IDE evolves from a **harness manager** into an **AI-first IDE**
 positioned as *the IDE where you bring your own harness*. Claude Code and Cursor
 stay the **suppliers** of the agent loop; the app is the workbench around them —
 sessions, customizations, review of what the agent changed, and (new) an editor.

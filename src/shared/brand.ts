@@ -9,6 +9,8 @@ export interface BrandLegacy {
 }
 
 export interface BrandConfig {
+  readonly slug: string;
+  readonly envPrefix: string;
   readonly displayName: string;
   readonly documentTitle: string;
   readonly appName: string;
@@ -29,25 +31,30 @@ export interface BrandConfig {
   readonly legacy: BrandLegacy;
 }
 
+const slug = 'air-ide';
+const envPrefix = 'AIR_IDE';
+
 export const brand = {
-  displayName: 'AI Companion',
-  documentTitle: 'AI Companion',
-  appName: 'AI Companion',
-  devAppName: 'AI Companion Dev',
-  notificationPrefix: 'AI Companion',
-  fatalErrorTitle: 'AI Companion failed to start',
+  slug,
+  envPrefix,
+  displayName: 'AIR IDE',
+  documentTitle: 'AIR IDE',
+  appName: 'AIR IDE',
+  devAppName: 'AIR IDE Dev',
+  notificationPrefix: 'AIR IDE',
+  fatalErrorTitle: 'AIR IDE failed to start',
   companyLine: 'OGS Tech',
   companyUrl: 'https://www.useogs.com/',
-  managedByPhrase: 'AI Companion',
+  managedByPhrase: 'AIR IDE',
   cursorPluginDescription:
-    'AI Companion — personal instruction as a Cursor rule. This plugin is managed automatically; edits will be overwritten.',
-  starterPackTitle: 'AI Companion · Starter Pack',
-  workspaceDirName: '.ai-companion',
-  cursorPluginId: 'ai-companion',
-  ownershipKey: 'x-ai-companion-managed',
-  generatedFileMarker: '<!-- Managed by AI Companion — edits will be overwritten -->',
-  cursorPluginJsonMarker: '"x-ai-companion-managed": true',
-  cursorRuleMdcMarker: 'x-ai-companion-managed: true',
+    'AIR IDE — personal instruction as a Cursor rule. This plugin is managed automatically; edits will be overwritten.',
+  starterPackTitle: 'AIR IDE · Starter Pack',
+  workspaceDirName: `.${slug}`,
+  cursorPluginId: slug,
+  ownershipKey: `x-${slug}-managed`,
+  generatedFileMarker: '<!-- Managed by AIR IDE — edits will be overwritten -->',
+  cursorPluginJsonMarker: `"x-${slug}-managed": true`,
+  cursorRuleMdcMarker: `x-${slug}-managed: true`,
   legacy: {
     workspaceDirName: '.superset-ai-app',
     cursorPluginId: 'superset-ai',
@@ -57,12 +64,12 @@ export const brand = {
   },
 } as const satisfies BrandConfig;
 
-/** Notification / dialog title: "AI Companion — …" */
+/** Notification / dialog title: "AIR IDE — …" */
 export function productLabel(suffix: string): string {
   return `${brand.notificationPrefix} — ${suffix}`;
 }
 
-/** User-facing workspace path hint, e.g. `~/.ai-companion`. */
+/** User-facing workspace path hint, e.g. `~/.air-ide`. */
 export function workspacePathHint(): string {
   return `~/${brand.workspaceDirName}`;
 }
@@ -83,4 +90,14 @@ export function legacyOwnershipMarkers(): readonly string[] {
     legacy.cursorPluginJsonMarker,
     legacy.cursorRuleMdcMarker,
   ] as const;
+}
+
+/** Env var name in the brand's namespace, e.g. `brandEnv('SIGNAL_FILE')` → `AIR_IDE_SIGNAL_FILE`. */
+export function brandEnv(name: string): string {
+  return `${brand.envPrefix}_${name}`;
+}
+
+/** Renderer storage key in the brand's namespace, e.g. `air-ide.explorer.showHidden`. */
+export function brandKey(name: string): string {
+  return `${brand.slug}.${name}`;
 }

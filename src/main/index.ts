@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { IPC_CHANNEL } from '../shared/ipc-contract.js';
-import { brand } from '../shared/brand.js';
+import { brand, brandEnv } from '../shared/brand.js';
 import { devLockPath, workspaceHomePath, workspacePath as workspaceDataDir } from '../shared/brand-paths.js';
 import type { Workspace } from '../shared/workspace.js';
 import { workspaceFolders } from '../shared/workspace.js';
@@ -130,7 +130,7 @@ const DEV_FOCUS_PORT = 47174;
  * this exposes every window in the app over CDP while any session's browser
  * tool is active, not just that session's own view.
  */
-const EMBEDDED_BROWSER_CDP_PORT = Number(process.env['AI_COMPANION_CDP_PORT']) || 9333; // the env override lets an e2e run beside a dev instance
+const EMBEDDED_BROWSER_CDP_PORT = Number(process.env[brandEnv('CDP_PORT')]) || 9333; // the env override lets an e2e run beside a dev instance
 app.commandLine.appendSwitch('remote-debugging-port', String(EMBEDDED_BROWSER_CDP_PORT));
 
 let mainWindow: BrowserWindow | null = null;
@@ -621,10 +621,10 @@ async function wireIpc(): Promise<void> {
 
 
   // The inline-answer hook checks this marker at run time, so the setting takes effect without restarting any session.
-  const inlineMarker = join(home, '.ai-companion', INLINE_ANSWER_MARKER);
+  const inlineMarker = join(home, brand.workspaceDirName, INLINE_ANSWER_MARKER);
   const syncInlineMarker = async (settings: Settings | null): Promise<void> => {
     if (resolveSessionSettings(settings).inlineAnswer) {
-      await nodeFsAdapter.mkdir(join(home, '.ai-companion', 'signals'), { recursive: true });
+      await nodeFsAdapter.mkdir(join(home, brand.workspaceDirName, 'signals'), { recursive: true });
       await nodeFsAdapter.writeFile(inlineMarker, '');
     } else {
       await nodeFsAdapter.remove(inlineMarker);
@@ -646,7 +646,7 @@ async function wireIpc(): Promise<void> {
 
   // Sessions running outside the app (Claude / Cursor in other terminals): observed, never controlled.
   const externalSessions = new ExternalSessionService({
-    signals: new FsExternalSignalAdapter(join(home, '.ai-companion', 'signals', 'external')),
+    signals: new FsExternalSignalAdapter(join(home, brand.workspaceDirName, 'signals', 'external')),
     transcripts: new FsClaudeTranscriptWatch(join(home, '.claude', 'projects')),
     processes: new PsProcessScanAdapter(),
     now: () => Date.now(),

@@ -1,13 +1,14 @@
+import { brand } from '../../../shared/brand.js';
 import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import type { SettingsService } from './settings-service.js';
 import type { Workspace } from '../../../shared/workspace.js';
 import { workspaceFolders } from '../../../shared/workspace.js';
 import { resolveGitIgnoreMode, type GitIgnoreMode } from '../../../shared/settings.js';
 
-const START = '# ai-companion:start (managed by AI Companion — do not edit)';
-const END = '# ai-companion:end';
+const START = `# ${brand.slug}:start (managed by ${brand.managedByPhrase} — do not edit)`;
+const END = `# ${brand.slug}:end`;
 /** Always hidden: the app's own data dir inside the folder. */
-const DATA_DIR_ENTRY = '/.ai-companion/';
+const DATA_DIR_ENTRY = `/${brand.workspaceDirName}/`;
 
 /** What the sync materialized, as absolute paths — supplied by `AdapterManager`. */
 export interface ManagedPathsSource {
@@ -28,7 +29,7 @@ const stripBlock = (content: string): string => {
  * Keeps the files the app generates inside a workspace's repos out of `git status`.
  *
  * Writes one delimited block per folder — to `.git/info/exclude` (`local`) or to
- * `.gitignore` (`gitignore`) — listing `.ai-companion/` plus only the symlinks and
+ * `.gitignore` (`gitignore`) — listing `.air-ide/` plus only the symlinks and
  * generated files the app itself created under `.claude/` / `.cursor/`, so anything
  * the user wrote by hand there stays visible. Idempotent; `off` removes the block.
  * Never touches tracked files (no `git rm --cached`).

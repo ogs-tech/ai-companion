@@ -74,7 +74,7 @@ describe('TopNav', () => {
   it('keeps the header slim: no theme toggle, no repeated app name', () => {
     renderWithShell(<TopNav onOpenCommandPalette={noop} />);
     expect(screen.queryByTestId('theme-toggle')).not.toBeInTheDocument();
-    expect(screen.queryByText('AI Companion')).not.toBeInTheDocument();
+    expect(screen.queryByText('AIR IDE')).not.toBeInTheDocument();
   });
 
   it('has no browser button: the Navegador lives in the Explorer and the Workbench "+"', () => {

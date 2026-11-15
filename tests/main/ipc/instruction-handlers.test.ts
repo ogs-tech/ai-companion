@@ -4,7 +4,7 @@ import type { InstructionService } from '../../../src/main/application/services/
 
 function fakeService(overrides: Partial<InstructionService> = {}): InstructionService {
   return {
-    resolvePath: vi.fn(async () => '/home/user/.ai-companion/instructions/default.md'),
+    resolvePath: vi.fn(async () => '/home/user/.air-ide/instructions/default.md'),
     ...overrides,
   } as unknown as InstructionService;
 }
@@ -14,18 +14,18 @@ describe('instruction handlers', () => {
     const service = fakeService();
     const handlers = buildInstructionHandlers(service);
     expect(await handlers['instruction.resolvePath']!(undefined)).toEqual({
-      absolutePath: '/home/user/.ai-companion/instructions/default.md',
+      absolutePath: '/home/user/.air-ide/instructions/default.md',
     });
     expect(service.resolvePath).toHaveBeenCalledWith(undefined);
   });
 
   it('instruction.resolvePath passes a given project slug through', async () => {
     const service = fakeService({
-      resolvePath: vi.fn(async () => '/home/user/.ai-companion/instructions/project/acme/INSTRUCTION.md'),
+      resolvePath: vi.fn(async () => '/home/user/.air-ide/instructions/project/acme/INSTRUCTION.md'),
     });
     const handlers = buildInstructionHandlers(service);
     expect(await handlers['instruction.resolvePath']!({ id: 'acme' })).toEqual({
-      absolutePath: '/home/user/.ai-companion/instructions/project/acme/INSTRUCTION.md',
+      absolutePath: '/home/user/.air-ide/instructions/project/acme/INSTRUCTION.md',
     });
     expect(service.resolvePath).toHaveBeenCalledWith('acme');
   });

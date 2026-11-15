@@ -4,7 +4,7 @@ import { EntityWatchService } from '../../../../src/main/application/services/en
 import type { FileWatcherPort } from '../../../../src/main/application/ports/file-watcher-port.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../../src/shared/entity.js';
 
-const dataDir = '/home/user/.ai-companion';
+const dataDir = '/home/user/.air-ide';
 
 const skill: Skill = {
   urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['personal'],

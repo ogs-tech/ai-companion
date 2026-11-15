@@ -6,9 +6,9 @@ description: Open a folder as a workspace, switch between workspaces and Início
 # Manage workspaces
 
 A **workspace** is one or more folders you opened in the app. Each folder has its own data dir,
-`<folder>/.ai-companion/`, holding the skills, agents and instructions scoped to it; to group several
+`<folder>/.air-ide/`, holding the skills, agents and instructions scoped to it; to group several
 repositories see [Work with multi-folder workspaces](work-with-multi-folder-workspaces.md). **Início** is not a workspace: it is the
-Global context (`~/.ai-companion/`), where `personal` entities live and where nothing folder-specific —
+Global context (`~/.air-ide/`), where `personal` entities live and where nothing folder-specific —
 Git, launch configurations, the file tree — is available. Background:
 [Architecture → Global / Workspace](../../technical/reference/architecture.md) and
 [On-disk layout](../../technical/reference/on-disk-layout.md).
@@ -23,7 +23,7 @@ Any of these opens the native folder picker:
 
 ![The Abrir pasta… button on Início](../../assets/screenshots/getting-started/02-open-folder.png)
 
-The workspace is named after the folder, `<folder>/.ai-companion/` is created, and the app switches to
+The workspace is named after the folder, `<folder>/.air-ide/` is created, and the app switches to
 it. You cannot open your home folder as a workspace — that is what Início is for.
 
 ![A workspace just opened: file tree with Git status, workspace overview, customizations](../../assets/screenshots/getting-started/03-workspace-opened.png)
@@ -51,7 +51,7 @@ to switch to it.
 With the workspace open, open the context switcher → **Remover este workspace…**. The app returns to
 Início first, then removes it.
 
-Removal only drops the workspace from `workspaces.json`: its `<folder>/.ai-companion/` dir, its entities
+Removal only drops the workspace from `workspaces.json`: its `<folder>/.air-ide/` dir, its entities
 and any symlinks they produced stay on disk. Delete the dir by hand if you want it gone. Your folder and
 its files are never touched.
 

@@ -9,7 +9,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-APP_NAME="AI Companion Dev.app"
+APP_NAME="AIR IDE Dev.app"
 
 if [[ -w "/Applications" ]]; then
   APP_BUNDLE="/Applications/${APP_NAME}"

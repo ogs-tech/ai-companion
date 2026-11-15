@@ -18,7 +18,7 @@ beforeEach(async () => {
   // migration stores real paths.
   root = await realpath(await mkdtemp(join(tmpdir(), 'ws-migration-')));
   home = join(root, 'home');
-  global = join(home, '.ai-companion');
+  global = join(home, '.air-ide');
   await mkdir(global, { recursive: true });
 });
 
@@ -26,7 +26,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const dataDir = (folder: string): string => join(folder, '.ai-companion');
+const dataDir = (folder: string): string => join(folder, '.air-ide');
 
 async function write(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryFileSystem } from '../../../../src/main/infrastructure/filesystem/in-memory-filesystem.js';
 import { OpenEditorsService, OPEN_EDITORS_FILE } from '../../../../src/main/application/services/open-editors-service.js';
 
-const DIR = '/ws/.ai-companion';
+const DIR = '/ws/.air-ide';
 
 function setup() {
   const fs = new InMemoryFileSystem();

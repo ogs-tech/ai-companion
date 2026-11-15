@@ -18,7 +18,7 @@ import type { SessionSignalPort } from '../../../../src/main/application/ports/s
 import { FakeSessionSignalPort } from '../../../../src/main/application/services/__fixtures__/fake-session-signal-port.js';
 import { scopedRepository } from '../../helpers/scoped-repository.js';
 
-const WORKSPACE = '/home/user/.ai-companion';
+const WORKSPACE = '/home/user/.air-ide';
 
 const skill = (name = 'foo'): Skill => ({
   urn: entityUrn('skill', name),
@@ -953,7 +953,7 @@ describe('SessionService.stageAttachment', () => {
         folders: ['/repos/ws', '/repos/api'],
       });
       expect(session.cwd).toMatch(
-        /^\/home\/u\/\.ai-companion\/workspaces\/ws-1\/sessions\/[0-9a-f]{10}$/,
+        /^\/home\/u\/\.air-ide\/workspaces\/ws-1\/sessions\/[0-9a-f]{10}$/,
       );
       const targets = fs.symlink.mock.calls
         .map((call: unknown[]) => (call[0] as { target: string }).target)

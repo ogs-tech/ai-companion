@@ -1,9 +1,9 @@
 ---
-title: AI Companion
+title: AIR IDE
 description: Local desktop app that manages your AI harnesses — one source of truth for skills, agent profiles and instructions, materialized into each harness's own config surface.
 ---
 
-# AI Companion
+# AIR IDE
 
 > Manages your AI **harnesses** — the programs that turn a language model into an agent working on your code (Claude Code, Cursor, …). New to the word? Start with [the harness model](product/harnesses/harness-model.md).
 
@@ -140,4 +140,4 @@ cloud-side.
 
 ## Repository
 
-Source: [github.com/ogs-tech/ai-companion](https://github.com/ogs-tech/ai-companion).
+Source: [github.com/ogs-tech/air-ide](https://github.com/ogs-tech/air-ide).

@@ -55,7 +55,7 @@ export interface WorkspaceScopedSharedDeps {
   settingsService: SettingsService;
   homedir: string;
   workspaceService: Pick<WorkspaceService, 'get'>;
-  /** Global's store (`~/.ai-companion`, `personal` entities) — built once, shared by every graph. */
+  /** Global's store (`~/.air-ide`, `personal` entities) — built once, shared by every graph. */
   globalEntities: DataDirRepository;
   pluginProvenance: PluginProvenanceService;
   pluginService: PluginService;
@@ -92,7 +92,7 @@ export interface WorkspaceScopedServices {
   commitMessageService: CommitMessageService;
 }
 
-/** The workspace a graph is built for, with its already-bootstrapped `<rootPath>/.ai-companion`. */
+/** The workspace a graph is built for, with its already-bootstrapped `<rootPath>/.air-ide`. */
 export interface ActiveWorkspaceScope {
   workspace: Workspace;
   dataDir: string;
@@ -202,7 +202,7 @@ export function buildWorkspaceScopedServices(
   ];
   const healthService = new HealthService(healthCollectors, clock);
 
-  // Factory reset wipes Global's data dir; a workspace's own `.ai-companion` stays in its folder.
+  // Factory reset wipes Global's data dir; a workspace's own `.air-ide` stays in its folder.
   const workspaceTeardownService = new WorkspaceTeardownService(
     adapterManager,
     nodeFsAdapter,

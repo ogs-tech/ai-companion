@@ -26,7 +26,7 @@ describe('WorkspaceBootstrapService.create', () => {
     expect(created).toEqual(WorkspacePaths.map((sub) => `/tmp/ws/${sub}`));
   });
 
-  it('writes the AI Companion index.md marker at the workspace root', async () => {
+  it('writes the AIR IDE index.md marker at the workspace root', async () => {
     const writeFile = vi.fn().mockResolvedValue(undefined);
     const service = new WorkspaceBootstrapService(mutator(vi.fn().mockResolvedValue(undefined), writeFile));
 
@@ -35,7 +35,7 @@ describe('WorkspaceBootstrapService.create', () => {
     expect(writeFile).toHaveBeenCalledTimes(1);
     const [path, content] = writeFile.mock.calls[0]!;
     expect(path).toBe(workspaceIndexMarkerPath('/tmp/ws'));
-    expect(content).toContain('AI Companion');
+    expect(content).toContain('AIR IDE');
   });
 
   it('is idempotent — does not throw when the mutator no-ops on existing dirs', async () => {

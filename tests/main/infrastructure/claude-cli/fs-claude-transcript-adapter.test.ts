@@ -8,7 +8,7 @@ let work: string;
 let projectsDir: string;
 
 beforeEach(async () => {
-  work = await mkdtemp(join(tmpdir(), 'ai-companion-transcripts-'));
+  work = await mkdtemp(join(tmpdir(), 'air-ide-transcripts-'));
   projectsDir = join(work, 'projects');
   await mkdir(projectsDir, { recursive: true });
 });
@@ -81,15 +81,15 @@ describe('FsClaudeTranscriptAdapter', () => {
 
     it('reads cwd from inside the file, so a directory whose own name contains a hyphen survives the round trip', async () => {
       // The folder name is the cwd with separators replaced by hyphens, which
-      // cannot be reversed: `/Users/me/ai-companion` and `/Users/me/ai/companion`
+      // cannot be reversed: `/Users/me/air-ide` and `/Users/me/air/ide`
       // produce the same slug.
-      await transcript('-Users-me-ai-companion', 'aaaaaaaa-0000-4000-8000-000000000001', [
-        userLine('/Users/me/ai-companion'),
+      await transcript('-Users-me-air-ide', 'aaaaaaaa-0000-4000-8000-000000000001', [
+        userLine('/Users/me/air-ide'),
       ]);
 
       const [ref] = await adapter().listRefs();
 
-      expect(ref?.cwd).toBe('/Users/me/ai-companion');
+      expect(ref?.cwd).toBe('/Users/me/air-ide');
     });
 
     it('finds cwd even when the first lines of the file do not carry one', async () => {

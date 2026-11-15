@@ -82,7 +82,7 @@ describe('claudeSignalSettings', () => {
   });
 
   it('hook commands are no-ops without the env var', () => {
-    for (const command of Object.values(SIGNAL_HOOK_COMMANDS)) expect(command.startsWith('[ -z "$AI_COMPANION_SIGNAL_FILE" ] ||')).toBe(true);
+    for (const command of Object.values(SIGNAL_HOOK_COMMANDS)) expect(command.startsWith('[ -z "$AIR_IDE_SIGNAL_FILE" ] ||')).toBe(true);
   });
 });
 

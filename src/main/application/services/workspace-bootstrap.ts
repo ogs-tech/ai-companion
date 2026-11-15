@@ -6,7 +6,7 @@ import { workspaceIndexMarkerPath } from '../../../shared/brand-paths.js';
 const joinPosix = (...parts: string[]): string =>
   parts.join('/').replace(/\/+/g, '/');
 
-const AI_COMPANION_INDEX_CONTENT = `# ${brand.displayName}
+const AIR_IDE_INDEX_CONTENT = `# ${brand.displayName}
 
 This folder is managed by the ${brand.displayName} app. Files here are generated or
 symlinked automatically — edit skills, agents, and instructions from the app,
@@ -20,6 +20,6 @@ export class WorkspaceBootstrapService {
     for (const sub of WorkspacePaths) {
       await this.mutator.mkdirRecursive(joinPosix(workspacePath, sub));
     }
-    await this.mutator.writeFile(workspaceIndexMarkerPath(workspacePath), AI_COMPANION_INDEX_CONTENT);
+    await this.mutator.writeFile(workspaceIndexMarkerPath(workspacePath), AIR_IDE_INDEX_CONTENT);
   }
 }

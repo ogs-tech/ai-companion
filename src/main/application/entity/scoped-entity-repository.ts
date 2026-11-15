@@ -8,7 +8,7 @@ export interface DataDirRepository {
   dataDir: string;
 }
 
-/** One folder's own `<folder>/.ai-companion` store, in a multi-folder workspace. */
+/** One folder's own `<folder>/.air-ide` store, in a multi-folder workspace. */
 export interface FolderRepository extends DataDirRepository {
   folder: string;
 }
@@ -27,9 +27,9 @@ export interface ActiveWorkspaceRepository extends DataDirRepository {
 }
 
 /**
- * The two entity stores the app sees at once: Global (`~/.ai-companion`,
+ * The two entity stores the app sees at once: Global (`~/.air-ide`,
  * `personal` entities, always present) and the active workspace's own
- * `<root>/.ai-companion` (`workspace` entities, absent at Início).
+ * `<root>/.air-ide` (`workspace` entities, absent at Início).
  *
  * Writes route by `scopes[0]`; reads see the union. A urn present in both
  * resolves to the workspace copy — the closer scope — though `EntityService`

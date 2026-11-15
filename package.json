@@ -1,11 +1,11 @@
 {
-  "name": "ai-companion",
+  "name": "air-ide",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
   "bin": {
-    "ai-companion-dev": "./scripts/dev-app.sh"
+    "air-ide-dev": "./scripts/dev-app.sh"
   },
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",

@@ -20,7 +20,7 @@ skill, a teammate opening `~/.claude/CLAUDE.md` in an editor) lands in the copy 
 discarded by the next save. Reconciling that needs a drift detector, a merge story and a "which side
 wins" rule — a sync engine, which this app has explicitly chosen not to be.
 
-**Ask each harness to read from our dir.** Point the harness at `~/.ai-companion/` through its own
+**Ask each harness to read from our dir.** Point the harness at `~/.air-ide/` through its own
 configuration. No harness offers this uniformly, and those that offer something (plugin dirs, include
 directives) each offer something different. It would turn every adapter into a negotiation with a
 vendor's configuration format.

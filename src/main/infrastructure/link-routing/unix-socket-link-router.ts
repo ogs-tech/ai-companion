@@ -1,3 +1,4 @@
+import { brand, brandEnv } from '../../../shared/brand.js';
 import { chmod, mkdir, unlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
 import { delimiter, join } from 'node:path';
@@ -10,9 +11,9 @@ const MAX_URLS_PER_SECOND = 5;
 const MAX_SOCKET_PATH_LENGTH = 100;
 const SOCKET_NAME = 'link.sock';
 
-export const SOCKET_ENV = 'AI_COMPANION_LINK_SOCKET';
+export const SOCKET_ENV = brandEnv('LINK_SOCKET');
 /** Overrides the real opener the shim falls back to — lets tests avoid launching a browser. */
-export const FALLBACK_OPENER_ENV = 'AI_COMPANION_OPEN_FALLBACK';
+export const FALLBACK_OPENER_ENV = brandEnv('OPEN_FALLBACK');
 
 /**
  * Forwards a bare http(s) URL to the app's socket; everything else (flags,
@@ -32,7 +33,7 @@ exec "$fallback" "$@"
 `;
 
 export interface UnixSocketLinkRouterOptions {
-  /** App data dir (`~/.ai-companion`): holds `bin/` (the shim) and, when the path is short enough, `run/` (the socket). */
+  /** App data dir (`~/.air-ide`): holds `bin/` (the shim) and, when the path is short enough, `run/` (the socket). */
   baseDir: string;
 }
 
@@ -100,7 +101,7 @@ export class UnixSocketLinkRouter implements LinkRoutingPort {
     const dir =
       join(preferred, SOCKET_NAME).length <= MAX_SOCKET_PATH_LENGTH
         ? preferred
-        : join(tmpdir(), `ai-companion-${userInfo().uid}`);
+        : join(tmpdir(), `${brand.slug}-${userInfo().uid}`);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     await chmod(dir, 0o700);
     return dir;

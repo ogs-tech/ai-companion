@@ -89,7 +89,7 @@ test('sessions: sessions outside the app', async () => {
   await shot(page, guide, '01-sessions-panel');
 
   // Hook signal files, as the hooks installed in another terminal's claude would write them.
-  const dir = join(demo.home, '.ai-companion', 'signals', 'external');
+  const dir = join(demo.home, '.air-ide', 'signals', 'external');
   mkdirSync(dir, { recursive: true });
   const line = (event: string, payload: Record<string, unknown>): string => JSON.stringify({ harness: 'claude', event, payload }) + '\n';
   const cwd = demo.workspace;

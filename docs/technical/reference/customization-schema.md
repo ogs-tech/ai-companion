@@ -25,7 +25,7 @@ interface Entity {
 interface Skill extends Entity { kind: 'skill'; content: string; explicitOnly?: boolean; }
 interface Agent extends Entity { kind: 'agent'; systemPrompt: string; model?: string; tools?: string[]; deniedTools?: string[]; }
 
-type Scope = 'personal' | 'workspace';  // personal = Global (~/.ai-companion); workspace = one opened folder
+type Scope = 'personal' | 'workspace';  // personal = Global (~/.air-ide); workspace = one opened folder
 
 // One interface, two valid shapes picked by scopes[0] (enforced by instructionEntitySchema;
 // isPersonalInstruction / isWorkspaceInstruction tell them apart): the personal singleton
@@ -57,7 +57,7 @@ tags:
 Free Markdown — this becomes `content` (skill) or `systemPrompt` (agent).
 ```
 
-Where an entity's files live depends on its scope: a `personal` entity is stored in Global's data dir (`~/.ai-companion/`), a `workspace` entity in that workspace's own data dir (`<root>/.ai-companion/`) — the paths below are relative to that dir. `ScopedEntityRepository` routes each write by `scopes[0]`, so changing an entity's scope moves its files between the two (see [Architecture](architecture.md#global--workspace)).
+Where an entity's files live depends on its scope: a `personal` entity is stored in Global's data dir (`~/.air-ide/`), a `workspace` entity in that workspace's own data dir (`<root>/.air-ide/`) — the paths below are relative to that dir. `ScopedEntityRepository` routes each write by `scopes[0]`, so changing an entity's scope moves its files between the two (see [Architecture](architecture.md#global--workspace)).
 
 `instruction` is stored **frontmatter-free**: the file is the body (`content`) verbatim so the assistant-facing target (`AGENTS.md`, `CLAUDE.md`) never has to strip YAML. The storage layout differs by scope:
 
@@ -95,7 +95,7 @@ Each kind's schema extends the common base. Only the differences are listed.
 
 - `content: string` (the Markdown body).
 - `explicitOnly?: boolean` — maps to frontmatter `disable-model-invocation: true` when set. A skill with `explicitOnly: true` is not offered for implicit model invocation — this is exactly what the removed `command` kind used to mean; commands are now expressed this way.
-- `scopes`/`scopeId` follow the shared single-scope rule (see [Common fields](#common-fields)): `personal` | `workspace`, with `scopeId` required for `workspace`. Scope picks both the store — `skills/<name>/` under Global's `~/.ai-companion/` for `personal`, under the workspace's `<root>/.ai-companion/` for `workspace` — and the adapter sync destination (see [Scope semantics](#scope-semantics)).
+- `scopes`/`scopeId` follow the shared single-scope rule (see [Common fields](#common-fields)): `personal` | `workspace`, with `scopeId` required for `workspace`. Scope picks both the store — `skills/<name>/` under Global's `~/.air-ide/` for `personal`, under the workspace's `<root>/.air-ide/` for `workspace` — and the adapter sync destination (see [Scope semantics](#scope-semantics)).
 - `kind` (frontmatter `type`) must be the literal `skill`.
 
 ### `agent`
@@ -119,7 +119,7 @@ Split by `scopes[0]`: **Personal** is the machine-wide singleton (stored in Glob
 
 A folder instruction is a workspace instruction with `folder` set — the same meaning as `Entity.folder`: the
 absolute path of a workspace folder. Like for skills and agents it is **derived from where the file is stored**
-(`<folder>/.ai-companion/instructions/project/<slug>/`) and never written to `meta.json`. No `folder` = the
+(`<folder>/.air-ide/instructions/project/<slug>/`) and never written to `meta.json`. No `folder` = the
 workspace-wide instruction. A urn is unique across the whole workspace, so a folder instruction's name must not
 collide with another instruction's (`folderInstructionName` in `src/shared/instruction-names.ts` appends
 `-folder` when the alias is taken, e.g. by the workspace-wide one seeded from the primary folder's name).
@@ -154,8 +154,8 @@ The Markdown body is unconstrained at the schema layer — `content: string` (sk
 
 | Scope | Meaning | Adapter target (typical) |
 |---|---|---|
-| `personal` | Global — applies machine-wide for the author. Stored in `~/.ai-companion/`. | `~/.claude/` (instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; skill/agent: `~/.claude/skills/<name>` / `~/.claude/agents/<name>.md`; and — when Cursor is enabled — the Cursor equivalents, personal instruction via the plugin under `~/.cursor/plugins/ai-companion/`). |
-| `workspace` | Applies to the `Workspace` (an opened folder) the entity's `scopeId` references. Stored in `<rootPath>/.ai-companion/`. | For a workspace instruction: `<resolved Workspace.rootPath>/.claude/CLAUDE.md` + `<resolved Workspace.rootPath>/AGENTS.md`. For a workspace skill/agent: `<resolved Workspace.rootPath>/.claude/skills/<name>` / `.claude/agents/<name>.md` (and the Cursor equivalents). |
+| `personal` | Global — applies machine-wide for the author. Stored in `~/.air-ide/`. | `~/.claude/` (instruction: **both** `~/.claude/CLAUDE.md` and `~/AGENTS.md`; skill/agent: `~/.claude/skills/<name>` / `~/.claude/agents/<name>.md`; and — when Cursor is enabled — the Cursor equivalents, personal instruction via the plugin under `~/.cursor/plugins/air-ide/`). |
+| `workspace` | Applies to the `Workspace` (an opened folder) the entity's `scopeId` references. Stored in `<rootPath>/.air-ide/`. | For a workspace instruction: `<resolved Workspace.rootPath>/.claude/CLAUDE.md` + `<resolved Workspace.rootPath>/AGENTS.md`. For a workspace skill/agent: `<resolved Workspace.rootPath>/.claude/skills/<name>` / `.claude/agents/<name>.md` (and the Cursor equivalents). |
 
 ## Validation result
 

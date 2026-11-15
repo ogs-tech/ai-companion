@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
 };
 
 export interface LaunchOptions {
-  /** Shallow-merged over `DEFAULT_SETTINGS` and written to `~/.ai-companion/settings.json`. */
+  /** Shallow-merged over `DEFAULT_SETTINGS` and written to `~/.air-ide/settings.json`. */
   settings?: Record<string, unknown>;
   /** Called with the throwaway HOME before the app starts — seed files, workspaces, whatever the journey needs. */
   seed?: (home: string) => void | Promise<void>;
@@ -83,14 +83,14 @@ export function seedGitWorkspace(root: string): void {
   writeFile(join(root, 'src', 'routes.js'), 'module.exports = [];\n');
 }
 
-/** Registers `root` as the (only) workspace in `~/.ai-companion/workspaces.json`; `open` makes it the active one at launch. */
+/** Registers `root` as the (only) workspace in `~/.air-ide/workspaces.json`; `open` makes it the active one at launch. */
 export function seedWorkspaceRegistry(
   home: string,
   workspaces: Array<{ id: string; name: string; rootPath: string }>,
   activeId: string | null,
 ): void {
   writeFile(
-    join(home, '.ai-companion', 'workspaces.json'),
+    join(home, '.air-ide', 'workspaces.json'),
     JSON.stringify({
       schemaVersion: 2,
       workspaces: workspaces.map((w) => ({ ...w, createdAt: '2026-01-01T00:00:00.000Z' })),
@@ -103,21 +103,21 @@ const SLOW_MS = Number(process.env.E2E_SLOW_MS ?? 0) || 0;
 
 /** Boots the built app (`out/main/index.js`) against a throwaway HOME and userData dir. Run `npm run build` first. */
 export async function launchApp(options: LaunchOptions = {}): Promise<AppSession> {
-  const home = mkdtempSync(join(tmpdir(), 'ai-companion-e2e-'));
+  const home = mkdtempSync(join(tmpdir(), 'air-ide-e2e-'));
   mkdirSync(join(home, '.claude'), { recursive: true });
   writeFile(
-    join(home, '.ai-companion', 'settings.json'),
+    join(home, '.air-ide', 'settings.json'),
     JSON.stringify({ ...DEFAULT_SETTINGS, ...options.settings }, null, 2),
   );
   if ((options.externalConsent ?? 'estimated') === 'estimated')
-    writeFile(join(home, '.ai-companion', 'signals', 'external-consent'), 'estimated');
+    writeFile(join(home, '.air-ide', 'signals', 'external-consent'), 'estimated');
   await options.seed?.(home);
 
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   env.HOME = home;
   delete env.ELECTRON_RENDERER_URL; // force the production loadFile path
-  env.AI_COMPANION_CDP_PORT = String(options.cdpPort ?? 9334); // the dev app owns the default 9333
+  env.AIR_IDE_CDP_PORT = String(options.cdpPort ?? 9334); // the dev app owns the default 9333
   const stubDir = join(home, 'cli-stubs');
   if (options.cli) {
     writeCliStubs(stubDir, options.cli);
@@ -126,7 +126,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<AppSession
   }
 
   // Own userData: the single-instance lock lives there, so a running dev app cannot swallow this launch.
-  const userData = mkdtempSync(join(tmpdir(), 'ai-companion-e2e-userdata-'));
+  const userData = mkdtempSync(join(tmpdir(), 'air-ide-e2e-userdata-'));
   const app = await electron.launch({
     args: [join(process.cwd(), 'out', 'main', 'index.js'), `--user-data-dir=${userData}`],
     env,

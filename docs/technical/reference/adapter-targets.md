@@ -15,7 +15,7 @@ Where each `manage` adapter materializes an `Entity`. Source of truth:
 | Symbol | Meaning |
 |---|---|
 | `~` | The user's home directory. |
-| `<data>` | The data dir the entity lives in — Global's `~/.ai-companion/` for `personal`, the workspace's `<workspace.rootPath>/.ai-companion/` for `workspace`. See [On-disk layout](on-disk-layout.md). |
+| `<data>` | The data dir the entity lives in — Global's `~/.air-ide/` for `personal`, the workspace's `<workspace.rootPath>/.air-ide/` for `workspace`. See [On-disk layout](on-disk-layout.md). |
 | `<scope>` | The path a `workspace`-scoped entity resolves to at sync time: `Workspace.rootPath`, looked up from `scopeId` by `resolveScopePath` (`src/main/application/resolve-scope-path.ts`). Never cached on the entity. |
 | `<name>` | The entity's `name`. |
 | 🔗 | `strategy: 'symlink'` — a symlink pointing at the canonical file in `<data>`. |
@@ -44,7 +44,7 @@ Off by default (`settings.adapters.cursor.enabled`). `manage` only — see
 |---|---|---|
 | Skill | 🔗 `~/.cursor/skills/<name>` (dir) | 🔗 `<scope>/.cursor/skills/<name>` (dir) |
 | Agent | 🔗 `~/.cursor/agents/<name>.md` | 🔗 `<scope>/.cursor/agents/<name>.md` |
-| Instruction | ✍️ `~/.cursor/plugins/ai-companion/.cursor-plugin/plugin.json` **and** ✍️ `~/.cursor/plugins/ai-companion/rules/personal-default.mdc` | ✍️ `<scope>/.cursor/rules/<name>.mdc` (`alwaysApply: true`) |
+| Instruction | ✍️ `~/.cursor/plugins/air-ide/.cursor-plugin/plugin.json` **and** ✍️ `~/.cursor/plugins/air-ide/rules/personal-default.mdc` | ✍️ `<scope>/.cursor/rules/<name>.mdc` (`alwaysApply: true`) |
 | MCP server | 🧩 `~/.cursor/mcp.json` → `mcpServers.<name>` (Claude's `type` key dropped) | 🧩 `<scope>/.cursor/mcp.json` |
 | Hook | 🧩 `~/.cursor/hooks.json` → `hooks.<event>[]` (`version: 1` seeded on a new file), or ⏭️ | 🧩 `<scope>/.cursor/hooks.json`, or ⏭️ |
 
@@ -59,9 +59,9 @@ A generated file is app-owned when it contains its marker. Markers come from `sr
 
 | Target | Marker | Check |
 |---|---|---|
-| `AGENTS.md` | `<!-- Managed by AI Companion — edits will be overwritten -->` (first line) | starts with |
-| `plugin.json` | `"x-ai-companion-managed": true` | includes |
-| `personal-default.mdc`, `<name>.mdc` | `x-ai-companion-managed: true` (YAML frontmatter) | includes |
+| `AGENTS.md` | `<!-- Managed by AIR IDE — edits will be overwritten -->` (first line) | starts with |
+| `plugin.json` | `"x-air-ide-managed": true` | includes |
+| `personal-default.mdc`, `<name>.mdc` | `x-air-ide-managed: true` (YAML frontmatter) | includes |
 
 `<scope>/AGENTS.md` is owned by the Claude adapter's symlink alone; Cursor no longer writes it (it reads `.cursor/rules/*.mdc` instead).
 
@@ -93,7 +93,7 @@ keys, so the app neither symlinks nor rewrites them. `MergeMaterializer`
 (`mcpServers.<name>`) or an `array-item` (one element of `hooks.<event>`, found again by an identity such as
 `matcher` + `command`) — and leaves every other key, the indentation and the trailing newline as found.
 
-Ownership is an index the app keeps at `~/.ai-companion/merge-index.json` (per file: entry id → hash of the
+Ownership is an index the app keeps at `~/.air-ide/merge-index.json` (per file: entry id → hash of the
 value last written), not a marker inside the entry, since Claude/Cursor may reject unknown keys.
 
 | Found in the file | Result |

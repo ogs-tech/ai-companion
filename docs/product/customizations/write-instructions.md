@@ -22,7 +22,7 @@ dot: synced, pending, not created, or detected. Hover the dot for its meaning.
 3. Write, then press **⌘S**.
 
 It is linked to `~/.claude/CLAUDE.md` **and** `~/AGENTS.md` (plus a Cursor rule, if Cursor is enabled).
-A pre-existing hand-written `~/.claude/CLAUDE.md` is moved to `~/.ai-companion/_backups/<timestamp>/`
+A pre-existing hand-written `~/.claude/CLAUDE.md` is moved to `~/.air-ide/_backups/<timestamp>/`
 on the first sync, and the Sync report tells you where. Copy anything you want to keep into the new body.
 
 ## Add an instruction for a workspace
@@ -44,7 +44,7 @@ enabled). Inside a folder, the harness reads that folder's file and those of its
 
 If a level's target already holds a file the app does not own, the **Instructions** row shows the file name,
 a blue **Aplicar** and a dashed *detected* dot. **Aplicar** imports its content as the level's instruction;
-the original is backed up under `~/.ai-companion/_backups/` before being replaced.
+the original is backed up under `~/.air-ide/_backups/` before being replaced.
 
 > **Avoid enabling Cursor if you rely on workspace instructions.** Both adapters claim
 > `<folder>/AGENTS.md`; with both enabled they overwrite each other on every sync. See

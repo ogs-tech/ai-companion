@@ -355,7 +355,7 @@ describe('WorkspaceScreen', () => {
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'instruction.list') return [workspaceInstruction];
-        if (method === 'instruction.resolvePath') return { absolutePath: '/repos/acme/.ai-companion/instructions/project/w1/INSTRUCTION.md' };
+        if (method === 'instruction.resolvePath') return { absolutePath: '/repos/acme/.air-ide/instructions/project/w1/INSTRUCTION.md' };
         if (method === 'session.spawn') {
           return {
             sessionId: 'sess-new-action', anchor: { kind: 'workspace', workspaceId: 'w1' },
@@ -377,7 +377,7 @@ describe('WorkspaceScreen', () => {
       await waitFor(() =>
         expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
           sessionId: 'sess-new-action',
-          data: '@/repos/acme/.ai-companion/instructions/project/w1/INSTRUCTION.md — describe the new action you want to create based on this',
+          data: '@/repos/acme/.air-ide/instructions/project/w1/INSTRUCTION.md — describe the new action you want to create based on this',
         }),
       );
     });
@@ -395,7 +395,7 @@ describe('WorkspaceScreen', () => {
         if (method === 'workspace.listDir') return [];
         if (method === 'session.list') return [];
         if (method === 'skill.list') return [workspaceSkill];
-        if (method === 'skill.resolvePath') return { absolutePath: '/repos/acme/.ai-companion/skills/helper/SKILL.md' };
+        if (method === 'skill.resolvePath') return { absolutePath: '/repos/acme/.air-ide/skills/helper/SKILL.md' };
         if (method === 'session.spawn') {
           return {
             sessionId: 'sess-skill', anchor: { kind: 'workspace', workspaceId: 'w1' },
@@ -416,7 +416,7 @@ describe('WorkspaceScreen', () => {
       await waitFor(() =>
         expect(ipc.callIpc).toHaveBeenCalledWith('session.write', {
           sessionId: 'sess-skill',
-          data: '@/repos/acme/.ai-companion/skills/helper/SKILL.md — describe the new action you want to create based on this',
+          data: '@/repos/acme/.air-ide/skills/helper/SKILL.md — describe the new action you want to create based on this',
         }),
       );
     });

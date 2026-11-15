@@ -29,7 +29,7 @@ Symlink and generated-file checks cover the **active workspace's** entities only
 ## Recover a file the app overwrote
 
 Whenever a sync replaces an existing file, the previous content is copied first to
-`<data dir>/_backups/<timestamp>/<original path>` (`~/.ai-companion/_backups/…` for personal entities),
+`<data dir>/_backups/<timestamp>/<original path>` (`~/.air-ide/_backups/…` for personal entities),
 and the **Sync report** shown after the save names the exact path. Copy what you need back by hand —
 for example, into the body of the instruction that replaced it. Backups are never deleted automatically.
 
@@ -44,11 +44,11 @@ edited elsewhere still looks stale, use **Reler do disco** (refresh icon) next t
 
 1. removes every symlink and owned generated file it created for the entities in view (Global's, plus the
    open workspace's if one is open);
-2. deletes Global's data dir `~/.ai-companion/` — personal entities, settings, the workspace registry,
-   backups. Each workspace's own `<folder>/.ai-companion/` stays in place;
+2. deletes Global's data dir `~/.air-ide/` — personal entities, settings, the workspace registry,
+   backups. Each workspace's own `<folder>/.air-ide/` stays in place;
 3. resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to empty —
    **including entries you added outside the app**;
 4. quits.
 
-Copy `~/.ai-companion/_backups/` somewhere else first if you might need it. The next launch starts from scratch, re-seeding
+Copy `~/.air-ide/_backups/` somewhere else first if you might need it. The next launch starts from scratch, re-seeding
 the official marketplace. Details: [On-disk layout → Factory reset](../../technical/reference/on-disk-layout.md#factory-reset).

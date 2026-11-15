@@ -22,7 +22,7 @@ let instructionPath: string;
 test.beforeAll(async () => {
   session = await launchApp({
     seed: (home) => {
-      instructionPath = join(home, '.ai-companion', 'instructions', 'default.md');
+      instructionPath = join(home, '.air-ide', 'instructions', 'default.md');
       writeFile(instructionPath, SEED_INSTRUCTION);
     },
   });

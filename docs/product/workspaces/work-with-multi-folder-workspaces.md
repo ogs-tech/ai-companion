@@ -32,7 +32,7 @@ Renaming does not.
 ## Remove a folder
 
 Context switcher → **Remover pasta «name» do workspace**. These entries appear only when the workspace has
-more than one folder. Nothing is deleted from disk, and the folder's own `.ai-companion/` stays where it is.
+more than one folder. Nothing is deleted from disk, and the folder's own `.air-ide/` stays where it is.
 
 ## What changes across folders
 
@@ -64,7 +64,7 @@ is the first folder. Folders you leave out are completely outside the session, n
 The choice is per session, and folders added later do not join a running session.
 
 - One folder ticked: the session runs inside that folder.
-- Two or more ticked: the session runs from a helper directory under `~/.ai-companion/` that links to
+- Two or more ticked: the session runs from a helper directory under `~/.air-ide/` that links to
   the ticked folders, and the folders are equals (no main one).
 
 Cursor sessions receive each ticked folder as an extra directory instead. See
@@ -75,9 +75,9 @@ Cursor sessions receive each ticked folder as an extra directory instead. See
 The **Customizações** panel is grouped by level: **Workspace** (the shared set), then one group per folder,
 then **Global**. Inside each: Instructions, Skills, Agents and, for **Workspace** only, Integrações.
 
-- A folder's skills, agents and instructions live in `<folder>/.ai-companion/` and are linked into that
+- A folder's skills, agents and instructions live in `<folder>/.air-ide/` and are linked into that
   folder's `.claude/` (and `.cursor/`, if enabled).
-- The **Workspace** shared set lives in `~/.ai-companion/workspaces/<id>/`, never inside your folders.
+- The **Workspace** shared set lives in `~/.air-ide/workspaces/<id>/`, never inside your folders.
   Consequence: a session on **one** folder does not load the shared set; a session on **two or more**
   folders does, together with each ticked folder's own skills and agents (the shared set wins a name clash).
   For Cursor, the shared set is not visible in a multi-folder session.

@@ -50,7 +50,7 @@ describe('resolveScopePath', () => {
 
     it('resolves a shared entity (no folder) to the workspace home under Global', async () => {
       const entity: Instruction = { ...base, scopes: ['workspace'], scopeId: 'ws-1' };
-      expect(await resolveScopePath(entity, deps)).toBe('/home/u/.ai-companion/workspaces/ws-1');
+      expect(await resolveScopePath(entity, deps)).toBe('/home/u/.air-ide/workspaces/ws-1');
     });
 
     it('a single-folder workspace still resolves to its root', async () => {

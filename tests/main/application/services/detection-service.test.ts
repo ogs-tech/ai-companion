@@ -142,7 +142,7 @@ describe('DetectionService — instructions', () => {
     fs.createFile('/data/instructions/default.md', 'x');
     await fs.mkdir(`${HOME}/.claude`, { recursive: true });
     await fs.symlink({ target: '/data/instructions/default.md', path: `${HOME}/.claude/CLAUDE.md` });
-    fs.createFile(`${FOLDER}/.cursor/rules/app.mdc`, '---\nx-ai-companion-managed: true\n---\nbody');
+    fs.createFile(`${FOLDER}/.cursor/rules/app.mdc`, '---\nx-air-ide-managed: true\n---\nbody');
     fs.createFile(`${FOLDER}/AGENTS.md`, '  \n');
     expect(await service.list({ kinds: ['instruction'] })).toEqual([]);
   });
@@ -170,7 +170,7 @@ describe('DetectionService — instructions', () => {
     await service.import(item!.id);
     expect(saved[0]).toMatchObject({ kind: 'instruction', name: 'app', scopes: ['workspace'], scopeId: 'ws-1', content: 'Use tabs\n' });
     expect((await fs.lstat(`${FOLDER}/.cursor/rules/style.mdc`)).kind).toBe('none');
-    const backup = await fs.readFile('/home/u/.ai-companion/_backups/2026-11-05T12-00-00-000Z/detected/repos__app__.cursor__rules__style.mdc');
+    const backup = await fs.readFile('/home/u/.air-ide/_backups/2026-11-05T12-00-00-000Z/detected/repos__app__.cursor__rules__style.mdc');
     expect(backup).toContain('Use tabs');
   });
 });

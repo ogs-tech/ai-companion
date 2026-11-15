@@ -55,7 +55,7 @@ afterEach(async () => {
   await rm(dirB, { recursive: true, force: true });
 });
 
-const scopeOf = (workspace: Workspace) => ({ workspace, dataDir: join(workspace.rootPath, '.ai-companion') });
+const scopeOf = (workspace: Workspace) => ({ workspace, dataDir: join(workspace.rootPath, '.air-ide') });
 
 const skill = (name: string, workspace?: Workspace): Skill => ({
   urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd',
@@ -78,7 +78,7 @@ function buildShared(): WorkspaceScopedSharedDeps {
     },
   };
   const pluginCache = new PluginCacheFile({
-    pluginsDir: () => join(homedir, '.ai-companion', 'plugins'),
+    pluginsDir: () => join(homedir, '.air-ide', 'plugins'),
     cacheDir: () => join(homedir, '.claude', 'plugins', 'cache', 'local'),
   });
   const claudeCodePluginReader = new ClaudeCodePluginReader({

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
 import { mapFilePathToEntity } from '../../../../src/main/application/entity/entity-watch-path.js';
 
-const dataDir = '/home/user/.ai-companion';
+const dataDir = '/home/user/.air-ide';
 
 describe('mapFilePathToEntity', () => {
   it('maps a skill SKILL.md path', () => {

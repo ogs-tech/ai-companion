@@ -1,14 +1,14 @@
 ---
-title: PRD — AI Companion
-internal_name: ai-companion
+title: PRD — AIR IDE
+internal_name: air-ide
 codename: forge
-public_name: AI Companion
+public_name: AIR IDE
 status: Ready
 created_at: 2026-04-19
 updated_at: 2026-11-03
 ---
 
-# PRD — AI Companion
+# PRD — AIR IDE
 
 > [!NOTE]
 > Vocabulary — what a *harness* is, and the `manage`/`run` capabilities this
@@ -122,7 +122,7 @@ not symmetric, and which harnesses have which today.
 ### Organization
 
 - **Workspaces** as a registry of opened folders: one active workspace at a time,
-  each with its own data directory (`<folder>/.ai-companion/`), plus **Início** — the
+  each with its own data directory (`<folder>/.air-ide/`), plus **Início** — the
   Global context for personal customizations, which is not a workspace.
 - A file browser over the workspace's real files, with preview for text and
   spreadsheets.

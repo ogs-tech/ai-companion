@@ -37,7 +37,7 @@ describe('GitInitCard', () => {
 
     render(ui('w2'));
     expect(screen.getByTestId('git-init-card')).toBeInTheDocument();
-    expect(window.localStorage.getItem('ai-companion.git-init-card-dismissed.w1')).toBe('1');
+    expect(window.localStorage.getItem('air-ide.git-init-card-dismissed.w1')).toBe('1');
   });
 
   it('survives a failing localStorage', async () => {

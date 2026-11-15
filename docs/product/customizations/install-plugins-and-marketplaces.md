@@ -7,7 +7,7 @@ description: Install Claude Code plugins from the Starter Pack, a marketplace or
 
 A **plugin** bundles skills, agents, slash-commands, hooks, MCP servers and LSP configs. A
 **marketplace** is a Git repository with a `marketplace.json` catalog of plugins. Installing a plugin
-clones it into `~/.ai-companion/plugins/`, links it into `~/.claude/plugins/cache/local/<id>` and enables it
+clones it into `~/.air-ide/plugins/`, links it into `~/.claude/plugins/cache/local/<id>` and enables it
 in `~/.claude/settings.json` ([On-disk layout](../../technical/reference/on-disk-layout.md)). Everything a plugin
 contributes shows up in the Customizations lists with its plugin badge, read-only.
 
@@ -66,6 +66,6 @@ There is no UI to *create* an owned plugin yet (`plugin.createOwned` has no call
 ## Scope caveat
 
 Plugins installed with `project` scope resolve their paths against the **open workspace's** folder
-(`<workspace>/.claude/…`, `<workspace>/.ai-companion/plugins/`), so they're only offered while a workspace is
+(`<workspace>/.claude/…`, `<workspace>/.air-ide/plugins/`), so they're only offered while a workspace is
 open — at Início only personal scope exists. See
 [On-disk layout → Claude Code's `project` tier](../../technical/reference/on-disk-layout.md#claude-codes-project-tier).

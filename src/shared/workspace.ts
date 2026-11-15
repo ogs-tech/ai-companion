@@ -3,7 +3,7 @@
  * is what single-folder workspaces have always stored; `extraFolders` are the
  * ones added later. A folder belongs to at most one workspace. Workspaces are
  * independent — one may live inside another's folder, but there is no
- * parent/child relation. Global (`~/.ai-companion`, the app's "Início") is not
+ * parent/child relation. Global (`~/.air-ide`, the app's "Início") is not
  * a workspace.
  */
 export interface Workspace {

@@ -6,7 +6,7 @@ import { DomainError } from '../domain/errors.js';
 
 export interface ResolveScopePathDeps {
   workspaceService: Pick<WorkspaceService, 'get'>;
-  /** Needed to place a multi-folder workspace's shared set under `~/.ai-companion/workspaces/<id>`. */
+  /** Needed to place a multi-folder workspace's shared set under `~/.air-ide/workspaces/<id>`. */
   homedir?: string;
 }
 

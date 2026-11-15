@@ -18,7 +18,7 @@ session history. Paths: [Adapter targets](../../technical/reference/adapter-targ
 The app immediately syncs every skill, agent, instruction, MCP server and hook of the **active workspace**
 into `~/.cursor/…` and `<repo>/.cursor/…`: workspace instructions become `.cursor/rules/<name>.mdc`, and MCP
 servers and hooks are added as single entries to `mcp.json` / `hooks.json` without touching your other entries. The personal instruction becomes a local Cursor plugin at
-`~/.cursor/plugins/ai-companion/` with an always-applied rule — restart Cursor so it loads the plugin.
+`~/.cursor/plugins/air-ide/` with an always-applied rule — restart Cursor so it loads the plugin.
 If any target had to be overwritten, a **Sync report** lists each one with its backup path.
 
 Other workspaces' entities are synced the next time each one is saved while its workspace is active.

@@ -1,6 +1,6 @@
-# ai-companion
+# AIR IDE
 
-[![GitHub Repo](https://img.shields.io/badge/github-ogs--tech%2Fai--companion-blue)](https://github.com/ogs-tech/ai-companion)
+[![GitHub Repo](https://img.shields.io/badge/github-ogs--tech%2Fair--ide-blue)](https://github.com/ogs-tech/air-ide)
 
 > Local desktop app that manages your AI **harnesses** — one source of truth for your customizations, materialized into each harness's own config surface.
 >
@@ -34,8 +34,8 @@ Pure TypeScript — no backend, API, database, auth, or telemetry.
 ## Quick start
 
 ```bash
-git clone https://github.com/ogs-tech/ai-companion.git
-cd ai-companion
+git clone https://github.com/ogs-tech/air-ide.git
+cd air-ide
 npm install
 npm run dev
 ```
@@ -75,4 +75,4 @@ Direct links:
 
 ## Repository
 
-Source: [github.com/ogs-tech/ai-companion](https://github.com/ogs-tech/ai-companion).
+Source: [github.com/ogs-tech/air-ide](https://github.com/ogs-tech/air-ide).

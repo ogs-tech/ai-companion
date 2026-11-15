@@ -15,8 +15,8 @@ export interface TranscriptRef {
    * The directory the conversation ran in, read from inside the file.
    *
    * Never decoded from the folder name: the CLI builds that name by replacing
-   * path separators with hyphens (`/Users/me/ai-companion` →
-   * `-Users-me-ai-companion`), which is lossy — a directory whose own name
+   * path separators with hyphens (`/Users/me/air-ide` →
+   * `-Users-me-air-ide`), which is lossy — a directory whose own name
    * contains a hyphen is indistinguishable from a separator. The folder name
    * is an index, nothing more.
    */

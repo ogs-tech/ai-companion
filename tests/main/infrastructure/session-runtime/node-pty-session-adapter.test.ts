@@ -184,7 +184,7 @@ describe('NodePtySessionAdapter', () => {
   });
 
   it('spawns with the env from buildSessionEnv', async () => {
-    const adapter = new NodePtySessionAdapter(stub('stub-env.sh'), () => ({ ...process.env, AI_COMPANION_LINK_SOCKET: '/tmp/x.sock' }));
+    const adapter = new NodePtySessionAdapter(stub('stub-env.sh'), () => ({ ...process.env, AIR_IDE_LINK_SOCKET: '/tmp/x.sock' }));
     const chunks: string[] = [];
     adapter.onData((_id, chunk) => chunks.push(chunk));
     adapter.onExit(() => undefined);

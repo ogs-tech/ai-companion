@@ -1,5 +1,6 @@
+import { brand } from '../../shared/brand.js';
 /** MIME type carrying the workspace-relative paths of an in-app Explorer drag, so the editor area can accept a tree file. */
-export const TREE_DRAG_TYPE = 'application/x-ai-companion-paths';
+export const TREE_DRAG_TYPE = `application/x-${brand.slug}-paths`;
 
 /** The paths of an Explorer drag, or `[]` when the drag isn't one of ours. */
 export function readTreeDrag(dataTransfer: DataTransfer): string[] {

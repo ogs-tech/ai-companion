@@ -6,7 +6,7 @@ import { expect, launchApp, type AppSession } from '../../fixtures/app.js';
 
 // External sessions (Claude running in the user's own terminal), end to end:
 // the REAL hook commands the app installed into ~/.claude/settings.json run in
-// a shell with the CLI's stdin JSON, append to ~/.ai-companion/signals/external,
+// a shell with the CLI's stdin JSON, append to ~/.air-ide/signals/external,
 // and the app's watcher → service → IPC reports the state. Isolated by a temp HOME.
 
 interface ExternalSessionDto {
@@ -57,7 +57,7 @@ function fire(event: string, sessionId: string, extra: Record<string, unknown> =
   if (!command) throw new Error(`hook ${event} was not installed`);
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env))
-    if (v !== undefined && k !== 'AI_COMPANION_SIGNAL_FILE') env[k] = v;
+    if (v !== undefined && k !== 'AIR_IDE_SIGNAL_FILE') env[k] = v;
   env.HOME = home;
   execFileSync('sh', ['-c', command], {
     input: JSON.stringify({ session_id: sessionId, cwd: CWD, ...extra }),
@@ -181,13 +181,13 @@ test.describe(
     });
 
     test('Without consent the hooks do nothing', async () => {
-      const marker = join(home, '.ai-companion', 'signals', 'external-enabled');
+      const marker = join(home, '.air-ide', 'signals', 'external-enabled');
       expect(existsSync(marker)).toBe(true);
       await call('externalSession.revokeConsent');
       expect(existsSync(marker)).toBe(false);
       // Hooks were removed from settings; fire the previously-captured command to prove the marker alone silences it.
       fire('SessionStart', 'ghost', { source: 'startup' });
-      expect(existsSync(join(home, '.ai-companion', 'signals', 'external', 'ghost.jsonl'))).toBe(
+      expect(existsSync(join(home, '.air-ide', 'signals', 'external', 'ghost.jsonl'))).toBe(
         false,
       );
       const after = await state();

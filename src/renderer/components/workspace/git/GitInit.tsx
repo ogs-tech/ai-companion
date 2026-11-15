@@ -1,9 +1,10 @@
+import { brandKey } from '../../../../shared/brand.js';
 import { useState } from 'react';
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { X } from 'lucide-react';
 import { Icon } from '../../ds/Icon.js';
 
-const DISMISS_KEY_PREFIX = 'ai-companion.git-init-card-dismissed.';
+const DISMISS_KEY_PREFIX = brandKey('git-init-card-dismissed.');
 
 function readDismissed(workspaceId: string): boolean {
   try {

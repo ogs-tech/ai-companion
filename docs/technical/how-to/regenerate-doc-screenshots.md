@@ -12,12 +12,12 @@ hand, so they can be refreshed whenever the UI changes.
 npm run docs:screenshots
 ```
 
-The command builds the app, launches it with a throwaway `HOME` (your real `~/.ai-companion` and `~/.claude`
+The command builds the app, launches it with a throwaway `HOME` (your real `~/.air-ide` and `~/.claude`
 are never touched), seeds a demo workspace called `acme-api` (a git repo with one commit and uncommitted
 changes), walks through the flows and writes the PNGs. Commit the changed images with the doc edits that
 need them.
 
-**Close the dev app first** (`npm run dev`, or `AI Companion Dev.app`). Both bind the embedded browser's CDP
+**Close the dev app first** (`npm run dev`, or `AIR IDE Dev.app`). Both bind the embedded browser's CDP
 port 9333 (`src/main/index.ts`), so a second instance cannot start and the script times out opening the window.
 
 ## Where things live

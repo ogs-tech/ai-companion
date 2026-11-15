@@ -38,7 +38,7 @@ static NSString *const kConfigRootDirKey = @"rootDir";
 
 - (void)showAlert:(NSString *)message {
   NSAlert *alert = [[NSAlert alloc] init];
-  alert.messageText = @"AI Companion Dev";
+  alert.messageText = @"AIR IDE Dev";
   alert.informativeText = message;
   alert.alertStyle = NSAlertStyleCritical;
   [alert runModal];
@@ -128,7 +128,7 @@ static NSString *const kConfigRootDirKey = @"rootDir";
 
   [menu addItem:[NSMenuItem separatorItem]];
 
-  NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit AI Companion Dev"
+  NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit AIR IDE Dev"
                                                     action:@selector(quitApp:)
                                              keyEquivalent:@""];
   quitItem.target = self;

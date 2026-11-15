@@ -1,9 +1,10 @@
+import { brandKey } from '../../shared/brand.js';
 // Module-scoped, same shape as `workspace-shell-store.ts`: the Explorer toolbar
 // (WorkspaceScreen) flips the flag while every `useDirListing` deep inside
 // FolderTree reads it through `useSyncExternalStore`, with no prop path between.
 // Persisted per viewer so the choice survives a restart.
 
-const STORAGE_KEY = 'ai-companion.explorer.showHidden';
+const STORAGE_KEY = brandKey('explorer.showHidden');
 const listeners = new Set<() => void>();
 
 function readStored(): boolean {

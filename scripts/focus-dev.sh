@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RENDERER_PORT=47173
 FOCUS_PORT=47174
-LOCK_FILE="${HOME}/.ai-companion/dev.lock"
+LOCK_FILE="${HOME}/.air-ide/dev.lock"
 
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/dev-env.sh"

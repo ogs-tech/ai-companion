@@ -47,7 +47,7 @@ export interface WorkspaceModelMigrationDeps {
   bootstrap: { create(dataDir: string): Promise<void> };
   clock: ClockPort;
   homedir: string;
-  /** `~/.ai-companion` — Global's data dir, and the old default workspace's. */
+  /** `~/.air-ide` — Global's data dir, and the old default workspace's. */
   globalDataDir: string;
 }
 

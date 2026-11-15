@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Start electron-vite dev detached from Terminal. Logs → ~/.ai-companion/dev.log
+# Start electron-vite dev detached from Terminal. Logs → ~/.air-ide/dev.log
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-LOG_DIR="${HOME}/.ai-companion"
+LOG_DIR="${HOME}/.air-ide"
 LOG_FILE="${LOG_DIR}/dev.log"
 SHELL_PID_FILE="${LOG_DIR}/dev-shell.pid"
 PGID_FILE="${LOG_DIR}/dev.pgid"

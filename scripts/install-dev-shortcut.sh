@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-APP_NAME="AI Companion Dev.app"
+APP_NAME="AIR IDE Dev.app"
 
 if [[ -w "/Applications" ]]; then
   APP_BUNDLE="/Applications/${APP_NAME}"
@@ -21,7 +21,7 @@ cd "${ROOT_DIR}"
 
 chmod +x "${SCRIPT_DIR}/dev-app-background.sh" "${SCRIPT_DIR}/open-dev-terminal.sh" "${SCRIPT_DIR}/stop-dev.sh"
 
-echo "→ Linking global CLI (ai-companion-dev)…"
+echo "→ Linking global CLI (air-ide-dev)…"
 npm link
 
 echo "→ Installing Dock app (${APP_BUNDLE})…"
@@ -36,11 +36,11 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << 'EOF'
   <key>CFBundleExecutable</key>
   <string>launcher</string>
   <key>CFBundleIdentifier</key>
-  <string>com.ogs-tech.ai-companion-dev</string>
+  <string>com.ogs-tech.air-ide-dev</string>
   <key>CFBundleName</key>
-  <string>AI Companion Dev</string>
+  <string>AIR IDE Dev</string>
   <key>CFBundleDisplayName</key>
-  <string>AI Companion Dev</string>
+  <string>AIR IDE Dev</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -85,9 +85,9 @@ rm -f "${LEGACY_COMMAND}"
 
 echo ""
 echo "Atalho dev instalado:"
-echo "  Terminal: ai-companion-dev   (de qualquer pasta)"
+echo "  Terminal: air-ide-dev   (de qualquer pasta)"
 echo "  Finder:   ${APP_BUNDLE}"
 echo "  Dock:     arraste o app de Aplicativos para o Dock"
-echo "  Dock (botão direito): Open Terminal (logs) | Quit AI Companion Dev (para o projeto)"
+echo "  Dock (botão direito): Open Terminal (logs) | Quit AIR IDE Dev (para o projeto)"
 echo ""
 open -R "${APP_BUNDLE}"

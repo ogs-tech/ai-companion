@@ -1,3 +1,4 @@
+import { brand } from '../../../shared/brand.js';
 import { FormControl, FormControlLabel, FormLabel, Radio, RadioGroup, Typography } from '@mui/material';
 import { callIpc } from '../../lib/ipc.js';
 import { useSettingsState } from '../../hooks/use-settings-state.js';
@@ -20,7 +21,7 @@ export function GitIgnorePage(): React.ReactElement {
   return (
     <ConfigPageFrame title="Git e arquivos gerados" testId="config-page-git-ignore">
       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-        Oculta do git o <code>.ai-companion/</code> e apenas os links e arquivos que o app gerou em <code>.claude/</code> e <code>.cursor/</code>. Arquivos seus nessas pastas continuam visíveis. Nada rastreado é removido do índice.
+        Oculta do git o <code>{brand.workspaceDirName}/</code> e apenas os links e arquivos que o app gerou em <code>.claude/</code> e <code>.cursor/</code>. Arquivos seus nessas pastas continuam visíveis. Nada rastreado é removido do índice.
       </Typography>
       <FormControl>
         <FormLabel id="git-ignore-label">Ocultar arquivos gerenciados</FormLabel>

@@ -21,7 +21,7 @@ describe('GitIgnoreService', () => {
     const { root, service } = await setup(undefined);
     await service.apply();
     const exclude = await readFile(join(root, '.git/info/exclude'), 'utf8');
-    expect(exclude).toContain('/.ai-companion/');
+    expect(exclude).toContain('/.air-ide/');
     expect(exclude).toContain('/.claude/skills/foo');
     expect(exclude).not.toContain('elsewhere');
   });
@@ -50,8 +50,8 @@ describe('GitIgnoreService', () => {
     await service.apply();
     const g = new GitIgnoreService(new NodeFsAdapter(), { load: async () => ({ git: { ignoreManagedFiles: 'gitignore' } }) as unknown as Settings }, { rootPath: root }, { managedPaths: async () => [] });
     await g.apply();
-    expect(await readFile(join(root, '.gitignore'), 'utf8')).toContain('/.ai-companion/');
-    expect(await readFile(join(root, '.git/info/exclude'), 'utf8')).not.toContain('ai-companion');
+    expect(await readFile(join(root, '.gitignore'), 'utf8')).toContain('/.air-ide/');
+    expect(await readFile(join(root, '.git/info/exclude'), 'utf8')).not.toContain('air-ide');
   });
 
   it('does nothing outside a git repo', async () => {

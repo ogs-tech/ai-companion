@@ -8,16 +8,16 @@ import {
 } from '../../src/shared/brand-paths.js';
 
 describe('brand', () => {
-  it('exposes the AI Companion display name', () => {
-    expect(brand.displayName).toBe('AI Companion');
+  it('exposes the AIR IDE display name', () => {
+    expect(brand.displayName).toBe('AIR IDE');
   });
 
   it('builds notification titles with the product prefix', () => {
-    expect(productLabel('a problem was detected')).toBe('AI Companion — a problem was detected');
+    expect(productLabel('a problem was detected')).toBe('AIR IDE — a problem was detected');
   });
 
   it('formats the workspace path hint for UI copy', () => {
-    expect(workspacePathHint()).toBe('~/.ai-companion');
+    expect(workspacePathHint()).toBe('~/.air-ide');
   });
 
   it('includes legacy ownership markers for migration', () => {
@@ -28,7 +28,7 @@ describe('brand', () => {
 
 describe('brand-paths', () => {
   it('resolves the current workspace path', () => {
-    expect(workspacePath('/home/u')).toBe('/home/u/.ai-companion');
+    expect(workspacePath('/home/u')).toBe('/home/u/.air-ide');
   });
 
   it('resolves the legacy workspace path', () => {
@@ -36,7 +36,7 @@ describe('brand-paths', () => {
   });
 
   it('resolves cursor plugin paths', () => {
-    expect(cursorPluginPath('/home/u')).toBe('/home/u/.cursor/plugins/ai-companion');
+    expect(cursorPluginPath('/home/u')).toBe('/home/u/.cursor/plugins/air-ide');
     expect(legacyCursorPluginPath('/home/u')).toBe('/home/u/.cursor/plugins/superset-ai');
   });
 });

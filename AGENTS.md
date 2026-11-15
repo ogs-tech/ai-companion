@@ -1,4 +1,4 @@
-<!-- Managed by AI Companion — edits will be overwritten -->
+<!-- Managed by AIR IDE — edits will be overwritten -->
 
 # Project instructions
 

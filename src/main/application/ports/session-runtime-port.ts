@@ -30,7 +30,7 @@ export interface SessionSpawnOptions {
   addDirs?: readonly string[];
   /**
    * Absolute path of the session's signal file. Exposed to the CLI as
-   * `AI_COMPANION_SIGNAL_FILE`; a CLI that takes hooks per invocation (Claude)
+   * `AIR_IDE_SIGNAL_FILE`; a CLI that takes hooks per invocation (Claude)
    * also gets its activity hooks injected.
    */
   signalFile?: string;

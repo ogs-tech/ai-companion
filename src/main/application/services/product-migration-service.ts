@@ -9,7 +9,7 @@ import {
 } from '../../../shared/brand-paths.js';
 
 /**
- * One-time migration from the Superset AI footprint to the AI Companion paths.
+ * One-time migration from the Superset AI footprint to the AIR IDE paths.
  * Recognizes the legacy workspace and Cursor plugin directories and renames
  * them when the new paths do not yet exist.
  */

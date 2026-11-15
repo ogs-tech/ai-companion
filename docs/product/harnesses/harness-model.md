@@ -15,8 +15,8 @@ Two words, two layers:
 
 - **Harness** — the whole set of configuration that makes a language model work
   as an agent on your code: **skills, agents, instructions, MCP servers and
-  hooks.** It is what this app manages, once, in `~/.ai-companion/` and in each
-  workspace's `.ai-companion/`.
+  hooks.** It is what this app manages, once, in `~/.air-ide/` and in each
+  workspace's `.air-ide/`.
 - **Channel** — a tool the harness reaches an agent through: **Claude, Cursor,
   LM Studio.** Each channel has its own on-disk surface and, sometimes, a CLI
   this app can run. Config > **Canais** lists them.
