@@ -4,6 +4,8 @@ import {
   MenuItem, Stack, TextField,
 } from '@mui/material';
 import { useSaveMcp } from '../../hooks/use-mcp-mutations.js';
+import { ChannelSyncSection } from '../../components/ds/ChannelSyncSection.js';
+import { entityUrn } from '../../../shared/entity.js';
 import type { McpServer, McpServerInput, McpTransport } from '../../../shared/mcp.js';
 
 type CreateScope = 'global' | 'project-local' | 'project-shared';
@@ -107,6 +109,7 @@ export function McpEditorDialog({ open, mode, initial, onClose }: Props): React.
             />
           )}
         </Stack>
+        {mode === 'edit' && initial !== undefined && <ChannelSyncSection urn={entityUrn('mcp', initial.name)} entityEnabled={initial.enabled} />}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>

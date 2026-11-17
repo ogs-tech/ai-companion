@@ -304,7 +304,7 @@ workspace, or on `personal` at Início. A conversation adopted from history (`se
 `SessionService.adoptConversation`) is anchored to the open workspace when its `cwd` is inside that
 workspace's root, and to `personal` otherwise — it never registers anything new.
 
-Every tree row that offers a right-click menu (`FolderTree` files/folders, `EntityTreeGroup` Skills/Agents,
+Every tree row that offers a right-click menu (`FolderTree` files/folders, `EntityTreeRow` Skills/Agents,
 `InstructionTreeRow`, including the `personal` row) also offers "New Action" —
 wired in `WorkspaceScreen` to `newActionForFile`/`newActionForEntity`/`newActionForInstruction`, all
 funneling into `startNewActionSession`. Unlike "Abrir sessão" above, this **never** anchors on the clicked
@@ -330,7 +330,7 @@ Same shell in both contexts; the content changes, the positions don't:
 | StatusBar (footer, left) | context switcher (`ContextSwitcher`, menu opens upward) | `🏠 Início ▾` | `📁 <name> ▾` + `⎇ branch` (root path in the tooltip) |
 | Left panel (`ExplorerPanelContent`) | **where** | Rail: Workspaces · Starter Pack · Marketplaces · Diagnóstico; body is the workspaces list (`WorkspacesList`) | Rail: Arquivos · Git · Terminais; body is that view over the workspace's 1..N folders |
 | Workbench (`WorkbenchCanvas`) | **work** | pinned Visão geral (`HomeOverview`) + tabs | pinned Visão geral (`WorkspaceOverview`) + tabs |
-| Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Sessões + Workspace customizations, with "Do Global" |
+| Right panel (`ControlPanelContent`) | **what** (current scope) | Global | Sessões + Workspace customizations, with a Global section |
 
 The **Visão geral** tab (id `overview`) is not part of `WorkspaceScreen`'s `openTabs` state: it is
 prepended to the canvas tabs on every render, icon-only, with no close control. Every close/reset path only
@@ -384,9 +384,9 @@ There is no standalone Instructions screen — instructions head the right panel
 
 - **Início** → one `InstructionTreeRow` (`kind="personal"`) for the Personal singleton
   (`scopes: ['personal']`) via `usePersonalInstruction()`.
-- **A workspace** → the tree is organised **by level**, each with the same rows (Instructions, Skills, Agents,
-  Integrações): *Workspace* (`Layers`), then — multi-folder only — one group per folder (`GitBranch`), a divider,
-  and *Global* (`Globe`, read-only here). Each level's **Instructions** row is always present: hollow
+- **A workspace** → two sections, *Workspace* (`Layers`) and *Global* (`Globe`, read-only here), each starting
+  with its Instructions row(s); in a multi-folder workspace each folder has its own row, tagged with the folder
+  (folders are row tags, not tree levels). The workspace's **Instructions** row is always present: hollow
   (`SyncDot` `missing`) until created, "detected" (`DetectedBadge`: file name, "Aplicar", dashed ring) when a
   foreign file was found, else the Claude/Cursor chips (one per enabled harness, green when the instruction is
   `synced`) and the sync dot. Clicking a hollow row creates the instruction seeded by `seedWorkspaceInstruction` /
@@ -415,13 +415,13 @@ src/renderer/
 ├── screens/                # Main.tsx wraps WorkspaceScreen in the shell
 │   ├── workspace/ marketplaces/ health/ starter-pack/ settings/
 │   ├── plugins/            # PluginDetail/PluginImportDialog/PublishPluginDialog — reused by
-│   │                       # PluginsTreeGroup; no longer a routed screen of its own (no PluginList.tsx)
+│   │                       # PluginTreeRow; no longer a routed screen of its own (no PluginList.tsx)
 │   ├── Main.tsx            # root screen — AppShell + WorkspaceScreen, health notifications
 │   ├── Settings.tsx
 │   └── IoError.tsx         # generic retry screen for I/O failures
 ├── components/             # ds/ (design system), shell/ (TopNav, CommandPalette),
-│                           # workspace/ (FolderTree, EntityTreeGroup, HooksTreeGroup, McpTreeGroup,
-│                           # PluginsTreeGroup, SessionsTreeGroup, TreeGroup, ...), EntityDataGrid/
+│                           # workspace/ (FolderTree, CustomizationsList, EntityTreeRow, McpTreeRow, HookTreeRow,
+│                           # PluginTreeRow, SessionsTreeGroup, TreeGroup, ...), EntityDataGrid/
 ├── hooks/                  # react-query data hooks
 └── lib/                    # ipc.ts, query-client.ts, theme-mode-context.tsx, instruction-seed.ts
 ```
@@ -430,21 +430,25 @@ There is no `instructions/` screen — instruction management is inline on the W
 "Instructions in the right panel" above), via `InstructionTreeRow` under `components/workspace/`. There is no
 `commands/` screen either — the `command` entity kind was removed too. There are no `skills/`, `agents/`,
 `hooks/`, `mcps/`, or (as of the Plugins fold-in) top-level `plugins/` screens either — each kind is a
-row source (`EntityTreeGroup` for Skill/Agent, `HooksTreeGroup`, `McpTreeGroup`, `PluginsTreeGroup`),
-rendered in `flat` mode (rows only, no group header) by `CustomizationsList`, the lower half of
-`WorkspaceScreen`'s Control Panel (`ControlPanelContent`). `CustomizationsList` is one searchable list with
-type chips (**Tudo · Skills · Agents · Integrações** — Integrações = hooks, MCP, plugins), a "+" button (creates
-the chip's type; a Skill/Agent/Instruction menu on Tudo; MCP/plugin import on Integrações) and a search box over
-name + description. Each flat group reports its row count (`useReportCount`) so the list can derive its empty
-state and auto-expand "Do Global" on a search hit. Chip and search text are local state; the list is keyed by
-scope, so they reset on workspace switch. Sections: at Início (`isHome`) one editable **Global** section; in a
-workspace, **Neste workspace** (editable) then **Do Global** (collapsed, read-only; see below). The Explorer ends in a **Terminais** section (`TerminalsSection`) under the file tree — the one list of everything running in the workspace; its ＋▾ menu starts a shell at the root, in a folder (`FolderPickerDialog`) or a launch configuration, and a folder row's context menu offers "Abrir terminal aqui". Each group fetches its own data
-(`skill.list`/`agent.list`/`hook.list`/`mcp.list`/`plugin.list`) and opens the same
-`CustomizationEditor`/`CustomizationViewDrawer`/`McpEditorDialog`/`PluginDetail` (in a `DetailDrawer`) the
-old standalone screens used — only the surrounding chrome (a dense tree row instead of a full-page
-`EntityDataGrid`) changed. `PluginsTreeGroup` also owns the "Importar plugin" and "Publicar" actions
-(`PluginImportDialog`/`PublishPluginDialog`, unchanged), previously toolbar buttons on the old `PluginList`
-screen, now the group's `TreeGroup` header "+" action and a per-row overflow menu respectively.
+row component (`EntityTreeRow` for Skill/Agent, `DetectedTreeRow`, `McpTreeRow`, `HookTreeRow`,
+`PluginTreeRow`, `InstructionTreeRow`) rendered by `CustomizationsList`, the lower half of `WorkspaceScreen`'s
+Control Panel (`ControlPanelContent`). The rows hold no lists: `useCustomizationTree` reads every query once
+(skills, agents, instructions, MCP, hooks, plugins, detected, health, folder routing) and hands them to the pure
+`buildCustomizationTree` (`lib/customization-tree.ts`), which returns **sections** (`local`, plus `global` inside a
+workspace) › type groups (Instruções, Skills, Agents, MCP, Hooks, Plugins) › items, each with origin
+(`local`/`global`/`detected`), state (`problems` per channel, `disabled`), chip totals on the searched set, and
+`shown`/`grandTotal` for the footer. Plugin-provided items are dropped from the type groups (listed inside their
+plugin). A row's trailing slot shows one tag by precedence (`rowBadge`): `⚠ <channels>` > `desativado` >
+`detectado · importar`. The panel has a search box, state chips (**Todos · ⚠ Problemas · Desativados ·
+Detectados**, `TreeFilterChips`) and a "+" menu (Skill/Agent/Instruction/Servidor MCP/Importar plugin). Search and
+chip are local state; the list is keyed by scope, so they reset on a scope switch. Sections: at Início
+(`isHome`) none (one editable list); in a workspace, **Workspace** (editable) then **Global** (collapsed,
+read-only; see below). Each section starts with its Instructions row(s), outside any group. Collapse state is
+kept per `tree-group:<scopeId|home>:<section>:<group>`. The Explorer ends in a **Terminais** section (`TerminalsSection`) under the file tree — the one list of everything running in the workspace; its ＋▾ menu starts a shell at the root, in a folder (`FolderPickerDialog`) or a launch configuration, and a folder row's context menu offers "Abrir terminal aqui". Rows open the same editors as before (`EditorPanel` tabs, `McpEditorDialog`); `PluginTreeRow` keeps the
+"Publicar" action (`PublishPluginDialog`) in its row menu, and "Importar plugin" lives in the "+" menu. Editing a
+skill, agent or instruction's Properties (or an MCP server) shows `ChannelSyncSection`: per channel, the
+destination path and how it is delivered, or the failing check with "Abrir diagnóstico", from the same health
+report (`lib/channel-sync.ts`).
 
 `SessionsTreeGroup` sits in the same Control Panel, above the Customizations list (the two split the panel height and each scrolls on its own), and lists the current scope's own
 conversations: the open workspace's (`HistoryScope` `workspace`), or Global's at Início (`personal` — history
@@ -453,17 +457,16 @@ already belongs to what's open by construction (activation kills the outgoing co
 [Session bounded context](#session-bounded-context)); live sessions of other contexts would only ever show
 on Início's Visão geral card. "Ver todas" opens the Histórico tab with scope `workspace`, or `all` at Início.
 
-Skill/Agent tree groups show only the "local" entities (`scopes[0] === 'workspace'` and `scopeId` is the
-open workspace) via `EntityTreeGroupProps.localScope`; at Início, with no `localScope`, every item shows.
-Inside a workspace, Global's skills/agents (Personal-scope or plugin-provided) and the personal instruction
-are listed read-only in the collapsed **Do Global** section below the workspace's own items
-(`EntityTreeGroup`'s `inherited` mode: no create, no delete, no Properties). A row opens an `inherited:<urn>`
+An item is "local" when `scopes[0] === 'workspace'` and `scopeId` is the open workspace
+(`buildCustomizationTree`'s origin rule); at Início, or while the workspace loads, every item is local.
+Inside a workspace, Global's skills/agents, MCP servers, hooks, plugins and the personal instruction are listed
+read-only in the collapsed **Global** section below the workspace's own items (`EntityTreeRow` with origin
+`global`: no delete, no Properties). A row opens an `inherited:<urn>`
 tab whose `EditorPanel` is read-only (`inherited` prop) with an "Editar no Início" action — it runs the
 unsaved-tabs guard, goes home, then opens the entity's own editable `entity:<urn>` tab there.
-`HooksTreeGroup`/`McpTreeGroup`/`PluginsTreeGroup` keep their own local/global split (Hooks have no
-workspace scoping, so inside a workspace they all fall under **Do Global**; MCP's `project-local`/`project-shared`
-scope is matched against the open workspace's `rootPath`; `isProjectContext` keeps `project` plugins; their
-`onlyGlobal` prop selects the Global half).
+The same model decides the other kinds' origin: hooks have no workspace scoping, so inside a workspace they
+all fall under **Global**; an MCP server's `project-local`/`project-shared` scope is matched against the open
+workspace's `rootPath` (`isMcpLocal`); a `project` plugin is local, a `personal` one Global.
 
 Navigation is state-driven via a `Nav` discriminated union in `components/shell/nav.ts` (areas: `workspace`,
 `starter-pack`, `marketplaces`, `diagnostico`); `Main.tsx` only wraps `WorkspaceScreen` in the shell; the area tabs open on the Workbench canvas. No `react-router`, and no

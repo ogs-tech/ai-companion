@@ -41,14 +41,14 @@ edited elsewhere still looks stale, use **Reler do disco** (refresh icon) next t
 ## Start over by hand
 
 The app has no reset button — it was removed because a button can only undo what the app *knows* it
-created, and it left hooks and MCP entries behind (the **Integrações** list still showed them). Wiping by
+created, and it left hooks and MCP entries behind (the **MCP** and **Hooks** groups still showed them). Wiping by
 hand is explicit about what goes. Quit the app first, then work through this list; every step is optional,
 pick the depth you want.
 
 1. **Turn off the signal hooks first.** Open **Config → Sessões** and revoke "Ver o estado exato de
    sessões fora do app" (or set it to "só estimado"). That removes the app's `signals` hooks from
    `~/.claude/settings.json` and `~/.cursor/hooks.json`. If you skip this, those hooks stay in the files
-   and keep showing up under **Integrações** as items detected in Claude and Cursor.
+   and keep showing up under **Hooks** as items detected in Claude and Cursor.
 2. **Copy `~/.air-ide/_backups/` somewhere else** if you might need the files the app overwrote.
 3. **Delete the app's links and generated files** in each harness's config surface — the list is in
    [Adapter targets](../../technical/reference/adapter-targets.md). In short: symlinks under

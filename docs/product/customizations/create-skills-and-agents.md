@@ -13,8 +13,7 @@ own — there is no separate kind for it. Field rules (name format, length limit
 ## Create one
 
 1. In the right panel (the **PanelRight** toggle in the TopNav shows it if hidden), click **+**
-   (**Novo**) in the **Customizações** header and choose **Skill** or **Agent**. You can also click the **+**
-   (**Novo skill** / **Novo agent**) on the **Skills** or **Agents** group of a level.
+   (**Novo**) in the **Customizações** header and choose **Skill** or **Agent**.
 
    ![The Novo button in the Customizações header](../../assets/screenshots/create-skills-and-agents/01-new-button.png)
 
@@ -27,8 +26,8 @@ own — there is no separate kind for it. Field rules (name format, length limit
      to use it, so describe the trigger, not the content.
    - **Version** — free-form; informational.
    - **Scope** — **Personal** (all your repos) or **Workspace** (the open workspace's folder). **Workspace**
-     is only available while a workspace is open, not on Início. In a multi-folder workspace, creating from
-     a folder's group puts the item in that folder; from the **Workspace** group, in the shared set
+     is only available while a workspace is open, not on Início. In a multi-folder workspace, **Novo** creates
+     the item in the workspace's shared set
      (see [Work with multi-folder workspaces](../workspaces/work-with-multi-folder-workspaces.md)).
 
    ![The Properties dialog](../../assets/screenshots/create-skills-and-agents/03-properties.png)
@@ -46,21 +45,41 @@ If any target needed overwriting, a **Sync report** dialog lists it with the pat
 
 ## Read the Customizações tree
 
-The panel shows one tree with the same shape at every level. From top to bottom: **Workspace**, then — in a
-multi-folder workspace only — one group per folder, a divider, and **Global**. Each level has
-**Instructions**, **Skills**, **Agents** and, for **Workspace** and **Global**, **Integrações** (MCP servers and
-hooks); **Global** also lists **Plugins**. Counts sit on the right of each group, and a level with nothing in
-it is collapsed and dimmed but stays in place, so the spot to create does not move. Use the search box to
-filter by name or description.
+At Início the panel lists Global's items. Inside a workspace it has two sections: **Workspace** (the open
+workspace's own items, and what was detected in its folders), then **Global** (Início's items, collapsed and
+read-only here — tooltip *Somente leitura aqui — edite no Início*; edit them from Início).
 
-- **Global** is read-only inside a workspace (tooltip: *Somente leitura aqui — edite no Início*). Edit it
-  from Início.
-- Each skill and agent has a status dot: **Sincronizado**, **Pendente de sincronização**, **Detectado, ainda
-  não aplicado** (found in a harness's own files; import it) or **Não criada**. The state is checked on
-  disk, so a file changed outside the app flips the dot.
+Each section starts with its **Instructions** row, then one group per type: **Skills**, **Agents**, **MCP**,
+**Hooks**, **Plugins**. A group with nothing in it is not shown, except **Skills** and **Agents** in the scope's
+own list, which read *Nada aqui ainda*. Hooks have no workspace scope, so inside a workspace they all sit under
+**Global**. A plugin is one row; click it to see what it provides. What a plugin provides is not listed again in
+the type groups.
+
+In a multi-folder workspace the folder is a tag on the row (`commit-msg · api`), not a level of the tree, and
+each folder has its own **Instructions · <folder>** row.
+
+A row speaks only when something needs attention; silence means it is in sync:
+
+| Row shows | Meaning |
+|---|---|
+| `⚠ Claude · Cursor` | It failed to reach those channels. Click it to open Diagnósticos on the item. |
+| `desativado` | You turned it off (an MCP server, a hook or a plugin). It goes to no channel. |
+| `detectado · importar` | Found in Claude's or Cursor's own files, not yet managed by the app. Click the tag to import it. |
+
+If a row has more than one state, it shows only the first that applies, in the table's order.
+
+Under the search box, the chips **Todos** · **⚠ Problemas N** · **Desativados N** · **Detectados N** keep only
+the rows in that state. They combine with the search, and each count is what selecting the chip shows. A chip
+at 0 is disabled. The footer reads `N itens, G do Global`; while a search or chip is active it reads
+`n de N itens` with **Limpar filtros**, which clears both. Switching between Início and a workspace resets the
+search and the chip.
+
 - A green **N sessões** beside a skill, agent or MCP server means running sessions used it in the last ten
   minutes; hover for the list.
-- Plugin-provided entries are grouped under their plugin's name, apart from your own (**Meus**).
+- Open a skill, agent or instruction's **Properties** (or edit an MCP server) to see **Sincronização**: for
+  each channel, where the item lands and how (`Ligado por link simbólico`, `Arquivo gerado`,
+  `Entrada em mcp.json`), or what is wrong there with **Abrir diagnóstico**. A channel that is off reads
+  *Desativado*; LM Studio reads *Só roda sessões, não recebe customizações*.
 
 ## Edit, preview, rename
 

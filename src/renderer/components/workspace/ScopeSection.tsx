@@ -23,9 +23,8 @@ interface ScopeSectionProps {
 }
 
 /**
- * A top-level, collapsible header for one scope of the Control Panel list
- * inside a workspace. Children stay mounted while collapsed: they report the
- * row counts the header, the footer and the empty state depend on.
+ * A top-level, collapsible header for one scope of the Customizações tree
+ * inside a workspace: the workspace's own items, or Global's (read-only here).
  */
 export function ScopeSection({ section, glyph, label, count, storageKey, forceOpen, defaultOpen, tooltip, hidden = false, children }: ScopeSectionProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);

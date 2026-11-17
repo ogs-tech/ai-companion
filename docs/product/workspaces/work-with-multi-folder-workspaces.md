@@ -72,8 +72,9 @@ Cursor sessions receive each ticked folder as an extra directory instead. See
 
 ### Customizations
 
-The **Customizações** panel is grouped by level: **Workspace** (the shared set), then one group per folder,
-then **Global**. Inside each: Instructions, Skills, Agents and, for **Workspace** only, Integrações.
+The **Customizações** panel has a **Workspace** section and a **Global** one, grouped by type. A folder is a
+tag on the row (`commit-msg · api`), not a level of the tree, and each folder has its own
+**Instructions · <folder>** row. New items from **+** (Novo) go to the workspace's shared set.
 
 - A folder's skills, agents and instructions live in `<folder>/.air-ide/` and are linked into that
   folder's `.claude/` (and `.cursor/`, if enabled).

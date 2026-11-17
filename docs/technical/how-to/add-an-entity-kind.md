@@ -63,8 +63,9 @@ complete example; `grep -rn "'agent'" src/` lists most touchpoints.
 
 - [ ] `lib/blank-customization.ts`: a blank entity for the create flow.
 - [ ] `components/workspace/EditorPanel.tsx`: the kind's entry in `SAVE_BY_KIND`, and its body field.
-- [ ] `components/workspace/EntityTreeGroup.tsx` and `CustomizationsList.tsx` (plus `ControlPanelContent.tsx`'s
-      props): widen the `'skill' | 'agent'` unions, add a chip/"+" entry and render a flat group for the kind.
+- [ ] `lib/customization-tree.ts` (a `TreeGroupId`/`TreeEntity` variant, its candidates and search fields),
+      `hooks/use-customization-tree.ts` (its query), a row component next to `EntityTreeRow.tsx`, and
+      `CustomizationsList.tsx` (plus `ControlPanelContent.tsx`'s props): its group glyph, row and "+" entry.
 - [ ] `components/shell/nav.ts`: its icon (`ENTITY_GROUP_ICONS`) and accent color (`ENTITY_ACCENT_COLOR`).
 - [ ] `hooks/use-entity-change-invalidation.ts`: invalidate the kind's list query on `entity:changed`.
 

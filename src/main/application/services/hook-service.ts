@@ -181,6 +181,7 @@ function toHook(e: HookEntity): Hook {
     ...(e.matcher !== undefined ? { matcher: e.matcher } : {}),
     ...(e.description !== '' ? { description: e.description } : {}),
     handler: e.handler as HookHandler,
+    enabled: e.enabled,
     source: WORKSPACE_SOURCE,
   };
 }

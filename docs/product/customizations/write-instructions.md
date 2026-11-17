@@ -36,7 +36,7 @@ Targets resolve to the workspace's primary folder: `<root>/.claude/CLAUDE.md` an
 ## Add an instruction for one folder
 
 Only in a multi-folder workspace (see [Work with multi-folder workspaces](../workspaces/work-with-multi-folder-workspaces.md)).
-Click the **Instructions** row inside the folder's group, write, **⌘S**. Targets are
+Click the folder's **Instructions · <folder>** row at the top of the **Workspace** section, write, **⌘S**. Targets are
 `<folder>/.claude/CLAUDE.md` and `<folder>/AGENTS.md` (plus `<folder>/.cursor/rules/<name>.mdc` with Cursor
 enabled). Inside a folder, the harness reads that folder's file and those of its parent directories.
 

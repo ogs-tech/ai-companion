@@ -60,27 +60,27 @@ test.describe('Customizations › create and edit', () => {
     });
 
     await test.step('the new skill appears in the Workspace tree and the count grows', async () => {
-      await expect(page.getByTestId('tree-skill-db-migrations')).toBeVisible();
+      await expect(page.getByTestId('tree-row-local::urn:skill:db-migrations')).toBeVisible();
     });
 
     await test.step('it is searchable by its description', async () => {
       await page.getByTestId('control-panel-search').fill('safe database');
-      await expect(page.getByTestId('tree-skill-db-migrations')).toBeVisible();
-      await expect(page.getByTestId('tree-skill-deploy-checklist')).toBeHidden();
+      await expect(page.getByTestId('tree-row-local::urn:skill:db-migrations')).toBeVisible();
+      await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeHidden();
       await page.getByTestId('control-panel-search-clear').click();
     });
   });
 
   test('Opening a workspace skill and changing its description saves to disk', async () => {
     const { page, app, acmeData } = session;
-    await page.getByTestId('tree-skill-deploy-checklist').click();
+    await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click();
     const tab = page.getByTestId('workbench-tab-entity:urn:skill:deploy-checklist');
     await expect(tab).toBeVisible();
     await expect(page.getByTestId('inherited-notice')).toHaveCount(0);
     await expect(page.getByText('Instructions for deploy-checklist.')).toBeVisible();
 
     await test.step('editing Properties marks the tab dirty', async () => {
-      await page.getByTestId('tree-skill-deploy-checklist').click({ button: 'right' });
+      await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click({ button: 'right' });
       await page.getByRole('menuitem', { name: 'Properties' }).click();
       const modal = page.getByTestId('properties-modal');
       await modal.getByLabel('Description').fill('Steps to ship acme-api safely');
@@ -101,13 +101,13 @@ test.describe('Customizations › create and edit', () => {
   test('Deleting a workspace skill removes it from the tree and from disk', async () => {
     const { page, acmeData } = session;
     const dir = join(acmeData, 'skills', 'db-migrations');
-    await expect(page.getByTestId('tree-skill-db-migrations')).toBeVisible();
+    await expect(page.getByTestId('tree-row-local::urn:skill:db-migrations')).toBeVisible();
     expect(existsSync(dir)).toBe(true);
 
-    await page.getByTestId('tree-skill-db-migrations').click({ button: 'right' });
+    await page.getByTestId('tree-row-local::urn:skill:db-migrations').click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Excluir' }).click(); // the confirm() dialog is auto-accepted by launchApp
 
-    await expect(page.getByTestId('tree-skill-db-migrations')).toHaveCount(0);
+    await expect(page.getByTestId('tree-row-local::urn:skill:db-migrations')).toHaveCount(0);
     await expect.poll(() => existsSync(join(dir, 'SKILL.md'))).toBe(false);
   });
 });

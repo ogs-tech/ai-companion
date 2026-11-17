@@ -8,6 +8,8 @@ export interface Hook {
   matcher?: string;
   description?: string;
   handler: HookHandler;
+  /** Absent on plugin-provided and detected hooks, which are always active. */
+  enabled?: boolean;
   source:
     | { kind: 'workspace' }
     | { kind: 'plugin'; pluginId: string }

@@ -42,7 +42,7 @@ delete its cached clone. Removing a marketplace does not uninstall plugins alrea
 
 ## Manage installed plugins
 
-In the **Plugins** group (its own group, next to Skills, Agents and Integrações), on a plugin row:
+In the **Plugins** group (next to Skills, Agents, MCP and Hooks), on a plugin row:
 
 - **Enable/disable** — the row's switch. Disabled plugins keep their files but Claude Code ignores them.
 - **Details** — click the row: source, installed ref, scope, manifest and every artifact it provides.

@@ -80,6 +80,13 @@ describe('HookService (canonical layer)', () => {
     expect((await service.list('project')).map((h) => h.id)).toEqual(['p']);
   });
 
+  it('list returns enabled false for a disabled hook', async () => {
+    const { service } = make({ canonical: [entity({ enabled: false }), entity({ urn: 'urn:hook:on', name: 'on' })] });
+    const list = await service.list('personal');
+    expect(list.find((h) => h.id === 'h1')!.enabled).toBe(false);
+    expect(list.find((h) => h.id === 'on')!.enabled).toBe(true);
+  });
+
   it('blocks save/delete of a detected hook until imported', async () => {
     const { service } = make({ detected: [detectedHook] });
     const [row] = await service.list('personal');

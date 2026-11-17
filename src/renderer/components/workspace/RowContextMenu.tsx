@@ -13,7 +13,7 @@ interface RowContextMenuState<T> {
  * Tracks which row (if any) was right-clicked and where, so a tree row only
  * needs to wire its own `onContextMenu` through `openMenu` — the anchor
  * position and the "which row" bookkeeping live here, shared by every tree
- * (FolderTree, EntityTreeGroup, InstructionTreeRow) that offers a row-level
+ * (FolderTree, EntityTreeRow, InstructionTreeRow) that offers a row-level
  * right-click menu.
  */
 export function useRowContextMenu<T>(): {

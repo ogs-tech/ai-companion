@@ -335,6 +335,7 @@ function EntitySubject({
               onChange={setEntity}
               {...(hiddenFields ? { hiddenFields } : {})}
               readOnly={readOnly}
+              {...(isCreate ? {} : { syncUrn: entityUrn(initial.kind, initial.name) })}
             />
           </DialogContent>
         </Dialog>

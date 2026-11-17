@@ -119,6 +119,8 @@ export interface Hook {
   matcher?: string;
   description?: string;
   handler: HookHandler;
+  /** Set on the user's own hooks (`HookEntity.enabled`); absent on plugin and detected ones, which are always active. */
+  enabled?: boolean;
   source: CustomizationSource;
 }
 

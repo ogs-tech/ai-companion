@@ -21,21 +21,21 @@ test.afterAll(async () => {
 test.describe('Customizations › channel warnings', () => {
   test('An unsynced skill and agent show "⚠ Claude", and their groups count the problems', async () => {
     const { page } = session;
-    await expect(page.getByTestId('tree-skill-deploy-checklist').getByTestId('channel-warning')).toHaveText('⚠ Claude');
-    await expect(page.getByTestId('tree-agent-api-architect').getByTestId('channel-warning')).toHaveText('⚠ Claude');
-    await expect(page.getByTestId('tree-subgroup-type-local-skill')).toContainText('⚠');
-    await expect(page.getByTestId('tree-subgroup-type-local-agent')).toContainText('⚠');
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveText('⚠ Claude');
+    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveText('⚠ Claude');
+    await expect(page.getByTestId('tree-group-skill')).toContainText('⚠');
+    await expect(page.getByTestId('tree-group-agent')).toContainText('⚠');
   });
 
   test('The warning is accessible: it names the channel and says it opens the diagnostic', async () => {
     const { page } = session;
-    const warning = page.getByTestId('tree-skill-deploy-checklist').getByTestId('channel-warning');
+    const warning = page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning');
     await expect(warning).toHaveAttribute('aria-label', 'Problema em Claude. Abrir diagnóstico');
   });
 
   test('Clicking the warning opens Diagnósticos narrowed to that item, without opening the skill', async () => {
     const { page } = session;
-    await page.getByTestId('tree-skill-deploy-checklist').getByTestId('channel-warning').click();
+    await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning').click();
     await expect(page.getByTestId('workbench-tab-diagnostico')).toBeVisible();
     await expect(page.getByTestId('workbench-tab-entity:urn:skill:deploy-checklist')).toHaveCount(0);
     await expect(page.getByTestId('health-focus')).toContainText('urn:skill:deploy-checklist');
@@ -51,21 +51,21 @@ test.describe('Customizations › channel warnings', () => {
 
   test('Saving an item from the editor clears its own warning at once, and leaves the others', async () => {
     const { page, app } = session;
-    await page.getByTestId('tree-skill-deploy-checklist').click({ button: 'right' });
+    await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Properties' }).click();
     await page.getByTestId('properties-modal').getByLabel('Description').fill('Steps to ship acme-api safely');
     await page.getByTestId('properties-modal').getByRole('button', { name: 'Fechar' }).click();
     await saveFromMenu(app);
 
     // well under the 30 s health poll: the save itself refreshes the report
-    await expect(page.getByTestId('tree-skill-deploy-checklist').getByTestId('channel-warning')).toHaveCount(0, { timeout: 8_000 });
-    await expect(page.getByTestId('tree-agent-api-architect').getByTestId('channel-warning')).toBeVisible();
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveCount(0, { timeout: 8_000 });
+    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toBeVisible();
   });
 
   test('Atualizar in Diagnósticos syncs to Claude and every warning in the tree goes away', async () => {
     const { page, acmeRoot } = session;
     // the editor tab from the previous test is in front; the agent's own ⚠ leads back to Diagnósticos
-    await page.getByTestId('tree-agent-api-architect').getByTestId('channel-warning').click();
+    await page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning').click();
     await page.getByTestId('health-refresh').click();
     const skillLink = join(acmeRoot, '.claude', 'skills', 'deploy-checklist');
     const agentLink = join(acmeRoot, '.claude', 'agents', 'api-architect.md');
@@ -73,8 +73,8 @@ test.describe('Customizations › channel warnings', () => {
     expect(lstatSync(skillLink).isSymbolicLink()).toBe(true);
     expect(lstatSync(agentLink).isSymbolicLink()).toBe(true);
 
-    await expect(page.getByTestId('tree-skill-deploy-checklist').getByTestId('channel-warning')).toHaveCount(0);
-    await expect(page.getByTestId('tree-agent-api-architect').getByTestId('channel-warning')).toHaveCount(0);
-    await expect(page.getByTestId('tree-subgroup-type-local-skill')).not.toContainText('⚠');
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveCount(0);
+    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveCount(0);
+    await expect(page.getByTestId('tree-group-skill')).not.toContainText('⚠');
   });
 });

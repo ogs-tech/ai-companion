@@ -528,7 +528,7 @@ Hooks are not part of the canonical `Entity` model yet — they live in `.claude
 
 | Method | Params | Result |
 |---|---|---|
-| `hook.list` | `{ scope?: 'personal' \| 'project' }` (default `'personal'`) | `Hook[]` |
+| `hook.list` | `{ scope?: 'personal' \| 'project' }` (default `'personal'`) | `Hook[]` — the user's own hooks carry `enabled: boolean`; plugin and detected ones omit it (always active) |
 | `hook.get` | `{ id: string; scope?: 'personal' \| 'project' }` | `Hook` |
 | `hook.save` | `{ hook: { id?; event; matcher?; description?; handler }; scope?: 'personal' \| 'project' }` | `{ hook: Hook; syncReport: SyncResult[] }` — saves the canonical `hook` entity and syncs it to every enabled harness |
 | `hook.delete` | `{ id: string; scope?: 'personal' \| 'project' }` | `{ ok: true }` |

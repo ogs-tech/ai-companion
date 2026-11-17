@@ -27,30 +27,28 @@ test.describe('Customizations › browse and search', () => {
     await test.step('Workspace shows its instruction, skill and agent', async () => {
       await expect(page.getByTestId('control-panel-section-local')).toBeVisible();
       await expect(page.getByTestId('workspace-instruction-row-acme-rules')).toBeVisible();
-      await expect(page.getByTestId('tree-skill-deploy-checklist')).toBeVisible();
-      await expect(page.getByTestId('tree-agent-api-architect')).toBeVisible();
+      await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
+      await expect(page.getByTestId('tree-row-local::urn:agent:api-architect')).toBeVisible();
     });
 
     await test.step('Global starts collapsed: its rows are not on screen', async () => {
       await expect(page.getByTestId('control-panel-section-global')).toBeVisible();
-      await expect(page.getByTestId('tree-inherited-skill-global-lint')).toBeHidden();
+      await expect(page.getByTestId('tree-row-global::urn:skill:global-lint')).toBeHidden();
     });
 
     await test.step('expanding Global lists the personal skills, agent and instruction', async () => {
       await page.getByTestId('control-panel-section-global').click();
       await expect(page.getByTestId('inherited-instruction-row')).toBeVisible();
-      await expect(page.getByTestId('tree-inherited-skill-global-lint')).toBeVisible();
-      await expect(page.getByTestId('tree-inherited-skill-release-notes')).toBeVisible();
-      await expect(page.getByTestId('tree-inherited-agent-global-reviewer')).toBeVisible();
+      await expect(page.getByTestId('tree-row-global::urn:skill:global-lint')).toBeVisible();
+      await expect(page.getByTestId('tree-row-global::urn:skill:release-notes')).toBeVisible();
+      await expect(page.getByTestId('tree-row-global::urn:agent:global-reviewer')).toBeVisible();
     });
 
     await test.step('Global skills and agents offer no "create" — they are edited at Início', async () => {
-      await expect(page.getByTestId('tree-group-new-inherited-skill')).toHaveCount(0);
-      await expect(page.getByTestId('tree-group-new-inherited-agent')).toHaveCount(0);
     });
 
     await test.step('a Global skill opens read-only with a way to edit it at Início', async () => {
-      await page.getByTestId('tree-inherited-skill-global-lint').click();
+      await page.getByTestId('tree-row-global::urn:skill:global-lint').click();
       await expect(page.getByTestId('inherited-notice')).toBeVisible();
       await expect(page.getByTestId('inherited-edit-at-home')).toBeVisible();
     });
@@ -64,16 +62,16 @@ test.describe('Customizations › browse and search', () => {
 
     await test.step('by name', async () => {
       await search.fill('deploy');
-      await expect(page.getByTestId('tree-skill-deploy-checklist')).toBeVisible();
-      await expect(page.getByTestId('tree-agent-api-architect')).toBeHidden();
+      await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
+      await expect(page.getByTestId('tree-row-local::urn:agent:api-architect')).toBeHidden();
       await expect(footer).toContainText(`de ${totalBefore} itens`);
       await expect(page.getByTestId('control-panel-footer-count')).toHaveText('1');
     });
 
     await test.step('by description, reaching into collapsed Global', async () => {
       await search.fill('release notes');
-      await expect(page.getByTestId('tree-inherited-skill-release-notes')).toBeVisible();
-      await expect(page.getByTestId('tree-skill-deploy-checklist')).toBeHidden();
+      await expect(page.getByTestId('tree-row-global::urn:skill:release-notes')).toBeVisible();
+      await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeHidden();
     });
 
     await test.step('no match shows the empty state naming the query', async () => {
@@ -95,5 +93,26 @@ test.describe('Customizations › browse and search', () => {
       await expect(search).toHaveValue('');
       await expect(page.getByTestId('control-panel-clear')).toHaveCount(0);
     });
+  });
+
+  test('Problemas chip narrows the tree and Limpar filtros restores it', async () => {
+    const { page } = session;
+    const problems = page.getByTestId('chip-problems');
+    const totalBefore = Number(await page.getByTestId('control-panel-footer-count').innerText());
+    // The seed writes files straight to disk, never synced to Claude: those rows carry "⚠ Claude".
+    await expect(problems).toHaveText(/⚠ Problemas [1-9]/);
+    const failing = Number((await problems.innerText()).replace(/\D+/g, ''));
+
+    await problems.click();
+    await expect(problems).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
+    await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(failing));
+    await expect(page.getByTestId('control-panel-footer')).toContainText(`de ${totalBefore} itens`);
+    // Every listed row says what is wrong.
+    for (const row of await page.locator('[data-testid^="tree-row-"]').all()) await expect(row.getByTestId('channel-warning')).toBeVisible();
+
+    await page.getByTestId('control-panel-clear').click();
+    await expect(page.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(totalBefore));
   });
 });

@@ -7,7 +7,7 @@ export type Area = 'workspace' | 'workspaces' | 'starter-pack' | 'marketplaces' 
 
 // No area carries a `sub` anymore — Skills/Agents/Hooks/MCP/Plugins all moved
 // from standalone sub-screens into tree nodes inside the one Workspace screen
-// (see WorkspaceScreen + EntityTreeGroup/HooksTreeGroup/McpTreeGroup/PluginsTreeGroup).
+// (see WorkspaceScreen + the Customizações tree rows: EntityTreeRow/HookTreeRow/McpTreeRow/PluginTreeRow).
 // Workspaces/Starter Pack/Marketplaces/Diagnóstico followed the same trend: they're
 // Workbench tabs now (see workspace-area-store.ts), opened from the Explorer
 // Panel's own pinned rows on the Default/Global workspace (WorkspaceScreen's

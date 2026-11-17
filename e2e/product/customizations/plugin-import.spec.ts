@@ -71,7 +71,7 @@ test.describe('Customizations › import a plugin', () => {
       await url.fill(pluginUrl);
       await page.getByTestId('plugin-import-btn').click();
       await expect(dialog).toBeHidden({ timeout: 30_000 });
-      await expect(page.getByTestId('tree-plugin-demo-plugin')).toBeVisible();
+      await expect(page.locator('[data-testid$=":urn:plugin:demo-plugin"]')).toBeVisible();
     });
   });
 
@@ -82,6 +82,6 @@ test.describe('Customizations › import a plugin', () => {
     await page.getByTestId('plugin-url-input').locator('input').fill(pluginUrl);
     await page.getByTestId('plugin-import-btn').click();
     await expect(page.getByTestId('plugin-import-dialog').getByRole('alert')).toBeVisible();
-    await expect(page.locator('[data-testid="tree-plugin-demo-plugin"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid$=":urn:plugin:demo-plugin"]')).toHaveCount(1);
   });
 });

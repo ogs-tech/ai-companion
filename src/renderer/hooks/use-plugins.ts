@@ -23,7 +23,7 @@ export function usePluginList(scope: PluginScope, enabled = true): UseQueryResul
 }
 
 // A mutation on one scope (e.g. toggling a personal plugin) can't affect
-// items in the other scope, but PluginsTreeGroup may have both queries
+// items in the other scope, but the Customizações tree may have both queries
 // mounted at once (local + "Mostrar globais") — invalidate both so neither
 // bucket goes stale.
 function invalidatePluginLists(qc: QueryClient): Promise<void[]> {

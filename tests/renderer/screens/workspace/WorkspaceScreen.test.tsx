@@ -405,7 +405,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      const row = await screen.findByTestId('tree-skill-helper');
+      const row = await screen.findByTestId('tree-row-local::urn:skill:helper');
       fireEvent.contextMenu(row);
       const item = await screen.findByTestId('row-context-menu-new-action');
       await user.click(item);
@@ -903,12 +903,12 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      expect(await screen.findByTestId('tree-skill-local')).toBeInTheDocument();
-      expect(screen.queryByTestId('tree-skill-global')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('tree-row-local::urn:skill:local')).toBeInTheDocument();
+      expect(screen.queryByTestId('tree-row-local::urn:skill:global')).not.toBeInTheDocument();
 
       await user.click(await screen.findByTestId('control-panel-section-global'));
-      expect(await screen.findByTestId('tree-inherited-skill-global')).toBeVisible();
-      await user.click(screen.getByTestId('tree-inherited-skill-global'));
+      expect(await screen.findByTestId('tree-row-global::urn:skill:global')).toBeVisible();
+      await user.click(screen.getByTestId('tree-row-global::urn:skill:global'));
 
       // Opens read-only, with the way to edit it at Início.
       expect(await screen.findByTestId('workbench-tab-inherited:urn:skill:global')).toBeInTheDocument();
@@ -931,7 +931,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      await user.click(await screen.findByTestId('tree-inherited-skill-global'));
+      await user.click(await screen.findByTestId('tree-row-global::urn:skill:global'));
       await user.click(await screen.findByTestId('inherited-edit-at-home'));
 
       await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
@@ -1243,7 +1243,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      fireEvent.contextMenu(await screen.findByTestId('tree-skill-acme'));
+      fireEvent.contextMenu(await screen.findByTestId('tree-row-local::urn:skill:acme'));
       await user.click(await screen.findByTestId('row-context-menu-preview'));
 
       expect(await screen.findByTestId('workbench-tab-preview:entity:urn:skill:acme')).toBeInTheDocument();
@@ -1290,7 +1290,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      fireEvent.contextMenu(await screen.findByTestId('tree-skill-acme'));
+      fireEvent.contextMenu(await screen.findByTestId('tree-row-local::urn:skill:acme'));
       await user.click(await screen.findByTestId('row-context-menu-properties'));
 
       expect(await screen.findByTestId('workbench-tab-entity:urn:skill:acme')).toBeInTheDocument();

@@ -3,6 +3,7 @@ import {
   Box, Checkbox, FormControlLabel, FormGroup, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
 import { useActiveWorkspace } from '../../hooks/use-workspaces.js';
+import { ChannelSyncSection } from '../ds/ChannelSyncSection.js';
 import type { Agent, Instruction, Scope, Skill } from '../../../shared/entity.js';
 
 export type EditableEntity = Skill | Agent | Instruction;
@@ -22,10 +23,12 @@ interface PropertiesFormProps {
   onChange: Dispatch<SetStateAction<EditableEntity>>;
   hiddenFields?: ReadonlySet<EditorHiddenField>;
   readOnly: boolean;
+  /** The saved item's urn: shows where it lands in each channel ("Sincronização"). Omitted while creating. */
+  syncUrn?: string;
 }
 
 /** The frontmatter strip — name/description/version/scope — for entity tabs (Skill/Agent/Instruction) in EditorPanel. */
-export function PropertiesForm({ entity, onChange, hiddenFields, readOnly }: PropertiesFormProps): React.ReactElement {
+export function PropertiesForm({ entity, onChange, hiddenFields, readOnly, syncUrn }: PropertiesFormProps): React.ReactElement {
   const activeWorkspace = useActiveWorkspace();
   // A workspace entity always belongs to the open workspace — at Início there is none to pick.
   const activeWorkspaceId = activeWorkspace.data?.id;
@@ -123,6 +126,7 @@ export function PropertiesForm({ entity, onChange, hiddenFields, readOnly }: Pro
           )}
         </Box>
       )}
+      {syncUrn !== undefined && <ChannelSyncSection urn={syncUrn} />}
     </Stack>
   );
 }

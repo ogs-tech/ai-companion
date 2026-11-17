@@ -30,13 +30,13 @@ test.describe('Control panel › layout', () => {
     await expect(page.getByTestId('control-panel-search')).toBeVisible();
     await page.getByTestId('control-panel-collapse').click();
     await expect(page.getByTestId('control-panel-search')).toBeHidden();
-    await expect(page.getByTestId('tree-skill-deploy-checklist')).toBeHidden();
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeHidden();
     await expect(page.getByTestId('control-panel-footer')).toBeHidden();
     await expect(page.getByTestId('control-panel-count')).toBeVisible();
 
     await page.getByTestId('control-panel-collapse').click();
     await expect(page.getByTestId('control-panel-search')).toBeVisible();
-    await expect(page.getByTestId('tree-skill-deploy-checklist')).toBeVisible();
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
     await expect(page.getByTestId('control-panel-footer')).toBeVisible();
   });
 

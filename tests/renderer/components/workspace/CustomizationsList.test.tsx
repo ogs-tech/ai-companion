@@ -9,14 +9,21 @@ const source = { kind: 'workspace' as const };
 const localSkill = { urn: 'urn:skill:deploy', kind: 'skill', name: 'deploy', description: 'Ship it', scopes: ['workspace'], scopeId: 'w1', metadata, source, content: '' };
 const globalSkill = { urn: 'urn:skill:lint', kind: 'skill', name: 'lint', description: 'Style rules', scopes: ['personal'], metadata, source, content: '' };
 const localAgent = { urn: 'urn:agent:reviewer', kind: 'agent', name: 'reviewer', description: 'Reviews PRs', scopes: ['workspace'], scopeId: 'w1', metadata, source, systemPrompt: '' };
-const hook = { id: 'h1', event: 'PreToolUse', handler: { type: 'command', command: 'echo hi' }, source };
+const hook = { id: 'h1', event: 'PreToolUse', handler: { type: 'command', command: 'echo hi' }, enabled: true, source };
 const personalInstruction = { urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: 'House rules', scopes: ['personal'], metadata, source, content: '# rules' };
+const server = (name: string, enabled = true) => ({ id: `${name}-id`, name, def: {}, scope: 'global', source, enabled });
+const check = (id: string, urn: string, channel: string) => ({ id, category: 'merge-entry', severity: 'error', title: 't', entityUrn: urn, channel, observedAt: '' });
 
+/** Row test id: `tree-row-<origin>:<folder alias>:<identity>`. */
+const row = (origin: 'local' | 'global' | 'detected', identity: string, alias = ''): string => `tree-row-${origin}:${alias}:${identity}`;
+
+type Handler = (method: string, params?: unknown) => unknown;
 let call: CallSpy;
-beforeEach(() => {
-  window.localStorage.clear();
-  call = mockApi();
-  call.mockImplementation(async (method: string) => {
+const respond = (overrides: Record<string, unknown> = {}, fallback?: Handler): void => {
+  call.mockImplementation(async (method: string, params?: unknown) => {
+    if (method in overrides) return ok(overrides[method]);
+    const fromFallback = fallback?.(method, params);
+    if (fromFallback !== undefined) return ok(fromFallback);
     if (method === 'skill.list') return ok([localSkill, globalSkill]);
     if (method === 'agent.list') return ok([localAgent]);
     if (method === 'hook.list') return ok([hook]);
@@ -24,6 +31,11 @@ beforeEach(() => {
     if (method === 'instruction.list') return ok([personalInstruction]);
     return ok([]);
   });
+};
+beforeEach(() => {
+  window.localStorage.clear();
+  call = mockApi();
+  respond();
 });
 
 const workspaceProps = (): CustomizationsListProps => ({
@@ -38,177 +50,209 @@ const workspaceProps = (): CustomizationsListProps => ({
   onNewActionForInstruction: vi.fn(),
   onOpenInherited: vi.fn(),
 });
+const homeProps = (): CustomizationsListProps => ({ ...workspaceProps(), isHome: true, localScope: undefined as never });
+const follows = (a: Element, b: Element): boolean => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 describe('CustomizationsList', () => {
-  it('in a workspace, lists local items first and Global ones under their own read-only section', async () => {
+  it('in a workspace, splits Workspace and a collapsed, read-only Global section, each grouped by type', async () => {
+    const user = userEvent.setup();
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    const local = await screen.findByTestId(row('local', 'urn:skill:deploy'));
+    const workspaceSection = screen.getByTestId('control-panel-section-local');
+    const globalSection = screen.getByTestId('control-panel-section-global');
+    expect(workspaceSection).toHaveTextContent('Workspace');
+    expect(globalSection).toHaveTextContent('Global');
+    expect(follows(workspaceSection, screen.getByTestId('tree-group-skill')) && follows(screen.getByTestId('tree-group-skill'), local)).toBe(true);
+    // Global starts closed: the workspace's own items stay in view.
+    await waitFor(() => expect(screen.getByTestId(row('global', 'urn:skill:lint'))).not.toBeVisible());
+    await user.click(globalSection);
+    const global = screen.getByTestId(row('global', 'urn:skill:lint'));
+    expect(global).toBeVisible();
+    expect(follows(globalSection, screen.getByTestId('tree-group-global-skill')) && follows(screen.getByTestId('tree-group-global-skill'), global)).toBe(true);
+    // Hooks have no workspace scoping, so they are Global's; MCP/Hooks are their own groups (no "Integrações").
+    expect(screen.getByTestId('tree-group-global-hook')).toHaveTextContent('Hooks');
+    expect(screen.getByTestId(row('global', 'urn:hook:h1'))).toBeInTheDocument();
+    expect(screen.queryByText('Integrações')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('row-tag-global')).not.toBeInTheDocument();
+    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent(/itens, 3 do Global/);
+  });
+
+  it('puts each section’s Instructions row right under it, not inside a group', async () => {
+    const user = userEvent.setup();
+    renderWithShell(<CustomizationsList {...workspaceProps()} seedWorkspaceInstruction={() => ({ ...personalInstruction, name: 'acme', scopes: ['workspace'], scopeId: 'w1' }) as never} />);
+    const own = await screen.findByTestId('workspace-instruction-row');
+    expect(own).toHaveTextContent('Instructions');
+    expect(screen.queryByTestId('tree-group-instruction')).not.toBeInTheDocument();
+    expect(follows(screen.getByTestId('control-panel-section-local'), own) && follows(own, screen.getByTestId('tree-group-skill'))).toBe(true);
+    await user.click(await screen.findByTestId('control-panel-section-global'));
+    const inherited = screen.getByTestId('inherited-instruction-row');
+    expect(inherited).toHaveTextContent('Instructions');
+    expect(follows(screen.getByTestId('control-panel-section-global'), inherited) && follows(inherited, screen.getByTestId('tree-group-global-skill'))).toBe(true);
+  });
+
+  it('hides the Global section when a search leaves nothing in it, and brings it back when cleared', async () => {
+    const user = userEvent.setup();
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    await screen.findByTestId('control-panel-section-global');
+    await user.type(screen.getByTestId('control-panel-search'), 'deploy');
+    await waitFor(() => expect(screen.queryByTestId('control-panel-section-global')).not.toBeInTheDocument());
+    await user.click(screen.getByTestId('control-panel-search-clear'));
+    expect(await screen.findByTestId('control-panel-section-global')).toBeInTheDocument();
+  });
+
+  it('at Início: no sections, the Instructions row, then the type groups in fixed order', async () => {
+    respond({ 'mcp.list': [server('ctx')], 'plugin.list': [{ id: 'kit', scope: 'personal', origin: 'imported', enabled: true }] });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    await screen.findByTestId(row('local', 'mcp:ctx-id'));
+    expect(screen.queryByTestId('control-panel-section-local')).not.toBeInTheDocument();
+    const ids = screen.getAllByTestId(/^tree-group-(instruction|skill|agent|mcp|hook|plugin)$/).map((el) => el.dataset['testid']);
+    expect(ids).toEqual(['tree-group-skill', 'tree-group-agent', 'tree-group-mcp', 'tree-group-hook', 'tree-group-plugin']);
+    expect(follows(screen.getByTestId('personal-instruction-row'), screen.getByTestId('tree-group-skill'))).toBe(true);
+  });
+
+  it('opening a Global skill calls onOpenInherited', async () => {
     const user = userEvent.setup();
     const props = workspaceProps();
     renderWithShell(<CustomizationsList {...props} />);
-
-    expect(await screen.findByTestId('tree-skill-deploy')).toBeVisible();
-    expect(screen.queryByTestId('tree-skill-lint')).not.toBeInTheDocument();
-    expect(screen.getByTestId('control-panel-section-local')).toHaveTextContent('Workspace');
-    expect(screen.getByTestId('control-panel-section-global')).toHaveTextContent('Global');
-    expect(screen.queryByTestId('origin-meta-global')).not.toBeInTheDocument();
-    // Global's section starts closed: the workspace's own items stay in view.
-    await waitFor(() => expect(screen.getByTestId('tree-inherited-skill-lint')).not.toBeVisible());
-
-    await user.click(screen.getByTestId('control-panel-section-global'));
-    expect(screen.getByTestId('tree-inherited-skill-lint')).toBeVisible();
-    await user.click(screen.getByTestId('tree-inherited-skill-lint'));
+    await user.click(await screen.findByTestId('control-panel-section-global'));
+    await user.click(screen.getByTestId(row('global', 'urn:skill:lint')));
     expect(props.onOpenInherited).toHaveBeenCalledWith(globalSkill, 'skill');
     expect(props.onEditEntity).not.toHaveBeenCalled();
-    // No delete affordance on an inherited row.
-    expect(screen.queryByTestId('tree-skill-delete-lint')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId(row('local', 'urn:skill:deploy')));
+    expect(props.onEditEntity).toHaveBeenCalledWith('skill', localSkill, false);
   });
 
-  it('at Início, shows a single editable list with no section title', async () => {
-    renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
-    expect(screen.queryByTestId('control-panel-section-local')).not.toBeInTheDocument();
-    expect(await screen.findByTestId('tree-skill-deploy')).toBeInTheDocument();
-    expect(screen.getByTestId('tree-skill-lint')).toBeInTheDocument();
-  });
-
-  it('searches name and description across both scopes', async () => {
-    const user = userEvent.setup();
-    renderWithShell(<CustomizationsList {...workspaceProps()} />);
-    await screen.findByTestId('tree-skill-deploy');
-
-    // By description, hitting only the Global skill.
-    await user.type(screen.getByTestId('control-panel-search'), 'style');
-    await waitFor(() => expect(screen.getByTestId('tree-inherited-skill-lint')).toBeVisible());
-    expect(screen.queryByTestId('tree-skill-deploy')).not.toBeInTheDocument();
-
-    // By name, hitting only the local one.
-    await user.clear(screen.getByTestId('control-panel-search'));
-    await user.type(screen.getByTestId('control-panel-search'), 'DEPLOY');
-    expect(await screen.findByTestId('tree-skill-deploy')).toBeVisible();
-    expect(screen.queryByTestId('tree-inherited-skill-lint')).not.toBeInTheDocument();
-  });
-
-  it('has no origin filter: the search is the only control, and Skills/Agents are always listed', async () => {
-    renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
-    await screen.findByTestId('tree-skill-deploy');
+  it('Início lists no Global tag', async () => {
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    expect(await screen.findByTestId(row('local', 'urn:skill:lint'))).toBeInTheDocument();
+    expect(screen.getByTestId(row('local', 'urn:skill:deploy'))).toBeInTheDocument();
     expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
-    expect(screen.queryByTestId('control-panel-origin')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('control-panel-origin-chip')).not.toBeInTheDocument();
-    expect(screen.getByTestId('tree-subgroup-type-local-agent')).toHaveTextContent('Agents');
+    expect(screen.queryByTestId('control-panel-section-global')).not.toBeInTheDocument();
+    expect(screen.getByTestId('control-panel-footer')).not.toHaveTextContent('Global');
   });
 
-  it('keeps the Início section collapsed but counted, toggles it, and a search reopens it', async () => {
+  it('searches name and description, and counts "n de N itens"', async () => {
     const user = userEvent.setup();
     renderWithShell(<CustomizationsList {...workspaceProps()} />);
-    await screen.findByTestId('tree-inherited-skill-lint');
-    await waitFor(() => expect(screen.getByTestId('tree-inherited-skill-lint')).not.toBeVisible());
-    expect(screen.getByTestId('control-panel-section-global')).toHaveTextContent(/\d+/);
-
-    await user.click(screen.getByTestId('control-panel-section-global'));
-    expect(screen.getByTestId('tree-inherited-skill-lint')).toBeVisible();
-    await user.click(screen.getByTestId('control-panel-section-global'));
-    await waitFor(() => expect(screen.getByTestId('tree-inherited-skill-lint')).not.toBeVisible());
-
-    await user.type(screen.getByTestId('control-panel-search'), 'lint');
-    expect(await screen.findByTestId('tree-inherited-skill-lint')).toBeVisible();
+    await screen.findByTestId(row('local', 'urn:skill:deploy'));
+    await user.type(screen.getByTestId('control-panel-search'), 'style');
+    expect(await screen.findByTestId(row('global', 'urn:skill:lint'))).toBeVisible();
+    expect(screen.queryByTestId(row('local', 'urn:skill:deploy'))).not.toBeInTheDocument();
+    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent('1 de 5 itens');
   });
 
-  it('hides the Início section when a filter leaves nothing from it, and brings it back when cleared', async () => {
+  it('selecting a chip filters rows and shows "n de N itens"', async () => {
     const user = userEvent.setup();
-    renderWithShell(<CustomizationsList {...workspaceProps()} />);
-    await screen.findByTestId('tree-inherited-skill-lint');
+    respond({ 'mcp.list': [server('on'), server('off', false)] });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    await screen.findByTestId(row('local', 'mcp:off-id'));
+    expect(screen.getByTestId('chip-disabled')).toHaveTextContent('Desativados 1');
+    await user.click(screen.getByTestId('chip-disabled'));
+    expect(screen.getByTestId('chip-disabled')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId(row('local', 'mcp:off-id'))).toBeVisible();
+    expect(screen.queryByTestId(row('local', 'mcp:on-id'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tree-group-skill')).not.toBeInTheDocument();
+    // 2 skills + 1 agent + 1 hook + 2 MCP + the saved personal instruction.
+    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent('1 de 7 itens');
+  });
 
+  it('a chip with zero matches is disabled', async () => {
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    await screen.findByTestId(row('local', 'urn:skill:deploy'));
+    expect(screen.getByTestId('chip-problems')).toBeDisabled();
+    expect(screen.getByTestId('chip-detected')).toBeDisabled();
+    expect(screen.getByTestId('chip-all')).toBeEnabled();
+    expect(screen.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('chip stays selected when search empties it and Limpar filtros resets both', async () => {
+    const user = userEvent.setup();
+    respond({ 'mcp.list': [server('off', false)] });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    await screen.findByTestId(row('local', 'mcp:off-id'));
+    await user.click(screen.getByTestId('chip-disabled'));
     await user.type(screen.getByTestId('control-panel-search'), 'deploy');
-    await waitFor(() => expect(screen.getByTestId('control-panel-section-global')).not.toBeVisible());
+    expect(screen.getByTestId('chip-disabled')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('chip-disabled')).toBeDisabled();
+    expect(screen.getByTestId('control-panel-empty')).toHaveTextContent('deploy');
+    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent('0 de');
 
-    await user.click(screen.getByTestId('control-panel-search-clear'));
-    await waitFor(() => expect(screen.getByTestId('control-panel-section-global')).toBeVisible());
+    await user.click(screen.getByTestId('control-panel-clear'));
+    expect(screen.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('control-panel-search')).toHaveValue('');
+    expect(screen.getByTestId(row('local', 'urn:skill:deploy'))).toBeInTheDocument();
+    expect(screen.queryByTestId('control-panel-empty')).not.toBeInTheDocument();
   });
 
-  it('lists a plugin once, in its own Plugins group outside Integrações, and keeps what it provides out of the type groups', async () => {
+  it('disabled hook row shows desativado', async () => {
+    respond({ 'hook.list': [{ ...hook, enabled: false }] });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    expect(await screen.findByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('desativado');
+  });
+
+  it('disabled MCP row shows desativado', async () => {
+    respond({ 'mcp.list': [server('off', false)] });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    expect(await screen.findByTestId(row('local', 'mcp:off-id'))).toHaveTextContent('desativado');
+  });
+
+  it('problem beats desativado on the same row, and groups count failing items once', async () => {
+    respond({
+      'hook.list': [{ ...hook, enabled: false }, { ...hook, id: 'h2' }, { ...hook, id: 'h3' }],
+      'health.getReport': { checks: [check('1', 'urn:hook:h1', 'claude'), check('2', 'urn:hook:h1', 'cursor'), check('3', 'urn:hook:h2', 'cursor')] },
+    });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    await waitFor(() => expect(screen.getByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('⚠ Claude · Cursor'));
+    expect(screen.getByTestId(row('local', 'urn:hook:h1'))).not.toHaveTextContent('desativado');
+    expect(screen.getByTestId(row('local', 'urn:hook:h2'))).toHaveTextContent('⚠ Cursor');
+    expect(screen.getByTestId(row('local', 'urn:hook:h3'))).not.toHaveTextContent('⚠');
+    expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('2 ⚠');
+    expect(screen.getByTestId('chip-problems')).toHaveTextContent('⚠ Problemas 2');
+  });
+
+  it('multi-folder rows show the folder tag', async () => {
+    const workspace = { id: 'w1', name: 'Acme', rootPath: '/r/api', extraFolders: ['/r/web'], createdAt: '' };
+    respond({ 'workspace.getActive': workspace, 'skill.list': [{ ...localSkill, folder: '/r/web' }] });
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    const tagged = await screen.findByTestId(row('local', 'urn:skill:deploy', 'web'));
+    expect(within(tagged).getByTestId('row-folder')).toHaveTextContent('web');
+  });
+
+  it('lists a plugin once and keeps what it provides out of the type groups', async () => {
     const plugin = { kind: 'plugin' as const, pluginId: 'dev-kit@market' };
-    const pluginSkill = { ...localSkill, urn: 'urn:skill:scaffold', name: 'scaffold', source: plugin };
-    const pluginHook = { ...hook, id: 'h2', source: plugin };
-    call.mockImplementation(async (method: string) => {
-      if (method === 'skill.list') return ok([localSkill, pluginSkill]);
-      if (method === 'hook.list') return ok([hook, pluginHook]);
-      if (method === 'plugin.list') return ok([{ id: 'dev-kit@market', scope: 'personal', origin: 'imported', enabled: true }]);
-      if (method === 'instruction.list') return ok([]);
-      return ok([]);
+    respond({
+      'skill.list': [localSkill, { ...localSkill, urn: 'urn:skill:scaffold', name: 'scaffold', source: plugin }],
+      'hook.list': [hook, { ...hook, id: 'h2', source: plugin }],
+      'plugin.list': [{ id: 'dev-kit@market', scope: 'personal', origin: 'imported', enabled: true }],
+      'instruction.list': [],
     });
-    renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
-
-    expect(await screen.findByTestId('tree-skill-deploy')).toBeVisible();
-    expect(await screen.findByTestId('tree-hook-h1')).toBeVisible();
-    expect(screen.getByTestId('tree-subgroup-type-local-skill')).toHaveTextContent('Skills');
-    expect(screen.getByTestId('tree-subgroup-type-local-integrations')).toHaveTextContent('Integrações');
-    expect(screen.getByTestId('tree-subgroup-type-local-agent')).toHaveTextContent('Agents');
-    // No origin-based "Plugins" block, and nothing a plugin ships is listed outside the plugin's own detail.
-    expect(screen.queryByTestId('tree-subgroup-plugins-local')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('tree-skill-scaffold')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('tree-hook-h2')).not.toBeInTheDocument();
-    // Integrações holds Hooks and MCP only; Plugins is a group of its own, and the plugin appears exactly once.
-    expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('Hooks');
-    expect(screen.getByTestId('tree-group-mcp')).toHaveTextContent('MCP');
-    expect(await screen.findByTestId('tree-subgroup-type-local-plugin')).toHaveTextContent('Plugins');
-    expect(await screen.findAllByTestId('tree-plugin-dev-kit@market')).toHaveLength(1);
-    expect(screen.queryByTestId('tree-group-plugin')).not.toBeInTheDocument();
-    // The group headers are rows, not containers: prove "outside Integrações" by order and indent.
-    const integrationsHeader = screen.getByTestId('tree-subgroup-type-local-integrations');
-    const pluginsHeader = screen.getByTestId('tree-subgroup-type-local-plugin');
-    const pluginRow = screen.getByTestId('tree-plugin-dev-kit@market');
-    const follows = (a: Element, b: Element): boolean => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-    expect(follows(screen.getByTestId('tree-group-mcp'), pluginsHeader)).toBe(true); // after Integrações' last folder…
-    expect(follows(pluginsHeader, pluginRow)).toBe(true); // …and the plugin sits under its own header
-    const indent = (el: Element): number => parseFloat(getComputedStyle(el).paddingLeft);
-    expect(indent(pluginsHeader)).toBe(indent(integrationsHeader)); // a sibling of Integrações, not a child
-    expect(indent(pluginRow)).toBeGreaterThan(indent(pluginsHeader));
-    expect(screen.queryByTestId('detail-drawer-plugin')).not.toBeInTheDocument();
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    expect(await screen.findAllByTestId(row('local', 'urn:plugin:dev-kit@market'))).toHaveLength(1);
+    expect(screen.queryByTestId(row('local', 'urn:skill:scaffold'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(row('local', 'urn:hook:h2'))).not.toBeInTheDocument();
   });
 
-  it('sums the items with a problem up the folders, counting an item once however many channels fail', async () => {
-    call.mockImplementation(async (method: string) => {
-      if (method === 'skill.list') return ok([localSkill]);
-      if (method === 'hook.list') return ok([hook, { ...hook, id: 'h2' }, { ...hook, id: 'h3' }]);
-      if (method === 'instruction.list') return ok([]);
-      if (method === 'settings.get') return ok({ adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } });
-      if (method === 'health.getReport') {
-        const check = (id: string, urn: string, channel: string) => ({ id, category: 'merge-entry', severity: 'error', title: 't', entityUrn: urn, channel, observedAt: '' });
-        return ok({ checks: [check('1', 'urn:hook:h1', 'claude'), check('2', 'urn:hook:h1', 'cursor'), check('3', 'urn:hook:h2', 'cursor')] });
-      }
-      return ok([]);
-    });
-    renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
-
-    await waitFor(() => expect(screen.getByTestId('tree-hook-h1')).toHaveTextContent('⚠ Claude · Cursor'));
-    expect(screen.getByTestId('tree-hook-h2')).toHaveTextContent('⚠ Cursor');
-    expect(screen.getByTestId('tree-hook-h3')).not.toHaveTextContent('⚠');
-    // Hooks: 2 items fail (h1 in both channels counts once).
-    await waitFor(() => expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('2 ⚠'));
-    // Integrações speaks per channel: Claude has 1 failing item, Cursor 2; the healthy Skills group shows bare marks.
-    const integrations = within(screen.getByTestId('tree-subgroup-type-local-integrations'));
-    await waitFor(() => expect(integrations.getByTestId('channel-mark-claude')).toHaveTextContent('⚠ 1'));
-    expect(integrations.getByTestId('channel-mark-cursor')).toHaveTextContent('⚠ 2');
-    const skills = within(screen.getByTestId('tree-subgroup-type-local-skill'));
-    expect(skills.getByTestId('channel-mark-claude')).toHaveAttribute('data-ok');
-    expect(skills.getByTestId('channel-mark-cursor')).toHaveAttribute('data-ok');
-    expect(skills.queryByTestId('channel-mark-lmstudio')).not.toBeInTheDocument();
+  it('keeps Skills and Agents as the create affordance when empty', async () => {
+    respond({ 'skill.list': [], 'agent.list': [] });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    expect(await screen.findByTestId('tree-group-empty-skill')).toHaveTextContent('Nada aqui ainda');
+    expect(screen.getByTestId('tree-group-empty-agent')).toBeInTheDocument();
   });
 
-  it('shows an empty state when nothing matches', async () => {
+  it('remembers a collapsed group per scope and section', async () => {
     const user = userEvent.setup();
     renderWithShell(<CustomizationsList {...workspaceProps()} />);
-    await screen.findByTestId('tree-skill-deploy');
-    await user.type(screen.getByTestId('control-panel-search'), 'zzz-nothing');
-    expect(await screen.findByTestId('control-panel-empty')).toHaveTextContent('zzz-nothing');
+    await user.click(await screen.findByTestId('tree-group-skill'));
+    await waitFor(() => expect(screen.queryByTestId(row('local', 'urn:skill:deploy'))).not.toBeInTheDocument());
+    expect(window.localStorage.getItem('tree-group:w1:local:skill')).not.toBeNull();
   });
 
-  it('"+" offers a Skill/Agent/Instruction/MCP/plugin menu, and no type chips exist', async () => {
+  it('"+" offers a Skill/Agent/Instruction/MCP/plugin menu', async () => {
     const user = userEvent.setup();
     const props = workspaceProps();
     props.seedWorkspaceInstruction = () => ({ ...personalInstruction, name: 'acme', scopes: ['workspace'], scopeId: 'w1' }) as never;
     renderWithShell(<CustomizationsList {...props} />);
-    await screen.findByTestId('tree-skill-deploy');
-    expect(screen.queryByTestId('control-panel-chip-all')).not.toBeInTheDocument();
-
+    await screen.findByTestId(row('local', 'urn:skill:deploy'));
     await user.click(screen.getByTestId('control-panel-new'));
     expect(await screen.findByTestId('control-panel-new-skill')).toBeInTheDocument();
     expect(screen.getByTestId('control-panel-new-agent')).toBeInTheDocument();
@@ -220,10 +264,20 @@ describe('CustomizationsList', () => {
 
   it('at Início, does not offer a second personal instruction once one exists', async () => {
     const user = userEvent.setup();
-    renderWithShell(<CustomizationsList {...workspaceProps()} isHome localScope={undefined as never} />);
+    renderWithShell(<CustomizationsList {...homeProps()} />);
     await screen.findByTestId('personal-instruction-row');
     await user.click(screen.getByTestId('control-panel-new'));
     expect(await screen.findByTestId('control-panel-new-skill')).toBeInTheDocument();
     expect(screen.queryByTestId('control-panel-new-instruction')).not.toBeInTheDocument();
+  });
+
+  it('the Global personal instruction opens read-only in a workspace', async () => {
+    const user = userEvent.setup();
+    const props = workspaceProps();
+    renderWithShell(<CustomizationsList {...props} />);
+    await user.click(await screen.findByTestId('control-panel-section-global'));
+    const inherited = screen.getByTestId('inherited-instruction-row');
+    await user.click(inherited);
+    expect(props.onOpenInherited).toHaveBeenCalledWith(personalInstruction, 'instruction');
   });
 });

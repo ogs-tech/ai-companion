@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Eye, ScrollText, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
 import { SyncDot } from '../ds/SyncDot.js';
-import { ChannelMarks } from '../ds/ChannelMarks.js';
+import { RowBadgeSlot, RowLabel } from './RowBadgeSlot.js';
+import type { TreeItem } from '../../lib/customization-tree.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
@@ -93,6 +94,8 @@ interface InstructionTreeRowProps {
    * starts an empty one.
    */
   detected?: DetectedEntity | undefined;
+  /** The row in the Customizações tree: its label (with the folder tag) and trailing tag. */
+  item?: TreeItem;
 }
 
 /**
@@ -101,7 +104,7 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected, item }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const invalidate = useInvalidateInstructions();
@@ -152,9 +155,9 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         testId={rowTestId}
         pl={1.5 + 2.5 + depth * 2}
         glyph={ScrollText}
-        primary={label ?? copy.label}
+        primary={item ? <RowLabel item={item} {...(label !== undefined ? { label } : {})} /> : (label ?? copy.label)}
         labelVariant="mono"
-        muted={instruction == null && offered === undefined}
+        muted={(instruction == null && offered === undefined) || item?.origin === 'global'}
         onClick={() => onOpen(instruction ?? seed(), !instruction)}
         onContextMenu={(e) => {
           if (!instruction) return;
@@ -164,7 +167,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
           instruction ? (
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
               <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
-              <ChannelMarks scope={{ urn: instruction.urn }} />
+              {item && <RowBadgeSlot item={item} />}
             </Stack>
           ) : offered ? (
             <DetectedBadge detected={offered} onApply={() => apply(offered)} busy={importer.isPending} />

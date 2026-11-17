@@ -4,6 +4,7 @@ import { InstructionTreeRow } from '../../../../src/renderer/components/workspac
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import type { Instruction } from '../../../../src/shared/entity.js';
 import type { DetectedEntity } from '../../../../src/shared/detected.js';
+import { treeItem } from './tree-item-fixture.js';
 
 function instruction(overrides: Partial<Instruction> = {}): Instruction {
   return {
@@ -169,41 +170,26 @@ describe('InstructionTreeRow status', () => {
     expect(onOpen).toHaveBeenCalledWith(seed, true);
   });
 
-  it('stays silent when the instruction is healthy in every channel', async () => {
-    call.mockImplementation(async (method: string) => (method === 'health.getReport' ? ok({ checks: [] }) : ok(undefined)));
-    renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
-    await vi.waitFor(() => expect(call).toHaveBeenCalledWith('health.getReport', expect.anything()));
+  it('stays silent when the instruction is healthy: no mark, no tag', () => {
+    const value = instruction();
+    const item = treeItem({ kind: 'instruction', value, placement: 'personal' }, { urn: value.urn, name: 'Instructions' });
+    renderWithShell(<InstructionTreeRow kind="personal" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
+    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('Instructions');
     expect(screen.queryByTestId('channel-warning')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-problem]')).toBeNull();
     expect(screen.queryByTestId('sync-dot')).not.toBeInTheDocument();
   });
 
-  it('shows a bare mark for each integrated channel that is in sync, and leaves disabled channels out', async () => {
-    call.mockImplementation(async (method: string) => {
-      if (method === 'settings.get') return ok({ adapters: { claude: { enabled: true }, cursor: { enabled: false }, lmstudio: { enabled: true } } });
-      return method === 'health.getReport' ? ok({ checks: [] }) : ok(undefined);
-    });
-    renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
-    expect(await screen.findByTestId('channel-mark-claude')).toHaveAttribute('data-ok');
-    expect(screen.queryByTestId('channel-mark-cursor')).not.toBeInTheDocument();
-    // LM Studio is run-only: there is nothing to sync to it.
-    expect(screen.queryByTestId('channel-mark-lmstudio')).not.toBeInTheDocument();
+  it('flags only the channel that fails, with a warning and its name', () => {
+    const value = instruction();
+    const item = treeItem({ kind: 'instruction', value, placement: 'personal' }, { urn: value.urn, name: 'Instructions', problems: ['cursor'] });
+    renderWithShell(<InstructionTreeRow kind="personal" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
+    expect(screen.getByTestId('channel-warning')).toHaveAttribute('aria-label', 'Problema em Cursor. Abrir diagnóstico');
   });
 
-  it('flags only the channel that fails, with a warning and its name', async () => {
-    call.mockImplementation(async (method: string) =>
-      method === 'settings.get'
-        ? ok({ adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } })
-        : method === 'health.getReport'
-        ? ok({ checks: [
-            { id: 'a', category: 'symlink', severity: 'ok', title: 't', entityUrn: 'urn:instruction:default', channel: 'claude', observedAt: '' },
-            { id: 'b', category: 'generated-file', severity: 'error', title: 't', entityUrn: 'urn:instruction:default', channel: 'cursor', observedAt: '' },
-          ] })
-        : ok(undefined),
-    );
-    renderWithShell(<InstructionTreeRow kind="personal" instruction={instruction()} seed={() => instruction()} onOpen={vi.fn()} />);
-    expect(await screen.findByTestId('channel-mark-cursor')).toHaveAttribute('data-problem');
-    expect(screen.getByTestId('channel-mark-cursor')).toHaveAttribute('aria-label', 'Problema em Cursor. Abrir diagnóstico');
-    expect(screen.getByTestId('channel-mark-claude')).toHaveAttribute('data-ok');
+  it('tags a folder instruction with its folder', () => {
+    const value = instruction({ scopes: ['workspace'], scopeId: 'w1', folder: '/r/api' });
+    const item = treeItem({ kind: 'instruction', value, placement: 'folder', folder: '/r/api' }, { urn: value.urn, name: 'Instructions', folderAlias: 'api' });
+    renderWithShell(<InstructionTreeRow kind="folder" testId="folder-instruction-row-api" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
+    expect(screen.getByTestId('folder-instruction-row-api')).toHaveTextContent('Instructions · api');
   });
 });
