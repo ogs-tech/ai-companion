@@ -66,7 +66,7 @@ describe('GeneratedFileCollector', () => {
 
   it.each([
     ['ok', 'installed'],
-    ['foreign', 'draft'],
+    ['foreign', 'error'],
     ['missing', 'error'],
     ['drift', 'error'],
   ] as const)('marks %s as outcome %s', async (state, outcome) => {

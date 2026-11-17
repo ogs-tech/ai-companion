@@ -4,6 +4,9 @@ export type Severity = 'ok' | 'warning' | 'error';
 
 import type { CustomizationStatus } from './customization-status.js';
 
+/** A health check's verdict for its customization: a check never yields `draft`. */
+export type CheckOutcome = Exclude<CustomizationStatus, 'draft'>;
+
 export type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry' | 'plugin-entity';
 
 export interface HealthCheck {
@@ -20,11 +23,11 @@ export interface HealthCheck {
   /** The harness (channel) this check concerns. Absent for checks that are not channel-specific. */
   channel?: ChannelId;
   /**
-   * What this check means for its customization's status, set by the collector (the only layer that knows a
-   * destination is blocked by a file the app doesn't own — `draft` — rather than missing or stale — `error`).
-   * Set whenever `entityUrn` is.
+   * What this check means for its customization's status, set by the collector. Any non-ok destination —
+   * missing, stale, or blocked by a file the app doesn't own (a conflict) — is an `error`; `draft` comes only
+   * from detection and `enabled: false`, never from a check. Set whenever `entityUrn` is.
    */
-  outcome?: CustomizationStatus;
+  outcome?: CheckOutcome;
   /** Actionable hint, e.g. "Run /mcp to authenticate". */
   remediation?: string;
   /** ISO timestamp, stamped by the service via ClockPort. */

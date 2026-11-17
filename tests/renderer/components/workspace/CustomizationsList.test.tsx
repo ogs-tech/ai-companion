@@ -206,7 +206,7 @@ describe('CustomizationsList', () => {
           'urn:hook:h1': error('claude', 'cursor'),
           'urn:hook:h2': error('cursor'),
           'urn:hook:h3': { status: 'installed', channels: { claude: { status: 'installed' } } },
-          'urn:hook:h4': { status: 'draft', reason: 'foreign', channels: { cursor: { status: 'draft', reason: 'foreign' } } },
+          'urn:hook:h4': { status: 'draft', reason: 'detected', channels: { cursor: { status: 'draft', reason: 'detected' } } },
         },
       },
     });
@@ -214,7 +214,7 @@ describe('CustomizationsList', () => {
     await waitFor(() => expect(screen.getByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('⚠ Claude · Cursor'));
     expect(screen.getByTestId(row('local', 'urn:hook:h2'))).toHaveTextContent('⚠ Cursor');
     expect(screen.getByTestId(row('local', 'urn:hook:h3'))).not.toHaveTextContent('⚠');
-    expect(screen.getByTestId(row('local', 'urn:hook:h4'))).toHaveTextContent('draft · conflito Cursor');
+    expect(screen.getByTestId(row('local', 'urn:hook:h4'))).toHaveTextContent('draft');
     expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('2 ⚠');
     expect(screen.getByTestId('chip-error')).toHaveTextContent('Com erro 2');
     expect(screen.getByTestId('chip-installed')).toHaveTextContent('Instalado 1');

@@ -67,28 +67,24 @@ describe('CustomizationStatusService', () => {
     });
   });
 
-  it('makes a destination blocked by a foreign file a draft on that channel', async () => {
+  it('makes a failing check (a conflict included) an error on that channel', async () => {
     const report = await make({
-      checks: [check('urn:skill:a', 'claude', 'installed'), check('urn:skill:a', 'cursor', 'draft')],
+      checks: [check('urn:skill:a', 'claude', 'installed'), check('urn:skill:a', 'cursor', 'error')],
     }).getReport();
     expect(report.items['urn:skill:a']).toEqual({
-      status: 'draft',
-      reason: 'foreign',
-      channels: { claude: { status: 'installed' }, cursor: { status: 'draft', reason: 'foreign' } },
+      status: 'error',
+      channels: { claude: { status: 'installed' }, cursor: { status: 'error' } },
     });
   });
 
   it('ranks error over draft over installed, per channel and overall', async () => {
     const report = await make({
-      checks: [
-        check('urn:skill:a', 'claude', 'error'),
-        check('urn:skill:a', 'cursor', 'draft'),
-        check('urn:skill:a', 'cursor', 'installed'),
-      ],
+      checks: [check('urn:skill:a', 'claude', 'error'), check('urn:skill:a', 'cursor', 'installed')],
+      detected: [detectedSkill('a', 'cursor')],
     }).getReport();
     expect(report.items['urn:skill:a']).toEqual({
       status: 'error',
-      channels: { claude: { status: 'error' }, cursor: { status: 'draft', reason: 'foreign' } },
+      channels: { claude: { status: 'error' }, cursor: { status: 'draft', reason: 'detected' } },
     });
   });
 

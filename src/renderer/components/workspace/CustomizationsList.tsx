@@ -71,7 +71,7 @@ type NewTarget = EntityKind | 'instruction' | 'mcp' | 'plugin';
  * Every customization of the current scope: its instruction row(s) ("Instructions") first, then one group
  * per type (Skills, Agents, MCP, Hooks, Plugins). Inside a workspace the tree splits into a Workspace section and a read-only
  * Global section (Início's items, collapsed by default). Rows show only the exception — `⚠ <canais>` (error) or
- * `draft · importar | conflito | desativado` — from `customization.status`; the chips (Todos · Instalado · Draft ·
+ * `draft · importar | desativado` — from `customization.status`; the chips (Todos · Instalado · Draft ·
  * Com erro, plus a channel row for the last two) filter by it and combine with the search. The tree comes
  * from one pure model (`buildCustomizationTree`), so every count equals what the list shows.
  *

@@ -40,8 +40,7 @@ const DETECTED: ChannelStatus = { status: 'draft', reason: 'detected' };
 const DISABLED: ItemStatus = { status: 'draft', reason: 'disabled', channels: {} };
 
 function checkStatus(check: HealthCheck): ChannelStatus | undefined {
-  if (check.outcome === undefined) return undefined;
-  return check.outcome === 'draft' ? { status: 'draft', reason: 'foreign' } : { status: check.outcome };
+  return check.outcome === undefined ? undefined : { status: check.outcome };
 }
 
 /** Adds one channel's verdict to an item, keeping the worse per channel and overall. */
@@ -49,7 +48,7 @@ function merge(items: Map<string, ItemStatus>, urn: string, channel: ChannelId, 
   const item = items.get(urn) ?? { status: 'installed', channels: {} };
   const current = item.channels[channel];
   const channels = { ...item.channels, [channel]: current === undefined ? verdict : worseStatus(current, verdict) };
-  // Overall: the worst channel, so an error anywhere outranks a conflict elsewhere.
+  // Overall: the worst channel, so an error anywhere outranks a draft elsewhere.
   const overall = Object.values(channels).reduce<ChannelStatus>((acc, c) => worseStatus(acc, c), { status: 'installed' });
   items.set(urn, { ...overall, channels });
 }

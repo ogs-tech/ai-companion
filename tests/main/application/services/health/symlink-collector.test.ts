@@ -72,7 +72,7 @@ describe('SymlinkCollector', () => {
 
   it.each([
     ['symlink-to-source', 'installed'],
-    ['real-file', 'draft'],
+    ['real-file', 'error'],
     ['none', 'error'],
     ['symlink-to-other', 'error'],
   ] as const)('marks %s as outcome %s', async (state, outcome) => {

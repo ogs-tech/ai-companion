@@ -1,6 +1,5 @@
-import type { HealthCheck, Severity } from '../../../../shared/health.js';
+import type { CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
 import type { Settings } from '../../../../shared/settings.js';
-import type { CustomizationStatus } from '../../../../shared/customization-status.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { Scope } from '../../ports/scope.js';
 import type { GeneratedFilePlanEntry } from '../adapter-manager.js';
@@ -51,10 +50,9 @@ function verdictFor(state: GeneratedFileState, destination: string): Verdict {
   }
 }
 
-/** A file the app didn't generate blocks the destination: sync won't overwrite it silently (draft). */
-function outcomeFor(state: GeneratedFileState): CustomizationStatus {
-  if (state === 'ok') return 'installed';
-  return state === 'foreign' ? 'draft' : 'error';
+/** Anything but ok is an error — including a conflict (a file/entry the app doesn't own blocks the destination). */
+function outcomeFor(state: GeneratedFileState): CheckOutcome {
+  return state === 'ok' ? 'installed' : 'error';
 }
 
 export class GeneratedFileCollector implements HealthCollector {

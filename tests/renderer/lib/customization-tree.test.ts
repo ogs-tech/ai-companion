@@ -84,10 +84,10 @@ function detected(name: string, opts: { kind?: 'skill' | 'agent' | 'instruction'
 
 const NONE: Record<string, ItemStatus> = {};
 const err = (...channels: ChannelId[]): ItemStatus => ({ status: 'error', channels: Object.fromEntries(channels.map((c) => [c, { status: 'error' }])) });
-const conflict = (...channels: ChannelId[]): ItemStatus => ({
+const detectedIn = (...channels: ChannelId[]): ItemStatus => ({
   status: 'draft',
-  reason: 'foreign',
-  channels: Object.fromEntries(channels.map((c) => [c, { status: 'draft', reason: 'foreign' }])),
+  reason: 'detected',
+  channels: Object.fromEntries(channels.map((c) => [c, { status: 'draft', reason: 'detected' }])),
 });
 const ok: ItemStatus = { status: 'installed', channels: { claude: { status: 'installed' } } };
 
@@ -207,7 +207,7 @@ describe('buildCustomizationTree', () => {
   });
 
   it('a status chip keeps only the items with that status and counts errors per group', () => {
-    const status = { 'urn:skill:a': err('claude'), 'urn:mcp:m': err('cursor'), 'urn:skill:b': ok, 'urn:mcp:n': conflict('cursor') };
+    const status = { 'urn:skill:a': err('claude'), 'urn:mcp:m': err('cursor'), 'urn:skill:b': ok, 'urn:mcp:n': detectedIn('cursor') };
     const skills = [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' })];
     const mcps = [mcp('m', { repoPath: '/r/app' }), mcp('n', { repoPath: '/r/app' })];
     const errors = buildCustomizationTree(input({ skills, mcps, status }), { ...WS, filter: 'error' });
@@ -224,7 +224,7 @@ describe('buildCustomizationTree', () => {
       'urn:skill:a': err('claude'),
       'urn:skill:b': err('claude', 'cursor'),
       // Error overall, but only a conflict on Cursor: it is not an error *on Cursor*.
-      'urn:skill:c': { status: 'error', channels: { claude: { status: 'error' }, cursor: { status: 'draft', reason: 'foreign' } } } satisfies ItemStatus,
+      'urn:skill:c': { status: 'error', channels: { claude: { status: 'error' }, cursor: { status: 'draft', reason: 'detected' } } } satisfies ItemStatus,
     };
     const skills = [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' }), skill('c', { ws: 'ws1' })];
     const tree = buildCustomizationTree(input({ skills, status }), { ...WS, filter: 'error', channel: 'cursor' });
@@ -322,7 +322,7 @@ describe('rowBadge', () => {
   });
   it('shows the status unless installed', () => {
     expect(rowBadge(item({ status: err('claude') }))).toBe('error');
-    expect(rowBadge(item({ origin: 'global', status: conflict('cursor') }))).toBe('draft');
+    expect(rowBadge(item({ origin: 'global', status: detectedIn('cursor') }))).toBe('draft');
     // The Global section names the origin; its rows carry no tag of their own.
     expect(rowBadge(item({ origin: 'global' }))).toBeNull();
     expect(rowBadge(item({ status: ok }))).toBeNull();

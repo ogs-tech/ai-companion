@@ -9,5 +9,5 @@ Install the app, open your first workspace and create your first skill.
 
 AIR IDE manages the AI harnesses on your machine (Claude Code, Cursor, …). Start here, then follow the area that matches what you want to do.
 
-- [Getting started](getting-started.md) — clone, install, run the app for the first time.
-- [Your first skill, end to end](first-skill-end-to-end.md) — create a skill, see it linked into Claude Code, use and edit it from a session, check its cost.
+- [Getting started](tutorials/getting-started.md) — clone, install, run the app for the first time.
+- [Your first skill, end to end](tutorials/first-skill-end-to-end.md) — create a skill, see it linked into Claude Code, use and edit it from a session, check its cost.

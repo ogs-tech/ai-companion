@@ -9,4 +9,4 @@ When something looks out of sync or broken.
 
 Every overwritten file is backed up first under `~/.air-ide/_backups/`.
 
-- [Diagnose and reset](diagnose-and-reset.md) — Diagnóstico, backups, starting over by hand.
+- [Diagnose and reset](how-to/diagnose-and-reset.md) — Diagnóstico, backups, starting over by hand.

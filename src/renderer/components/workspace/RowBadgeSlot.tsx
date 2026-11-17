@@ -1,8 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { channelsWith, isDisabled, rowBadge, type TreeItem } from '../../lib/customization-tree.js';
-import { channelNames } from '../../lib/entity-health.js';
-import { openDiagnosticsFor } from '../../lib/diagnostics-focus.js';
 
 const TAG_SX = { flexShrink: 0, fontSize: '0.6875rem', whiteSpace: 'nowrap' } as const;
 
@@ -23,52 +21,19 @@ interface RowBadgeSlotProps {
 }
 
 /**
- * The row's single trailing tag, from its status: `⚠ <canais>` (error), or `draft · <why>` — `importar` (detected),
- * `conflito <canais>` (a file the app doesn't own is in the way), `desativado`. Installed is silent.
+ * The row's single trailing tag, from its status: `⚠ <canais>` (error — a conflict with a file the app doesn't own
+ * included), or `draft · <why>` — `importar` (detected), `desativado`. Installed is silent.
  */
 export function RowBadgeSlot({ item, onImport, busy = false }: RowBadgeSlotProps): React.ReactElement | null {
   const badge = rowBadge(item);
   if (badge === null) return null;
   if (badge === 'error') return <ChannelWarning urn={item.urn} channels={channelsWith(item, 'error')} />;
-  switch (item.status?.reason) {
-    case 'disabled':
-      return (
-        <Typography component="span" data-testid="row-tag-disabled" sx={{ ...TAG_SX, color: 'text.disabled' }}>
-          draft · desativado
-        </Typography>
-      );
-    case 'foreign': {
-      const names = channelNames(channelsWith(item, 'draft'));
-      return (
-        <Box
-          component="button"
-          type="button"
-          data-testid="row-tag-conflict"
-          aria-label={`Conflito em ${names}. Abrir diagnóstico`}
-          title={`Um arquivo que o app não gerencia ocupa o destino em ${names} — abrir diagnóstico`}
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation();
-            openDiagnosticsFor(item.urn);
-          }}
-          sx={(theme) => ({
-            ...TAG_SX,
-            font: 'inherit',
-            fontSize: '0.6875rem',
-            color: theme.palette.info.main,
-            background: 'none',
-            border: 0,
-            borderRadius: `${theme.ogs.radius.xs}px`,
-            px: 0.5,
-            cursor: 'pointer',
-            '&:hover': { bgcolor: `${theme.palette.info.main}24` },
-          })}
-        >
-          draft · conflito {names}
-        </Box>
-      );
-    }
-    default:
-      break;
+  if (item.status?.reason === 'disabled') {
+    return (
+      <Typography component="span" data-testid="row-tag-disabled" sx={{ ...TAG_SX, color: 'text.disabled' }}>
+        draft · desativado
+      </Typography>
+    );
   }
   if (!importable(item) || onImport === undefined) {
     return (

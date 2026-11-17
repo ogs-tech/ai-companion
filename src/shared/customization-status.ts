@@ -3,12 +3,13 @@ import type { ChannelId } from './channel.js';
 /**
  * Where a customization stands with the channels it goes to:
  * - `installed` — every check is ok;
- * - `draft` — sync can't install it silently: a destination blocked by a file the app doesn't own
- *   (`foreign`), found in a channel's files but not imported (`detected`), or turned off (`disabled`);
- * - `error` — anything else is wrong (missing, stale, auth, runtime, unreadable).
+ * - `draft` — not meant to be installed yet: found in a channel's files but not imported (`detected`), or
+ *   turned off (`disabled`);
+ * - `error` — something is wrong: missing, stale, a conflict (a file the app doesn't own blocks a destination),
+ *   auth, runtime, unreadable.
  */
 export type CustomizationStatus = 'installed' | 'draft' | 'error';
-export type DraftReason = 'foreign' | 'detected' | 'disabled';
+export type DraftReason = 'detected' | 'disabled';
 
 export interface ChannelStatus {
   status: CustomizationStatus;
