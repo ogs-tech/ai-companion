@@ -137,17 +137,19 @@ test.describe('Customizations › lifecycle', () => {
 
     const pluginRow = page.locator('[data-testid$=":urn:plugin:demo-plugin"]');
     const greet = page.locator('[data-testid$=":urn:skill:greet"]');
-    await test.step('its skill is not in Skills; clicking the plugin lists it underneath', async () => {
-      await expect(pluginRow).toContainText('ativo');
+    await test.step('its skill is not in Skills; opening the plugin and its Skills sub-header lists it', async () => {
       await expect(greet).toHaveCount(0);
       await pluginRow.click();
+      await page.getByTestId('tree-plugin-kind-demo-plugin-skill').click();
       await expect(greet).toBeVisible();
     });
 
     await test.step('Desativar keeps the skill listed and marks it desativado', async () => {
       await pluginRow.click({ button: 'right' });
       await page.getByRole('menuitem', { name: 'Desativar' }).click();
-      await expect(pluginRow).toContainText('desativado');
+      await pluginRow.click({ button: 'right' });
+      await expect(page.getByRole('menuitem', { name: 'Ativar' })).toBeVisible();
+      await page.keyboard.press('Escape');
       await expect(greet).toBeVisible();
       await expect(greet.getByTestId('row-tag-disabled')).toHaveText('draft · desativado');
     });

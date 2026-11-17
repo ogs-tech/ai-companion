@@ -329,7 +329,15 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
           : { origin: entityOrigin(value, options) };
       out.push({
         item: makeItem(
-          { identity: urn, urn, name: value.name, folder: value.folder, entity, ...plugin },
+          {
+            // Two plugins may ship a same-named item (same urn): the plugin keeps their rows apart.
+            identity: value.source.kind === 'plugin' ? `${value.source.pluginId}:${urn}` : urn,
+            urn,
+            name: value.name,
+            folder: value.folder,
+            entity,
+            ...plugin,
+          },
           input,
           options,
         ),

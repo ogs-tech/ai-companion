@@ -31,7 +31,8 @@ const skillFile = (name: string) =>
 
 const skill = (name: string, content = 'x'): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill', enabled: true,
+  kind: 'skill',
+  enabled: true,
   name,
   description: `skill ${name}`,
   scopes: ['personal'],
@@ -45,7 +46,8 @@ const agentFile = (name: string) =>
 
 const agent = (name: string, systemPrompt = 'x'): Agent => ({
   urn: `urn:agent:${name}`,
-  kind: 'agent', enabled: true,
+  kind: 'agent',
+  enabled: true,
   name,
   description: `agent ${name}`,
   scopes: ['personal'],
@@ -117,7 +119,11 @@ describe('SkillService — provenance merging', () => {
     const fs = new InMemoryFileSystem();
     const clock = new FixedClock(FROZEN);
     const adapterManager = fakeEntityAdapterManager();
-    const base = new EntityService(scopedRepository({ global: repo }).scoped, clock, adapterManager);
+    const base = new EntityService(
+      scopedRepository({ global: repo }).scoped,
+      clock,
+      adapterManager,
+    );
     const provenance = new PluginProvenanceService({ cache, fs });
     const skills = new SkillService(base, { provenance, fs });
     return { repo, cache, fs, skills };
@@ -171,10 +177,7 @@ describe('SkillService — provenance merging', () => {
         },
       ],
     });
-    await fs.writeFile(
-      `${cache.pluginDir('personal', pid)}/skills/foo/SKILL.md`,
-      skillFile('foo'),
-    );
+    await fs.writeFile(`${cache.pluginDir('personal', pid)}/skills/foo/SKILL.md`, skillFile('foo'));
 
     const list = await skills.list('personal');
     expect(list).toHaveLength(1);
@@ -209,10 +212,7 @@ describe('SkillService — provenance merging', () => {
         },
       ],
     });
-    await fs.writeFile(
-      `${cache.pluginDir('personal', pid)}/skills/foo/SKILL.md`,
-      skillFile('foo'),
-    );
+    await fs.writeFile(`${cache.pluginDir('personal', pid)}/skills/foo/SKILL.md`, skillFile('foo'));
     await expect(
       skills.save({
         skill: skill('foo', 'x'),
@@ -236,10 +236,7 @@ describe('SkillService — provenance merging', () => {
         },
       ],
     });
-    await fs.writeFile(
-      `${cache.pluginDir('personal', pid)}/skills/foo/SKILL.md`,
-      skillFile('foo'),
-    );
+    await fs.writeFile(`${cache.pluginDir('personal', pid)}/skills/foo/SKILL.md`, skillFile('foo'));
     await expect(
       skills.delete({ id: skillId('foo'), removeSymlinks: false, scope: 'personal' }),
     ).rejects.toThrow(OperationNotAllowedForOriginError);
@@ -253,7 +250,11 @@ describe('AgentService — provenance merging', () => {
     const fs = new InMemoryFileSystem();
     const clock = new FixedClock(FROZEN);
     const adapterManager = fakeEntityAdapterManager();
-    const base = new EntityService(scopedRepository({ global: repo }).scoped, clock, adapterManager);
+    const base = new EntityService(
+      scopedRepository({ global: repo }).scoped,
+      clock,
+      adapterManager,
+    );
     const provenance = new PluginProvenanceService({ cache, fs });
     const agents = new AgentService(base, { provenance, fs });
     return { repo, cache, fs, agents };
@@ -391,28 +392,46 @@ describe('PluginProvenanceService.scan — roots', () => {
     expect(refs.some((r) => r.provenance === 'claude-code')).toBe(false);
   });
 
-  it('shadows a claude-code ref when a workspace-managed plugin provides the same type/name', async () => {
+  const twoTiers = (ccId: string): PluginProvenanceService => {
     const cache = new FakePluginCachePort();
     const fs = new InMemoryFileSystem();
     cache.seedMeta('personal', {
       version: 2,
       plugins: [
-        { id: 'p', origin: 'imported', installedAt: FROZEN.toISOString(), scope: 'personal', enabled: true },
+        {
+          id: 'p',
+          origin: 'imported',
+          installedAt: FROZEN.toISOString(),
+          scope: 'personal',
+          enabled: true,
+        },
       ],
     });
     // Workspace-managed dir is `${scope}/plugins/${id}` per FakePluginCachePort.
     fs.createFile('personal/plugins/p/agents/dup.md', agentFile('dup'));
-    fs.createFile('/cc/q/agents/dup.md', agentFile('dup'));
-
+    fs.createFile(`/cc/${ccId}/agents/dup.md`, agentFile('dup'));
     const claudeCodeRegistry: ClaudeCodePluginRegistryPort = {
       list: async () => [
-        { pluginId: pluginId('q'), marketplace: 'mp', installPath: '/cc/q', version: '1', scope: 'user' },
+        {
+          pluginId: pluginId(ccId),
+          marketplace: 'mp',
+          installPath: `/cc/${ccId}`,
+          version: '1',
+          scope: 'user',
+        },
       ],
     };
+    return new PluginProvenanceService({ cache, fs, claudeCodeRegistry });
+  };
 
-    const svc = new PluginProvenanceService({ cache, fs, claudeCodeRegistry });
-    const refs = (await svc.scan('personal')).filter((r) => r.name === 'dup');
+  it('the same plugin in both registries lists its item once, from the workspace-managed tier', async () => {
+    const refs = (await twoTiers('p').scan('personal')).filter((r) => r.name === 'dup');
     expect(refs).toHaveLength(1);
     expect(refs[0]?.provenance).toBe('workspace-managed');
+  });
+
+  it('two plugins shipping a same-named item each keep theirs', async () => {
+    const refs = (await twoTiers('q').scan('personal')).filter((r) => r.name === 'dup');
+    expect(refs.map((r) => String(r.pluginId)).sort()).toEqual(['p', 'q']);
   });
 });

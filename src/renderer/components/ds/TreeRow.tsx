@@ -115,7 +115,7 @@ export function TreeRow({
     >
       <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
         {chevron === 'spacer' ? (
-          <Box sx={{ width: 14 }} />
+          <Box data-testid="tree-row-chevron-spacer" sx={{ width: 14, flexShrink: 0 }} />
         ) : chevron ? (
           <Icon glyph={chevron === 'expanded' ? ChevronDown : ChevronRight} size={14} />
         ) : null}

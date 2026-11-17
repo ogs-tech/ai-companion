@@ -23,8 +23,8 @@ interface TreeGroupRowProps {
   onClick?: () => void;
   /** Right-click on the row — the home of edit/delete/etc.: a row reveals nothing on hover. */
   onContextMenu?: (e: React.MouseEvent) => void;
-  /** Folder chevron — for a row that expands inline (a plugin). */
-  chevron?: 'expanded' | 'collapsed';
+  /** Folder chevron — for a row that expands inline (a plugin); `spacer` keeps a sibling that can't expand aligned. */
+  chevron?: 'expanded' | 'collapsed' | 'spacer';
   muted?: boolean;
   disabled?: boolean;
   /** Tree nesting level, matching FolderTree's indent formula. Defaults to `0`. */

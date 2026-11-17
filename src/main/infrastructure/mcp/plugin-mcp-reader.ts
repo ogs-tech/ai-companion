@@ -17,6 +17,19 @@ export interface PluginMcpReaderDeps {
   listRoots: (scope: Scope) => Promise<PluginRoot[]>;
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * A plugin's `.mcp.json` comes in two shapes Claude Code both accepts: wrapped (`{ "mcpServers": { name: def } }`)
+ * or flat (`{ name: def }`, e.g. the official `github` and `playwright` plugins). Flat entries that are not a
+ * server def are dropped by the schema check in {@link PluginMcpReader.read}.
+ */
+function serversOf(json: unknown): Record<string, unknown> {
+  if (!isObject(json)) return {};
+  return isObject(json['mcpServers']) ? json['mcpServers'] : json;
+}
+
 export class PluginMcpReader {
   constructor(private readonly deps: PluginMcpReaderDeps) {}
 
@@ -32,7 +45,7 @@ export class PluginMcpReader {
       }
       let servers: Record<string, unknown>;
       try {
-        servers = (JSON.parse(raw) as { mcpServers?: Record<string, unknown> }).mcpServers ?? {};
+        servers = serversOf(JSON.parse(raw));
       } catch {
         continue; // malformed plugin file — skip whole plugin
       }

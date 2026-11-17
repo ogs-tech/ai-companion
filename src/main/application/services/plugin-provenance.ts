@@ -60,14 +60,18 @@ export class PluginProvenanceService {
     return map;
   }
 
-  /** Every plugin-provided entity, deduped by {type/name} keeping the higher tier. */
+  /**
+   * Every plugin-provided entity, deduped by {plugin/type/name} keeping the higher tier: the same plugin in both
+   * registries is listed once, while two plugins shipping a same-named item (`pr-review-toolkit` and
+   * `code-simplifier` both ship a `code-simplifier` agent) each keep theirs — Claude Code namespaces them by plugin.
+   */
   async scan(scope: Scope): Promise<PluginEntityRef[]> {
     if (!this.deps) return [];
     const out: PluginEntityRef[] = [];
     const seen = new Set<string>();
     for (const root of await this.listRoots(scope)) {
       for (const ref of await this.scanRoot(root)) {
-        const k = provenanceKey({ type: ref.type, name: ref.name });
+        const k = `${String(ref.pluginId)}/${provenanceKey({ type: ref.type, name: ref.name })}`;
         if (seen.has(k)) continue;
         seen.add(k);
         out.push(ref);
@@ -98,7 +102,10 @@ export class PluginProvenanceService {
         });
       }
     } catch (err) {
-      console.warn('[PluginProvenance] cannot read plugin registry; skipping workspace-managed plugins', err);
+      console.warn(
+        '[PluginProvenance] cannot read plugin registry; skipping workspace-managed plugins',
+        err,
+      );
     }
 
     // Tier 2 — Claude Code plugins (registry scope "user" → app personal).
@@ -108,7 +115,10 @@ export class PluginProvenanceService {
           roots.push({ pluginId: d.pluginId, dir: d.installPath, provenance: 'claude-code' });
         }
       } catch (err) {
-        console.warn('[PluginProvenance] Claude Code registry unavailable; skipping its plugins', err);
+        console.warn(
+          '[PluginProvenance] Claude Code registry unavailable; skipping its plugins',
+          err,
+        );
       }
     }
 
@@ -119,7 +129,13 @@ export class PluginProvenanceService {
     const { fs } = this.deps!;
     const refs: PluginEntityRef[] = [];
     const push = (type: PluginEntityRef['type'], name: string): void => {
-      refs.push({ type, name, pluginId: root.pluginId, dir: root.dir, provenance: root.provenance });
+      refs.push({
+        type,
+        name,
+        pluginId: root.pluginId,
+        dir: root.dir,
+        provenance: root.provenance,
+      });
     };
 
     // skills/<name>/ — each entry is a directory holding SKILL.md.

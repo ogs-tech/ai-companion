@@ -33,6 +33,24 @@ describe('PluginMcpReader', () => {
     expect(servers[0]?.provenance).toBe('claude-code');
   });
 
+  it('reads a flat .mcp.json (no mcpServers wrapper), as the github and playwright plugins ship it', async () => {
+    const dir = path.join(tmp, 'playwright');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, '.mcp.json'),
+      JSON.stringify({
+        playwright: { command: 'npx', args: ['@playwright/mcp@latest'] },
+        $schema: 'ignored',
+      }),
+      'utf8',
+    );
+    const reader = new PluginMcpReader({
+      listRoots: async () => [{ pluginId: 'playwright' as never, dir, provenance: 'claude-code' }],
+    });
+    const servers = await reader.read('personal');
+    expect(servers.map((s) => s.name)).toEqual(['playwright']);
+  });
+
   it('skips plugins without a .mcp.json', async () => {
     const dir = path.join(tmp, 'noop');
     await mkdir(dir, { recursive: true });

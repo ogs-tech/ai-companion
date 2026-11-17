@@ -253,10 +253,12 @@ describe('CustomizationsList', () => {
     const pluginRow = (await screen.findAllByTestId(row('local', 'urn:plugin:dev-kit@market')))[0]!;
     expect(screen.getAllByTestId(row('local', 'urn:plugin:dev-kit@market'))).toHaveLength(1);
     expect(screen.getByTestId('tree-group-plugin')).toHaveTextContent('Plugins');
-    expect(screen.queryByTestId(row('local', 'urn:skill:scaffold'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(row('local', 'dev-kit@market:urn:skill:scaffold'))).not.toBeInTheDocument();
     expect(screen.queryByTestId(row('local', 'urn:hook:h2'))).not.toBeInTheDocument();
     await user.click(pluginRow);
-    expect(await screen.findByTestId(row('local', 'urn:skill:scaffold'))).toBeInTheDocument();
+    await user.click(screen.getByTestId('tree-plugin-kind-dev-kit@market-skill'));
+    await user.click(screen.getByTestId('tree-plugin-kind-dev-kit@market-hook'));
+    expect(await screen.findByTestId(row('local', 'dev-kit@market:urn:skill:scaffold'))).toBeInTheDocument();
     expect(screen.getByTestId(row('local', 'urn:hook:h2'))).toBeInTheDocument();
   });
 
@@ -366,8 +368,10 @@ describe('CustomizationsList — workspace plugins', () => {
     });
     renderWithShell(<CustomizationsList {...workspaceProps()} />);
     const pluginRow = await screen.findByTestId(row('local', 'urn:plugin:demo-plugin'));
-    expect(screen.queryByTestId(row('local', 'urn:skill:greet'))).not.toBeInTheDocument();
-    await userEvent.setup().click(pluginRow);
-    expect(await screen.findByTestId(row('local', 'urn:skill:greet'))).toBeInTheDocument();
+    expect(screen.queryByTestId(row('local', 'demo-plugin:urn:skill:greet'))).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(pluginRow);
+    await user.click(screen.getByTestId('tree-plugin-kind-demo-plugin-skill'));
+    expect(await screen.findByTestId(row('local', 'demo-plugin:urn:skill:greet'))).toBeInTheDocument();
   });
 });

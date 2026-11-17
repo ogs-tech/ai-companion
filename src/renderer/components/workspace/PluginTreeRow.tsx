@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Menu, MenuItem, Tooltip, Typography } from '@mui/material';
-import { Puzzle } from 'lucide-react';
+import { Box, Button, Menu, MenuItem, Typography } from '@mui/material';
+import { Puzzle, RefreshCw } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import {
   pluginsQueryKey,
@@ -14,8 +16,9 @@ import {
 } from '../../hooks/use-plugins.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
-import type { TreeItem } from '../../lib/customization-tree.js';
-import type { PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
+import { channelsWith, rowBadge, type TreeItem } from '../../lib/customization-tree.js';
+import { kindSpec } from '../../../shared/customization-kind.js';
+import type { PluginListItemIpc } from '../../../shared/plugin-ipc-types.js';
 import { invalidateHealth } from '../../hooks/use-health-report.js';
 import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 
@@ -26,25 +29,28 @@ type PublishState = {
   hasPublishInfo: boolean;
 };
 
-const INSTALLED_BY_LABEL = { claude: 'Claude', both: 'App + Claude' } as const;
-
 function errorMessage(err: unknown): string {
   return err instanceof IpcCallError ? err.message : String(err);
 }
 
-function pluginTooltip(item: PluginListItemIpc, ref: PluginRefIpc | undefined): string {
-  const parts = [
-    item.installedBy === 'claude'
-      ? 'Instalado pelo Claude'
-      : item.origin === 'owned'
-        ? 'Próprio'
-        : 'Importado',
-    ...(item.version !== undefined ? [`Claude ${item.version}`] : []),
-    ...(ref?.value ? [ref.value] : []),
-    ...(item.enabled ? [] : ['desabilitado']),
-    ...(item.drift?.details !== undefined ? [item.drift.details] : []),
-  ];
-  return parts.join(' · ');
+/** The kinds a plugin can ship, in the tree's group order: its items are listed under one sub-header per kind. */
+const SHIPPED_KINDS = ['skill', 'agent', 'mcp', 'hook'] as const;
+type ShippedKind = (typeof SHIPPED_KINDS)[number];
+
+function groupByKind(items: readonly TreeItem[]): Array<{ kind: ShippedKind; items: TreeItem[] }> {
+  return SHIPPED_KINDS.map((kind) => ({
+    kind,
+    items: items.filter((i) => i.entity.kind === kind),
+  })).filter((g) => g.items.length > 0);
+}
+
+/** Only a plugin imported from a branch can be pulled again; one only Claude installed has no registry entry. */
+function canUpdate(plugin: PluginListItemIpc): boolean {
+  return (
+    plugin.origin === 'imported' &&
+    plugin.installedRef?.kind === 'branch' &&
+    plugin.installedBy !== 'claude'
+  );
 }
 
 interface PluginTreeRowProps {
@@ -57,8 +63,12 @@ interface PluginTreeRowProps {
 }
 
 /**
- * One plugin as a closed folder with `ativo`/`desativado`: clicking it lists what it ships underneath, one level
- * deeper — those items are listed only here, never in the kind groups. Menu: Atualizar · Ativar/Desativar · (Publicar) · Remover.
+ * One plugin as a closed folder: name and version, then only what needs attention — `⚠ N` when something it ships
+ * fails, and an `Atualizar` button (the one action shown on the row) when it can be pulled again. A disabled plugin
+ * reads muted. Clicking it lists what it ships underneath, one collapsible sub-header per kind (closed until clicked, open while a
+ * search or chip forces the plugin open) — those items are listed only here,
+ * never in the kind groups. Menu: Ativar/Desativar · (Publicar) · Remover; read-only, with the reason, for a plugin
+ * only Claude installed.
  */
 export function PluginTreeRow({
   item,
@@ -75,6 +85,7 @@ export function PluginTreeRow({
   const [publishing, setPublishing] = useState<PublishState | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [userOpen, setUserOpen] = useState(false);
+  const [openKinds, setOpenKinds] = useState<ReadonlySet<ShippedKind>>(new Set());
   if (item.entity.kind !== 'plugin') return null;
   const plugin = item.entity.value;
   const children = item.entity.items;
@@ -98,6 +109,26 @@ export function PluginTreeRow({
     void invalidateHealth(qc);
   };
 
+  const handleUpdate = (e: React.MouseEvent): void => {
+    e.stopPropagation();
+    update.mutate(
+      { id: plugin.id, scope: plugin.scope },
+      {
+        onSuccess: () =>
+          setToast({ variant: 'success', message: `Plugin "${plugin.id}" atualizado` }),
+        onError,
+      },
+    );
+  };
+  const claudeOnly = plugin.installedBy === 'claude';
+  const toggleKind = (kind: ShippedKind): void =>
+    setOpenKinds((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+
   return (
     <>
       <TreeGroupRow
@@ -111,49 +142,84 @@ export function PluginTreeRow({
               chevron: open ? ('expanded' as const) : ('collapsed' as const),
               onClick: () => setUserOpen((v) => !v),
             }
-          : {})}
+          : // Nothing to list: keep the chevron's column so it lines up with the plugins that expand.
+            { chevron: 'spacer' as const })}
         primary={
-          <Tooltip title={pluginTooltip(plugin, plugin.installedRef)}>
-            <span>
-              <RowLabel item={item} />
-            </span>
-          </Tooltip>
+          <>
+            <RowLabel item={item} />
+            {plugin.version !== undefined && (
+              <Box
+                component="span"
+                data-testid={`tree-plugin-version-${plugin.id}`}
+                sx={{ color: 'text.disabled', ml: 0.75 }}
+              >
+                {plugin.version}
+              </Box>
+            )}
+          </>
         }
         badge={
           <>
-            {plugin.installedBy !== undefined && (
-              <Typography
-                component="span"
-                data-testid={`tree-plugin-installed-by-${plugin.id}`}
-                noWrap
-                sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}
-              >
-                {INSTALLED_BY_LABEL[plugin.installedBy]}
-              </Typography>
+            {/* Errors of what it provides roll up here; a disabled plugin has none to report. */}
+            {plugin.enabled && rowBadge(item) === 'error' && (
+              <ChannelWarning urn={item.urn} channels={channelsWith(item, 'error')} />
             )}
-            <Typography
-              component="span"
-              data-testid={`tree-plugin-state-${plugin.id}`}
-              noWrap
-              sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}
-            >
-              {plugin.enabled ? 'ativo' : 'desativado'}
-            </Typography>
-            {/* Errors of what it provides roll up here; "desativado" is already said above. */}
-            {plugin.enabled && <RowBadgeSlot item={item} />}
+            {canUpdate(plugin) && (
+              <Button
+                size="small"
+                data-testid={`tree-plugin-update-${plugin.id}`}
+                disabled={update.isPending}
+                onClick={handleUpdate}
+                onContextMenu={(e) => e.stopPropagation()}
+                startIcon={<RefreshCw size={11} />}
+                sx={{
+                  flexShrink: 0,
+                  minWidth: 0,
+                  height: 18,
+                  px: 0.5,
+                  fontSize: '0.6875rem',
+                  fontWeight: 400,
+                  textTransform: 'none',
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {update.isPending ? 'Atualizando…' : 'Atualizar'}
+              </Button>
+            )}
           </>
         }
-        // A plugin only Claude installed is read-only here: the app has no registry entry to act on.
-        {...(plugin.installedBy === 'claude'
-          ? {}
-          : {
-              onContextMenu: (e: React.MouseEvent) => {
-                e.preventDefault();
-                setMenuAt({ top: e.clientY, left: e.clientX });
-              },
-            })}
+        onContextMenu={(e: React.MouseEvent) => {
+          e.preventDefault();
+          setMenuAt({ top: e.clientY, left: e.clientX });
+        }}
       />
-      {open && renderChild && children.map((child) => renderChild(child, depth + 1))}
+      {open &&
+        renderChild &&
+        groupByKind(children).map((group) => {
+          const kindOpen = forceOpen || openKinds.has(group.kind);
+          return (
+            <Fragment key={group.kind}>
+              <TreeGroupRow
+                testId={`tree-plugin-kind-${plugin.id}-${group.kind}`}
+                glyph={ENTITY_GROUP_ICONS[group.kind]}
+                depth={depth + 1}
+                muted
+                chevron={kindOpen ? 'expanded' : 'collapsed'}
+                onClick={() => toggleKind(group.kind)}
+                primary={kindSpec(group.kind).label}
+                badge={
+                  <Typography
+                    component="span"
+                    sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}
+                  >
+                    {group.items.length}
+                  </Typography>
+                }
+              />
+              {kindOpen && group.items.map((child) => renderChild(child, depth + 2))}
+            </Fragment>
+          );
+        })}
 
       <Menu
         anchorReference="anchorPosition"
@@ -161,18 +227,18 @@ export function PluginTreeRow({
         open={menuAt !== null}
         onClose={closeMenu}
       >
-        {plugin.origin === 'imported' && plugin.installedRef?.kind === 'branch' && (
+        {claudeOnly && (
           <MenuItem
-            onClick={() => {
-              closeMenu();
-              update.mutate({ id: plugin.id, scope: plugin.scope }, { onError });
-            }}
+            disabled
+            data-testid={`tree-plugin-claude-note-${plugin.id}`}
+            sx={{ fontSize: '0.75rem', whiteSpace: 'normal', maxWidth: 240 }}
           >
-            Atualizar
+            Instalado pelo Claude Code. Gerencie com /plugin.
           </MenuItem>
         )}
         <MenuItem
           data-testid={`tree-plugin-toggle-${plugin.id}`}
+          disabled={claudeOnly}
           onClick={() => {
             closeMenu();
             toggle.mutate(
@@ -200,7 +266,11 @@ export function PluginTreeRow({
             Publicar
           </MenuItem>
         )}
-        <MenuItem data-testid={`tree-plugin-remove-${plugin.id}`} onClick={handleRemove}>
+        <MenuItem
+          data-testid={`tree-plugin-remove-${plugin.id}`}
+          disabled={claudeOnly}
+          onClick={handleRemove}
+        >
           Remover
         </MenuItem>
       </Menu>

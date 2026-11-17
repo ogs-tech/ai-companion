@@ -42,16 +42,19 @@ delete its cached clone. Removing a marketplace does not uninstall plugins alrea
 
 ## Manage installed plugins
 
-The **Plugins** group (after Skills, Agents, MCP and Hooks) has one row per plugin, marked *ativo*/*desativado*.
-Click it to list what the plugin provides — skills, agents, MCP servers, hooks — one level deeper; those items are
-listed only there, never again in the type groups, and are read-only (right-click → **Abrir**). A search opens the
-plugins whose items match. On the plugin's row menu:
+The **Plugins** group (after Skills, Agents, MCP and Hooks) has one row per plugin: its name and version, then only
+what needs attention — `⚠ N` when something it provides fails, and an **Atualizar** button on a plugin imported from
+a branch, which re-fetches it from the source (a toast confirms). A disabled plugin reads muted. Click the row to list
+one collapsed sub-header per type it provides, with its count (Skills, Agents, MCP, Hooks); click one to list its
+items. Those items are listed only there, never again in the type groups, and are read-only (right-click →
+**Abrir**). A search opens the plugins whose items match, with every sub-header open. On the plugin's row menu:
 
-- **Atualizar** (imported plugins) re-fetches from the source.
 - **Desativar / Ativar** — disabled plugins keep their files but Claude Code ignores them; their items stay
   listed and read *draft · desativado*.
 - **Remover** hides the row and, when the toast's **Desfazer** window ends, deletes the clone and its link and
   disables it in Claude Code.
+
+A plugin only Claude Code installed (`/plugin`) opens the same menu read-only, saying to manage it with `/plugin`.
 
 Drift is reported in the **Diagnóstico** tab's **Config Drift** section.
 
