@@ -4,7 +4,7 @@ import { Download, Trash2, Webhook } from 'lucide-react';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { useEntityHealth } from '../../hooks/use-entity-health.js';
 import { entityUrn } from '../../../shared/entity.js';
-import { countProblems } from '../../lib/entity-health.js';
+import { problemUrns } from '../../lib/entity-health.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { OriginGroups, type OriginView } from './OriginGroups.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
@@ -14,7 +14,7 @@ import { HARNESS_LABEL } from './DetectedTreeGroup.js';
 import { describeHookHandler, hookRowLabel } from '../../lib/describe-hook-handler.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { IpcCallError } from '../../lib/ipc.js';
-import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
+import { matchesOrigin, matchesQuery, useReportCount, useReportList, type OriginSegment } from '../../lib/control-panel-filter.js';
 
 interface HooksTreeGroupProps {
   /** Hooks have no project/workspace scoping today — everything is the "global" tier. Omitted at the Default workspace, where nothing is filtered. */
@@ -28,8 +28,8 @@ interface HooksTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
-  /** Reports how many of the rows have a problem in some channel. */
-  onProblems?: (count: number) => void;
+  /** Reports the rows that have a problem in some channel, as urns. */
+  onProblems?: (urns: string[]) => void;
   /** Row indent of the group header — see `TreeGroup`'s `depth`. */
   depth?: number;
   /** Starts expanded — see `TreeGroup`'s `defaultExpanded`. */
@@ -56,9 +56,10 @@ export function HooksTreeGroup({ isProjectContext, showGlobal, flat = false, que
     .sort((a, b) => hookRowLabel(a).localeCompare(hookRowLabel(b)));
   const health = useEntityHealth();
   // A hook the harness cannot express is not a fault, and no check is emitted for it (`skip` destination).
-  const problems = countProblems(health, items.map((h) => entityUrn('hook', h.id)));
+  const failing = problemUrns(health, items.filter((h) => h.source.kind !== 'plugin').map((h) => entityUrn('hook', h.id)));
+  const problems = failing.length;
   useReportCount(items.length, onCount);
-  useReportCount(problems, onProblems);
+  useReportList(failing, onProblems);
 
   const handleDelete = (hookId: string, label: string): void => {
     if (!window.confirm(`Remover hook "${label}"?`)) return;

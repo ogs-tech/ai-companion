@@ -26,6 +26,7 @@ const CATEGORY_LABEL: Record<HealthCategory, string> = {
   symlink: 'Symlinks',
   'generated-file': 'Generated Files',
   'merge-entry': 'Hooks & MCP entries',
+  'plugin-entity': 'Plugin files',
 };
 
 const SEVERITY_PILL: Record<Severity, 'ok' | 'warning' | 'error'> = {
@@ -41,6 +42,7 @@ const CATEGORY_ORDER: readonly HealthCategory[] = [
   'symlink',
   'generated-file',
   'merge-entry',
+  'plugin-entity',
 ];
 
 function groupByCategory(checks: HealthCheck[]): Map<HealthCategory, HealthCheck[]> {

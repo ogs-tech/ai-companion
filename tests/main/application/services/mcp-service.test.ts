@@ -15,7 +15,7 @@ const detectedItem: DetectedEntity = {
   path: '/home/u/.cursor/mcp.json', importable: true, preview: { def: { command: 'fs-mcp' } },
 };
 
-function make(opts: { canonical?: McpEntity[]; detected?: DetectedEntity[]; workspaceId?: string | null; pluginServers?: unknown[] } = {}) {
+function make(opts: { canonical?: McpEntity[]; detected?: DetectedEntity[]; workspaceId?: string | null; pluginServers?: unknown[]; authAlerts?: string[] } = {}) {
   const store = new Map((opts.canonical ?? []).map((e) => [e.urn, e]));
   const save = vi.fn(async ({ entity: e }: { entity: McpEntity; isCreate?: boolean }) => {
     store.set(e.urn, e);
@@ -39,7 +39,7 @@ function make(opts: { canonical?: McpEntity[]; detected?: DetectedEntity[]; work
   const service = new McpService({
     canonical: () => canonical,
     plugins: { read: async () => opts.pluginServers ?? [] } as never,
-    runtime: { readMcpRuntimeLogs: async () => [], readMcpAuthAlerts: async () => [] } as never,
+    runtime: { readMcpRuntimeLogs: async () => [], readMcpAuthAlerts: async () => (opts.authAlerts ?? []).map((name) => ({ name })) } as never,
   });
   return { service, save, del };
 }
@@ -60,6 +60,21 @@ describe('McpService (canonical layer)', () => {
     const list = await service.list();
     expect(list.filter((s) => s.name === 'fs')).toHaveLength(1);
     expect(list.find((s) => s.name === 'fs')).toMatchObject({ scope: 'plugin' });
+  });
+
+  it('does not list a runtime-only `plugin:<plugin>:<server>` alert: plugin servers live under Plugins', async () => {
+    const { service } = make({ authAlerts: ['plugin:marketing:amplitude'] });
+    expect(await service.list()).toEqual([]);
+  });
+
+  it('does not list a plugin server again as an orphan when the runtime reports it as `plugin:<plugin>:<server>`', async () => {
+    const { service } = make({
+      authAlerts: ['plugin:marketing:amplitude'],
+      pluginServers: [{ location: { kind: 'plugin', pluginId: 'marketing', pluginDir: '/d' }, pluginId: 'marketing', name: 'amplitude', def: { url: 'https://x' }, provenance: 'claude-code' }],
+    });
+    const list = await service.list();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ name: 'amplitude', health: { state: 'needs-auth' } });
   });
 
   it('saves a global server as a personal entity', async () => {

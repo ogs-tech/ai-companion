@@ -7,6 +7,7 @@ import type { AgentId } from '../../domain/agent-id.js';
 import { OperationNotAllowedForOriginError } from '../../domain/plugin-errors.js';
 import {
   collectPluginEntities,
+  PLUGIN_AGENT_SPEC,
   assertEntityNotPluginSourced,
   type EntityPluginDeps,
 } from './entity-plugin-helpers.js';
@@ -27,7 +28,7 @@ export class AgentService {
     if (!this.pluginDeps) return workspace;
     const plugin = (await collectPluginEntities(
       this.pluginDeps,
-      { kind: 'agent', relPath: (name) => `agents/${name}.md` },
+      PLUGIN_AGENT_SPEC,
       scope,
     )) as Agent[];
     const urns = new Set(workspace.map((a) => a.urn));

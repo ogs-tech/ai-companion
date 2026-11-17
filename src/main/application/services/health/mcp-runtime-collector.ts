@@ -1,5 +1,4 @@
 import type { HealthCheck, Severity } from '../../../../shared/health.js';
-import { entityUrn } from '../../../../shared/entity.js';
 import { isClaudeManagedMcp } from '../../../../shared/mcp.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type {
@@ -8,6 +7,7 @@ import type {
   McpLogSummary,
 } from '../../ports/claude-runtime-port.js';
 import type { HealthCollector } from './health-collector.js';
+import { mcpCheckUrn } from './channel.js';
 
 const SEVERITY: Record<McpLogState, Severity> = {
   ok: 'ok',
@@ -58,7 +58,7 @@ export class McpRuntimeCollector implements HealthCollector {
             ? `MCP "${name}" healthy`
             : `MCP "${name}" runtime problem`,
         target: name,
-        entityUrn: entityUrn('mcp', name),
+        entityUrn: mcpCheckUrn(name),
         channel: 'claude',
         observedAt,
         ...(summary?.detail !== undefined ? { detail: summary.detail } : {}),

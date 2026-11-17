@@ -35,15 +35,55 @@ export async function collectPluginEntities(
     if (ref.type !== (spec.type ?? spec.kind)) continue;
     const file = join(ref.dir, spec.relPath(ref.name));
     try {
-      const raw = await deps.fs.readFile(file);
-      const source: EntitySource = { kind: 'plugin', pluginId: ref.pluginId, provenance: ref.provenance };
-      const entity = parseEntityFile({ kind: spec.kind, name: ref.name, raw, source });
-      out.push(spec.explicitOnly === true ? ({ ...entity, explicitOnly: true } as Entity) : entity);
+      out.push(await readPluginEntity(deps, spec, ref, file));
     } catch (err) {
       console.warn('[plugin-entities] skipped unreadable plugin file', file, err);
     }
   }
   return out;
+}
+
+type PluginRef = Awaited<ReturnType<PluginProvenanceService['scan']>>[number];
+type CollectSpec = Parameters<typeof collectPluginEntities>[1];
+
+async function readPluginEntity(deps: EntityPluginDeps, spec: CollectSpec, ref: PluginRef, file: string): Promise<Entity> {
+  const raw = await deps.fs.readFile(file);
+  const source: EntitySource = { kind: 'plugin', pluginId: ref.pluginId, provenance: ref.provenance };
+  const entity = parseEntityFile({ kind: spec.kind, name: ref.name, raw, source });
+  return spec.explicitOnly === true ? ({ ...entity, explicitOnly: true } as Entity) : entity;
+}
+
+/** Where each plugin-provided entity lives; shared by the lists and the Diagnósticos scan. */
+export const PLUGIN_SKILL_SPEC: CollectSpec = { kind: 'skill', relPath: (name) => `skills/${name}/SKILL.md` };
+export const PLUGIN_COMMAND_SPEC: CollectSpec = { kind: 'skill', type: 'command', explicitOnly: true, relPath: (name) => `commands/${name}.md` };
+export const PLUGIN_AGENT_SPEC: CollectSpec = { kind: 'agent', relPath: (name) => `agents/${name}.md` };
+
+export interface PluginEntityFailure {
+  pluginId: string;
+  file: string;
+  reason: string;
+}
+
+/** Every plugin skill / agent / command file that cannot be read, for Diagnósticos (the lists only skip them). */
+export async function findUnreadablePluginEntities(
+  deps: EntityPluginDeps,
+  specs: ReadonlyArray<CollectSpec>,
+  scope: Scope,
+): Promise<PluginEntityFailure[]> {
+  const refs = await deps.provenance.scan(scope);
+  const failures: PluginEntityFailure[] = [];
+  for (const spec of specs) {
+    for (const ref of refs) {
+      if (ref.type !== (spec.type ?? spec.kind)) continue;
+      const file = join(ref.dir, spec.relPath(ref.name));
+      try {
+        await readPluginEntity(deps, spec, ref, file);
+      } catch (err) {
+        failures.push({ pluginId: String(ref.pluginId), file, reason: (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'unreadable' });
+      }
+    }
+  }
+  return failures;
 }
 
 /**

@@ -7,6 +7,8 @@ import type { SkillId } from '../../domain/skill-id.js';
 import { OperationNotAllowedForOriginError } from '../../domain/plugin-errors.js';
 import {
   collectPluginEntities,
+  PLUGIN_COMMAND_SPEC,
+  PLUGIN_SKILL_SPEC,
   assertEntityNotPluginSourced,
   type EntityPluginDeps,
 } from './entity-plugin-helpers.js';
@@ -27,13 +29,13 @@ export class SkillService {
     if (!this.pluginDeps) return workspace;
     const plugin = (await collectPluginEntities(
       this.pluginDeps,
-      { kind: 'skill', relPath: (name) => `skills/${name}/SKILL.md` },
+      PLUGIN_SKILL_SPEC,
       scope,
     )) as Skill[];
     // A plugin's slash-commands are explicit-only Skills. Workspace skills and real plugin skills win on a name clash.
     const commands = (await collectPluginEntities(
       this.pluginDeps,
-      { kind: 'skill', type: 'command', explicitOnly: true, relPath: (name) => `commands/${name}.md` },
+      PLUGIN_COMMAND_SPEC,
       scope,
     )) as Skill[];
     const urns = new Set(workspace.map((s) => s.urn));

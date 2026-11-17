@@ -6,14 +6,14 @@ import { Plug, Puzzle, Terminal, Webhook, type LucideIcon } from 'lucide-react';
 import type { ChannelId } from '../../../shared/channel.js';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { useEntityHealth } from '../../hooks/use-entity-health.js';
-import { countProblems } from '../../lib/entity-health.js';
+import { problemUrns } from '../../lib/entity-health.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import {
   pluginsQueryKey, usePluginList, useRemovePlugin, useTogglePlugin, useUpdatePlugin, type PluginScope,
 } from '../../hooks/use-plugins.js';
 import { IpcCallError } from '../../lib/ipc.js';
-import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
+import { matchesOrigin, matchesQuery, useReportCount, useReportList, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { callIpc } from '../../lib/ipc.js';
 import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js';
@@ -36,8 +36,8 @@ interface PluginsTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
-  /** Reports how many of the rows have a problem in some channel. */
-  onProblems?: (count: number) => void;
+  /** Reports the rows that have a problem in some channel, as urns. */
+  onProblems?: (urns: string[]) => void;
   /** Starts expanded — see `TreeGroup`'s `defaultExpanded`. */
   defaultExpanded?: boolean;
   /** Renders nothing and only reports the count, so it keeps flowing while the rows' group is collapsed or hidden. */
@@ -82,9 +82,10 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
     .filter((p) => matchesQuery(query, p.id))
     .sort((a, b) => a.id.localeCompare(b.id));
   const health = useEntityHealth();
-  const problems = countProblems(health, visible.map((p) => pluginUrn(p.id)));
+  const failing = problemUrns(health, visible.map((p) => pluginUrn(p.id)));
+  const problems = failing.length;
   useReportCount(visible.length, onCount);
-  useReportCount(problems, onProblems);
+  useReportList(failing, onProblems);
   const importScope: PluginScope = isProjectContext ? 'project' : 'personal';
 
   if (countOnly) return <></>;

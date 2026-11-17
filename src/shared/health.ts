@@ -2,7 +2,7 @@ import type { ChannelId } from './channel.js';
 
 export type Severity = 'ok' | 'warning' | 'error';
 
-export type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry';
+export type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry' | 'plugin-entity';
 
 export interface HealthCheck {
   /** Stable id, e.g. "mcp-auth:claude.ai Gmail". Used for notification diffing. */

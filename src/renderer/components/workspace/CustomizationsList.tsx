@@ -105,8 +105,8 @@ export function CustomizationsList({
 
   const [query, setQuery] = useState('');
   const [counts, setCounts] = useState<Record<string, number>>({});
-  // Items with a problem in some channel, per `section:type` — what a folder shows as `N ⚠`.
-  const [problemCounts, setProblemCounts] = useState<Record<string, number>>({});
+  // Listed items with a problem in some channel, as urns per `section:type` — what a folder shows as `N ⚠`.
+  const [problemUrns, setProblemUrns] = useState<Record<string, string[]>>({});
   const [newMenuAnchor, setNewMenuAnchor] = useState<HTMLElement | null>(null);
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [pluginImportOpen, setPluginImportOpen] = useState(false);
@@ -114,8 +114,8 @@ export function CustomizationsList({
   const report = useCallback((key: string, count: number): void => {
     setCounts((prev) => (prev[key] === count ? prev : { ...prev, [key]: count }));
   }, []);
-  const reportProblems = useCallback((key: string, count: number): void => {
-    setProblemCounts((prev) => (prev[key] === count ? prev : { ...prev, [key]: count }));
+  const reportProblems = useCallback((key: string, urns: string[]): void => {
+    setProblemUrns((prev) => (prev[key]?.join('\n') === urns.join('\n') ? prev : { ...prev, [key]: urns }));
   }, []);
 
   const types = TYPES;
@@ -190,7 +190,7 @@ export function CustomizationsList({
   const scopeProp = localScope ? { localScope } : {};
   const counter = (section: Section, type: RowType) => ({
     onCount: (n: number) => report(`${section}:${type}`, n),
-    onProblems: (n: number) => reportProblems(`${section}:${type}`, n),
+    onProblems: (urns: string[]) => reportProblems(`${section}:${type}`, urns),
   });
 
   // Skills, agents, hooks and MCP share one origin axis: every type list first
@@ -201,7 +201,7 @@ export function CustomizationsList({
     setBuckets((prev) => (JSON.stringify(prev[key]) === JSON.stringify(counts) ? prev : { ...prev, [key]: counts }));
   }, []);
   type ViewMode = { kind: 'census' } | { kind: 'bucket'; key: string; depth: number };
-  const viewProps = (section: Section, type: RowType, mode: ViewMode): { view: OriginView; onCount?: (n: number) => void; onProblems?: (n: number) => void } =>
+  const viewProps = (section: Section, type: RowType, mode: ViewMode): { view: OriginView; onCount?: (n: number) => void; onProblems?: (urns: string[]) => void } =>
     mode.kind === 'census'
       ? { view: { kind: 'census', onBuckets: (counts) => reportBuckets(`${section}:${type}`, counts) }, ...counter(section, type) }
       : { view: mode };
@@ -267,7 +267,7 @@ export function CustomizationsList({
       if (!showsType(type)) return 0;
       return type === 'plugin' ? (counts[`${section}:plugin`] ?? 0) : (buckets[`${section}:${type}`]?.[MINE_KEY] ?? 0);
     };
-    const problemsOf = (type: RowType): number => (showsType(type) ? (problemCounts[`${section}:${type}`] ?? 0) : 0);
+    const problemsOf = (type: RowType): string[] => (showsType(type) ? (problemUrns[`${section}:${type}`] ?? []) : []);
     const visibleGroups = TYPE_GROUPS.filter((g) => g.types.some(showsType));
     const groupBody = (g: (typeof TYPE_GROUPS)[number], depth: number): React.ReactNode => (
       <>
@@ -276,16 +276,16 @@ export function CustomizationsList({
       </>
     );
     const mine = visibleGroups
-      .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + mineCount(type), 0), problems: g.types.reduce((sum, type) => sum + problemsOf(type), 0) }))
+      .map((g) => ({ g, count: g.types.reduce((sum, type) => sum + mineCount(type), 0), failing: g.types.flatMap(problemsOf) }))
       .filter(({ g, count }) => count > 0 || (g.alwaysShown === true && !searching))
-      .map(({ g, count, problems }) => (
+      .map(({ g, count, failing }) => (
         <PersistedGroup
           key={g.id}
           glyph={g.glyph}
           label={g.label}
           count={count}
-          problems={problems}
-          channelKinds={g.types}
+          problems={failing.length}
+          channelUrns={failing}
           storageKey={groupKey(section, `type:${g.id}`)}
           testId={`type-${section}-${g.id}`}
           forceOpen={searching}
@@ -399,9 +399,9 @@ export function CustomizationsList({
       ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string })),
     ];
     const integrationsCount = (buckets['local:hook']?.[MINE_KEY] ?? 0) + (buckets['local:mcp']?.[MINE_KEY] ?? 0);
-    const integrationsProblems = (['hook', 'mcp'] as const).reduce((sum, type) => sum + (showsType(type) ? (problemCounts[`local:${type}`] ?? 0) : 0), 0);
+    const integrationsProblems = (['hook', 'mcp'] as const).reduce((sum, type) => sum + (showsType(type) ? (problemUrns[`local:${type}`]?.length ?? 0) : 0), 0);
     const pluginsCount = showsType('plugin') ? (counts['local:plugin'] ?? 0) : 0;
-    const pluginsProblems = showsType('plugin') ? (problemCounts['local:plugin'] ?? 0) : 0;
+    const pluginsFailing = showsType('plugin') ? (problemUrns['local:plugin'] ?? []) : [];
     return origins.map(({ folder, label }) => {
       const scoped = { ...localScope, folder };
       const instruction = folder === null ? workspaceInstructions.find((i) => i.folder === undefined) : folderInstructionOf(folder);
@@ -446,8 +446,8 @@ export function CustomizationsList({
               glyph={Puzzle}
               label="Plugins"
               count={pluginsCount}
-              problems={pluginsProblems}
-              channelKinds={['plugin']}
+              problems={pluginsFailing.length}
+              channelUrns={pluginsFailing}
               storageKey={groupKey('local', 'folder:shared:plugins')}
               testId="type-local-plugin"
               forceOpen={searching}

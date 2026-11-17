@@ -22,6 +22,18 @@ export function useReportCount(count: number, onCount: ((count: number) => void)
   }, [count]);
 }
 
+/** `useReportCount` for a list of ids: reports again only when the ids change, not on every new array. */
+export function useReportList(ids: readonly string[], onList: ((ids: string[]) => void) | undefined): void {
+  const latest = useRef(onList);
+  useEffect(() => {
+    latest.current = onList;
+  });
+  const key = ids.join('\n');
+  useEffect(() => {
+    latest.current?.(key === '' ? [] : key.split('\n'));
+  }, [key]);
+}
+
 /** Which origin the Control Panel list shows: the user's own items, plugin-provided ones, or both. */
 export type OriginSegment = 'all' | 'mine' | 'plugins';
 

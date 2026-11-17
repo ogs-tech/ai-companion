@@ -24,6 +24,8 @@ import type { SessionTranscriptPort } from './ports/session-transcript-port.js';
 import { HealthService } from './services/health/health-service.js';
 import { McpAuthCollector } from './services/health/mcp-auth-collector.js';
 import { McpRuntimeCollector } from './services/health/mcp-runtime-collector.js';
+import { PluginEntityCollector } from './services/health/plugin-entity-collector.js';
+import { findUnreadablePluginEntities, PLUGIN_AGENT_SPEC, PLUGIN_COMMAND_SPEC, PLUGIN_SKILL_SPEC } from './services/entity-plugin-helpers.js';
 import { ConfigDriftCollector } from './services/health/config-drift-collector.js';
 import { SymlinkCollector } from './services/health/symlink-collector.js';
 import { MergeEntryCollector } from './services/health/merge-entry-collector.js';
@@ -195,6 +197,10 @@ export function buildWorkspaceScopedServices(
     new SymlinkCollector(adapterManager, symlinkManager, clock),
     new GeneratedFileCollector(adapterManager, fileMaterializer, settingsService, clock),
     new MergeEntryCollector(adapterManager, mergeMaterializer, clock),
+    new PluginEntityCollector(
+      () => findUnreadablePluginEntities({ provenance: pluginProvenance, fs: nodeFsAdapter }, [PLUGIN_SKILL_SPEC, PLUGIN_COMMAND_SPEC, PLUGIN_AGENT_SPEC], 'personal'),
+      clock,
+    ),
   ];
   const healthService = new HealthService(healthCollectors, clock);
 

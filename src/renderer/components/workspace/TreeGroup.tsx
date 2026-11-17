@@ -99,10 +99,10 @@ export function TreeGroup({ testId, glyph, label, count, problems = 0, onCreate,
 }
 
 /** `N ⚠` (only when N > 0) then the total, right-aligned on a folder row. */
-function FolderCounts({ problems, count, channelKinds }: { problems: number; count: number; channelKinds?: readonly string[] | undefined }): React.ReactElement {
+function FolderCounts({ problems, count, channelUrns }: { problems: number; count: number; channelUrns?: readonly string[] | undefined }): React.ReactElement {
   return (
     <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
-      {channelKinds && count > 0 ? <ChannelMarks scope={{ kinds: channelKinds }} /> : <ProblemCount count={problems} />}
+      {channelUrns && count > 0 ? <ChannelMarks scope={{ urns: channelUrns }} /> : <ProblemCount count={problems} />}
       <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>
     </Stack>
   );
@@ -156,8 +156,8 @@ interface TreeSubGroupProps {
   count: number;
   /** Items inside with a problem — see `TreeGroup`'s `problems`. */
   problems?: number;
-  /** Entity kinds whose channels the header speaks for: a mark per integrated channel replaces the bare `N ⚠`. */
-  channelKinds?: readonly string[] | undefined;
+  /** The listed items with a problem, as urns: a mark per integrated channel replaces the bare `N ⚠`. */
+  channelUrns?: readonly string[] | undefined;
   /** Indent level of the header row — see `TreeGroup`'s `depth`. */
   depth: number;
   expanded: boolean;
@@ -172,7 +172,7 @@ interface TreeSubGroupProps {
  * Controlled (`expanded`/`onToggle`) so the parent can persist the choice and
  * force it open while a search is active.
  */
-export function TreeSubGroup({ testId, glyph, label, count, problems = 0, channelKinds, depth, expanded, onToggle, muted = false, children }: TreeSubGroupProps): React.ReactElement {
+export function TreeSubGroup({ testId, glyph, label, count, problems = 0, channelUrns, depth, expanded, onToggle, muted = false, children }: TreeSubGroupProps): React.ReactElement {
   return (
     <>
       <TreeRow
@@ -183,7 +183,7 @@ export function TreeSubGroup({ testId, glyph, label, count, problems = 0, channe
         primary={label}
         onClick={onToggle}
         muted={muted}
-        badge={<FolderCounts problems={problems} count={count} channelKinds={channelKinds} />}
+        badge={<FolderCounts problems={problems} count={count} channelUrns={channelUrns} />}
       />
       <Collapse in={expanded} unmountOnExit>
         <List disablePadding>{children}</List>

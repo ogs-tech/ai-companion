@@ -51,13 +51,13 @@ export class McpService {
     const own = canonical.map((e) => this.entityToDto(e, health));
     const fromPlugins = plugins.map((s) => this.pluginToDto(s, health));
     // A plugin's server is listed under the plugin only: a harness-file entry of the same name is the same server.
-    const pluginNames = new Set(plugins.flatMap((s) => [s.name, `plugin-${s.pluginId}-${s.name}`]));
+    const pluginNames = new Set(plugins.flatMap((s) => [s.name, ...runtimeAliases(s)]));
     const found = detected.filter((d) => !pluginNames.has(d.name)).map((d) => this.detectedToDto(d, health));
 
     // Names already represented, so the runtime-health join doesn't double-list them as orphans.
     const claimed = new Set<string>([...canonical.map((e) => e.name), ...detected.map((d) => d.name)]);
     for (const s of plugins) {
-      claimed.add(`plugin-${s.pluginId}-${s.name}`);
+      for (const alias of runtimeAliases(s)) claimed.add(alias);
       claimed.add(s.name);
     }
 
@@ -205,8 +205,7 @@ export class McpService {
 
   private pluginToDto(s: PluginMcpServer, health: Map<string, McpHealth>): McpServer {
     const ref: McpServerRef = { location: s.location, name: s.name };
-    const runtimeName = `plugin-${s.pluginId}-${s.name}`;
-    const found = health.get(runtimeName) ?? health.get(s.name);
+    const found = [...runtimeAliases(s), s.name].map((n) => health.get(n)).find((h) => h !== undefined);
     return {
       id: mcpServerId(ref),
       name: s.name,
@@ -230,6 +229,8 @@ export class McpService {
     for (const [name, h] of health) {
       if (h.state !== 'error' && h.state !== 'needs-auth') continue;
       if (claimed.has(name)) continue;
+      // A plugin's server belongs to the plugin (listed under Plugins), never loose here.
+      if (name.startsWith('plugin:')) continue;
       out.push(this.detectedDto(name, h));
     }
     return out;
@@ -267,4 +268,9 @@ export class McpService {
     for (const alert of alerts) map.set(alert.name, { state: 'needs-auth' });
     return map;
   }
+}
+
+/** The names the Claude runtime reports a plugin's server under: `plugin:<plugin>:<server>`, or its hyphenated CLI form. */
+function runtimeAliases(s: { pluginId: string; name: string }): string[] {
+  return [`plugin:${s.pluginId}:${s.name}`, `plugin-${s.pluginId}-${s.name}`];
 }

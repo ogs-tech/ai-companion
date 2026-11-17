@@ -5,7 +5,7 @@ import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { useEntityHealth } from '../../hooks/use-entity-health.js';
-import { countProblems } from '../../lib/entity-health.js';
+import { problemUrns } from '../../lib/entity-health.js';
 import { DetectedRows, useDetectedItems } from './DetectedTreeGroup.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
 import { MINE_KEY, OriginGroups, type OriginView } from './OriginGroups.js';
@@ -13,7 +13,7 @@ import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './
 import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { useCustomizationList, useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
+import { matchesOrigin, matchesQuery, useReportCount, useReportList, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import type { Agent, Entity, Skill } from '../../../shared/entity.js';
@@ -49,8 +49,8 @@ interface EntityTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
-  /** Reports how many of the rows have a problem in some channel. */
-  onProblems?: (count: number) => void;
+  /** Reports the rows that have a problem in some channel, as urns. */
+  onProblems?: (urns: string[]) => void;
   /** Takes part in a cross-type origin view — see `OriginView`. */
   view?: OriginView;
   /** Opens a create/edit tab for this entity in the parent screen's Workbench canvas — this group only ever lists rows, it never renders the editor itself. */
@@ -111,9 +111,10 @@ export function EntityTreeGroup({ kind, label, localScope, inherited = false, de
   const groupTestId = inherited ? `inherited-${kind}` : kind;
 
   const health = useEntityHealth();
-  const problems = countProblems(health, visible.map((item) => item.urn));
+  const failing = problemUrns(health, visible.map((item) => item.urn));
+  const problems = failing.length;
   useReportCount(visible.length + detected.length, onCount);
-  useReportCount(problems, onProblems);
+  useReportList(failing, onProblems);
 
   // Census views only count; a bucket view lists one origin — detected items are the user's own.
   const showDetected = view?.kind !== 'census' && (view?.kind !== 'bucket' || view.key === MINE_KEY);

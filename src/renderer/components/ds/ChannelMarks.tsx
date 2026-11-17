@@ -6,16 +6,16 @@ import { openDiagnosticsFor } from '../../lib/diagnostics-focus.js';
 import type { ChannelProblems } from '../../lib/entity-health.js';
 import { ChannelMark } from '../ChannelMark.js';
 
-/** What the marks speak for: one item, or every item of some kinds (`['skill']`, `['hook', 'mcp', 'plugin']`). */
-export type ChannelMarksScope = { urn: string } | { kinds: readonly string[] };
+/**
+ * What the marks speak for: one item, or the items a group lists (`urns`). A group passes only what it shows, so a
+ * problem on something not listed (a plugin not installed here, a server the list leaves out) never lands on its header.
+ */
+export type ChannelMarksScope = { urn: string } | { urns: readonly string[] };
 
 /** Items in scope that have a problem on `channel`, as urns — the count a group shows, the item a row opens. */
 export function failingUrns(problems: ChannelProblems, scope: ChannelMarksScope, channel: ChannelId): string[] {
-  const inScope = (urn: string): boolean =>
-    'urn' in scope ? urn === scope.urn : scope.kinds.some((kind) => urn.startsWith(`urn:${kind}:`));
-  const failing: string[] = [];
-  for (const [urn, channels] of problems) if (inScope(urn) && channels.includes(channel)) failing.push(urn);
-  return failing;
+  const urns = 'urn' in scope ? [scope.urn] : scope.urns;
+  return urns.filter((urn) => problems.get(urn)?.includes(channel) === true);
 }
 
 /** The channels this app manages files for and the user turned on, in registry order. */

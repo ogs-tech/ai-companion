@@ -3,7 +3,7 @@ import { Button, Typography } from '@mui/material';
 import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { useEntityHealth } from '../../hooks/use-entity-health.js';
-import { countProblems } from '../../lib/entity-health.js';
+import { problemUrns } from '../../lib/entity-health.js';
 import { entityUrn } from '../../../shared/entity.js';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroup, TreeGroupRow } from './TreeGroup.js';
@@ -15,7 +15,7 @@ import { useImportDetected } from '../../hooks/use-detected.js';
 import { HARNESS_LABEL } from './DetectedTreeGroup.js';
 import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp, useRefreshMcpHealth } from '../../hooks/use-mcp-mutations.js';
 import { IpcCallError } from '../../lib/ipc.js';
-import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
+import { matchesOrigin, matchesQuery, useReportCount, useReportList, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
 import { isClaudeManagedMcp, needsAuth, type McpServer } from '../../../shared/mcp.js';
 
@@ -51,8 +51,8 @@ interface McpTreeGroupProps {
   origin?: OriginSegment;
   /** Reports the number of rows this list renders. */
   onCount?: (count: number) => void;
-  /** Reports how many of the rows have a problem in some channel. */
-  onProblems?: (count: number) => void;
+  /** Reports the rows that have a problem in some channel, as urns. */
+  onProblems?: (urns: string[]) => void;
   /** Row indent of the group header — see `TreeGroup`'s `depth`. */
   depth?: number;
   /** Starts expanded — see `TreeGroup`'s `defaultExpanded`. */
@@ -121,9 +121,10 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
     .filter((s) => matchesQuery(query, s.name))
     .sort((a, b) => a.name.localeCompare(b.name));
   const health = useEntityHealth();
-  const problems = countProblems(health, visible.map((s) => entityUrn('mcp', s.name)));
+  const failing = problemUrns(health, visible.filter((s) => s.source.kind !== 'plugin').map((s) => entityUrn('mcp', s.name)));
+  const problems = failing.length;
   useReportCount(visible.length, onCount);
-  useReportCount(problems, onProblems);
+  useReportList(failing, onProblems);
   // Two servers with the same name differ only by where they are configured — say so on those rows.
   const nameCounts = new Map<string, number>();
   for (const s of visible) if (s.source.kind !== 'plugin') nameCounts.set(s.name, (nameCounts.get(s.name) ?? 0) + 1);
