@@ -119,3 +119,6 @@ export const FILTER_GLYPHS: Record<SessionFilter, string> = {
   idle: '◌',
   exited: '⊘',
 };
+
+/** What a session is called until the CLI has written a title for it — the same for app and external sessions. */
+export const UNTITLED_LABEL = 'Untitled';

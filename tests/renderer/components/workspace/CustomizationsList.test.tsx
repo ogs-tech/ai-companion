@@ -123,7 +123,7 @@ describe('CustomizationsList', () => {
     await waitFor(() => expect(screen.getByTestId('control-panel-section-global')).toBeVisible());
   });
 
-  it('lists a plugin once, as a folder under Integrações, and keeps what it provides out of the type groups', async () => {
+  it('lists a plugin once, in its own Plugins group outside Integrações, and keeps what it provides out of the type groups', async () => {
     const plugin = { kind: 'plugin' as const, pluginId: 'dev-kit@market' };
     const pluginSkill = { ...localSkill, urn: 'urn:skill:scaffold', name: 'scaffold', source: plugin };
     const pluginHook = { ...hook, id: 'h2', source: plugin };
@@ -145,11 +145,22 @@ describe('CustomizationsList', () => {
     expect(screen.queryByTestId('tree-subgroup-plugins-local')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tree-skill-scaffold')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tree-hook-h2')).not.toBeInTheDocument();
-    // Hooks, MCP and Plugins are folders of Integrações; the plugin appears exactly once.
+    // Integrações holds Hooks and MCP only; Plugins is a group of its own, and the plugin appears exactly once.
     expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('Hooks');
     expect(screen.getByTestId('tree-group-mcp')).toHaveTextContent('MCP');
-    expect(screen.getByTestId('tree-group-plugin')).toHaveTextContent('Plugins');
+    expect(await screen.findByTestId('tree-subgroup-type-local-plugin')).toHaveTextContent('Plugins');
     expect(await screen.findAllByTestId('tree-plugin-dev-kit@market')).toHaveLength(1);
+    expect(screen.queryByTestId('tree-group-plugin')).not.toBeInTheDocument();
+    // The group headers are rows, not containers: prove "outside Integrações" by order and indent.
+    const integrationsHeader = screen.getByTestId('tree-subgroup-type-local-integrations');
+    const pluginsHeader = screen.getByTestId('tree-subgroup-type-local-plugin');
+    const pluginRow = screen.getByTestId('tree-plugin-dev-kit@market');
+    const follows = (a: Element, b: Element): boolean => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(follows(screen.getByTestId('tree-group-mcp'), pluginsHeader)).toBe(true); // after Integrações' last folder…
+    expect(follows(pluginsHeader, pluginRow)).toBe(true); // …and the plugin sits under its own header
+    const indent = (el: Element): number => parseFloat(getComputedStyle(el).paddingLeft);
+    expect(indent(pluginsHeader)).toBe(indent(integrationsHeader)); // a sibling of Integrações, not a child
+    expect(indent(pluginRow)).toBeGreaterThan(indent(pluginsHeader));
     expect(screen.queryByTestId('detail-drawer-plugin')).not.toBeInTheDocument();
   });
 

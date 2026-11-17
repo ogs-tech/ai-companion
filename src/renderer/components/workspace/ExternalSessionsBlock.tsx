@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tooltip, Typography } from '@mui/material';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { useSetExternalConsent } from '../../hooks/use-external-sessions.js';
-import { compareRows, type SessionRowState } from '../../lib/session-attention.js';
+import { compareRows, UNTITLED_LABEL, type SessionRowState } from '../../lib/session-attention.js';
 import type { ExternalSession } from '../../../shared/external-session.js';
 import type { SessionSnapshot, SessionSnapshotWithOutput } from '../../../shared/session.js';
 import { SessionRow } from './SessionRow.js';
@@ -72,7 +72,7 @@ function ObserveDialog({ session, onClose }: { session: ExternalSession; onClose
   }, [session.id]);
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="md" data-testid="external-observe-dialog">
-      <DialogTitle>{`Observando ${session.label} (somente leitura)`}</DialogTitle>
+      <DialogTitle>{`Observando ${session.title ?? UNTITLED_LABEL} (somente leitura)`}</DialogTitle>
       <DialogContent>
         <Box component="pre" sx={{ m: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} data-testid="external-observe-text">
           {text || 'Sem transcrição disponível para esta sessão.'}
@@ -128,6 +128,7 @@ export function ExternalSessionRows({ sessions, filter, now, onAssumed, onError 
         const canAssume = session.cwd !== null && (session.closed || session.activity === 'idle');
         const subtitle = [
           `externa${session.terminal ? ` · ${session.terminal}` : ''}`,
+          session.label,
           session.closed ? 'motivo desconhecido' : session.precision === 'estimated' ? 'estimado' : null,
         ]
           .filter(Boolean)
@@ -136,7 +137,7 @@ export function ExternalSessionRows({ sessions, filter, now, onAssumed, onError 
           <SessionRow
             key={`external:${session.id}`}
             testId={`tree-external-session-${session.id}`}
-            label={session.label}
+            label={session.title ?? UNTITLED_LABEL}
             harness={session.harness}
             state={state}
             {...(session.attention ? { attention: session.attention } : {})}

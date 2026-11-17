@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect } from '../../fixtures/app.js';
 import { launchCustomizationsApp, type CustomizationsApp } from '../../fixtures/customizations-app.js';
 
-// Integrações = hooks + MCP servers (+ plugins). Global's sit under the read-only Global section in a workspace;
+// Integrações = hooks + MCP servers (plugins have their own "Plugins" group). Global's sit under the read-only Global section in a workspace;
 // at Início they are the user's own and "Servidor MCP" in the Novo menu creates one.
 
 let session: CustomizationsApp;

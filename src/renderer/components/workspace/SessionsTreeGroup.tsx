@@ -29,6 +29,7 @@ import {
   matchesFilter,
   rowStateOf,
   SESSION_FILTERS,
+  UNTITLED_LABEL,
   type SessionFilter,
   type SessionRowState,
 } from '../../lib/session-attention.js';
@@ -135,12 +136,12 @@ export function SessionsTreeGroup({
     [history.data],
   );
 
-  // External sessions start with their folder name; the CLI's own title (live from the transcript, else the history) says which conversation it is.
+  // An external row is titled like an app one: the CLI's own title (live from the transcript, else the history), else Untitled.
   const externalList = useMemo(() => {
     const titles = new Map(historyEntries.flatMap((e) => (e.title ? [[e.conversationId, e.title] as const] : [])));
     return (external?.sessions ?? []).map((s) => {
       const title = s.title ?? titles.get(s.id);
-      return title ? { ...s, label: title } : s;
+      return title ? { ...s, title } : s;
     });
   }, [external, historyEntries]);
 
@@ -373,7 +374,8 @@ export function SessionsTreeGroup({
         data-testid="sessions-filters"
         sx={{ gap: 0.625, px: 1.5, pb: 0.75, flexWrap: 'wrap' }}
       >
-        {SESSION_FILTERS.map((key) => {
+        {/* A state nobody is in gets no chip; the chosen one stays so it can be cleared. */}
+        {SESSION_FILTERS.filter((key) => counts[key] > 0 || filter === key).map((key) => {
           const active = filter === key;
           const count = counts[key];
           const color = FILTER_COLORS[key];
@@ -400,7 +402,6 @@ export function SessionsTreeGroup({
                   border: `1px solid ${active ? theme.palette.text.secondary : theme.palette.divider}`,
                   bgcolor: active ? theme.palette.action.selected : 'transparent',
                   color: theme.palette.text.primary,
-                  opacity: count === 0 ? 0.4 : 1,
                   fontVariantNumeric: 'tabular-nums',
                   '&:focus-visible': {
                     outline: `2px solid ${theme.palette.primary.main}`,
@@ -585,7 +586,6 @@ export function currentScopeId(scope: HistoryScope): string | null {
  * for). Workspace/Início ones only have a generic "<name> N" label, so the CLI's
  * own title replaces it as soon as the transcript has one.
  */
-const UNTITLED_LABEL = 'Untitled';
 
 function liveLabelOf(session: SessionSnapshot, entry: SessionHistoryEntry | null): string {
   const generic = session.anchor.kind === 'workspace' || session.anchor.kind === 'personal';

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Box, Divider, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
-import { GitBranch, Globe, Layers, Plus, Search, X } from 'lucide-react';
+import { GitBranch, Globe, Layers, Plus, Puzzle, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
 import { ContainerFooter, ContainerHeader, FooterLink } from '../ds/ContainerChrome.js';
 import { useDetected } from '../../hooks/use-detected.js';
@@ -39,10 +39,11 @@ type RowType = 'instruction' | 'skill' | 'agent' | 'hook' | 'mcp' | 'plugin';
 const TYPE_GROUPS: ReadonlyArray<{ id: string; label: string; glyph: LucideIcon; types: ReadonlyArray<RowType>; alwaysShown?: boolean }> = [
   { id: 'skill', label: 'Skills', glyph: ENTITY_GROUP_ICONS.skill, types: ['skill'], alwaysShown: true },
   { id: 'agent', label: 'Agents', glyph: ENTITY_GROUP_ICONS.agent, types: ['agent'], alwaysShown: true },
-  { id: 'integrations', label: 'Integrações', glyph: ENTITY_GROUP_ICONS.mcp, types: ['hook', 'mcp', 'plugin'] },
+  { id: 'integrations', label: 'Integrações', glyph: ENTITY_GROUP_ICONS.mcp, types: ['hook', 'mcp'] },
+  { id: 'plugin', label: 'Plugins', glyph: Puzzle, types: ['plugin'] },
 ];
 
-/** Row types the list shows. Plugins are folders under "Integrações", one row per plugin. */
+/** Row types the list shows. Plugins are one folder row each, in their own "Plugins" group. */
 const TYPES: ReadonlyArray<RowType> = ['instruction', 'skill', 'agent', 'hook', 'mcp', 'plugin'];
 
 export interface CustomizationsListProps {
@@ -244,7 +245,7 @@ export function CustomizationsList({
   const scopeKey = (section: Section): string => `scope-section:${localScope?.scopeId ?? 'home'}:${section}`;
   const groupKey = (section: Section, suffix: string): string => `tree-subgroup:${localScope?.scopeId ?? 'home'}:${section}:${suffix}`;
 
-  // Plugins are listed once, as closed folders under Integrações: what a plugin provides is reached through it.
+  // Plugins are listed once, as closed folders in their own group: what a plugin provides is reached through it.
   const pluginRows = (section: Section, depth: number, census = false): React.ReactNode =>
     showsType('plugin') && (
       <PluginsTreeGroup
@@ -254,12 +255,13 @@ export function CustomizationsList({
         {...(section === 'local'
           ? { showGlobal: false, ...(isHome ? {} : { isProjectContext: true }) }
           : { isProjectContext: true, showGlobal: true, onlyGlobal: true })}
-        {...(census ? { flat: true, countOnly: true, ...counter(section, 'plugin') } : { defaultExpanded: true })}
+        // The "Plugins" group's own header names the rows, so they render flat (no second "Plugins" header inside it).
+        {...(census ? { flat: true, countOnly: true, ...counter(section, 'plugin') } : { flat: true })}
       />
     );
 
-  // The user's own items split by type (Skills / Agents / Integrações). Plugins are folders under
-  // Integrações; what they provide is not listed again in the type groups.
+  // The user's own items split by type (Skills / Agents / Integrações / Plugins). A plugin is one folder
+  // in Plugins; what it provides is not listed again in the type groups.
   const originSections = (section: Section, typesFor: (mode: ViewMode, only?: ReadonlyArray<RowType>) => React.ReactNode): { census: React.ReactNode; body: React.ReactNode; mine: React.ReactNode } => {
     const mineCount = (type: RowType): number => {
       if (!showsType(type)) return 0;
@@ -396,14 +398,15 @@ export function CustomizationsList({
       { folder: null, label: 'Workspace' },
       ...routing.folders.map((folder) => ({ folder, label: routing.aliases[folder] as string })),
     ];
-    const integrationsCount =
-      (buckets['local:hook']?.[MINE_KEY] ?? 0) + (buckets['local:mcp']?.[MINE_KEY] ?? 0) + (showsType('plugin') ? (counts['local:plugin'] ?? 0) : 0);
-    const integrationsProblems = (['hook', 'mcp', 'plugin'] as const).reduce((sum, type) => sum + (showsType(type) ? (problemCounts[`local:${type}`] ?? 0) : 0), 0);
+    const integrationsCount = (buckets['local:hook']?.[MINE_KEY] ?? 0) + (buckets['local:mcp']?.[MINE_KEY] ?? 0);
+    const integrationsProblems = (['hook', 'mcp'] as const).reduce((sum, type) => sum + (showsType(type) ? (problemCounts[`local:${type}`] ?? 0) : 0), 0);
+    const pluginsCount = showsType('plugin') ? (counts['local:plugin'] ?? 0) : 0;
+    const pluginsProblems = showsType('plugin') ? (problemCounts['local:plugin'] ?? 0) : 0;
     return origins.map(({ folder, label }) => {
       const scoped = { ...localScope, folder };
       const instruction = folder === null ? workspaceInstructions.find((i) => i.folder === undefined) : folderInstructionOf(folder);
       const hasDetected = detectedInstructionAt(folder ?? undefined) !== undefined;
-      const count = originCount(folder) + (instruction !== undefined ? 1 : 0) + (folder === null ? integrationsCount : 0);
+      const count = originCount(folder) + (instruction !== undefined ? 1 : 0) + (folder === null ? integrationsCount + pluginsCount : 0);
       // A level with nothing in it stays put but collapsed and dimmed, so the place to create does not move.
       const empty = count === 0 && !hasDetected;
       return (
@@ -422,7 +425,7 @@ export function CustomizationsList({
           {folder === null ? workspaceInstructionRows(base + 1) : folderInstructionRow(folder, base + 1)}
           {showsType('skill') && <EntityTreeGroup kind="skill" label="Skills" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
           {showsType('agent') && <EntityTreeGroup kind="agent" label="Agents" depth={base + 1} query={query} origin="mine" localScope={scoped} {...entityHandlers} />}
-          {folder === null && (showsType('hook') || showsType('mcp') || showsType('plugin')) && (
+          {folder === null && (showsType('hook') || showsType('mcp')) && (
             <PersistedGroup
               glyph={ENTITY_GROUP_ICONS.mcp}
               label="Integrações"
@@ -436,6 +439,21 @@ export function CustomizationsList({
               muted={integrationsCount === 0}
             >
               {localTypes({ kind: 'bucket', key: MINE_KEY, depth: base + 2 }, ['hook', 'mcp'])}
+            </PersistedGroup>
+          )}
+          {folder === null && showsType('plugin') && pluginsCount > 0 && (
+            <PersistedGroup
+              glyph={Puzzle}
+              label="Plugins"
+              count={pluginsCount}
+              problems={pluginsProblems}
+              channelKinds={['plugin']}
+              storageKey={groupKey('local', 'folder:shared:plugins')}
+              testId="type-local-plugin"
+              forceOpen={searching}
+              depth={base + 1}
+              defaultOpen
+            >
               {pluginRows('local', base + 2)}
             </PersistedGroup>
           )}

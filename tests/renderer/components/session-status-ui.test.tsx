@@ -88,7 +88,17 @@ describe('external sessions UI', () => {
   it('labels the row "externa · terminal" and marks estimated ones', () => {
     renderWithQuery(<ExternalSessionRows sessions={[external({ precision: 'estimated' })]} filter={null} now={10} onAssumed={vi.fn()} onError={vi.fn()} />);
     const row = screen.getByTestId('tree-external-session-e1');
-    expect(row).toHaveTextContent('externa · iTerm2 · estimado');
+    expect(row).toHaveTextContent('externa · iTerm2 · api · estimado');
+  });
+
+  it('titles the row like an app session: the CLI title, else "Untitled" — the folder moves to line two', () => {
+    const { rerender } = renderWithQuery(<ExternalSessionRows sessions={[external({ title: 'Fix the cart bug' })]} filter={null} now={10} onAssumed={vi.fn()} onError={vi.fn()} />);
+    const row = screen.getByTestId('tree-external-session-e1');
+    expect(row).toHaveTextContent('Fix the cart bug');
+    expect(row).toHaveTextContent('externa · iTerm2 · api');
+    rerender(<ExternalSessionRows sessions={[external()]} filter={null} now={10} onAssumed={vi.fn()} onError={vi.fn()} />);
+    expect(screen.getByTestId('tree-external-session-e1')).toHaveTextContent('Untitled');
+    expect(screen.getByTestId('tree-external-session-e1').querySelector('[data-testid$="-indicator"]')).not.toBeNull();
   });
 
   it('enables "Assumir aqui" only for an idle or closed session, and a closed one says the reason is unknown', () => {

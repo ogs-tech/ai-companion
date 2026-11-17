@@ -7,6 +7,7 @@ import {
   openSessionTab,
   resetBrowserTabsForTests,
 } from '../../../../src/renderer/lib/browser-tabs-store.js';
+import { sessionsQueryKey } from '../../../../src/renderer/hooks/use-sessions.js';
 import { mockApi, ok, fail, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { intersectionObservers } from '../../setup.js';
 import type {
@@ -666,9 +667,27 @@ describe('SessionsTreeGroup', () => {
         'data-state',
         'idle',
       );
-      expect(screen.getByTestId('sessions-filter-working')).toHaveAccessibleName('Trabalhando: 0');
-      expect(screen.getByTestId('sessions-filter-needs-input')).toHaveAccessibleName('Pergunta: 0');
+      // A state nobody is in gets no chip at all, rather than a dimmed "0".
+      expect(screen.queryByTestId('sessions-filter-working')).toBeNull();
+      expect(screen.queryByTestId('sessions-filter-needs-input')).toBeNull();
       expect(screen.getByTestId('sessions-filter-idle')).toHaveAccessibleName('Ocioso: 1');
+    });
+
+    it('keeps the chosen chip on screen after its count drops to 0, so it can be cleared', async () => {
+      route({ 'session.list': ok([live('need', 'needs-input'), live('idle', 'idle')]) });
+      const { client } = render();
+      await screen.findByTestId('tree-session-workspace:need');
+      await userEvent.click(screen.getByTestId('sessions-filter-needs-input'));
+
+      route({ 'session.list': ok([live('idle', 'idle')]) });
+      await client.invalidateQueries({ queryKey: sessionsQueryKey });
+
+      const chip = await screen.findByTestId('sessions-filter-needs-input');
+      expect(chip).toHaveAttribute('aria-pressed', 'true');
+      expect(chip).toHaveAccessibleName('Pergunta: 0');
+      await userEvent.click(chip);
+      await waitFor(() => expect(screen.queryByTestId('sessions-filter-needs-input')).toBeNull());
+      expect(order()).toEqual(['idle']);
     });
 
     it('keeps the Encerradas count steady while history pages load', async () => {
