@@ -3,7 +3,7 @@ import type { SyncResult, SyncResultDetails } from '../../../shared/sync-result.
 import type { Entity } from '../../../shared/entity.js';
 import type { SettingsService } from './settings-service.js';
 import type { EntityRepository } from '../ports/entity-repository.js';
-import type { Adapter, AdapterDestination, MergeTarget } from '../ports/adapter.js';
+import type { Adapter, AdapterDestination, MergeTarget, OwnershipCheck } from '../ports/adapter.js';
 import type { SymlinkManager } from './symlink-manager.js';
 import type { FileMaterializer } from './file-materializer.js';
 import type { MergeMaterializer } from './merge-materializer.js';
@@ -48,6 +48,9 @@ export interface GeneratedFilePlanEntry {
   entityUrn: string;
   destination: string;
   content: string;
+  /** How the materializer recognizes this file as app-owned (Cursor's .mdc/plugin.json use their own markers). */
+  ownershipMarker?: string;
+  ownershipCheck?: OwnershipCheck;
 }
 
 export interface MergePlanEntry {
@@ -365,7 +368,14 @@ export class AdapterManager {
         const destinations = await adapter.resolveEntityDestinations({ entity });
         for (const dest of destinations) {
           if (dest.strategy !== 'write') continue;
-          entries.push({ adapterId: adapter.adapterId, entityUrn: entity.urn, destination: dest.destination, content: dest.content });
+          entries.push({
+            adapterId: adapter.adapterId,
+            entityUrn: entity.urn,
+            destination: dest.destination,
+            content: dest.content,
+            ...(dest.ownershipMarker !== undefined ? { ownershipMarker: dest.ownershipMarker } : {}),
+            ...(dest.ownershipCheck !== undefined ? { ownershipCheck: dest.ownershipCheck } : {}),
+          });
         }
       }
     }

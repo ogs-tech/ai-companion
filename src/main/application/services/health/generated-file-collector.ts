@@ -12,7 +12,7 @@ export interface GeneratedFilePlanner {
   planGeneratedFiles(): Promise<GeneratedFilePlanEntry[]>;
 }
 export interface GeneratedFileValidator {
-  validate(args: { destination: string; content: string }): Promise<GeneratedFileState>;
+  validate(args: Pick<GeneratedFilePlanEntry, 'destination' | 'content' | 'ownershipMarker' | 'ownershipCheck'>): Promise<GeneratedFileState>;
 }
 export interface SettingsReader {
   load(): Promise<Settings | null>;
@@ -76,7 +76,13 @@ export class GeneratedFileCollector implements HealthCollector {
     const checks: HealthCheck[] = [];
 
     for (const entry of await this.planner.planGeneratedFiles()) {
-      const state = await this.validator.validate({ destination: entry.destination, content: entry.content });
+      const { destination, content, ownershipMarker, ownershipCheck } = entry;
+      const state = await this.validator.validate({
+        destination,
+        content,
+        ...(ownershipMarker !== undefined ? { ownershipMarker } : {}),
+        ...(ownershipCheck !== undefined ? { ownershipCheck } : {}),
+      });
       const verdict = verdictFor(state, entry.destination);
       checks.push({
         id: `generated-file:${entry.adapterId}:${entry.destination}`,

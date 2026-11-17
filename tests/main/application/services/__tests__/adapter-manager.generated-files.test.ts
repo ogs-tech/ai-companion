@@ -15,6 +15,7 @@ import {
   CURSOR_PLUGIN_PERSONAL_RULE_FILE,
   CURSOR_PLUGIN_RULES_SUBPATH,
 } from '../../../../../src/main/application/entity/cursor-plugin-manifest.js';
+import { GeneratedFileCollector } from '../../../../../src/main/application/services/health/generated-file-collector.js';
 import type { Adapter } from '../../../../../src/main/application/ports/adapter.js';
 import { DomainError } from '../../../../../src/main/domain/errors.js';
 import type { Settings } from '../../../../../src/shared/settings.js';
@@ -51,7 +52,7 @@ const setup = async () => {
     entityDataDir: () => '/workspace',
     adapters: new Map<string, Adapter>([['cursor', new CursorAdapter({ homedir: '/home/u', ...scopeDeps })]]),
   });
-  return { manager, fs };
+  return { manager, fs, settingsService, clock };
 };
 
 describe('AdapterManager generated-file lifecycle', () => {
@@ -59,6 +60,17 @@ describe('AdapterManager generated-file lifecycle', () => {
     const { manager } = await setup();
     await manager.syncAll({ adapterId: 'cursor' });
     expect(await manager.countDestinations('cursor')).toBe(2);
+  });
+
+  it('health sees freshly synced Cursor files as owned (their marker is not the AGENTS.md one)', async () => {
+    const { manager, fs, settingsService, clock } = await setup();
+    await manager.syncAll({ adapterId: 'cursor' });
+    const collector = new GeneratedFileCollector(manager, new FileMaterializer(fs, clock, '/workspace'), settingsService, clock);
+    const checks = await collector.collect('personal');
+    expect(checks.map((c) => [c.target, c.severity])).toEqual([
+      [manifestPath, 'ok'],
+      [rulePath, 'ok'],
+    ]);
   });
 
   it('removeAdapterGeneratedFiles deletes owned files and reports the count', async () => {
