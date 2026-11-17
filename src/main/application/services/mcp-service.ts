@@ -28,6 +28,8 @@ export interface McpServiceDeps {
   runtime: ClaudeRuntimePort;
   /** Optional shell, used to open the external claude.ai auth flow. */
   shell?: ShellPort;
+  /** Re-checks every server's live connection state (`claude mcp list`) so `list()` stops reporting stale health. */
+  refreshHealth?: () => Promise<void>;
 }
 
 /** Where needs-auth claude.ai connectors are (re-)authenticated. */
@@ -74,6 +76,14 @@ export class McpService {
       throw new DomainError('internal', 'MCP shell port is not configured');
     }
     await shell.openExternal(CLAUDE_AI_CONNECTORS_URL);
+    return { ok: true };
+  }
+
+  /** Called after the user connects a server elsewhere: re-probes the runtime, then the next `list()` reflects it. */
+  async refreshHealth(): Promise<{ ok: true }> {
+    const refresh = this.deps.refreshHealth;
+    if (refresh === undefined) throw new DomainError('internal', 'MCP health probe is not configured');
+    await refresh();
     return { ok: true };
   }
 

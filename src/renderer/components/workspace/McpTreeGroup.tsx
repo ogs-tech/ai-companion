@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Typography } from '@mui/material';
 import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
@@ -13,7 +13,7 @@ import { Toast, type ToastMessage } from '../Toast.js';
 import { useMcpList } from '../../hooks/use-mcp-list.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
 import { HARNESS_LABEL } from './DetectedTreeGroup.js';
-import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp } from '../../hooks/use-mcp-mutations.js';
+import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp, useRefreshMcpHealth } from '../../hooks/use-mcp-mutations.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
@@ -66,9 +66,22 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
   const del = useDeleteMcp();
   const setEnabled = useSetMcpEnabled();
   const authenticate = useAuthenticateMcp();
+  const refreshHealth = useRefreshMcpHealth();
   const importer = useImportDetected();
   const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; server?: McpServer } | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  // Connecting happens in the browser; the app can't see it finish, so it re-checks once the user comes back.
+  const [awaitingReturn, setAwaitingReturn] = useState(false);
+  useEffect(() => {
+    if (!awaitingReturn) return undefined;
+    const onFocus = (): void => {
+      setAwaitingReturn(false);
+      refreshHealth.mutate(undefined, { onError: (err) => setToast({ variant: 'error', message: errorMessage(err) }) });
+    };
+    window.addEventListener('focus', onFocus, { once: true });
+    return () => window.removeEventListener('focus', onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `mutate` is stable; the mutation object is not.
+  }, [awaitingReturn]);
   const rowMenu = useRowContextMenu<McpServer>();
   const rowMenuTarget = rowMenu.state?.target;
   const onMutationError = (err: unknown): void => setToast({ variant: 'error', message: errorMessage(err) });
@@ -173,13 +186,14 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
                         size="small"
                         variant="outlined"
                         data-testid={`tree-mcp-connect-${server.id}`}
+                        disabled={refreshHealth.isPending}
                         onClick={(e) => {
                           e.stopPropagation();
-                          authenticate.mutate({ id: server.id }, { onError: onMutationError });
+                          authenticate.mutate({ id: server.id }, { onSuccess: () => setAwaitingReturn(true), onError: onMutationError });
                         }}
                         sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.75, fontSize: '0.6875rem', textTransform: 'none' }}
                       >
-                        Conectar
+                        {refreshHealth.isPending ? 'Verificando…' : 'Conectar'}
                       </Button>
                     )}
                     <SessionsUsingBadge usage={{ kind: 'mcp', name: server.name }} testId={`tree-mcp-using-${server.id}`} />

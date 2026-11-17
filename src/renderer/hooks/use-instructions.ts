@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { healthQueryKey } from './use-health-report.js';
 import { callIpc, IpcCallError } from '../lib/ipc.js';
 import type { Instruction } from '../../shared/entity.js';
 import { isWorkspaceInstruction } from '../../shared/entity.js';
@@ -72,6 +73,7 @@ export function useInvalidateInstructions() {
       qc.invalidateQueries({ queryKey: INSTRUCTIONS_QUERY_KEY }),
       qc.invalidateQueries({ queryKey: PERSONAL_INSTRUCTION_QUERY_KEY }),
       qc.invalidateQueries({ queryKey: ['starter-pack'] }),
+      qc.invalidateQueries({ queryKey: healthQueryKey('personal') }),
     ]);
   };
 }

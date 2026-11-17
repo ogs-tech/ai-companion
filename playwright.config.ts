@@ -9,6 +9,7 @@ const AREAS = [
   'sessions',
   'channels',
   'workspace',
+  'customizations',
   'workbench',
   'settings',
   'integration',

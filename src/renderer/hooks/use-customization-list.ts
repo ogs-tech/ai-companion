@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
 import type { Entity, EntityKind } from '../../shared/entity.js';
 import type { PluginScope } from './use-plugins.js';
+import { healthQueryKey } from './use-health-report.js';
 
 /**
  * `scope` here is the plugin-provenance scope `*.list` merges plugin entities
@@ -25,6 +26,11 @@ export function useCustomizationList(kind: EntityKind, listMethod: string, scope
 
 export function useInvalidateCustomization() {
   const qc = useQueryClient();
-  return (kind: EntityKind, scope: Scope = 'personal'): Promise<void> =>
-    qc.invalidateQueries({ queryKey: entityQueryKey(kind, scope) });
+  // A save or delete re-syncs the item to the channels, so the ⚠ next to it must be re-read now, not at the next poll.
+  return async (kind: EntityKind, scope: Scope = 'personal'): Promise<void> => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: entityQueryKey(kind, scope) }),
+      qc.invalidateQueries({ queryKey: healthQueryKey('personal') }),
+    ]);
+  };
 }

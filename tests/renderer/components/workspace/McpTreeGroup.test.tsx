@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { McpTreeGroup } from '../../../../src/renderer/components/workspace/McpTreeGroup.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -74,5 +74,27 @@ describe('McpTreeGroup', () => {
     await user.click(screen.getByTestId('tree-subgroup-mcp-figma@market'));
     expect(await screen.findByTestId('tree-mcp-f1')).toBeInTheDocument();
     expect(screen.queryByTestId('tree-mcp-f2')).not.toBeInTheDocument();
+  });
+
+  it('re-probes the runtime when the window regains focus after Conectar, then drops the button', async () => {
+    const connector: McpServer = {
+      id: 'c1', name: 'claude-ai-Gmail', transport: 'http', def: {}, scope: 'detected',
+      source: { kind: 'detected' }, enabled: false, health: { state: 'needs-auth' },
+    };
+    let connected = false;
+    call.mockImplementation(async (method: string) => {
+      if (method === 'mcp.list') return ok([connected ? { ...connector, health: { state: 'ok' } } : connector]);
+      if (method === 'mcp.refreshHealth') connected = true;
+      return ok(undefined);
+    });
+    const user = userEvent.setup();
+    renderWithShell(<McpTreeGroup showGlobal={false} defaultExpanded />);
+    await user.click(await screen.findByTestId('tree-mcp-connect-c1'));
+    expect(call).toHaveBeenCalledWith('mcp.authenticate', { id: 'c1' });
+    expect(call).not.toHaveBeenCalledWith('mcp.refreshHealth', expect.anything());
+
+    fireEvent.focus(window);
+    await waitFor(() => expect(call).toHaveBeenCalledWith('mcp.refreshHealth', {}));
+    await waitFor(() => expect(screen.queryByTestId('tree-mcp-connect-c1')).not.toBeInTheDocument());
   });
 });

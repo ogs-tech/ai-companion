@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { entityQueryKey } from './use-customization-list.js';
+import { healthQueryKey } from './use-health-report.js';
 import { INSTRUCTIONS_QUERY_KEY, PERSONAL_INSTRUCTION_QUERY_KEY } from './use-instructions.js';
 import type { EntityChangedEvent } from '../../shared/entity.js';
 
@@ -16,6 +17,7 @@ export function useEntityChangeInvalidation(): void {
 
   useEffect(() => {
     return window.api.entity.onChanged((event: EntityChangedEvent) => {
+      void queryClient.invalidateQueries({ queryKey: healthQueryKey('personal') });
       if (event.kind === 'skill' || event.kind === 'agent') {
         void queryClient.invalidateQueries({ queryKey: entityQueryKey(event.kind) });
       } else if (event.kind === 'instruction') {

@@ -36,5 +36,7 @@ export function buildMcpHandlers(service: McpService): IpcHandlers {
       const raw = asObject(params, 'mcp.authenticate');
       return service.authenticate({ id: asString(raw['id'], 'id') });
     },
+
+    'mcp.refreshHealth': async () => service.refreshHealth(),
   };
 }

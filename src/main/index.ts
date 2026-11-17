@@ -86,6 +86,8 @@ import { ChokidarFileWatcher } from './infrastructure/file-watcher/chokidar-file
 import { MarketplaceService } from './application/services/marketplace-service.js';
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
 import { SettingsMarketplaceRepository } from './infrastructure/marketplace/settings-marketplace-repository.js';
+import { ClaudeCliMcpProbe } from './infrastructure/claude-cli/claude-cli-mcp-probe.js';
+import { ProbedClaudeRuntime } from './application/mcp/probed-claude-runtime.js';
 import { FsClaudeRuntimeReader } from './infrastructure/claude-runtime/fs-claude-runtime-reader.js';
 import { PluginMcpReader } from './infrastructure/mcp/plugin-mcp-reader.js';
 import { McpService } from './application/services/mcp-service.js';
@@ -384,11 +386,13 @@ async function wireIpc(): Promise<void> {
 
   await new MarketplaceSeeder({ marketplaceService }).seedDefaultsIfMissing('personal');
 
-  const claudeRuntimeReader = new FsClaudeRuntimeReader({
+  const claudeRuntimeFiles = new FsClaudeRuntimeReader({
     claudeJsonPath: join(homedir(), '.claude.json'),
     authCachePath: join(homedir(), '.claude', 'mcp-needs-auth-cache.json'),
     mcpLogsBaseDir: join(homedir(), 'Library', 'Caches', 'claude-cli-nodejs'),
   });
+  // One shared view for the MCP list, the row warnings and Diagnósticos: files, overridden by the last live probe.
+  const claudeRuntimeReader = new ProbedClaudeRuntime(claudeRuntimeFiles, new ClaudeCliMcpProbe({ cwd: homedir() }));
 
   const pluginMcpReader = new PluginMcpReader({
     listRoots: (scope) => pluginProvenance.roots(scope),
@@ -403,6 +407,7 @@ async function wireIpc(): Promise<void> {
     plugins: pluginMcpReader,
     runtime: claudeRuntimeReader,
     shell: shellPort,
+    refreshHealth: () => claudeRuntimeReader.refresh(),
   });
 
   const embeddedBrowserAdapter = new EmbeddedBrowserAdapter({
