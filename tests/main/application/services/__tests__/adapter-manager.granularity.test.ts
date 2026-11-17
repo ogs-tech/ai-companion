@@ -13,7 +13,7 @@ describe('AdapterManager sync granularity by entity kind', () => {
 
     const skillEntity: Skill = {
       urn: 'urn:skill:alpha',
-      kind: 'skill',
+      kind: 'skill', enabled: true,
       name: 'alpha',
       description: 'skill entity',
       scopes: ['personal'],
@@ -37,7 +37,7 @@ describe('AdapterManager sync granularity by entity kind', () => {
 
     const agentEntity: Agent = {
       urn: 'urn:agent:beta',
-      kind: 'agent',
+      kind: 'agent', enabled: true,
       name: 'beta',
       description: 'agent entity',
       scopes: ['personal'],

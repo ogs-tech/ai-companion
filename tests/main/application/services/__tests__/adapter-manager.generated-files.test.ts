@@ -22,7 +22,7 @@ import type { Settings } from '../../../../../src/shared/settings.js';
 import { WORKSPACE_SOURCE, type Entity, type Instruction } from '../../../../../src/shared/entity.js';
 
 const instruction: Instruction = {
-  urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
+  urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default', description: '',
   scopes: ['personal'], metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'body',
 };
@@ -93,7 +93,7 @@ describe('AdapterManager generated-file lifecycle', () => {
     // throws for this entity.
     const brokenProjectInstruction: Instruction = {
       urn: 'urn:instruction:broken',
-      kind: 'instruction',
+      kind: 'instruction', enabled: true,
       name: 'broken',
       description: '',
       scopes: ['workspace'],

@@ -15,7 +15,7 @@ describe('FsEntityRepository — skill', () => {
   it('writes SKILL.md under skills/<name>/ and reads it back', async () => {
     const repo = new FsEntityRepository(ws, 'personal');
     const skill: Skill = {
-      urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['personal'],
+      urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd', scopes: ['personal'],
       metadata: meta, source: WORKSPACE_SOURCE, content: '# Demo\n',
     };
     await repo.save(skill);
@@ -28,7 +28,7 @@ describe('FsEntityRepository — skill', () => {
   it('round-trips scopes/scopeId for a workspace-scoped skill through disk', async () => {
     const repo = new FsEntityRepository(ws, 'workspace');
     const skill: Skill = {
-      urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd', scopes: ['workspace'],
+      urn: 'urn:skill:acme', kind: 'skill', enabled: true, name: 'acme', description: 'd', scopes: ['workspace'],
       scopeId: 'ws-1', metadata: meta, source: WORKSPACE_SOURCE, content: '# Acme\n',
     };
     await repo.save(skill);
@@ -40,7 +40,7 @@ describe('FsEntityRepository — skill', () => {
 
 describe('FsEntityRepository — scope role', () => {
   const skill = (scope: 'personal' | 'workspace'): Skill => ({
-    urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: [scope],
+    urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd', scopes: [scope],
     ...(scope === 'workspace' ? { scopeId: 'ws-1' } : {}),
     metadata: meta, source: WORKSPACE_SOURCE, content: '# Demo\n',
   });
@@ -60,7 +60,7 @@ describe('FsEntityRepository — instruction', () => {
   it('stores frontmatter-free markdown at instructions/<name>.md', async () => {
     const repo = new FsEntityRepository(ws, 'personal');
     const ins: Instruction = {
-      urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
+      urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default', description: '',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: '# Hi\n',
     };
     await repo.save(ins);
@@ -125,7 +125,7 @@ describe('FsEntityRepository — list & delete', () => {
 describe('FsEntityRepository — workspace instruction storage', () => {
   const projectInstruction = (name = 'acme', scopeId = 'ws-1'): Instruction => ({
     urn: `urn:instruction:${name}`,
-    kind: 'instruction',
+    kind: 'instruction', enabled: true,
     name,
     description: `${name} rules`,
     scopes: ['workspace'],
@@ -276,5 +276,70 @@ describe('FsEntityRepository — filePath', () => {
   it('rejects with not_found for a urn that does not exist', async () => {
     const repo = new FsEntityRepository(ws, 'personal');
     await expect(repo.filePath('urn:skill:missing')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});
+
+describe('FsEntityRepository — enabled round-trip', () => {
+  const exists = async (path: string): Promise<boolean> => readFile(path, 'utf8').then(() => true, () => false);
+
+  it('round-trips a disabled skill and agent', async () => {
+    const repo = new FsEntityRepository(ws, 'personal');
+    const skill: Skill = {
+      urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['personal'], enabled: false,
+      metadata: meta, source: WORKSPACE_SOURCE, content: '# Demo\n',
+    };
+    const agent: Agent = {
+      urn: 'urn:agent:rev', kind: 'agent', name: 'rev', description: 'r', scopes: ['personal'], enabled: false,
+      metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'Review.',
+    };
+    await repo.save(skill);
+    await repo.save(agent);
+    expect((await repo.get('urn:skill:demo')).enabled).toBe(false);
+    expect((await repo.get('urn:agent:rev')).enabled).toBe(false);
+    await repo.save({ ...skill, enabled: true });
+    expect((await repo.get('urn:skill:demo')).enabled).toBe(true);
+  });
+
+  it('stores a workspace instruction flag in meta.json and drops it when re-enabled', async () => {
+    const repo = new FsEntityRepository(ws, 'workspace');
+    const ins: Instruction = {
+      urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme', description: 'a', scopes: ['workspace'],
+      scopeId: 'ws-1', enabled: false, metadata: meta, source: WORKSPACE_SOURCE, content: '# Acme\n',
+    };
+    const metaPath = join(ws, 'instructions', 'project', 'acme', 'meta.json');
+    await repo.save(ins);
+    expect(JSON.parse(await readFile(metaPath, 'utf8')).enabled).toBe(false);
+    expect((await repo.get('urn:instruction:acme')).enabled).toBe(false);
+    await repo.save({ ...ins, enabled: true });
+    expect(JSON.parse(await readFile(metaPath, 'utf8'))).not.toHaveProperty('enabled');
+    expect((await repo.get('urn:instruction:acme')).enabled).toBe(true);
+  });
+
+  it('stores the personal instruction flag in default.meta.json, body untouched', async () => {
+    const repo = new FsEntityRepository(ws, 'personal');
+    const ins: Instruction = {
+      urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '', scopes: ['personal'],
+      enabled: false, metadata: meta, source: WORKSPACE_SOURCE, content: '# Hi\n',
+    };
+    const sidecar = join(ws, 'instructions', 'default.meta.json');
+    const body = join(ws, 'instructions', 'default.md');
+    await repo.save(ins);
+    expect(JSON.parse(await readFile(sidecar, 'utf8'))).toEqual({ enabled: false });
+    expect(await readFile(body, 'utf8')).toBe('# Hi\n');
+    expect((await repo.get('urn:instruction:default')).enabled).toBe(false);
+    await repo.save({ ...ins, enabled: true });
+    expect(await exists(sidecar)).toBe(false);
+    expect(await readFile(body, 'utf8')).toBe('# Hi\n');
+    expect((await repo.get('urn:instruction:default')).enabled).toBe(true);
+  });
+
+  it('deleting the personal instruction removes its sidecar too', async () => {
+    const repo = new FsEntityRepository(ws, 'personal');
+    await repo.save({
+      urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '', scopes: ['personal'],
+      enabled: false, metadata: meta, source: WORKSPACE_SOURCE, content: '# Hi\n',
+    } as Instruction);
+    await repo.delete('urn:instruction:default');
+    expect(await exists(join(ws, 'instructions', 'default.meta.json'))).toBe(false);
   });
 });

@@ -12,20 +12,20 @@ const meta = { version: '0.1.0', createdAt: '', updatedAt: '' };
 
 describe('EntityValidator', () => {
   it('accepts a valid skill', () => {
-    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(() => v.validate(skill)).not.toThrow();
   });
 
   it('rejects a bad slug', () => {
-    const skill: Skill = { urn: 'urn:skill:Bad', kind: 'skill', name: 'Bad Name', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:Bad', kind: 'skill', enabled: true, name: 'Bad Name', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(() => v.validate(skill)).toThrow();
   });
 
   it('accepts a valid personal instruction (name=default, scopes=[personal])', () => {
     const good: Instruction = {
-      urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
+      urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default',
       description: '', scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
     };
     expect(() => v.validate(good)).not.toThrow();
@@ -50,7 +50,7 @@ describe('EntityValidator', () => {
 
   it('accepts a valid workspace instruction (scopes=[workspace] + scopeId)', () => {
     const good: Instruction = {
-      urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
+      urn: 'urn:instruction:acme', kind: 'instruction', enabled: true, name: 'acme',
       description: 'acme workspace rules', scopes: ['workspace'], metadata: meta,
       source: WORKSPACE_SOURCE, content: 'b', scopeId: 'ws-1',
     };
@@ -93,7 +93,7 @@ describe('EntityValidator', () => {
   });
 
   it('throws a DomainError with kind "validation" and a non-empty details.errors array', () => {
-    const skill: Skill = { urn: 'urn:skill:Bad', kind: 'skill', name: 'Bad Name', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:Bad', kind: 'skill', enabled: true, name: 'Bad Name', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
 
     let caught: unknown;
@@ -117,7 +117,7 @@ describe('EntityValidator', () => {
   });
 
   it('rejects a skill with an empty description', () => {
-    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: '',
+    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: '',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(() => v.validate(skill)).toThrow();
   });

@@ -387,7 +387,7 @@ export class DetectionService {
     };
     if (item.kind === 'instruction') {
       const raw = await this.deps.fs.readFile(item.path);
-      const instruction: Instruction = { ...common, kind: 'instruction', description: '', content: stripFrontmatter(raw) };
+      const instruction: Instruction = { ...common, kind: 'instruction', enabled: true, description: '', content: stripFrontmatter(raw) };
       return instruction;
     }
     if (item.kind === 'skill' || item.kind === 'agent') {

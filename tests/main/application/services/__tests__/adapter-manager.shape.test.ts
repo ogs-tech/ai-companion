@@ -9,7 +9,7 @@ describe('AdapterManager.syncEntity shape', () => {
     const { manager, fs, registerEntity } = await setupAdapterManager([adapter]);
     const entity: Skill = {
       urn: 'urn:skill:foo',
-      kind: 'skill',
+      kind: 'skill', enabled: true,
       name: 'foo',
       description: 'desc',
       scopes: ['personal'],

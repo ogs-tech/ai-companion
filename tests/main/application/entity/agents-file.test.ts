@@ -3,7 +3,7 @@ import { GENERATED_FILE_MARKER, renderAgentsFile } from '../../../../src/main/ap
 import { WORKSPACE_SOURCE, type Instruction } from '../../../../src/shared/entity.js';
 
 const instruction = (content: string): Instruction => ({
-  urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
+  urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default', description: '',
   scopes: ['personal'], metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content,
 });

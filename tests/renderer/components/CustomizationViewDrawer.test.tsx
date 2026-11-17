@@ -7,7 +7,7 @@ import { renderWithTheme } from '../test-utils.js';
 
 const skill = (name: string, source = WORKSPACE_SOURCE): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: `${name} description`,
   scopes: ['personal'],

@@ -8,7 +8,7 @@ const meta = { version: '1.0.0', createdAt: '', updatedAt: '' };
 
 const baseEntity = (overrides: Partial<Pick<Skill, 'name' | 'scopes'>> = {}): Skill => ({
   urn: `urn:skill:${overrides.name ?? 'foo'}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: overrides.name ?? 'foo',
   description: 'desc',
   scopes: overrides.scopes ?? (['personal'] as Scope[]),

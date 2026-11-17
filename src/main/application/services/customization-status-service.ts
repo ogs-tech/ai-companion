@@ -1,7 +1,7 @@
 import type { ChannelId } from '../../../shared/channel.js';
 import { worseStatus, type ChannelStatus, type CustomizationStatusReport, type ItemStatus } from '../../../shared/customization-status.js';
 import type { DetectedEntity } from '../../../shared/detected.js';
-import { entityUrn } from '../../../shared/entity.js';
+import { entityUrn, type Entity } from '../../../shared/entity.js';
 import type { HealthCheck, HealthReport } from '../../../shared/health.js';
 import type { ClockPort } from '../ports/clock-port.js';
 
@@ -33,6 +33,8 @@ export interface CustomizationStatusDeps {
   mcps: () => Promise<readonly StatusMcp[]>;
   hooks: () => Promise<readonly StatusHook[]>;
   plugins: () => Promise<readonly StatusPlugin[]>;
+  /** The current scope's own canonical skills, agents and instructions (mcp/hook come through `mcps`/`hooks`). */
+  entities: () => Promise<readonly Entity[]>;
   clock: ClockPort;
 }
 
@@ -65,12 +67,13 @@ export class CustomizationStatusService {
 
   async getReport(): Promise<CustomizationStatusReport> {
     // Issued together so the three detection readers share one scan (see `DetectionService.list`).
-    const [health, detected, mcps, hooks, plugins] = await Promise.all([
+    const [health, detected, mcps, hooks, plugins, entities] = await Promise.all([
       this.deps.health.getReport('personal'),
       this.deps.detection.list({ kinds: ['skill', 'agent'] }),
       this.deps.mcps(),
       this.deps.hooks(),
       this.deps.plugins(),
+      this.deps.entities(),
     ]);
 
     const items = new Map<string, ItemStatus>();
@@ -86,6 +89,7 @@ export class CustomizationStatusService {
       // Only the user's own servers can be turned off; a detected one reports `enabled: false` because the app doesn't manage it.
       ...mcps.map((m) => ({ urn: entityUrn('mcp', m.name), source: m.source, disabled: m.source.kind === 'workspace' && !m.enabled })),
       ...hooks.map((h) => ({ urn: entityUrn('hook', h.id), source: h.source, disabled: h.source.kind !== 'detected' && h.enabled === false })),
+      ...entities.map((e) => ({ urn: e.urn, source: e.source, disabled: e.source.kind === 'workspace' && !e.enabled })),
     ];
     for (const { urn, source, disabled } of subjects) {
       if (source.kind === 'detected' && source.harness !== undefined) merge(items, urn, source.harness, DETECTED);

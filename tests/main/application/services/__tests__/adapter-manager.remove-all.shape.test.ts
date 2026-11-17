@@ -22,7 +22,7 @@ const baseSettings: Settings = {
 
 const skillEntity: Skill = {
   urn: 'urn:skill:test',
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: 'test',
   description: 'desc',
   scopes: ['personal'],

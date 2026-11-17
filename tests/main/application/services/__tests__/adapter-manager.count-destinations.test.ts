@@ -25,7 +25,7 @@ const meta = { version: '1.0.0', createdAt: '', updatedAt: '' };
 
 const makeSkillEntity = (name: string): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: 'desc',
   scopes: ['personal'],
@@ -80,7 +80,7 @@ describe('AdapterManager.countDestinations (AC#17)', () => {
     // throws for this entity.
     const brokenInstruction: Instruction = {
       urn: 'urn:instruction:broken',
-      kind: 'instruction',
+      kind: 'instruction', enabled: true,
       name: 'broken',
       description: '',
       scopes: ['workspace'],

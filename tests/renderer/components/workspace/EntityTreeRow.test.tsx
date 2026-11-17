@@ -5,10 +5,11 @@ import { EntityTreeRow, seedNewEntity, type EntityRowHandlers } from '../../../.
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { rowId, treeItem } from './tree-item-fixture.js';
 import type { Skill } from '../../../../src/shared/entity.js';
+import { UndoableDeleteContext } from '../../../../src/renderer/hooks/use-undoable-delete.js';
 
 function skill(overrides: Partial<Skill>): Skill {
   return {
-    urn: `urn:skill:${overrides.name}`, kind: 'skill', name: 'unnamed', description: '', scopes: ['personal'],
+    urn: `urn:skill:${overrides.name}`, kind: 'skill', enabled: true, name: 'unnamed', description: '', scopes: ['personal'],
     metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '', ...overrides,
   };
 }
@@ -32,7 +33,7 @@ describe('EntityTreeRow', () => {
     expect(h.onEdit).toHaveBeenCalledWith('skill', own, false);
   });
 
-  it('a Global item is read-only: opens inherited, dimmed, with no delete or Properties', async () => {
+  it('a Global item is read-only: opens inherited, dimmed, with Abrir and no Editar or Excluir', async () => {
     const h = handlers();
     renderWithShell(<EntityTreeRow item={globalItem} handlers={h} />);
     const row = screen.getByTestId(rowId(globalItem));
@@ -40,19 +41,27 @@ describe('EntityTreeRow', () => {
     expect(h.onOpenInherited).toHaveBeenCalledWith(own, 'skill');
     expect(h.onEdit).not.toHaveBeenCalled();
     fireEvent.contextMenu(row);
-    expect(await screen.findByTestId('row-context-menu-preview')).toBeInTheDocument();
+    expect(await screen.findByTestId('row-context-menu-open')).toBeInTheDocument();
     expect(screen.queryByTestId('row-context-menu-delete')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('row-context-menu-properties')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('row-context-menu-edit')).not.toBeInTheDocument();
   });
 
-  it('deletes an own item after confirmation', async () => {
+  it('Excluir hands the delete to the undo window, with no confirm dialog', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    renderWithShell(<EntityTreeRow item={ownItem} handlers={handlers()} />);
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const requestDelete = vi.fn();
+    renderWithShell(
+      <UndoableDeleteContext.Provider value={requestDelete}>
+        <EntityTreeRow item={ownItem} handlers={handlers()} />
+      </UndoableDeleteContext.Provider>,
+    );
     fireEvent.contextMenu(screen.getByTestId(rowId(ownItem)));
     await user.click(await screen.findByTestId('row-context-menu-delete'));
-    expect(confirmSpy).toHaveBeenCalled();
-    await waitFor(() => expect(call).toHaveBeenCalledWith('skill.delete', { id: 'personal-skill', removeSymlinks: true }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(requestDelete).toHaveBeenCalledWith(expect.objectContaining({ key: ownItem.urn, message: '"personal-skill" excluído' }));
+    expect(call).not.toHaveBeenCalledWith('skill.delete', expect.anything());
+    await requestDelete.mock.calls[0]![0].commit();
+    expect(call).toHaveBeenCalledWith('skill.delete', { id: 'personal-skill', removeSymlinks: true });
     confirmSpy.mockRestore();
   });
 
@@ -85,5 +94,35 @@ describe('EntityTreeRow', () => {
     expect(seedNewEntity('skill', { scope: 'workspace', scopeId: 'w1' })).toMatchObject({ scopes: ['workspace'], scopeId: 'w1' });
     expect(seedNewEntity('agent', { scope: 'workspace', scopeId: 'w1', folder: '/r/api' })).toMatchObject({ folder: '/r/api' });
     expect(seedNewEntity('skill', undefined).scopes).toEqual(['personal']);
+  });
+});
+
+describe('EntityTreeRow — registry menu', () => {
+  it('an own skill offers Abrir, Editar, Desativar, Excluir, then New Action', async () => {
+    renderWithShell(<EntityTreeRow item={ownItem} handlers={handlers()} />);
+    fireEvent.contextMenu(screen.getByTestId(rowId(ownItem)));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Abrir', 'Editar', 'Desativar', 'Excluir', 'New Action']);
+  });
+
+  it('Desativar turns the skill off in every channel', async () => {
+    renderWithShell(<EntityTreeRow item={ownItem} handlers={handlers()} />);
+    fireEvent.contextMenu(screen.getByTestId(rowId(ownItem)));
+    fireEvent.click(await screen.findByTestId('row-context-menu-toggle'));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: ownItem.urn, enabled: false }));
+  });
+
+  it("a plugin's skill is tagged, opens as a preview and offers only Abrir and New Action", async () => {
+    const h = handlers();
+    const pluginSkill = { ...own, source: { kind: 'plugin' as const, pluginId: 'superpowers', provenance: 'workspace-managed' as const } };
+    const item = { ...ownItem, pluginTag: 'superpowers', entity: { kind: 'skill' as const, value: pluginSkill } };
+    renderWithShell(<EntityTreeRow item={item} handlers={h} />);
+    expect(screen.getByTestId('row-tag-plugin')).toHaveTextContent('superpowers');
+    fireEvent.click(screen.getByTestId(rowId(item)));
+    expect(h.onPreview).toHaveBeenCalledWith(pluginSkill);
+    expect(h.onEdit).not.toHaveBeenCalled();
+    fireEvent.contextMenu(screen.getByTestId(rowId(item)));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Abrir', 'New Action']);
   });
 });

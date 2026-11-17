@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Button, Typography } from '@mui/material';
-import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
+import { KeyRound, Plug } from 'lucide-react';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { PluginTag, RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { customizationMenu, toRowActions } from './customization-menu.js';
+import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 import { HarnessTag } from './DetectedTreeRow.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
-import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp, useRefreshMcpHealth } from '../../hooks/use-mcp-mutations.js';
+import { useDeleteMcp, useAuthenticateMcp, useRefreshMcpHealth } from '../../hooks/use-mcp-mutations.js';
+import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
 import { isClaudeManagedMcp, needsAuth, type McpServer } from '../../../shared/mcp.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
+import { entityUrn } from '../../../shared/entity.js';
 
 const MCP_SCOPE_LABEL: Record<McpServer['scope'], string> = {
   global: 'usuário',
@@ -38,7 +42,8 @@ interface McpTreeRowProps {
 /** One MCP server: toggle/edit/delete for the user's own, "Autenticar" when it needs auth, "Importar" when detected. */
 export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowProps): React.ReactElement | null {
   const del = useDeleteMcp();
-  const setEnabled = useSetMcpEnabled();
+  const requestDelete = useRequestDelete();
+  const setEnabled = useSetEntityEnabled();
   const authenticate = useAuthenticateMcp();
   const refreshHealth = useRefreshMcpHealth();
   const importer = useImportDetected();
@@ -63,21 +68,36 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
   const detectedId = server.source.kind === 'detected' && server.source.importable === true ? server.source.detectedId : undefined;
   const runImport = detectedId !== undefined ? (): void => importer.mutate({ id: detectedId }, { onError: onMutationError }) : undefined;
 
+  const own = server.source.kind === 'workspace';
+  const lifecycle = toRowActions(
+    customizationMenu({
+      entity: { kind: 'mcp', name: server.name, scopes: ['personal'] },
+      enabled: server.enabled,
+      readOnly: server.source.kind === 'plugin' ? 'plugin' : false,
+      detected: server.source.kind === 'detected',
+      canInstallOver: false,
+      hasUndo: false,
+      newAction: false,
+    }),
+    {
+      ...(runImport !== undefined ? { import: runImport } : {}),
+      ...(own
+        ? {
+            edit: () => setEditing(true),
+            toggle: () => setEnabled.mutate({ urn: entityUrn('mcp', server.name), enabled: !server.enabled }, { onError: onMutationError }),
+            delete: () => requestDelete({ key: item.urn, message: `"${server.name}" excluído`, commit: () => del.mutateAsync({ id: server.id }) }),
+          }
+        : {}),
+    },
+  );
   const actions: RowContextMenuAction[] = rowMenu.state
     ? [
         ...(needsAuth(server) ? [{ key: 'authenticate', label: 'Autenticar', glyph: KeyRound, onSelect: () => authenticate.mutate({ id: server.id }) }] : []),
-        ...(server.source.kind === 'workspace'
-          ? [
-              { key: 'toggle', label: server.enabled ? 'Desativar' : 'Ativar', glyph: Power, onSelect: () => setEnabled.mutate({ id: server.id, enabled: !server.enabled }, { onError: onMutationError }) },
-              { key: 'edit', label: 'Editar', glyph: Pencil, onSelect: () => setEditing(true) },
-              { key: 'delete', label: 'Excluir', glyph: Trash2, danger: true, onSelect: () => del.mutate({ id: server.id }, { onError: onMutationError }) },
-            ]
-          : []),
-        ...(runImport !== undefined ? [{ key: 'import', label: 'Importar', glyph: Download, onSelect: runImport }] : []),
+        ...lifecycle,
       ]
     : [];
   // Detected servers offer a menu only when importable.
-  const hasMenu = server.source.kind === 'workspace' || needsAuth(server) || runImport !== undefined;
+  const hasMenu = own || needsAuth(server) || runImport !== undefined;
 
   return (
     <>
@@ -91,6 +111,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
         {...(hasMenu ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, server) } : {})}
         badge={
           <>
+            {item.pluginTag !== undefined && <PluginTag pluginId={item.pluginTag} />}
             {showScope && (
               <Typography component="span" data-testid={`tree-mcp-scope-${server.id}`} noWrap sx={QUIET_SX}>
                 {MCP_SCOPE_LABEL[server.scope]}

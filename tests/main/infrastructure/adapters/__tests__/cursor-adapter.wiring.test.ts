@@ -6,13 +6,13 @@ import type { Settings } from '../../../../../src/shared/settings.js';
 import { setupAdapterManager } from '../../../application/services/__tests__/adapter-manager.helpers.js';
 
 const skill: Skill = {
-  urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
+  urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd',
   scopes: ['personal'], metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'b',
 };
 
 const settings = (cursorEnabled: boolean): Settings => ({
-  adapters: { claude: { enabled: true }, cursor: { enabled: cursorEnabled }, lmstudio: { enabled: false } },  ui: { theme: 'system' },
+  adapters: { claude: { enabled: true }, cursor: { enabled: cursorEnabled, readsClaudeConfig: false }, lmstudio: { enabled: false } },  ui: { theme: 'system' },
   language: 'off',
 });
 

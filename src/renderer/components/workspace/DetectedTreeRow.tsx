@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Box, Tooltip } from '@mui/material';
-import { Download, ScanSearch } from 'lucide-react';
+import { ScanSearch } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowBadgeSlot, RowLabel, rowTestId } from './RowBadgeSlot.js';
-import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
+import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { customizationMenu, toRowActions } from './customization-menu.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
 import { IpcCallError } from '../../lib/ipc.js';
@@ -37,7 +38,17 @@ export function DetectedTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: n
         onError: (err) => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) }),
       },
     );
-  const actions: RowContextMenuAction[] = rowMenu.state ? [{ key: 'import', label: 'Importar', glyph: Download, onSelect: runImport }] : [];
+  // Detected rows: Abrir + Importar from the registry; there is no preview of a detected file yet, so Abrir is left out.
+  const menu = customizationMenu({
+    entity: { kind: detected.kind === 'agent' ? 'agent' : 'skill', name: detected.name, scopes: ['personal'] },
+    enabled: true,
+    readOnly: false,
+    detected: true,
+    canInstallOver: false,
+    hasUndo: false,
+    newAction: false,
+  });
+  const actions = rowMenu.state ? toRowActions(menu, { import: runImport }) : [];
 
   return (
     <>

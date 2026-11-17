@@ -18,8 +18,14 @@ complete example; `grep -rn "'agent'" src/` lists most touchpoints.
 ### Shared model — `src/shared/`
 
 - [ ] `entity.ts`: add the kind's interface (extending the shared `Entity` base: `name`, `description`,
-      `metadata`, `source`, `scopes`, `scopeId?`, `urn`) and add it to the `Entity` union. URNs are
+      `metadata`, `source`, `scopes`, `scopeId?`, `urn`, `enabled`) and add it to the `Entity` union. URNs are
       `urn:<kind>:<name>` via `entityUrn`.
+- [ ] `customization-kind.ts`: register it in `CUSTOMIZATION_KINDS` — group label, the lifecycle verbs it
+      supports (`edit`, `toggle`, `delete`, `import`, `installOver`) and its editor. Its position is its tree
+      group's position; row menus, `+ Novo` and the verb labels all come from here, so a verb the kind lacks is
+      simply not listed (never shown disabled).
+- [ ] `channel.ts`: if a channel reads another channel's copy of this kind natively, add it to that channel's
+      `reads` (coverage) so the app does not write it twice.
 - [ ] `settings.ts`: if the kind has its own top-level folder that must exist from day one, add it to
       `WorkspacePaths` (bootstrapped on workspace creation and activation).
 
@@ -28,6 +34,7 @@ complete example; `grep -rn "'agent'" src/` lists most touchpoints.
 - [ ] `application/schemas/entity-schema.ts`: a Zod schema extending `entityBase` with `kind: z.literal(...)`.
 - [ ] `application/services/entity-validator.ts`: map the kind to its schema (unknown kinds are rejected).
 - [ ] `application/entity/entity-serializer.ts`: entity ↔ file content (frontmatter keys, body field).
+      Store `enabled` only when `false` (absent = `true`), so existing files need no migration.
       Keep it lossless — a field the editor does not show must survive a save (cf. `explicitOnly` ↔
       `disable-model-invocation`).
 - [ ] `infrastructure/entity/fs-entity-repository.ts`: the kind's folder in `FOLDER`, its file path, and
@@ -64,8 +71,10 @@ complete example; `grep -rn "'agent'" src/` lists most touchpoints.
 - [ ] `lib/blank-customization.ts`: a blank entity for the create flow.
 - [ ] `components/workspace/EditorPanel.tsx`: the kind's entry in `SAVE_BY_KIND`, and its body field.
 - [ ] `lib/customization-tree.ts` (a `TreeGroupId`/`TreeEntity` variant, its candidates and search fields),
-      `hooks/use-customization-tree.ts` (its query), a row component next to `EntityTreeRow.tsx`, and
-      `CustomizationsList.tsx` (plus `ControlPanelContent.tsx`'s props): its group glyph, row and "+" entry.
+      `hooks/use-customization-tree.ts` (its query), a row component next to `EntityTreeRow.tsx` whose menu is
+      `toRowActions(customizationMenu(…), handlers)` from `components/workspace/customization-menu.ts` (deletes go
+      through `useRequestDelete()` — the list's undo toast), and `CustomizationsList.tsx`'s row switch.
+      The group label and the `+ Novo` entry come from `CUSTOMIZATION_KINDS`.
 - [ ] `components/shell/nav.ts`: its icon (`ENTITY_GROUP_ICONS`) and accent color (`ENTITY_ACCENT_COLOR`).
 - [ ] `hooks/use-entity-change-invalidation.ts`: invalidate the kind's list query on `entity:changed`.
 

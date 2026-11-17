@@ -22,7 +22,7 @@ import { scopedRepository } from '../helpers/scoped-repository.js';
 
 const skill = (name = 'foo'): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: 'd',
   scopes: ['personal'],
@@ -43,7 +43,7 @@ const setupSkillService = () => {
 
 const agent = (name = 'reviewer'): Agent => ({
   urn: `urn:agent:${name}`,
-  kind: 'agent',
+  kind: 'agent', enabled: true,
   name,
   description: 'd',
   scopes: ['personal'],
@@ -64,7 +64,7 @@ const setupAgentService = () => {
 
 const instruction = (): Instruction => ({
   urn: 'urn:instruction:default',
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name: 'default',
   description: '',
   scopes: ['personal'],

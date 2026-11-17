@@ -16,7 +16,7 @@ const WORKSPACE = '/workspace';
 
 const skillPersonal: Skill = {
   urn: 'urn:skill:review',
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: 'review',
   description: 'desc',
   scopes: ['personal'],

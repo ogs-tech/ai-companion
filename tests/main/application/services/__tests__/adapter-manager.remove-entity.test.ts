@@ -7,6 +7,7 @@ import type { Settings } from '../../../../../src/shared/settings.js';
 const baseSkill = (overrides: Partial<Skill> = {}): Skill => ({
   urn: `urn:skill:${overrides.name ?? 'foo'}`,
   kind: 'skill',
+  enabled: true,
   name: 'foo',
   description: 'desc',
   scopes: ['personal'],

@@ -5,11 +5,12 @@ import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js'
 import type { Instruction } from '../../../../src/shared/entity.js';
 import type { DetectedEntity } from '../../../../src/shared/detected.js';
 import { treeItem } from './tree-item-fixture.js';
+import { UndoableDeleteContext } from '../../../../src/renderer/hooks/use-undoable-delete.js';
 
 function instruction(overrides: Partial<Instruction> = {}): Instruction {
   return {
     urn: 'urn:instruction:default',
-    kind: 'instruction',
+    kind: 'instruction', enabled: true,
     name: 'default',
     description: '',
     scopes: ['personal'],
@@ -144,14 +145,14 @@ describe('InstructionTreeRow status', () => {
     expect(screen.queryByTestId('detected-apply')).not.toBeInTheDocument();
   });
 
-  it('offers the detected file: its name, a single "Aplicar", and the detected dot', () => {
+  it('offers the detected file: its name, a single "Importar", and the detected dot', () => {
     renderWithShell(<InstructionTreeRow kind="personal" instruction={null} detected={detectedFile} seed={() => instruction()} onOpen={vi.fn()} />);
     expect(screen.getByTestId('detected-file')).toHaveTextContent('AGENTS.md');
-    expect(screen.getByTestId('detected-apply')).toHaveTextContent('Aplicar');
+    expect(screen.getByTestId('detected-apply')).toHaveTextContent('Importar');
     expect(screen.getByTestId('sync-dot')).toHaveAttribute('data-state', 'detected');
   });
 
-  it('Aplicar imports the file and opens the imported instruction for editing, without starting an empty one', async () => {
+  it('Importar imports the file and opens the imported instruction for editing, without starting an empty one', async () => {
     const imported = instruction({ content: 'from file' });
     call.mockImplementation(async (method: string) => (method === 'detected.import' ? ok({ entity: imported, syncReport: [] }) : ok(undefined)));
     const onOpen = vi.fn();
@@ -191,5 +192,48 @@ describe('InstructionTreeRow status', () => {
     const item = treeItem({ kind: 'instruction', value, placement: 'folder', folder: '/r/api' }, { urn: value.urn, name: 'Instructions', folderAlias: 'api' });
     renderWithShell(<InstructionTreeRow kind="folder" testId="folder-instruction-row-api" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
     expect(screen.getByTestId('folder-instruction-row-api')).toHaveTextContent('Instructions · api');
+  });
+});
+
+describe('InstructionTreeRow — delete', () => {
+  it('Excluir on a workspace instruction hands the delete to the undo window, with no confirm dialog', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const requestDelete = vi.fn();
+    const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['workspace'], scopeId: 'w1' });
+    renderWithShell(
+      <UndoableDeleteContext.Provider value={requestDelete}>
+        <InstructionTreeRow kind="workspace" instruction={target} seed={() => target} onOpen={vi.fn()} />
+      </UndoableDeleteContext.Provider>,
+    );
+    fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
+    fireEvent.click(await screen.findByTestId('row-context-menu-delete'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(requestDelete).toHaveBeenCalledWith(expect.objectContaining({ key: 'urn:instruction:acme', message: '"acme" excluído' }));
+    await requestDelete.mock.calls[0]![0].commit();
+    expect(call).toHaveBeenCalledWith('instruction.delete', { name: 'acme', removeSymlinks: true });
+    confirmSpy.mockRestore();
+  });
+});
+
+describe('InstructionTreeRow — registry menu', () => {
+  const menuLabels = async (): Promise<string[]> => {
+    const { within: inside } = await import('@testing-library/react');
+    return inside(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent ?? '');
+  };
+
+  it('the personal instruction: Abrir, Editar, Desativar, New Action — never Excluir', async () => {
+    const target = instruction();
+    renderWithShell(<InstructionTreeRow kind="personal" instruction={target} seed={() => target} onOpen={vi.fn()} onPreview={vi.fn()} onNewAction={vi.fn()} />);
+    fireEvent.contextMenu(await screen.findByTestId('personal-instruction-row'));
+    expect(await menuLabels()).toEqual(['Abrir', 'Editar', 'Desativar', 'New Action']);
+  });
+
+  it('a workspace instruction: Editar, Desativar, Excluir, New Action; Desativar calls entity.setEnabled', async () => {
+    const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['workspace'], scopeId: 'w1' });
+    renderWithShell(<InstructionTreeRow kind="workspace" instruction={target} seed={() => target} onOpen={vi.fn()} onProperties={vi.fn()} onNewAction={vi.fn()} />);
+    fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
+    expect(await menuLabels()).toEqual(['Editar', 'Desativar', 'Excluir', 'New Action']);
+    fireEvent.click(screen.getByTestId('row-context-menu-toggle'));
+    await vi.waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: 'urn:instruction:acme', enabled: false }));
   });
 });

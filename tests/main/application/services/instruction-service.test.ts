@@ -8,13 +8,13 @@ import { DomainError } from '../../../../src/main/domain/errors.js';
 import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const personal = (): Instruction => ({
-  urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
+  urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default', description: '',
   scopes: ['personal'], metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: '# Instructions\n',
 });
 
 const workspace = (name = 'acme', scopeId = 'ws-1'): Instruction => ({
-  urn: `urn:instruction:${name}`, kind: 'instruction', name, description: `${name} rules`,
+  urn: `urn:instruction:${name}`, kind: 'instruction', enabled: true, name, description: `${name} rules`,
   scopes: ['workspace'], scopeId, metadata: { version: '0.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: `# ${name}\n`,
 });

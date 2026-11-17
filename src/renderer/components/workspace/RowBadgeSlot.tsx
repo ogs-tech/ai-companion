@@ -47,17 +47,18 @@ const actionTagSx = (theme: Theme) => ({
 });
 
 /**
- * `draft · instalar`: a file the app doesn't own sits where the item goes. Clicking installs over it (the file/folder
- * is moved to `_backups/`) and the toast's Desfazer moves it back.
+ * Installing over a file the app doesn't own (moved to `_backups/`), with "Desfazer" in its toast — shared by the
+ * `draft · instalar` tag and the row menu's "Instalar por cima". `available` is false when nothing is in the way.
  */
-function InstallTag({ item, channels }: { item: TreeItem; channels: ChannelId[] }): React.ReactElement {
+export function useInstallOver(item: TreeItem | undefined): { available: boolean; run: () => void; pending: boolean; toast: React.ReactElement } {
   const install = useInstallEntity();
   const undo = useUndoInstall();
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const channels = item === undefined ? [] : notInstalledChannels(item);
   const where = channels.map((id) => CHANNELS[id].displayName).join(', ');
   const fail = (err: unknown): void => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
-
-  const runInstall = (): void =>
+  const run = (): void => {
+    if (item === undefined) return;
     install.mutate(
       { urn: item.urn, channels },
       {
@@ -70,26 +71,47 @@ function InstallTag({ item, channels }: { item: TreeItem; channels: ChannelId[] 
         onError: fail,
       },
     );
+  };
+  return {
+    available: item?.status?.reason === 'not-installed' && channels.length > 0,
+    run,
+    pending: install.isPending,
+    toast: <Toast toast={toast} onDismiss={() => setToast(null)} />,
+  };
+}
 
+/** `draft · instalar`: a file the app doesn't own sits where the item goes. Clicking installs over it. */
+function InstallTag({ item }: { item: TreeItem }): React.ReactElement {
+  const installOver = useInstallOver(item);
+  const where = notInstalledChannels(item).map((id) => CHANNELS[id].displayName).join(', ');
   return (
     <>
       <Box
         component="button"
         type="button"
-        disabled={install.isPending}
+        disabled={installOver.pending}
         data-testid="row-tag-not-installed"
         aria-label={`Instalar ${item.name} no ${where}`}
         title={`Já existe um arquivo do ${where} neste lugar. Instalar faz backup dele e passa o controle para o app.`}
         onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
-          runInstall();
+          installOver.run();
         }}
         sx={actionTagSx}
       >
         draft · instalar
       </Box>
-      <Toast toast={toast} onDismiss={() => setToast(null)} />
+      {installOver.toast}
     </>
+  );
+}
+
+/** The plugin an item ships with, after its name (`brainstorming  superpowers`): the item is read-only. */
+export function PluginTag({ pluginId }: { pluginId: string }): React.ReactElement {
+  return (
+    <Typography component="span" data-testid="row-tag-plugin" noWrap sx={{ ...TAG_SX, flexShrink: 0, color: 'text.secondary' }}>
+      {pluginId}
+    </Typography>
   );
 }
 
@@ -102,7 +124,7 @@ export function RowBadgeSlot({ item, onImport, busy = false }: RowBadgeSlotProps
   const badge = rowBadge(item);
   if (badge === null) return null;
   if (badge === 'error') return <ChannelWarning urn={item.urn} channels={channelsWith(item, 'error')} />;
-  if (item.status?.reason === 'not-installed') return <InstallTag item={item} channels={notInstalledChannels(item)} />;
+  if (item.status?.reason === 'not-installed') return <InstallTag item={item} />;
   if (item.status?.reason === 'disabled') {
     return (
       <Typography component="span" data-testid="row-tag-disabled" sx={{ ...TAG_SX, color: 'text.disabled' }}>

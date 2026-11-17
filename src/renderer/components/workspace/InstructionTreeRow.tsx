@@ -1,14 +1,17 @@
 import { Box, Stack } from '@mui/material';
 import { useState } from 'react';
-import { Eye, ScrollText, Settings2, SquareTerminal, Trash2 } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
 import { SyncDot } from '../ds/SyncDot.js';
-import { RowBadgeSlot, RowLabel } from './RowBadgeSlot.js';
+import { RowBadgeSlot, RowLabel, useInstallOver } from './RowBadgeSlot.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
+import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { customizationMenu, toRowActions } from './customization-menu.js';
+import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
 import { useInvalidateInstructions } from '../../hooks/use-instructions.js';
+import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
 import type { DetectedEntity } from '../../../shared/detected.js';
@@ -28,7 +31,7 @@ const ROW_COPY: Record<InstructionRowKind, { label: string; removeLabel?: (name:
   },
 };
 
-/** The detected file at the end of the row: its name, then a quiet "Aplicar" — one action per row. */
+/** The detected file at the end of the row: its name, then a quiet "Importar" — one action per row. */
 function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; onApply: () => void; busy: boolean }): React.ReactElement {
   return (
     <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
@@ -44,7 +47,7 @@ function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; 
         type="button"
         disabled={busy}
         data-testid="detected-apply"
-        aria-label={`Aplicar ${String(detected.preview['file'] ?? 'arquivo detectado')} como instructions`}
+        aria-label={`Importar ${String(detected.preview['file'] ?? 'arquivo detectado')} como instructions`}
         onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
           onApply();
@@ -64,7 +67,7 @@ function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; 
           '&:disabled': { opacity: 0.5, cursor: 'default' },
         })}
       >
-        Aplicar
+        Importar
       </Box>
       <SyncDot state="detected" />
     </Stack>
@@ -82,6 +85,8 @@ interface InstructionTreeRowProps {
   onProperties?: (entity: Instruction) => void;
   /** Right-click → "New Action" — opens a brand-new session with a draft first message referencing this instruction. Gated on `instruction` being configured (nothing to reference otherwise), but — unlike Properties — offered for `kind="personal"` too, since starting a session from it is meaningful even though there's nothing to edit. */
   onNewAction?: (entity: Instruction) => void;
+  /** Workspace only: "Editar no Início" on Global's instruction — leaves the workspace and opens it there. */
+  onEditAtHome?: (entity: Instruction) => void;
   /** Overrides the default `data-testid` (`${kind}-instruction-row`). */
   testId?: string;
   /** Overrides the row's "instructions" label — e.g. the instruction's own name, when a workspace lists several. */
@@ -90,7 +95,7 @@ interface InstructionTreeRowProps {
   depth?: number;
   /**
    * A file of this level that the app does not own, found in a harness's own config. While the
-   * level has no Instruction, the row offers it ("Aplicar"); a click on the row itself still
+   * level has no Instruction, the row offers it ("Importar"); a click on the row itself still
    * starts an empty one.
    */
   detected?: DetectedEntity | undefined;
@@ -104,10 +109,13 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected, item }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, onEditAtHome, testId, label, depth = 0, detected, item }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const invalidate = useInvalidateInstructions();
+  const requestDelete = useRequestDelete();
+  const setEnabled = useSetEntityEnabled();
+  const installOver = useInstallOver(item);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const importer = useImportDetected();
   const offered = instruction == null ? detected : undefined;
@@ -125,28 +133,41 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
   const canDelete = instruction != null && copy.removeLabel !== undefined;
   const rowMenu = useRowContextMenu<Instruction>();
   const rowMenuTarget = rowMenu.state?.target;
-  const rowMenuActions: RowContextMenuAction[] = rowMenuTarget
-    ? [
-        { key: 'preview', label: 'Preview', glyph: Eye, onSelect: () => onPreview?.(rowMenuTarget) },
-        ...(kind !== 'personal'
-          ? [{ key: 'properties', label: 'Properties', glyph: Settings2, onSelect: () => onProperties?.(rowMenuTarget) }]
-          : []),
-        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget) },
-        ...(canDelete ? [{ key: 'delete', label: 'Remover', glyph: Trash2, danger: true, onSelect: () => void handleDelete() }] : []),
-      ]
+  // Editar: the Properties modal where there are properties to edit; the personal singleton has none, so it opens its editor.
+  const rowMenuActions = rowMenuTarget
+    ? toRowActions(
+        customizationMenu({
+          entity: rowMenuTarget,
+          enabled: rowMenuTarget.enabled !== false,
+          readOnly: item?.origin === 'global' ? 'global' : false,
+          detected: false,
+          canInstallOver: installOver.available,
+          hasUndo: false,
+          newAction: onNewAction !== undefined,
+        }),
+        {
+          ...(onPreview ? { open: () => onPreview(rowMenuTarget) } : {}),
+          ...(onEditAtHome ? { 'edit-home': () => onEditAtHome(rowMenuTarget) } : {}),
+          edit: kind !== 'personal' && onProperties ? () => onProperties(rowMenuTarget) : () => onOpen(rowMenuTarget, false),
+          toggle: () => setEnabled.mutate({ urn: rowMenuTarget.urn, enabled: rowMenuTarget.enabled === false }),
+          ...(canDelete ? { delete: () => handleDelete() } : {}),
+          installOver: installOver.run,
+          ...(onNewAction ? { 'new-action': () => onNewAction(rowMenuTarget) } : {}),
+        },
+      )
     : [];
 
-  const handleDelete = async (): Promise<void> => {
+  const handleDelete = (): void => {
     if (!instruction || !copy.removeLabel) return;
-    const confirmed = window.confirm(copy.removeLabel(instruction.name));
-    if (!confirmed) return;
-    try {
-      await callIpc('instruction.delete', { name: instruction.name, removeSymlinks: true });
-      await invalidate();
-      setToast({ variant: 'success', message: 'Instructions removidas' });
-    } catch (err) {
-      setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) });
-    }
+    const { name, urn } = instruction;
+    requestDelete({
+      key: urn,
+      message: `"${name}" excluído`,
+      commit: async () => {
+        await callIpc('instruction.delete', { name, removeSymlinks: true });
+        await invalidate();
+      },
+    });
   };
 
   return (
@@ -176,6 +197,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
       />
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+      {installOver.toast}
     </>
   );
 }

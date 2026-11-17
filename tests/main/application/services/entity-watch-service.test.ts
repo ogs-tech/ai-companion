@@ -7,7 +7,7 @@ import { WORKSPACE_SOURCE, type Skill } from '../../../../src/shared/entity.js';
 const dataDir = '/home/user/.air-ide';
 
 const skill: Skill = {
-  urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['personal'],
+  urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd', scopes: ['personal'],
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'b',
 };
 

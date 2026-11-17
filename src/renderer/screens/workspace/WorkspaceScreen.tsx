@@ -1615,6 +1615,7 @@ export function WorkspaceScreen(): React.ReactElement {
               onInstructionProperties={requestInstructionProperties}
               onNewActionForInstruction={newActionForInstruction}
               onOpenInherited={openInheritedTab}
+              onEditAtHome={editAtHome}
               sessionsScope={sessionsScope}
               onOpenSession={openSessionAnywhere}
               onSessionRemoved={removeSessionTab}

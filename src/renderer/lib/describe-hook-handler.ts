@@ -3,6 +3,8 @@ export interface HookHandler {
   command?: string;
   url?: string;
   prompt?: string;
+  /** Seconds before Claude cancels the handler. */
+  timeout?: number;
 }
 
 export function describeHookHandler(handler: HookHandler): string {

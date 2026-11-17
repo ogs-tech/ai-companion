@@ -24,7 +24,7 @@ const meta = { version: '1.0.0', createdAt: '', updatedAt: '' };
 
 const skillPersonal: Skill = {
   urn: 'urn:skill:my-skill',
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: 'my-skill',
   description: 'desc',
   scopes: ['personal'],
@@ -35,7 +35,7 @@ const skillPersonal: Skill = {
 
 const agentPersonal: Agent = {
   urn: 'urn:agent:my-agent',
-  kind: 'agent',
+  kind: 'agent', enabled: true,
   name: 'my-agent',
   description: 'desc',
   scopes: ['personal'],
@@ -46,7 +46,7 @@ const agentPersonal: Agent = {
 
 const skillRealFile: Skill = {
   urn: 'urn:skill:real-skill',
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: 'real-skill',
   description: 'desc',
   scopes: ['personal'],

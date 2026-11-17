@@ -5,6 +5,7 @@ import { HookTreeRow } from '../../../../src/renderer/components/workspace/HookT
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { rowId, treeItem } from './tree-item-fixture.js';
 import type { Hook } from '../../../../src/renderer/hooks/use-hooks.js';
+import { UndoableDeleteContext } from '../../../../src/renderer/hooks/use-undoable-delete.js';
 
 const own: Hook = { id: 'h1', event: 'PreToolUse', handler: { type: 'command', command: './fmt.sh' }, enabled: true, source: { kind: 'workspace' } };
 const itemOf = (hook: Hook, opts: { disabled?: boolean; origin?: 'local' | 'global' | 'detected' } = {}) =>
@@ -17,13 +18,28 @@ beforeEach(() => {
 });
 
 describe('HookTreeRow', () => {
-  it('deletes an own hook after confirmation', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('Editar opens the hook editor on an own hook', async () => {
     const item = itemOf(own);
     renderWithShell(<HookTreeRow item={item} />);
     fireEvent.contextMenu(screen.getByTestId(rowId(item)));
+    await userEvent.setup().click(await screen.findByTestId('row-context-menu-edit'));
+    expect(await screen.findByTestId('hook-editor-dialog')).toBeInTheDocument();
+  });
+
+  it('Excluir hands the delete to the undo window, with no confirm dialog', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const requestDelete = vi.fn();
+    const item = itemOf(own);
+    renderWithShell(
+      <UndoableDeleteContext.Provider value={requestDelete}>
+        <HookTreeRow item={item} />
+      </UndoableDeleteContext.Provider>,
+    );
+    fireEvent.contextMenu(screen.getByTestId(rowId(item)));
     await userEvent.setup().click(await screen.findByTestId('row-context-menu-delete'));
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(requestDelete).toHaveBeenCalledWith(expect.objectContaining({ key: 'urn:hook:h1', message: '"fmt" excluído' }));
+    await requestDelete.mock.calls[0]![0].commit();
     await waitFor(() => expect(call).toHaveBeenCalledWith('hook.delete', { id: 'h1', scope: 'personal' }));
     confirmSpy.mockRestore();
   });

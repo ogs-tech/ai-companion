@@ -1,4 +1,4 @@
-import { CHANNEL_IDS, channelSupports, type ChannelId } from '../../shared/channel.js';
+import { CHANNELS, CHANNEL_IDS, channelSupports, type ChannelId } from '../../shared/channel.js';
 import type { HealthCheck } from '../../shared/health.js';
 
 export interface SyncLine {
@@ -41,6 +41,10 @@ function okText(check: HealthCheck): string {
 
 function lineOf(check: HealthCheck): SyncLine {
   const path = check.target !== undefined ? { path: check.target } : {};
+  // A covered channel reads the covering channel's own file: say so, with that file's path.
+  if (check.severity === 'ok' && check.coveredBy !== undefined) {
+    return { ...path, text: `lê o mesmo arquivo do ${CHANNELS[check.coveredBy].displayName}` };
+  }
   if (check.severity === 'ok') return { ...path, text: okText(check) };
   return {
     ...path,

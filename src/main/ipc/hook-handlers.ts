@@ -30,6 +30,7 @@ export function buildHookHandlers(service: HookService): IpcHandlers {
           ...(hook.matcher !== undefined ? { matcher: hook.matcher } : {}),
           ...(hook.description !== undefined ? { description: hook.description } : {}),
           handler: hook.handler as HookHandler,
+          ...(typeof hook.enabled === 'boolean' ? { enabled: hook.enabled } : {}),
         },
         scope,
       });

@@ -28,6 +28,8 @@ export interface HealthCheck {
    * (not installed — the user installs over it from the tree). Set whenever `entityUrn` is.
    */
   outcome?: CheckOutcome;
+  /** Set on a covered channel's check: that channel reads `coveredBy`'s file natively, and this is that file's verdict. */
+  coveredBy?: ChannelId;
   /** Actionable hint, e.g. "Run /mcp to authenticate". */
   remediation?: string;
   /** ISO timestamp, stamped by the service via ClockPort. */

@@ -242,7 +242,7 @@ describe('CustomizationsList', () => {
     expect(within(tagged).getByTestId('row-folder')).toHaveTextContent('web');
   });
 
-  it('lists a plugin once and keeps what it provides out of the type groups', async () => {
+  it('lists a plugin once as an origin row, and what it provides in the type groups with its tag', async () => {
     const plugin = { kind: 'plugin' as const, pluginId: 'dev-kit@market' };
     respond({
       'skill.list': [localSkill, { ...localSkill, urn: 'urn:skill:scaffold', name: 'scaffold', source: plugin }],
@@ -251,9 +251,20 @@ describe('CustomizationsList', () => {
       'instruction.list': [],
     });
     renderWithShell(<CustomizationsList {...homeProps()} />);
-    expect(await screen.findAllByTestId(row('local', 'urn:plugin:dev-kit@market'))).toHaveLength(1);
-    expect(screen.queryByTestId(row('local', 'urn:skill:scaffold'))).not.toBeInTheDocument();
-    expect(screen.queryByTestId(row('local', 'urn:hook:h2'))).not.toBeInTheDocument();
+    const pluginRow = (await screen.findAllByTestId(row('local', 'urn:plugin:dev-kit@market')))[0]!;
+    expect(screen.getAllByTestId(row('local', 'urn:plugin:dev-kit@market'))).toHaveLength(1);
+    expect(pluginRow).toHaveTextContent('2 itens');
+    expect(screen.getByTestId('tree-group-plugin')).toHaveTextContent('Plugins (origem)');
+    expect(within(screen.getByTestId(row('local', 'urn:skill:scaffold'))).getByTestId('row-tag-plugin')).toHaveTextContent('dev-kit@market');
+    expect(within(screen.getByTestId(row('local', 'urn:hook:h2'))).getByTestId('row-tag-plugin')).toHaveTextContent('dev-kit@market');
+  });
+
+  it('+ Novo lists the kinds in registry order', async () => {
+    const user = userEvent.setup();
+    renderWithShell(<CustomizationsList {...workspaceProps()} seedWorkspaceInstruction={() => personalInstruction as never} />);
+    await user.click(await screen.findByTestId('control-panel-new'));
+    const items = within(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent);
+    expect(items).toEqual(['Instruções', 'Skills', 'Agents', 'MCP', 'Hooks', 'Importar plugin']);
   });
 
   it('keeps Skills and Agents as the create affordance when empty', async () => {
@@ -303,5 +314,62 @@ describe('CustomizationsList', () => {
     const inherited = screen.getByTestId('inherited-instruction-row');
     await user.click(inherited);
     expect(props.onOpenInherited).toHaveBeenCalledWith(personalInstruction, 'instruction');
+  });
+});
+
+describe('CustomizationsList — undoable delete', () => {
+  it('Excluir hides the row at once; Desfazer brings it back and nothing is deleted', async () => {
+    const user = userEvent.setup();
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    const target = await screen.findByTestId(row('local', 'urn:skill:deploy'));
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    await user.click(await screen.findByTestId('row-context-menu-delete'));
+    await waitFor(() => expect(screen.queryByTestId(row('local', 'urn:skill:deploy'))).not.toBeInTheDocument());
+    expect(screen.getByText('"deploy" excluído')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Desfazer' }));
+    expect(await screen.findByTestId(row('local', 'urn:skill:deploy'))).toBeInTheDocument();
+    expect(call).not.toHaveBeenCalledWith('skill.delete', expect.anything());
+  });
+
+  it('unmounting during the undo window still deletes', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    const target = await screen.findByTestId(row('local', 'urn:skill:deploy'));
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    await user.click(await screen.findByTestId('row-context-menu-delete'));
+    unmount();
+    await waitFor(() => expect(call).toHaveBeenCalledWith('skill.delete', { id: 'deploy', removeSymlinks: true }));
+  });
+});
+
+describe('CustomizationsList — read-only Global rows', () => {
+  it('a Global skill in a workspace offers Abrir, Editar no Início and New Action; Editar no Início hands it over', async () => {
+    const user = userEvent.setup();
+    const onEditAtHome = vi.fn();
+    renderWithShell(<CustomizationsList {...workspaceProps()} onEditAtHome={onEditAtHome} />);
+    await user.click(await screen.findByTestId('control-panel-section-global'));
+    const target = screen.getByTestId(row('global', 'urn:skill:lint'));
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    const items = within(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent);
+    expect(items).toEqual(['Abrir', 'Editar no Início', 'New Action']);
+    await user.click(screen.getByTestId('row-context-menu-edit-home'));
+    expect(onEditAtHome).toHaveBeenCalledWith(expect.objectContaining({ name: 'lint' }), 'skill');
+  });
+});
+
+describe('CustomizationsList — workspace plugins', () => {
+  it("lists a workspace plugin's skills in Skills, tagged, and counts them on its row", async () => {
+    const plugin = { kind: 'plugin' as const, pluginId: 'demo-plugin', provenance: 'workspace-managed' as const };
+    const greet = { ...localSkill, urn: 'urn:skill:greet', name: 'greet', scopes: ['personal'], source: plugin };
+    respond({ 'instruction.list': [] }, (method, params) => {
+      const scope = (params as { scope?: string } | undefined)?.scope;
+      if (method === 'skill.list') return scope === 'project' ? [greet] : [localSkill];
+      if (method === 'plugin.list') return scope === 'project' ? [{ id: 'demo-plugin', scope: 'project', origin: 'imported', enabled: true }] : [];
+      return undefined;
+    });
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    const greetRow = await screen.findByTestId(row('local', 'urn:skill:greet'));
+    expect(within(greetRow).getByTestId('row-tag-plugin')).toHaveTextContent('demo-plugin');
+    expect(screen.getByTestId(row('local', 'urn:plugin:demo-plugin'))).toHaveTextContent('demo-plugin · 1 item');
   });
 });

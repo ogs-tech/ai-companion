@@ -4,10 +4,11 @@ import { scopedRepository } from '../../helpers/scoped-repository.js';
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { AdapterManager } from '../../../../src/main/application/services/adapter-manager.js';
 import { WORKSPACE_SOURCE, type Skill } from '../../../../src/shared/entity.js';
+import { OperationNotAllowedForOriginError } from '../../../../src/main/domain/plugin-errors.js';
 
 const FROZEN = new Date('2026-04-26T10:00:00.000Z');
 const skill = (name = 'demo'): Skill => ({
-  urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd', scopes: ['personal'],
+  urn: `urn:skill:${name}`, kind: 'skill', enabled: true, name, description: 'd', scopes: ['personal'],
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'b',
 });
 
@@ -156,5 +157,26 @@ describe('EntityService.filePath', () => {
   it('rejects not_found for a urn that does not exist', async () => {
     const { service } = setup();
     await expect(service.filePath('urn:skill:missing')).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});
+
+describe('EntityService.setEnabled', () => {
+  it('saves enabled: false and hands the disabled entity to the sync (which removes it from every channel)', async () => {
+    const { service, global, adapterManager } = setup();
+    await global.save(skill('tdd'));
+    await service.setEnabled({ urn: 'urn:skill:tdd', enabled: false });
+    expect((await global.get('urn:skill:tdd')).enabled).toBe(false);
+    expect(adapterManager.syncEntity).toHaveBeenCalledWith({ entity: expect.objectContaining({ urn: 'urn:skill:tdd', enabled: false }) });
+  });
+
+  it('refuses a plugin-provided entity', async () => {
+    const { service, global } = setup();
+    await global.save({ ...skill('brainstorming'), source: { kind: 'plugin', pluginId: 'superpowers', provenance: 'workspace-managed' } } as Skill);
+    await expect(service.setEnabled({ urn: 'urn:skill:brainstorming', enabled: false })).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+  });
+
+  it('reports not_found for an unknown urn', async () => {
+    const { service } = setup();
+    await expect(service.setEnabled({ urn: 'urn:skill:nope', enabled: false })).rejects.toMatchObject({ kind: 'not_found' });
   });
 });

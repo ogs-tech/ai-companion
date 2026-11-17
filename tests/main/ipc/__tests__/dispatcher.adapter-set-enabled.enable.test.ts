@@ -32,7 +32,7 @@ describe('IPC adapter.setEnabled — enable (AC#8)', () => {
     if (!result.ok) return;
     const data = result.data as { syncReport: SyncResult[] };
     expect(data.syncReport).toEqual(stubSyncReport);
-    expect(syncAll).toHaveBeenCalledWith({ adapterId: 'claude' });
+    expect(syncAll).toHaveBeenCalledWith({});
   });
 
   it('enabled:true with runSyncAll:false → syncAll NOT called; syncReport empty', async () => {

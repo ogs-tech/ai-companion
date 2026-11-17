@@ -43,7 +43,7 @@ enabled). Inside a folder, the harness reads that folder's file and those of its
 ## Existing files are never overwritten
 
 If a level's target already holds a file the app does not own, the **Instructions** row shows the file name,
-a blue **Aplicar** and a dashed *detected* dot. **Aplicar** imports its content as the level's instruction;
+a blue **Importar** and a dashed *detected* dot. **Importar** imports its content as the level's instruction;
 the original is backed up under `~/.air-ide/_backups/` before being replaced.
 
 > **Avoid enabling Cursor if you rely on workspace instructions.** Both adapters claim
@@ -52,8 +52,9 @@ the original is backed up under `~/.air-ide/_backups/` before being replaced.
 
 ## Remove a workspace instruction
 
-Right-click its **Instructions** row (or use the row's actions button) → **Remover**. The instruction file and
-its links are deleted. The Global instruction cannot be removed, only emptied. Inside a workspace the Global
+Right-click its **Instructions** row → **Excluir**. The row hides at once; when the toast's **Desfazer** window
+ends, the instruction file and its links are deleted. The Global instruction cannot be deleted, only emptied or
+turned off (**Desativar**, stored in `~/.air-ide/instructions/default.meta.json`). Inside a workspace the Global
 row is read-only (edit it from Início).
 
 ## Set the reply language for every session

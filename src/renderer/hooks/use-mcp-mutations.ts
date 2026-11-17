@@ -22,14 +22,6 @@ export function useDeleteMcp(): UseMutationResult<{ ok: true }, Error, { id: str
   });
 }
 
-export function useSetMcpEnabled(): UseMutationResult<{ ok: true }, Error, { id: string; enabled: boolean }> {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars) => callIpc<{ ok: true }>('mcp.setEnabled', vars),
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: mcpListQueryKey() }), qc.invalidateQueries({ queryKey: HEALTH_QUERY_ROOT })]),
-  });
-}
-
 // Opens the external claude.ai connectors page; the actual OAuth happens there.
 // Health is re-probed separately (`useRefreshMcpHealth`) once the user comes back from the browser.
 export function useAuthenticateMcp(): UseMutationResult<{ ok: true }, Error, { id: string }> {

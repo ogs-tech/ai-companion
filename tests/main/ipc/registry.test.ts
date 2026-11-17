@@ -47,6 +47,7 @@ interface Deps {
   dialogPort: DialogPort;
   pluginService: PluginService;
   credentialStore: CredentialStorePort;
+  entityService: IpcDeps['entityService'];
   skillService: SkillService;
   agentService: AgentService;
   instructionService: InstructionService;
@@ -109,6 +110,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
 
   const openWithService = null as unknown as OpenWithService;
   const pluginService = null as unknown as PluginService;
+  const entityService = null as unknown as IpcDeps['entityService'];
   const skillService = null as unknown as SkillService;
   const agentService = null as unknown as AgentService;
   const instructionService = null as unknown as InstructionService;
@@ -147,6 +149,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     dialogPort,
     pluginService,
     credentialStore,
+    entityService,
     skillService,
     agentService,
     instructionService,

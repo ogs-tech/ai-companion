@@ -128,14 +128,6 @@ export class McpService {
     return { ok: true };
   }
 
-  async setEnabled(input: { id: string; enabled: boolean }): Promise<{ ok: true; syncReport: SyncResult[] }> {
-    const ref = this.canonicalRef(input.id, 'save');
-    const { entities } = this.deps.canonical();
-    const current = (await entities.get(entityUrn('mcp', ref.name))) as McpEntity;
-    const result = await entities.save({ entity: { ...current, enabled: input.enabled } as McpEntity });
-    return { ok: true, syncReport: result.syncReport };
-  }
-
   /** Plugin and detected rows are read-only; everything else is a canonical server addressed by name. */
   private canonicalRef(id: string, operation: 'save' | 'delete'): { name: string } {
     const ref = parseMcpServerId(id);

@@ -1,3 +1,6 @@
+import type { EntityKind } from './entity.js';
+import type { Settings } from './settings.js';
+
 /**
  * Harness registry — the single source of truth for which AI harnesses this
  * app integrates with, and what it can do for each of them.
@@ -72,6 +75,11 @@ export interface ChannelDescriptor {
   /** Whether a fresh install syncs to this harness without being asked first. */
   readonly defaultEnabled: boolean;
   readonly setup: ChannelSetup;
+  /**
+   * Coverage: per entity kind, the channels whose destinations this channel already reads natively. While one of
+   * them is enabled and serves the entity, the app writes no second copy here (see `coveringChannel`).
+   */
+  readonly reads?: Partial<Record<EntityKind, readonly ChannelId[]>>;
 }
 
 export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
@@ -92,6 +100,9 @@ export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
     displayName: 'Cursor',
     capabilities: ['manage', 'run'],
     defaultEnabled: false,
+    // Cursor imports Claude's `.claude/skills`, `.claude/agents` and hooks natively ("Include Third-Party Plugins,
+    // Skills, and Other Configs", on by default). Instructions and MCP are not read — Cursor keeps its own copies.
+    reads: { skill: ['claude'], agent: ['claude'], hook: ['claude'] },
     setup: {
       bin: 'cursor-agent',
       versionArgs: ['--version'],
@@ -123,3 +134,19 @@ export const isChannelId = (value: string): value is ChannelId =>
 
 export const channelSupports = (id: ChannelId, capability: ChannelCapability): boolean =>
   CHANNELS[id].capabilities.includes(capability);
+
+/**
+ * The channel whose destination `covered` reads natively for `kind`, or `undefined` when `covered` needs its own copy.
+ * `served` = the channels that produced a non-skip destination for this entity. Off when the covered channel's
+ * `readsClaudeConfig` is `false` (absent = on).
+ */
+export function coveringChannel(args: {
+  covered: ChannelId;
+  kind: EntityKind;
+  settings: Pick<Settings, 'adapters'>;
+  served: ReadonlySet<ChannelId>;
+}): ChannelId | undefined {
+  const { covered, kind, settings, served } = args;
+  if (settings.adapters[covered]?.readsClaudeConfig === false) return undefined;
+  return CHANNELS[covered].reads?.[kind]?.find((p) => settings.adapters[p]?.enabled === true && served.has(p));
+}

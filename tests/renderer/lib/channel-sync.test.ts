@@ -15,6 +15,13 @@ const rows = (checks: HealthCheck[], adapters = on, entityEnabled = true) => {
 const rowOf = (checks: HealthCheck[], channel: 'claude' | 'cursor' | 'lmstudio', adapters = on) => rows(checks, adapters).find((r) => r.channel === channel);
 
 describe('channelSyncRows', () => {
+  it('a covered check reads as the covering channel file, with its path', () => {
+    const covered = check({ channel: 'cursor', coveredBy: 'claude', target: '/h/.claude/skills/tdd' });
+    expect(rowOf([covered], 'cursor')).toEqual({
+      channel: 'cursor', status: 'ok', lines: [{ path: '/h/.claude/skills/tdd', text: 'lê o mesmo arquivo do Claude' }],
+    });
+  });
+
   it('lists channels in registry order', () => {
     expect(rows([]).map((r) => r.channel)).toEqual(['claude', 'cursor', 'lmstudio']);
   });

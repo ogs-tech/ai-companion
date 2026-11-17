@@ -31,7 +31,7 @@ const skillFile = (name: string) =>
 
 const skill = (name: string, content = 'x'): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: `skill ${name}`,
   scopes: ['personal'],
@@ -45,7 +45,7 @@ const agentFile = (name: string) =>
 
 const agent = (name: string, systemPrompt = 'x'): Agent => ({
   urn: `urn:agent:${name}`,
-  kind: 'agent',
+  kind: 'agent', enabled: true,
   name,
   description: `agent ${name}`,
   scopes: ['personal'],

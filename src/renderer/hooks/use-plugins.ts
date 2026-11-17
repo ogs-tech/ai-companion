@@ -31,6 +31,10 @@ function invalidatePluginLists(qc: QueryClient): Promise<void[]> {
   return Promise.all([
     qc.invalidateQueries({ queryKey: pluginsQueryKey('personal') }),
     qc.invalidateQueries({ queryKey: pluginsQueryKey('project') }),
+    // A plugin's skills/agents/MCP/hooks are listed in their kind groups — they come and go with it.
+    qc.invalidateQueries({ queryKey: ['entity'] }),
+    qc.invalidateQueries({ queryKey: ['mcp'] }),
+    qc.invalidateQueries({ queryKey: ['hooks'] }),
     invalidateHealth(qc),
   ]);
 }

@@ -36,3 +36,23 @@ export function useDeleteHook() {
     onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: hooksQueryKey }), invalidateHealth(qc)]),
   });
 }
+
+/** Where a hook lives: Global (`personal`) or the open workspace (`project`, the `hook.*` IPC name). */
+export type HookScope = 'personal' | 'project';
+
+export interface HookInput {
+  id?: string;
+  event: string;
+  matcher?: string;
+  handler: HookHandler;
+  enabled: boolean;
+}
+
+export function useSaveHook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { hook: HookInput; scope: HookScope }) =>
+      callIpc<{ hook: Hook }>('hook.save', { scope: vars.scope, hook: vars.hook }),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: hooksQueryKey }), invalidateHealth(qc)]),
+  });
+}

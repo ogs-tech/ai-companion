@@ -4,7 +4,7 @@ import { InMemoryEntityRepository } from '../../../../src/main/infrastructure/en
 import { WORKSPACE_SOURCE, type Skill } from '../../../../src/shared/entity.js';
 
 const skill = (name: string, over: Partial<Skill> = {}): Skill => ({
-  urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd', scopes: ['workspace'], scopeId: 'ws',
+  urn: `urn:skill:${name}`, kind: 'skill', enabled: true, name, description: 'd', scopes: ['workspace'], scopeId: 'ws',
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'c', ...over,
 });
 

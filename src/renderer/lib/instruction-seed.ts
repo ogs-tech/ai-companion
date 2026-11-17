@@ -12,7 +12,7 @@ export function basenameFromPath(p: string): string {
 export function seedWorkspaceInstruction(workspace: Workspace): Instruction {
   return {
     urn: '',
-    kind: 'instruction',
+    kind: 'instruction', enabled: true,
     name: basenameFromPath(workspace.rootPath),
     description: '',
     scopes: ['workspace'],

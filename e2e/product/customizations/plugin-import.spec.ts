@@ -4,7 +4,7 @@ import { expect } from '../../fixtures/app.js';
 import { launchCustomizationsApp, seedGitRepo, type CustomizationsApp } from '../../fixtures/customizations-app.js';
 
 // Journey: Novo › Importar plugin. The dialog refuses an empty URL, points a marketplace at its own screen, explains
-// a repo that is not a plugin, and — for a real plugin repo — imports it and lists it in the Plugins group.
+// a repo that is not a plugin, and — for a real plugin repo — imports it and lists it in the Plugins (origem) group.
 // Sources are local git repos cloned through file://, so no network is involved.
 
 let session: CustomizationsApp;

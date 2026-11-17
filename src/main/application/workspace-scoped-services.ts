@@ -202,7 +202,7 @@ export function buildWorkspaceScopedServices(
       clock,
     ),
   ];
-  const healthService = new HealthService(healthCollectors, clock);
+  const healthService = new HealthService(healthCollectors, clock, () => adapterManager.planCoverage());
 
   const entityWatchService = new EntityWatchService(
     active === null

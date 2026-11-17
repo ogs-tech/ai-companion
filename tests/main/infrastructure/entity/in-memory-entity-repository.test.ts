@@ -4,11 +4,11 @@ import { WORKSPACE_SOURCE, type Skill, type Agent } from '../../../../src/shared
 
 const meta = { version: '0.1.0', createdAt: '', updatedAt: '' };
 const skill = (name: string): Skill => ({
-  urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd', scopes: ['personal'],
+  urn: `urn:skill:${name}`, kind: 'skill', enabled: true, name, description: 'd', scopes: ['personal'],
   metadata: meta, source: WORKSPACE_SOURCE, content: 'b',
 });
 const agent = (name: string): Agent => ({
-  urn: `urn:agent:${name}`, kind: 'agent', name, description: 'd', scopes: ['personal'],
+  urn: `urn:agent:${name}`, kind: 'agent', enabled: true, name, description: 'd', scopes: ['personal'],
   metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b',
 });
 

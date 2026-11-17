@@ -44,6 +44,12 @@ export interface Entity {
   folder?: string;
   metadata: EntityMetadata;
   source: EntitySource;
+  /**
+   * `false` keeps the canonical copy but materializes it in no channel. Stored
+   * only when `false` (frontmatter key for skill/agent, sidecar for
+   * instructions, JSON field for mcp/hook); absent on disk = `true`.
+   */
+  enabled: boolean;
   ext?: Record<string, unknown>;
 }
 
@@ -95,13 +101,14 @@ export interface InstructionSidecar {
   /** Present on every workspace instruction; absent on the personal singleton. */
   scope?: 'workspace';
   scopeId?: string;
+  /** Written only when the instruction is disabled. */
+  enabled?: false;
 }
 
 /** MCP server definition (Claude's `mcpServers.<name>` shape); `enabled: false` keeps the canonical copy but writes it to no harness. */
 export interface McpEntity extends Entity {
   kind: 'mcp';
   def: Record<string, unknown>;
-  enabled: boolean;
 }
 
 /**
@@ -113,7 +120,6 @@ export interface HookEntity extends Entity {
   event: string;
   matcher?: string;
   handler: Record<string, unknown>;
-  enabled: boolean;
 }
 
 export interface EntityChangedEvent {

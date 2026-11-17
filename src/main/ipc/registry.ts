@@ -42,6 +42,8 @@ import { buildMarketplaceHandlers } from './marketplace-handlers.js';
 import { buildHealthHandlers } from './health-handlers.js';
 import type { HealthService } from '../application/services/health/health-service.js';
 import { buildMcpHandlers } from './mcp-handlers.js';
+import { buildEntityHandlers } from './entity-handlers.js';
+import type { EntityService } from '../application/services/entity-service.js';
 import { buildOpenWithHandlers } from './open-with-handlers.js';
 import type { OpenWithService } from '../application/services/open-with-service.js';
 import { buildLaunchConfigHandlers } from './launch-config-handlers.js';
@@ -66,6 +68,8 @@ export interface IpcDeps {
   dialogPort: DialogPort;
   pluginService: PluginService;
   credentialStore: CredentialStorePort;
+  /** The current scope's canonical entity use case (Global ∪ open workspace). */
+  entityService: EntityService;
   skillService: SkillService;
   agentService: AgentService;
   hookService: HookService;
@@ -120,6 +124,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     dialogPort,
     pluginService,
     credentialStore,
+    entityService,
     skillService,
     agentService,
     hookService,
@@ -222,14 +227,24 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
           };
         }
         await settingsService.merge({ adapters: { [adapterId]: { enabled: false } } });
-        return removeResult;
+        // Coverage: another channel may have been reading this one's copies — it gets its own now, on this call.
+        const syncReport = runSyncAll ? await adapterManager.syncAll({}) : [];
+        return { ...removeResult, syncReport };
       } else {
         await settingsService.merge({ adapters: { [adapterId]: { enabled: true } } });
-        const syncReport = runSyncAll
-          ? await adapterManager.syncAll({ adapterId })
-          : [];
+        // Unfiltered: enabling a channel can cover another one's copies, which this sync then removes.
+        const syncReport = runSyncAll ? await adapterManager.syncAll({}) : [];
         return { syncReport };
       }
+    },
+
+    'adapter.setReadsClaudeConfig': async (params) => {
+      const raw = asObject(params, 'adapter.setReadsClaudeConfig');
+      if (typeof raw['enabled'] !== 'boolean') {
+        throw new DomainError('validation', "Missing or invalid 'enabled'");
+      }
+      await settingsService.merge({ adapters: { cursor: { readsClaudeConfig: raw['enabled'] } } });
+      return { syncReport: await adapterManager.syncAll({}) };
     },
 
     'adapter.install': async (params) => {
@@ -269,6 +284,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildMarketplaceHandlers(marketplaceService),
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),
+    ...buildEntityHandlers(entityService),
     ...buildDetectedHandlers(detectionService),
     ...buildCustomizationStatusHandlers(customizationStatusService),
     ...buildOpenWithHandlers({

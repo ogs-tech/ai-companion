@@ -36,7 +36,8 @@ const stripLegacyFields = (settings: Settings): Settings => {
           typeof entry?.['enabled'] === 'boolean'
             ? (entry['enabled'] as boolean)
             : CHANNELS[id].defaultEnabled;
-        return [id, { enabled }];
+        const readsClaudeConfig = entry?.['readsClaudeConfig'];
+        return [id, typeof readsClaudeConfig === 'boolean' ? { enabled, readsClaudeConfig } : { enabled }];
       }),
     ) as Record<ChannelId, AdapterSettings>,
   };
@@ -113,7 +114,10 @@ function assertValidSettings(value: unknown): asserts value is Settings {
     if (typeof entry['enabled'] !== 'boolean') {
       invalid(`'adapters.${key}.enabled' must be a boolean`);
     }
-    if (Object.keys(entry).some((k) => k !== 'enabled')) {
+    if (entry['readsClaudeConfig'] !== undefined && typeof entry['readsClaudeConfig'] !== 'boolean') {
+      invalid(`'adapters.${key}.readsClaudeConfig' must be a boolean`);
+    }
+    if (Object.keys(entry).some((k) => k !== 'enabled' && k !== 'readsClaudeConfig')) {
       invalid(`'adapters.${key}' has unexpected fields`);
     }
   }

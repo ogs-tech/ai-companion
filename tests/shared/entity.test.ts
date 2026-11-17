@@ -43,7 +43,7 @@ describe('Skill type', () => {
   it('is assignable with the canonical shape', () => {
     const skill: Skill = {
       urn: 'urn:skill:demo',
-      kind: 'skill',
+      kind: 'skill', enabled: true,
       name: 'demo',
       description: 'a demo skill',
       scopes: ['personal'],
@@ -59,6 +59,7 @@ describe('Instruction scoping', () => {
   const base = {
     urn: 'urn:instruction:x',
     kind: 'instruction' as const,
+    enabled: true,
     description: '',
     metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
     source: WORKSPACE_SOURCE,

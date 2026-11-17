@@ -235,6 +235,18 @@ recover from their own main-process store.
 Global's at Início. A missing or corrupt file is "nothing was open", never an error. `openEditors.save` drops every
 malformed or duplicate-id tab itself before writing, because the file is hand-editable and nothing in it is trusted. The `file` and `file-preview` tabs may carry `pinned: true` (only `true` is ever written); array order is tab order. A `config` tab carries `page` (a Config page id such as `language` or `channel:claude`); the renderer shows a stale id as an unknown page rather than dropping it.
 
+### `entity`
+
+Verbs every customization kind shares, addressed by urn. The per-kind namespaces keep their own `save`/`list`/`delete`.
+
+| Method | Params | Result |
+|---|---|---|
+| `entity.setEnabled` | `{ urn: string; enabled: boolean }` | `{ ok: true; syncReport: SyncResult[] }` |
+
+Resolved through the current scope's `EntityService` (Global ∪ the open workspace). `enabled: false` keeps the canonical
+copy and removes it from every channel; `true` syncs it back. Unknown urn → `not_found`; a plugin-provided entity →
+`OperationNotAllowedForOriginError` (kind `validation`). Replaces `mcp.setEnabled` (removed).
+
 ### `skill`
 
 | Method | Params | Result |
@@ -530,7 +542,7 @@ Hooks are not part of the canonical `Entity` model yet — they live in `.claude
 |---|---|---|
 | `hook.list` | `{ scope?: 'personal' \| 'project' }` (default `'personal'`) | `Hook[]` — the user's own hooks carry `enabled: boolean`; plugin and detected ones omit it (always active) |
 | `hook.get` | `{ id: string; scope?: 'personal' \| 'project' }` | `Hook` |
-| `hook.save` | `{ hook: { id?; event; matcher?; description?; handler }; scope?: 'personal' \| 'project' }` | `{ hook: Hook; syncReport: SyncResult[] }` — saves the canonical `hook` entity and syncs it to every enabled harness |
+| `hook.save` | `{ hook: { id?; event; matcher?; description?; handler; enabled? }; scope?: 'personal' \| 'project' }` | `{ hook: Hook; syncReport: SyncResult[] }` — saves the canonical `hook` entity and syncs it to every enabled harness; `enabled` absent keeps the stored flag (`true` on create). The UI editor is `HookEditorDialog` (events = `SUPPORTED_HOOK_EVENTS` in `src/shared/hook-events.ts`) |
 | `hook.delete` | `{ id: string; scope?: 'personal' \| 'project' }` | `{ ok: true }` |
 
 ### `marketplace`
@@ -577,6 +589,7 @@ The CRUD `customization.*` methods (pre-Entity) were **removed**, and so was the
 | `adapter.syncAll` | `{ adapterId?: string }` (or none) | `SyncResult[]` |
 | `adapter.removeAll` | `{ adapterId: string }` | `RemoveAdapterResult` |
 | `adapter.setEnabled` | `{ adapterId: string; enabled: boolean; removeSymlinks?: boolean; runSyncAll?: boolean }` | See below |
+| `adapter.setReadsClaudeConfig` | `{ enabled: boolean }` | `{ syncReport: SyncResult[] }` — sets `settings.adapters.cursor.readsClaudeConfig`, then an unfiltered sync (Cursor's own skill/agent/hook copies are written or removed) |
 | `adapter.countDestinations` | `{ adapterId: string }` | `{ count: number }` |
 | `adapter.install` | `{ urn: string; adapterId: string }` | `{ undoToken?: string }` — installs one entity into one channel over a file/folder the app doesn't own (moved to `~/.air-ide/_backups/`); a sync never does that |
 | `adapter.undoInstall` | `{ undoToken: string }` | `void` — moves the backups back (token kept in memory; `not_found` after a scope switch) |
@@ -585,8 +598,11 @@ The CRUD `customization.*` methods (pre-Entity) were **removed**, and so was the
 
 `adapter.setEnabled` returns:
 
-- When `enabled: false` — a `RemoveAdapterResult` (default `removeSymlinks: true`); pass `removeSymlinks: false` to skip cleanup.
+- When `enabled: false` — a `RemoveAdapterResult` plus `syncReport: SyncResult[]` (default `removeSymlinks: true`); pass `removeSymlinks: false` to skip cleanup.
 - When `enabled: true` — `{ syncReport: SyncResult[] }` (default `runSyncAll: true`); pass `runSyncAll: false` to skip the sync.
+
+Both directions run an **unfiltered** `syncAll({})` after saving the setting: with coverage, turning Claude off gives
+Cursor its own skill/agent/hook copies, and turning it on removes them — on the same call.
 
 `RemoveAdapterResult`:
 
@@ -695,11 +711,10 @@ and import](../../channels/reference/adapter-targets.md#detected-items-and-impor
 | `mcp.get` | `{ id: string }` | `McpServer \| undefined` |
 | `mcp.save` | `{ server: McpServerInput; isCreate?: boolean }` | `{ ok: true; syncReport: SyncResult[] }` |
 | `mcp.delete` | `{ id: string }` | `{ ok: true }` |
-| `mcp.setEnabled` | `{ id: string; enabled: boolean }` | `{ ok: true; syncReport: SyncResult[] }` |
 | `mcp.authenticate` | `{ id: string }` | `{ ok: true }` |
 | `mcp.refreshHealth` | `{}` | `{ ok: true }` |
 
-`McpServer` is read-only when `source.kind === 'plugin'` **or** `source.kind === 'detected'`. `mcp.delete` and `mcp.setEnabled` throw `OperationNotAllowedForOriginError` (kind `validation`) for plugin- and detected-sourced ids. `mcp.save` cannot target a plugin/detected server by construction (its `scope` excludes both). `mcp.*` now operate on the canonical `mcp` entity (`<data>/mcps/<name>.json`): `McpServerInput.scope` `global` → `personal`, the two `project-*` scopes → `workspace` (needs an open workspace; `repoPath` becomes the entity's `folder`). `mcp.setEnabled` flips `enabled`; a disabled server is removed from every harness. Harness files are written by `MergeMaterializer` — see [Adapter targets](../../channels/reference/adapter-targets.md#merged-entries-mcp-and-hooks).
+`McpServer` is read-only when `source.kind === 'plugin'` **or** `source.kind === 'detected'`. `mcp.delete` throws `OperationNotAllowedForOriginError` (kind `validation`) for plugin- and detected-sourced ids. `mcp.save` cannot target a plugin/detected server by construction (its `scope` excludes both). `mcp.*` now operate on the canonical `mcp` entity (`<data>/mcps/<name>.json`): `McpServerInput.scope` `global` → `personal`, the two `project-*` scopes → `workspace` (needs an open workspace; `repoPath` becomes the entity's `folder`). Turning a server on or off is `entity.setEnabled` (`mcp.setEnabled` was removed). Harness files are written by `MergeMaterializer` — see [Adapter targets](../../channels/reference/adapter-targets.md#merged-entries-mcp-and-hooks).
 
 **Detected servers found on disk** (`source.kind === 'detected'` with `detectedId`, `harness`, `importable`) come from `DetectionService` (Claude's `~/.claude.json` / `.mcp.json` and Cursor's `mcp.json`); import one with `detected.import { id: source.detectedId }`. The same shape applies to `Hook` rows (`hook.list`).
 

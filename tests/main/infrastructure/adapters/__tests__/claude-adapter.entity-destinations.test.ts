@@ -18,7 +18,7 @@ const adapter = new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps });
 
 describe('ClaudeAdapter.resolveEntityDestinations', () => {
   it('routes a personal skill to ~/.claude/skills/<name>', async () => {
-    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
       { scope: 'personal', destination: '/home/u/.claude/skills/demo', strategy: 'symlink' },
@@ -27,7 +27,7 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
 
   it('fans the personal instruction out to both ~/.claude/CLAUDE.md and ~/AGENTS.md', async () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
+      urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default',
       description: '', scopes: ['personal'], metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };
@@ -38,7 +38,7 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
   });
 
   it('routes a workspace-scoped skill to <resolved workspace root>/.claude/skills/<name>', async () => {
-    const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', enabled: true, name: 'acme', description: 'd',
       scopes: ['workspace'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
       { scope: 'workspace', destination: '/repos/acme/.claude/skills/acme', strategy: 'symlink' },
@@ -46,7 +46,7 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
   });
 
   it('routes a workspace-scoped agent to <resolved workspace root>/.claude/agents/<name>.md', async () => {
-    const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'd',
+    const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', enabled: true, name: 'triage', description: 'd',
       scopes: ['workspace'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: agent })).toEqual([
       { scope: 'workspace', destination: '/repos/acme/.claude/agents/triage.md', strategy: 'symlink' },
@@ -58,14 +58,14 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
       homedir: '/home/u',
       workspaceService: { get: async () => { throw new DomainError('not_found', 'Workspace not found'); } },
     });
-    const skill: Skill = { urn: 'urn:skill:gone', kind: 'skill', name: 'gone', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:gone', kind: 'skill', enabled: true, name: 'gone', description: 'd',
       scopes: ['workspace'], scopeId: 'gone', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     await expect(goneAdapter.resolveEntityDestinations({ entity: skill })).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('routes a workspace instruction to <resolved workspace root>/{.claude/CLAUDE.md, AGENTS.md}', async () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
+      urn: 'urn:instruction:acme', kind: 'instruction', enabled: true, name: 'acme',
       description: '', scopes: ['workspace'], scopeId: 'proj-1', metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };
@@ -77,7 +77,7 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
 
   it('routes a folder instruction to <folder>/{.claude/CLAUDE.md, AGENTS.md}', async () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:ui-core', kind: 'instruction', name: 'ui-core',
+      urn: 'urn:instruction:ui-core', kind: 'instruction', enabled: true, name: 'ui-core',
       description: '', scopes: ['workspace'], scopeId: 'proj-1', folder: '/repos/ui-core', metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };
@@ -93,7 +93,7 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
       workspaceService: { get: async () => { throw new DomainError('not_found', 'Workspace not found'); } },
     });
     const ins: Instruction = {
-      urn: 'urn:instruction:gone', kind: 'instruction', name: 'gone',
+      urn: 'urn:instruction:gone', kind: 'instruction', enabled: true, name: 'gone',
       description: '', scopes: ['workspace'], scopeId: 'gone', metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };
@@ -102,7 +102,7 @@ describe('ClaudeAdapter.resolveEntityDestinations', () => {
 
   it('preserves non-ASCII / spaced paths as-is', async () => {
     const accented = new ClaudeAdapter({ homedir: '/Users/José Silva', ...scopeDeps });
-    const skill: Skill = { urn: 'urn:skill:review', kind: 'skill', name: 'review', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:review', kind: 'skill', enabled: true, name: 'review', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     const [personal] = await accented.resolveEntityDestinations({ entity: skill });
     expect(personal?.destination).toBe('/Users/José Silva/.claude/skills/review');

@@ -10,10 +10,10 @@ import { WORKSPACE_SOURCE } from '../../shared/entity.js';
 export function blankCustomization(kind: 'skill' | 'agent' | 'instruction'): Skill | Agent | Instruction {
   const metadata = { version: '0.1.0', createdAt: '', updatedAt: '' };
   if (kind === 'agent') {
-    return { urn: '', kind: 'agent', name: '', description: '', scopes: ['personal'], metadata, source: WORKSPACE_SOURCE, systemPrompt: '' };
+    return { urn: '', kind: 'agent', enabled: true, name: '', description: '', scopes: ['personal'], metadata, source: WORKSPACE_SOURCE, systemPrompt: '' };
   }
   if (kind === 'instruction') {
-    return { urn: '', kind: 'instruction', name: 'default', description: '', scopes: ['personal'], metadata, source: WORKSPACE_SOURCE, content: '' };
+    return { urn: '', kind: 'instruction', enabled: true, name: 'default', description: '', scopes: ['personal'], metadata, source: WORKSPACE_SOURCE, content: '' };
   }
-  return { urn: '', kind: 'skill', name: '', description: '', scopes: ['personal'], metadata, source: WORKSPACE_SOURCE, content: '' };
+  return { urn: '', kind: 'skill', enabled: true, name: '', description: '', scopes: ['personal'], metadata, source: WORKSPACE_SOURCE, content: '' };
 }

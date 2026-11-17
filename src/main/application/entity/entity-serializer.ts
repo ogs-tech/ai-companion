@@ -15,8 +15,13 @@ import type {
 } from '../../../shared/entity.js';
 
 const COMMON_KEYS = ['name', 'type', 'description', 'scopes', 'scopeId', 'version', 'tags', 'createdAt', 'updatedAt'];
-const SKILL_KEYS = [...COMMON_KEYS, 'disable-model-invocation'];
-const AGENT_KEYS = [...COMMON_KEYS, 'model', 'tools', 'deniedTools'];
+const SKILL_KEYS = [...COMMON_KEYS, 'disable-model-invocation', 'enabled'];
+const AGENT_KEYS = [...COMMON_KEYS, 'model', 'tools', 'deniedTools', 'enabled'];
+
+/** Skill/agent frontmatter carries `enabled` only when `false`, so enabled files stay byte-identical to before. */
+function enabledFrontmatter(entity: Entity): Record<string, unknown> {
+  return entity.enabled ? {} : { enabled: false };
+}
 
 function extOf(frontmatter: Record<string, unknown>, known: string[]): Record<string, unknown> | undefined {
   const ext: Record<string, unknown> = {};
@@ -127,6 +132,7 @@ export function renderEntityFile(entity: Entity): string {
     const fm: Record<string, unknown> = {
       ...metaFrontmatter(skill),
       ...(skill.explicitOnly ? { 'disable-model-invocation': true } : {}),
+      ...enabledFrontmatter(skill),
       ...(skill.ext ?? {}),
     };
     return serializeMarkdown(fm, skill.content);
@@ -138,6 +144,7 @@ export function renderEntityFile(entity: Entity): string {
       ...(agent.model !== undefined ? { model: agent.model } : {}),
       ...(agent.tools !== undefined ? { tools: agent.tools } : {}),
       ...(agent.deniedTools !== undefined ? { deniedTools: agent.deniedTools } : {}),
+      ...enabledFrontmatter(agent),
       ...(agent.ext ?? {}),
     };
     return serializeMarkdown(fm, agent.systemPrompt);
@@ -173,6 +180,7 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
     ...(typeof frontmatter['scopeId'] === 'string' ? { scopeId: frontmatter['scopeId'] } : {}),
     metadata: readMetadata(frontmatter),
     source,
+    enabled: frontmatter['enabled'] !== false,
   };
 
   if (kind === 'skill') {
@@ -223,6 +231,7 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
         scopes: ['personal'],
         metadata: meta,
         source,
+        enabled: sidecar.enabled !== false,
         content: body,
       };
       return personal;
@@ -237,6 +246,7 @@ export function parseEntityFile(args: ParseEntityFileArgs): Entity {
         scopeId: sidecar.scopeId,
         metadata: meta,
         source,
+        enabled: sidecar.enabled !== false,
         content: body,
       };
       return scoped;

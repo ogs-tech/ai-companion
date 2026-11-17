@@ -53,6 +53,21 @@ export class FsEntityRepository implements EntityRepository {
     return join(await this.root(), FOLDER.instruction, `${PERSONAL_INSTRUCTION_NAME}.md`);
   }
 
+  /** Holds `{ "enabled": false }` while the personal instruction is disabled; absent = enabled. Keeps `default.md` a clean body. */
+  private async personalInstructionSidecar(): Promise<string> {
+    return join(await this.root(), FOLDER.instruction, `${PERSONAL_INSTRUCTION_NAME}.meta.json`);
+  }
+
+  private async personalInstructionEnabled(): Promise<boolean> {
+    try {
+      const parsed: unknown = JSON.parse(await readFile(await this.personalInstructionSidecar(), 'utf8'));
+      return !(typeof parsed === 'object' && parsed !== null && (parsed as Record<string, unknown>)['enabled'] === false);
+    } catch (err) {
+      if (isEnoent(err) || err instanceof SyntaxError) return true;
+      throw err;
+    }
+  }
+
   private async projectInstructionDir(slug: string): Promise<string> {
     return join(await this.root(), FOLDER.instruction, PROJECT_INSTRUCTIONS_SUBDIR, slug);
   }
@@ -181,16 +196,17 @@ export class FsEntityRepository implements EntityRepository {
   private async getInstruction(name: string, urn: string): Promise<Entity> {
     if (isPersonalName(name)) {
       const path = await this.personalInstructionFile();
+      const enabled = await this.personalInstructionEnabled();
       try {
         const raw = await readFile(path, 'utf8');
-        return parseEntityFile({ kind: 'instruction', name, raw, source: WORKSPACE_SOURCE });
+        return { ...parseEntityFile({ kind: 'instruction', name, raw, source: WORKSPACE_SOURCE }), enabled };
       } catch (err) {
         if (!isEnoent(err)) throw err;
       }
       // Legacy fallback: global-instructions/default.md
       try {
         const raw = await readFile(await this.legacyInstructionFile(name), 'utf8');
-        return parseEntityFile({ kind: 'instruction', name, raw, source: WORKSPACE_SOURCE });
+        return { ...parseEntityFile({ kind: 'instruction', name, raw, source: WORKSPACE_SOURCE }), enabled };
       } catch (err) {
         if (isEnoent(err)) throw new DomainError('not_found', `Entity not found: ${urn}`);
         throw err;
@@ -247,6 +263,9 @@ export class FsEntityRepository implements EntityRepository {
       await mkdir(dirname(path), { recursive: true });
       const body = renderEntityFile(entity);
       await writeFileAtomic(path, body);
+      const sidecar = await this.personalInstructionSidecar();
+      if (entity.enabled) await rm(sidecar, { force: true });
+      else await writeFileAtomic(sidecar, `${JSON.stringify({ enabled: false })}\n`);
       return entity;
     }
     // Workspace: write body + meta.json atomically-per-file.
@@ -261,6 +280,7 @@ export class FsEntityRepository implements EntityRepository {
       updatedAt: entity.metadata.updatedAt,
       scope: 'workspace',
       ...(entity.scopeId !== undefined ? { scopeId: entity.scopeId } : {}),
+      ...(entity.enabled ? {} : { enabled: false as const }),
     };
     await writeFileAtomic(paths.body, body);
     await writeFileAtomic(paths.meta, `${JSON.stringify(sidecar, null, 2)}\n`);
@@ -289,6 +309,7 @@ export class FsEntityRepository implements EntityRepository {
           if (isEnoent(err)) throw new DomainError('not_found', `Entity not found: ${urn}`);
           throw err;
         }
+        await rm(await this.personalInstructionSidecar(), { force: true });
         return;
       }
       const paths = await this.projectInstructionPaths(name);
@@ -395,6 +416,7 @@ function parseSidecar(raw: string, urn: string): InstructionSidecar {
     ...(Array.isArray(obj['tags']) ? { tags: obj['tags'] as string[] } : {}),
     ...(scopeRaw === 'workspace' ? { scope: scopeRaw } : {}),
     ...(typeof obj['scopeId'] === 'string' ? { scopeId: obj['scopeId'] } : {}),
+    ...(obj['enabled'] === false ? { enabled: false as const } : {}),
   };
   return sidecar;
 }

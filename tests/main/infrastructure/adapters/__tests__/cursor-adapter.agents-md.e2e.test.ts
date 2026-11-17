@@ -26,14 +26,14 @@ import {
 } from '../../../../../src/shared/entity.js';
 
 const personal: Instruction = {
-  urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
+  urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default',
   description: 'Global rules', scopes: ['personal'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'Reply in pt-BR.',
 };
 
 const project: Instruction = {
-  urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
+  urn: 'urn:instruction:acme', kind: 'instruction', enabled: true, name: 'acme',
   description: 'Acme project rules', scopes: ['workspace'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'Only in acme.',

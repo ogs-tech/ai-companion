@@ -9,7 +9,7 @@ import { agentId } from '../../../../src/main/domain/agent-id.js';
 import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const agent = (name = 'rev'): Agent => ({
-  urn: `urn:agent:${name}`, kind: 'agent', name, description: 'reviewer', scopes: ['personal'],
+  urn: `urn:agent:${name}`, kind: 'agent', enabled: true, name, description: 'reviewer', scopes: ['personal'],
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, systemPrompt: 'You review.',
 });
 

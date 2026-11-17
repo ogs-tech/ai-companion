@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Menu, MenuItem, Tooltip, Typography } from '@mui/material';
-import { Plug, Puzzle, Terminal, Webhook, type LucideIcon } from 'lucide-react';
+import { Puzzle } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { pluginsQueryKey, useRemovePlugin, useTogglePlugin, useUpdatePlugin, type PluginScope } from '../../hooks/use-plugins.js';
-import { callIpc, IpcCallError } from '../../lib/ipc.js';
-import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
+import { IpcCallError } from '../../lib/ipc.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
-import type { PluginDetailIpc, PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
+import type { PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
 import { invalidateHealth } from '../../hooks/use-health-report.js';
+import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 
 type PublishState = { pluginId: string; scope: PluginScope; currentVersion?: string; hasPublishInfo: boolean };
 
@@ -33,49 +33,37 @@ function pluginTooltip(item: PluginListItemIpc, ref: PluginRefIpc | undefined): 
 }
 
 /**
- * One plugin as a closed folder: the row toggles, and what the plugin provides lists inline underneath
- * (one level deeper). What a plugin provides is listed only here, never again in the type groups.
+ * One plugin as an origin, not a kind: `<id> · N itens` and `ativo`/`desativado`, never expanded — what it provides
+ * is listed in the type groups, tagged with it. Menu: Atualizar · Ativar/Desativar · (Publicar) · Remover.
  */
 export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: number }): React.ReactElement | null {
   const qc = useQueryClient();
   const toggle = useTogglePlugin();
   const update = useUpdatePlugin();
   const remove = useRemovePlugin();
-  const [open, setOpen] = useState(false);
+  const requestDelete = useRequestDelete();
   const [menuAt, setMenuAt] = useState<{ top: number; left: number } | null>(null);
   const [publishing, setPublishing] = useState<PublishState | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const plugin = item.entity.kind === 'plugin' ? item.entity.value : undefined;
-  const { data: detail } = useQuery<PluginDetailIpc>({
-    queryKey: ['plugin.detail', plugin?.scope, plugin?.id],
-    queryFn: () => callIpc<PluginDetailIpc>('plugin.get', { id: plugin?.id, scope: plugin?.scope }),
-    enabled: open && plugin !== undefined,
-  });
-  if (plugin === undefined) return null;
+  if (item.entity.kind !== 'plugin') return null;
+  const plugin = item.entity.value;
+  const itemCount = item.entity.itemCount ?? 0;
 
   const closeMenu = (): void => setMenuAt(null);
   const onError = (err: unknown): void => setToast({ variant: 'error', message: errorMessage(err) });
   const handleRemove = (): void => {
     closeMenu();
-    if (!window.confirm(`Remover plugin "${plugin.id}"?`)) return;
-    remove.mutate({ id: plugin.id, scope: plugin.scope }, { onError });
+    requestDelete({
+      key: item.urn,
+      message: `Plugin "${plugin.id}" removido`,
+      commit: () => remove.mutateAsync({ id: plugin.id, scope: plugin.scope }),
+    });
   };
   const invalidateLists = (): void => {
     void qc.invalidateQueries({ queryKey: pluginsQueryKey('personal') });
     void qc.invalidateQueries({ queryKey: pluginsQueryKey('project') });
     void invalidateHealth(qc);
   };
-
-  const artifacts = detail?.manifest?.artifacts;
-  const provided: Array<{ key: string; glyph: LucideIcon; label: string }> = artifacts
-    ? [
-        ...artifacts.skills.map((n) => ({ key: `skill:${n}`, glyph: ENTITY_GROUP_ICONS.skill, label: n })),
-        ...artifacts.agents.map((n) => ({ key: `agent:${n}`, glyph: ENTITY_GROUP_ICONS.agent, label: n })),
-        ...artifacts.commands.map((n) => ({ key: `command:${n}`, glyph: Terminal, label: n })),
-        ...(artifacts.hooks > 0 ? [{ key: 'hooks', glyph: Webhook, label: `Hooks · ${artifacts.hooks}` }] : []),
-        ...(artifacts.mcp ? [{ key: 'mcp', glyph: Plug, label: 'MCP' }] : []),
-      ]
-    : [];
 
   return (
     <>
@@ -84,13 +72,11 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
         glyph={Puzzle}
         depth={depth}
         mono
-        chevron={open ? 'expanded' : 'collapsed'}
         muted={rowMuted(item)}
-        onClick={() => setOpen((v) => !v)}
         primary={
           <Tooltip title={pluginTooltip(plugin, plugin.installedRef)}>
             <span>
-              <RowLabel item={item} />
+              <RowLabel item={item} label={`${plugin.id} · ${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`} />
             </span>
           </Tooltip>
         }
@@ -101,7 +87,11 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
                 {INSTALLED_BY_LABEL[plugin.installedBy]}
               </Typography>
             )}
-            <RowBadgeSlot item={item} />
+            <Typography component="span" data-testid={`tree-plugin-state-${plugin.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+              {plugin.enabled ? 'ativo' : 'desativado'}
+            </Typography>
+            {/* Errors of what it provides roll up here; "desativado" is already said above. */}
+            {plugin.enabled && <RowBadgeSlot item={item} />}
           </>
         }
         // A plugin only Claude installed is read-only here: the app has no registry entry to act on.
@@ -114,21 +104,8 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
               },
             })}
       />
-      {open &&
-        provided.map((p) => (
-          <TreeGroupRow key={p.key} testId={`tree-plugin-${plugin.id}-${p.key}`} glyph={p.glyph} depth={depth + 1} mono muted primary={p.label} />
-        ))}
 
       <Menu anchorReference="anchorPosition" {...(menuAt ? { anchorPosition: menuAt } : {})} open={menuAt !== null} onClose={closeMenu}>
-        <MenuItem
-          data-testid={`tree-plugin-toggle-${plugin.id}`}
-          onClick={() => {
-            closeMenu();
-            toggle.mutate({ id: plugin.id, scope: plugin.scope, enabled: !plugin.enabled }, { onError });
-          }}
-        >
-          {plugin.enabled ? 'Desativar' : 'Ativar'}
-        </MenuItem>
         {plugin.origin === 'imported' && plugin.installedRef?.kind === 'branch' && (
           <MenuItem
             onClick={() => {
@@ -139,6 +116,15 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
             Atualizar
           </MenuItem>
         )}
+        <MenuItem
+          data-testid={`tree-plugin-toggle-${plugin.id}`}
+          onClick={() => {
+            closeMenu();
+            toggle.mutate({ id: plugin.id, scope: plugin.scope, enabled: !plugin.enabled }, { onError });
+          }}
+        >
+          {plugin.enabled ? 'Desativar' : 'Ativar'}
+        </MenuItem>
         {plugin.origin === 'owned' && (
           <MenuItem
             onClick={() => {
@@ -154,9 +140,9 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
             Publicar
           </MenuItem>
         )}
-        <MenuItem onClick={handleRemove}>Remover</MenuItem>
-        {/* Reconciling drift has no backing action yet — pre-existing stub kept as-is from the old PluginList row menu. */}
-        {plugin.drift && <MenuItem onClick={closeMenu}>Reconciliar</MenuItem>}
+        <MenuItem data-testid={`tree-plugin-remove-${plugin.id}`} onClick={handleRemove}>
+          Remover
+        </MenuItem>
       </Menu>
 
       {publishing && (

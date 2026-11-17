@@ -27,6 +27,7 @@ test.describe('Customizations › create and edit', () => {
     await expect(page.getByTestId('control-panel-new-skill')).toBeVisible();
     await expect(page.getByTestId('control-panel-new-agent')).toBeVisible();
     await expect(page.getByTestId('control-panel-new-mcp')).toBeVisible();
+    await expect(page.getByTestId('control-panel-new-hook')).toBeVisible();
     await expect(page.getByTestId('control-panel-new-plugin')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('control-panel-new-skill')).toBeHidden();
@@ -79,9 +80,9 @@ test.describe('Customizations › create and edit', () => {
     await expect(page.getByTestId('inherited-notice')).toHaveCount(0);
     await expect(page.getByText('Instructions for deploy-checklist.')).toBeVisible();
 
-    await test.step('editing Properties marks the tab dirty', async () => {
+    await test.step('Editar opens Properties; changing it marks the tab dirty', async () => {
       await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click({ button: 'right' });
-      await page.getByRole('menuitem', { name: 'Properties' }).click();
+      await page.getByRole('menuitem', { name: 'Editar' }).click();
       const modal = page.getByTestId('properties-modal');
       await modal.getByLabel('Description').fill('Steps to ship acme-api safely');
       await modal.getByRole('button', { name: 'Fechar' }).click();
@@ -105,9 +106,10 @@ test.describe('Customizations › create and edit', () => {
     expect(existsSync(dir)).toBe(true);
 
     await page.getByTestId('tree-row-local::urn:skill:db-migrations').click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Excluir' }).click(); // the confirm() dialog is auto-accepted by launchApp
+    await page.getByRole('menuitem', { name: 'Excluir' }).click();
 
+    // Hidden at once; the file goes when the undo window ends.
     await expect(page.getByTestId('tree-row-local::urn:skill:db-migrations')).toHaveCount(0);
-    await expect.poll(() => existsSync(join(dir, 'SKILL.md'))).toBe(false);
+    await expect.poll(() => existsSync(join(dir, 'SKILL.md')), { timeout: 15_000 }).toBe(false);
   });
 });

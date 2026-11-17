@@ -29,7 +29,7 @@ const props = (): CustomizationsListProps => ({
   localScope: { scope: 'workspace', scopeId: 'w1' },
   onEditEntity: vi.fn(), onPreviewEntity: vi.fn(), onEntityProperties: vi.fn(), onNewActionForEntity: vi.fn(),
   onOpenInstruction: vi.fn(), onInstructionProperties: vi.fn(), onNewActionForInstruction: vi.fn(), onOpenInherited: vi.fn(),
-  seedWorkspaceInstruction: () => ({ urn: '', kind: 'instruction', name: 'core', description: '', scopes: ['workspace'], scopeId: 'w1', metadata, source: { kind: 'workspace' }, content: '' }),
+  seedWorkspaceInstruction: () => ({ urn: '', kind: 'instruction', enabled: true, name: 'core', description: '', scopes: ['workspace'], scopeId: 'w1', metadata, source: { kind: 'workspace' }, content: '' }),
   seedFolderInstruction: (folder, taken) => seedFolderInstruction(workspace, folder, taken),
 });
 
@@ -82,7 +82,7 @@ describe('CustomizationsList detected items and folders', () => {
 
     const ui = await screen.findByTestId('folder-instruction-row-ui');
     expect(ui).toHaveTextContent('AGENTS.md');
-    expect(ui).toHaveTextContent('Aplicar');
+    expect(ui).toHaveTextContent('Importar');
     expect(within(ui).getByTestId('row-folder')).toHaveTextContent('ui');
     const workspaceRow = screen.getByTestId('workspace-instruction-row');
     expect((workspaceRow.compareDocumentPosition(ui) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);

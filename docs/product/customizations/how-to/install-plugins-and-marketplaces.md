@@ -42,15 +42,18 @@ delete its cached clone. Removing a marketplace does not uninstall plugins alrea
 
 ## Manage installed plugins
 
-In the **Plugins** group (next to Skills, Agents, MCP and Hooks), on a plugin row:
+A plugin is an origin, not a type. The **Plugins (origem)** group (after Skills, Agents, MCP and Hooks) has one
+row per plugin — `<name> · N itens` and *ativo*/*desativado* — that does not expand: what the plugin provides is
+listed in its type group with the plugin's name as a tag, read-only (right-click → **Abrir**). On the plugin's
+row menu:
 
-- **Enable/disable** — the row's switch. Disabled plugins keep their files but Claude Code ignores them.
-- **Details** — click the row: source, installed ref, scope, manifest and every artifact it provides.
-- **Update** — row menu → **Atualizar** (imported plugins) re-fetches from the source.
-- **Remove** — row menu → **Remover** deletes the clone and its link, and disables it in Claude Code.
+- **Atualizar** (imported plugins) re-fetches from the source.
+- **Desativar / Ativar** — disabled plugins keep their files but Claude Code ignores them; their items stay
+  listed and read *draft · desativado*.
+- **Remover** hides the row and, when the toast's **Desfazer** window ends, deletes the clone and its link and
+  disables it in Claude Code.
 
-A **Reconciliar** menu item appears for plugins flagged with drift, but it has no action behind it yet;
-check the **Diagnóstico** tab's **Config Drift** section instead.
+Drift is reported in the **Diagnóstico** tab's **Config Drift** section.
 
 ## Publish your own plugin
 

@@ -58,7 +58,7 @@ afterEach(async () => {
 const scopeOf = (workspace: Workspace) => ({ workspace, dataDir: join(workspace.rootPath, '.air-ide') });
 
 const skill = (name: string, workspace?: Workspace): Skill => ({
-  urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd',
+  urn: `urn:skill:${name}`, kind: 'skill', enabled: true, name, description: 'd',
   scopes: [workspace ? 'workspace' : 'personal'],
   ...(workspace ? { scopeId: workspace.id } : {}),
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },

@@ -82,6 +82,19 @@ export function ChannelPage({ harnessId }: { harnessId: ChannelId }): React.Reac
     }
   };
 
+  // Only a channel that natively reads another's config (Cursor → Claude) offers this; the registry says which.
+  const readsOthers = harness.reads !== undefined;
+  const channelEnabled = settings?.adapters[harnessId].enabled ?? false;
+  const readsClaudeConfig = settings?.adapters[harnessId].readsClaudeConfig !== false;
+
+  const handleReadsClaudeConfig = async (enabled: boolean): Promise<void> => {
+    const result = await callIpc<{ syncReport: SyncResult[] }>('adapter.setReadsClaudeConfig', { enabled });
+    void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+    void invalidateHealth(queryClient);
+    await refetch();
+    if (result.syncReport.some((e) => e.status !== 'ok')) setSyncReport(result.syncReport);
+  };
+
   const handleDisableConfirm = async (removeSymlinks: boolean): Promise<void> => {
     setDisableModal(null);
     const result = await callIpc<{ removed: number; skipped: number; errors: unknown[] }>('adapter.setEnabled', {
@@ -160,6 +173,12 @@ export function ChannelPage({ harnessId }: { harnessId: ChannelId }): React.Reac
             control={<Checkbox id={`adapter-${harnessId}`} checked={settings?.adapters[harnessId].enabled ?? false} disabled={settings === null} onChange={(e) => void handleToggle(e.target.checked)} />}
             label={`Ativar ${harness.displayName}`}
           />
+          {readsOthers && channelEnabled && (
+            <FormControlLabel
+              control={<Checkbox id={`adapter-${harnessId}-reads-claude`} checked={readsClaudeConfig} onChange={(e) => void handleReadsClaudeConfig(e.target.checked)} />}
+              label={`O ${harness.displayName} importa as configurações do Claude`}
+            />
+          )}
         </FormGroup>
       )}
       {disableModal !== null && (

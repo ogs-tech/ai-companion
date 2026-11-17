@@ -6,6 +6,7 @@ import type { ClockPort } from '../ports/clock-port.js';
 import type { AdapterManager } from './adapter-manager.js';
 import type { EntityValidator } from './entity-validator.js';
 import { validationError } from '../../domain/errors.js';
+import { OperationNotAllowedForOriginError } from '../../domain/plugin-errors.js';
 
 export interface SaveEntityCommand {
   entity: Entity;
@@ -90,6 +91,18 @@ export class EntityService {
 
     const syncReport = await this.adapterManager.syncEntity({ entity: saved });
     return { entity: saved, syncReport: [...removeReport, ...syncReport] };
+  }
+
+  /** Turns an entity on or off everywhere: off removes it from every channel, on syncs it back (both through `save`). */
+  async setEnabled(input: { urn: string; enabled: boolean }): Promise<SaveEntityResult> {
+    const current = await this.repository.get(input.urn);
+    if (current.source.kind === 'plugin') {
+      throw new OperationNotAllowedForOriginError(`Cannot toggle '${current.name}': it is provided by a plugin`, {
+        origin: 'plugin',
+        operation: 'save',
+      });
+    }
+    return this.save({ entity: { ...current, enabled: input.enabled } });
   }
 
   private assertWritableScope(entity: Entity): void {

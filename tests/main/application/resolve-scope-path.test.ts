@@ -4,7 +4,7 @@ import { DomainError } from '../../../src/main/domain/errors.js';
 import { WORKSPACE_SOURCE, type Instruction } from '../../../src/shared/entity.js';
 
 const base = {
-  urn: 'urn:instruction:x', kind: 'instruction' as const, name: 'x', description: '',
+  urn: 'urn:instruction:x', kind: 'instruction' as const, enabled: true, name: 'x', description: '',
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'x',
 };
 

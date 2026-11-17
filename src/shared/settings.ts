@@ -6,6 +6,11 @@ export type LanguagePreference = 'off' | 'mirror' | 'pt-BR' | 'en' | 'es';
 
 export interface AdapterSettings {
   enabled: boolean;
+  /**
+   * Cursor only: whether Cursor imports Claude's skills, agents and hooks (mirrors Cursor's own "Include
+   * Third-Party Plugins, Skills, and Other Configs", which the app can't read). Absent = `true`.
+   */
+  readsClaudeConfig?: boolean;
 }
 
 export interface UiSettings {

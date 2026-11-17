@@ -10,7 +10,7 @@ const scopeDeps = {
 describe('AdapterManager.syncEntity', () => {
   it('creates a symlink for a personal skill', async () => {
     const { manager, fs } = await setupAdapterManager([new ClaudeAdapter({ homedir: '/home/u', ...scopeDeps })]);
-    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd',
       scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
       source: WORKSPACE_SOURCE, content: 'b' };
     const report = await manager.syncEntity({ entity: skill });

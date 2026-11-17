@@ -22,7 +22,7 @@ const baseSettings: Settings = {
 
 const skillPersonal: Skill = {
   urn: 'urn:skill:my-skill',
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: 'my-skill',
   description: 'desc',
   scopes: ['personal'],

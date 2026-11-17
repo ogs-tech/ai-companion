@@ -7,7 +7,7 @@ import type { Skill } from '../../../src/shared/entity.js';
 
 const skill = (name: string, pluginId: string | null): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: `${name} desc`,
   scopes: ['personal'],

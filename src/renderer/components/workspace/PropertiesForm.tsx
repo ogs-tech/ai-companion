@@ -126,7 +126,7 @@ export function PropertiesForm({ entity, onChange, hiddenFields, readOnly, syncU
           )}
         </Box>
       )}
-      {syncUrn !== undefined && <ChannelSyncSection urn={syncUrn} />}
+      {syncUrn !== undefined && <ChannelSyncSection urn={syncUrn} entityEnabled={entity.enabled !== false} />}
     </Stack>
   );
 }

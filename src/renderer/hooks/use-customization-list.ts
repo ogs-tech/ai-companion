@@ -14,8 +14,9 @@ export function entityQueryKey(kind: EntityKind, scope: Scope = 'personal'): rea
   return ['entity', kind, scope] as const;
 }
 
-export function useCustomizationList(kind: EntityKind, listMethod: string, scope: Scope = 'personal') {
+export function useCustomizationList(kind: EntityKind, listMethod: string, scope: Scope = 'personal', enabled = true) {
   return useQuery<Entity[]>({
+    enabled,
     queryKey: entityQueryKey(kind, scope),
     queryFn: async () => {
       const list = await callIpc<Entity[]>(listMethod, { scope });

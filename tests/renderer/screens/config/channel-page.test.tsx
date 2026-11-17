@@ -185,3 +185,38 @@ describe('<ChannelPage> — install and sign-in steps', () => {
     expect(screen.queryByText('Entrar na conta')).not.toBeInTheDocument();
   });
 });
+
+describe('<ChannelPage> — Cursor reads Claude config', () => {
+  const cursorOn: Settings = { ...baseSettings, adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } } };
+  const route = (settings: Settings): void => {
+    call.mockImplementation((method: string) => {
+      if (method === 'settings.get') return Promise.resolve(ok(settings));
+      if (method === 'adapter.setReadsClaudeConfig') return Promise.resolve(ok({ syncReport: [] }));
+      if (method === 'channelSetup.status') return Promise.resolve(ok({ channelId: 'cursor', installed: true, version: '1.0', signedIn: true }));
+      return Promise.resolve(ok(undefined));
+    });
+  };
+
+  it('is checked by default and turning it off calls adapter.setReadsClaudeConfig', async () => {
+    const user = userEvent.setup();
+    route(cursorOn);
+    render(<ConfigPage page="channel:cursor" />);
+    const toggle = await screen.findByLabelText('O Cursor importa as configurações do Claude');
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+    await waitFor(() => expect(call).toHaveBeenCalledWith('adapter.setReadsClaudeConfig', { enabled: false }));
+  });
+
+  it('reflects readsClaudeConfig: false', async () => {
+    route({ ...cursorOn, adapters: { ...cursorOn.adapters, cursor: { enabled: true, readsClaudeConfig: false } } });
+    render(<ConfigPage page="channel:cursor" />);
+    expect(await screen.findByLabelText('O Cursor importa as configurações do Claude')).not.toBeChecked();
+  });
+
+  it('is absent on the Claude page', async () => {
+    setupRoute();
+    render(<ConfigPage page="channel:claude" />);
+    await screen.findByLabelText('Ativar Claude');
+    expect(screen.queryByLabelText('O Cursor importa as configurações do Claude')).toBeNull();
+  });
+});

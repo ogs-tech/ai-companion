@@ -104,12 +104,6 @@ describe('McpService (canonical layer)', () => {
     expect(save.mock.calls[0]![0].entity).toMatchObject({ enabled: false, def: { command: 'v2' } });
   });
 
-  it('toggles enabled on the canonical entity (the sync removes/restores it in each harness)', async () => {
-    const { service, save } = make({ canonical: [entity()] });
-    await service.setEnabled({ id: mcpServerId({ location: { kind: 'global' }, name: 'gh' }), enabled: false });
-    expect(save.mock.calls[0]![0].entity).toMatchObject({ name: 'gh', enabled: false });
-  });
-
   it('deletes the canonical entity together with its harness entries', async () => {
     const { service, del } = make({ canonical: [entity()] });
     await service.delete({ id: mcpServerId({ location: { kind: 'global' }, name: 'gh' }) });
@@ -121,6 +115,6 @@ describe('McpService (canonical layer)', () => {
     const detected = mcpServerId({ location: { kind: 'detected' }, name: 'cursor/personal/fs' });
     const plugin = mcpServerId({ location: { kind: 'plugin', pluginId: 'p', pluginDir: '/d' }, name: 'x' });
     await expect(service.delete({ id: detected })).rejects.toThrow(/import it first/);
-    await expect(service.setEnabled({ id: plugin, enabled: false })).rejects.toThrow(/plugin/);
+    await expect(service.delete({ id: plugin })).rejects.toThrow(/plugin/);
   });
 });

@@ -62,6 +62,15 @@ describe('HookService (canonical layer)', () => {
     expect(save.mock.calls[0]![0]).toMatchObject({ isCreate: false, entity: { name: 'h1', matcher: 'Read', enabled: false } });
   });
 
+  it('persists an explicit enabled flag, on create and on edit', async () => {
+    const created = make();
+    await created.service.save({ hook: { event: 'Stop', handler: { type: 'command', command: './s.sh' }, enabled: false } });
+    expect(created.save.mock.calls[0]![0].entity.enabled).toBe(false);
+    const edited = make({ canonical: [entity({ enabled: false })] });
+    await edited.service.save({ hook: { id: hookId('h1'), event: 'PreToolUse', handler: { type: 'command', command: './c.sh' }, enabled: true } });
+    expect(edited.save.mock.calls[0]![0].entity.enabled).toBe(true);
+  });
+
   it('rejects an invalid handler and a project hook without an open workspace', async () => {
     await expect(make().service.save({ hook: { event: 'Stop', handler: { type: 'command' } as never } })).rejects.toThrow();
     await expect(

@@ -45,7 +45,7 @@ describe('ChannelSyncSection', () => {
     expect(screen.getByTestId('channel-sync-claude')).toHaveTextContent('/h/.claude/skills/tdd');
     expect(screen.getByTestId('channel-sync-cursor')).toHaveTextContent('Arquivo divergente');
     expect(screen.getByTestId('channel-sync-cursor')).toHaveTextContent('Sincronize de novo');
-    expect(screen.getByTestId('channel-sync-lmstudio')).toHaveTextContent('Só roda sessões, não recebe customizações');
+    expect(screen.getByTestId('channel-sync-lmstudio')).toHaveTextContent('Só roda sessões');
     expect(screen.queryByTestId('channel-sync-open-claude')).not.toBeInTheDocument();
 
     await userEvent.setup().click(screen.getByTestId('channel-sync-open-cursor'));
@@ -56,5 +56,29 @@ describe('ChannelSyncSection', () => {
     call.mockImplementation(async (method: string) => (method === 'settings.get' ? ok(settings) : method === 'health.getReport' ? ok(report) : ok(undefined)));
     renderWithShell(<ChannelSyncSection urn={URN} entityEnabled={false} />);
     expect(await screen.findByTestId('channel-sync')).toHaveTextContent('Desativado — não vai para nenhum canal');
+  });
+
+  it('shows a covered channel as reading the covering file, and LM Studio as run-only', async () => {
+    const covered = {
+      generatedAt: '', worst: 'ok', counts: { ok: 2, warning: 0, error: 0 },
+      checks: [
+        { id: 'a', category: 'symlink', severity: 'ok', title: 't', entityUrn: URN, channel: 'claude', target: '/h/.claude/skills/tdd', observedAt: '' },
+        { id: 'a:covered:cursor', category: 'symlink', severity: 'ok', title: 't', entityUrn: URN, channel: 'cursor', coveredBy: 'claude', target: '/h/.claude/skills/tdd', observedAt: '' },
+      ],
+    };
+    call.mockImplementation(async (method: string) => (method === 'settings.get' ? ok(settings) : ok(covered)));
+    renderWithShell(<ChannelSyncSection urn={URN} />);
+    const cursor = await screen.findByTestId('channel-sync-cursor');
+    expect(cursor).toHaveTextContent('lê o mesmo arquivo do Claude');
+    expect(cursor).toHaveTextContent('/h/.claude/skills/tdd');
+    expect(screen.getByTestId('channel-sync-lmstudio')).toHaveTextContent('Só roda sessões');
+    expect(screen.getByTestId('channel-sync-lmstudio')).not.toHaveTextContent('não recebe');
+  });
+
+  it('a disabled item shows only the disabled line', async () => {
+    call.mockImplementation(async (method: string) => (method === 'settings.get' ? ok(settings) : ok(report)));
+    renderWithShell(<ChannelSyncSection urn={URN} entityEnabled={false} />);
+    expect(await screen.findByText('Desativado — não vai para nenhum canal')).toBeInTheDocument();
+    expect(screen.queryByTestId('channel-sync-claude')).not.toBeInTheDocument();
   });
 });

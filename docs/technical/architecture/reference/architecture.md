@@ -91,6 +91,18 @@ The adapter implementations — the `manage` side of that registry — live unde
 
 Both implement the `Adapter` port at `src/main/application/ports/adapter.ts`. `AdapterDestination` is a discriminated union on `strategy`: `symlink` (a link), `write` (`content`, a generated file), `merge` (`target`, one entry in a shared JSON file) or `skip` (`reason`, nothing written). `AdapterManager` branches on `strategy`: `symlink` → `SymlinkManager`; `write` → `FileMaterializer`; `merge` → `MergeMaterializer`; `skip` → a `SyncResult` warning. An entity with `enabled: false` is removed instead of synced.
 
+**Joint resolution and coverage.** `AdapterManager` resolves one entity's destinations for every enabled adapter at once
+(`resolveJoint`), then drops the ones a **coverage rule** says another channel already serves: a channel descriptor in
+`src/shared/channel.ts` declares `reads` per entity kind (Cursor reads Claude's skills, agents and hooks), and the pure
+`coveringChannel()` decides per entity (the covering channel must be enabled and have produced a destination; the
+covered channel's `settings.adapters.<id>.readsClaudeConfig === false` turns it off). `syncAll`/`syncEntity` and the
+plan methods (`planDestinations`, `planGeneratedFiles`, `planMergeDestinations`) use only the remaining destinations;
+`syncAll`/`syncEntity` remove the app's old copies at covered paths, ownership-safe; `planCoverage()` lists what is
+covered for health. Removal paths (`removeEntity`, `removeAll`, `removeAdapter*`) still resolve every adapter
+unfiltered. Because coverage makes one channel's state change another's destinations, `adapter.setEnabled` (both
+directions) and `adapter.setReadsClaudeConfig` run an unfiltered `syncAll({})`. Details in
+[Adapter targets](../../channels/reference/adapter-targets.md#coverage--what-cursor-reads-from-claude).
+
 ### Entity file watcher
 
 `EntityWatchService` (`src/main/application/services/entity-watch-service.ts`) keeps adapter destinations in sync when a canonical entity source file is edited **outside** the app's own `save()` flow — e.g. a `claude` session (opened via a tree row's "New Action" context-menu entry) writing to a Skill/Agent/Instruction's file directly. It watches every data dir it's given — Global's, plus the open workspace's when there is one — recursively through the `FileWatcherPort` (`src/main/application/ports/file-watcher-port.ts`), implemented by `ChokidarFileWatcher` (`src/main/infrastructure/file-watcher/chokidar-file-watcher.ts`, backed by `chokidar` — glob-free in v4, so the port watches root paths and reports every change under them). Every reported path is filtered through the pure `mapFilePathToEntity` (`src/main/application/entity/entity-watch-path.ts`), the reverse of `FsEntityRepository`'s on-disk conventions; a match re-reads the entity (tolerating a malformed/mid-write file by skipping it, same as `FsEntityRepository.list`'s per-item tolerance) and calls `AdapterManager.syncEntity` directly — deliberately **not** the full `EntityService.save()`, since an externally-detected change has no rename to detect and no `updatedAt` worth stamping. A successful re-sync fires `entity:changed` (`src/shared/entity.ts`) over the same main→renderer push-channel mechanism as `session:output`/`session:exit` (see [ipc-contract.md](ipc-contract.md#push-channels-exception-to-requestresponse)); the renderer's `useEntityChangeInvalidation` hook invalidates that kind's list query so the tree picks up the change. Like every other workspace-scoped service, one `EntityWatchService` instance is built per `buildWorkspaceScopedServices(active, …)` call and is stopped before the outgoing instance is discarded on every activation (`workspace.switchTo`/`open`/`goHome`/`delete` of the open one).

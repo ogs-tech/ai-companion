@@ -9,6 +9,7 @@ import {
 import { FixedClock } from '../../../../src/main/infrastructure/clock/fixed-clock.js';
 import type { DetectedEntity } from '../../../../src/shared/detected.js';
 import type { HealthCheck } from '../../../../src/shared/health.js';
+import { WORKSPACE_SOURCE, type Entity } from '../../../../src/shared/entity.js';
 
 const FROZEN = new Date('2026-11-17T10:00:00.000Z');
 
@@ -41,6 +42,7 @@ function make(over: {
   mcps?: StatusMcp[];
   hooks?: StatusHook[];
   plugins?: StatusPlugin[];
+  entities?: Entity[];
 } = {}): CustomizationStatusService {
   const deps: CustomizationStatusDeps = {
     health: {
@@ -50,6 +52,7 @@ function make(over: {
     mcps: async () => over.mcps ?? [],
     hooks: async () => over.hooks ?? [],
     plugins: async () => over.plugins ?? [],
+    entities: async () => over.entities ?? [],
     clock: new FixedClock(FROZEN),
   };
   return new CustomizationStatusService(deps);
@@ -146,5 +149,38 @@ describe('CustomizationStatusService', () => {
       status: 'error',
       channels: { claude: { status: 'error' }, cursor: { status: 'installed' } },
     });
+  });
+});
+
+describe('CustomizationStatusService — disabled entities', () => {
+  const entity = (kind: 'skill' | 'agent' | 'instruction', name: string, scopes: Entity['scopes'] = ['personal']): Entity => ({
+    urn: `urn:${kind}:${name}`, kind, name, description: '', scopes, ...(scopes[0] === 'workspace' ? { scopeId: 'ws-1' } : {}),
+    metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, enabled: false,
+  });
+
+  it('reports a disabled skill, agent and workspace instruction as draft/disabled', async () => {
+    const report = await make({
+      checks: [check('urn:skill:tdd', 'claude', 'installed')],
+      entities: [entity('skill', 'tdd'), entity('agent', 'rev'), entity('instruction', 'acme', ['workspace'])],
+    }).getReport();
+    for (const urn of ['urn:skill:tdd', 'urn:agent:rev', 'urn:instruction:acme']) {
+      expect(report.items[urn]).toEqual({ status: 'draft', reason: 'disabled', channels: {} });
+    }
+  });
+
+  it('leaves an enabled entity to its health checks', async () => {
+    const report = await make({
+      checks: [check('urn:skill:tdd', 'claude', 'installed')],
+      entities: [{ ...entity('skill', 'tdd'), enabled: true }],
+    }).getReport();
+    expect(report.items['urn:skill:tdd']?.status).toBe('installed');
+  });
+});
+
+describe('CustomizationStatusService — coverage', () => {
+  it('a covered skill reports installed on Cursor from the copied Claude check', async () => {
+    const covered: HealthCheck = { ...check('urn:skill:tdd', 'cursor', 'installed'), coveredBy: 'claude' };
+    const report = await make({ checks: [check('urn:skill:tdd', 'claude', 'installed'), covered] }).getReport();
+    expect(report.items['urn:skill:tdd']).toEqual({ status: 'installed', channels: { claude: { status: 'installed' }, cursor: { status: 'installed' } } });
   });
 });

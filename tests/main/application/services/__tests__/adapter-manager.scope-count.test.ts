@@ -15,7 +15,7 @@ describe('AdapterManager.syncEntity counts destinations by scope', () => {
     const { manager, fs, registerEntity } = await setupAdapterManager(adapters, defaultSettings);
     const entity: Instruction = {
       urn: 'urn:instruction:acme',
-      kind: 'instruction',
+      kind: 'instruction', enabled: true,
       name: 'acme',
       description: 'acme rules',
       scopes: ['workspace'],
@@ -38,7 +38,7 @@ describe('AdapterManager.syncEntity counts destinations by scope', () => {
     const { manager, fs, registerEntity } = await setupAdapterManager(adapters, defaultSettings);
     const entity: Skill = {
       urn: 'urn:skill:foo',
-      kind: 'skill',
+      kind: 'skill', enabled: true,
       name: 'foo',
       description: 'desc',
       scopes: ['personal'],

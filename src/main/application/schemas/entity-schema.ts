@@ -24,6 +24,7 @@ const entityBase = z.object({
   scopeId: z.string().optional(),
   metadata,
   source,
+  enabled: z.boolean(),
 });
 
 type SingleScope = 'personal' | 'workspace';
@@ -112,7 +113,6 @@ export const mcpEntitySchema = entityBase
     kind: z.literal('mcp'),
     name: mcpName,
     def: mcpServerDefSchema,
-    enabled: z.boolean(),
     scopes: scopeTuple('mcp'),
   })
   .passthrough()
@@ -124,7 +124,6 @@ export const hookEntitySchema = entityBase
     event: z.string().min(1),
     matcher: z.string().optional(),
     handler: hookHandlerSchema,
-    enabled: z.boolean(),
     scopes: scopeTuple('hook'),
   })
   .passthrough()

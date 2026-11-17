@@ -27,7 +27,7 @@ function sheet(
 function skill(overrides: Partial<Skill> = {}): Skill {
   return {
     urn: 'urn:skill:acme',
-    kind: 'skill',
+    kind: 'skill', enabled: true,
     name: 'acme',
     description: '',
     scopes: ['personal'],
@@ -41,7 +41,7 @@ function skill(overrides: Partial<Skill> = {}): Skill {
 function agent(overrides: Partial<Agent> = {}): Agent {
   return {
     urn: 'urn:agent:acme',
-    kind: 'agent',
+    kind: 'agent', enabled: true,
     name: 'acme',
     description: '',
     scopes: ['personal'],

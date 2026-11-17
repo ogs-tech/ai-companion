@@ -1,7 +1,7 @@
 import type { IpcHandlers } from './dispatcher.js';
 import type { McpService } from '../application/services/mcp-service.js';
 import type { McpServerInput } from '../../shared/mcp.js';
-import { asObject, asString, asBoolean } from './_validators.js';
+import { asObject, asString } from './_validators.js';
 
 export function buildMcpHandlers(service: McpService): IpcHandlers {
   return {
@@ -22,14 +22,6 @@ export function buildMcpHandlers(service: McpService): IpcHandlers {
     'mcp.delete': async (params) => {
       const raw = asObject(params, 'mcp.delete');
       return service.delete({ id: asString(raw['id'], 'id') });
-    },
-
-    'mcp.setEnabled': async (params) => {
-      const raw = asObject(params, 'mcp.setEnabled');
-      return service.setEnabled({
-        id: asString(raw['id'], 'id'),
-        enabled: asBoolean(raw['enabled'], 'enabled'),
-      });
     },
 
     'mcp.authenticate': async (params) => {

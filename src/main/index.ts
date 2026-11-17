@@ -422,6 +422,11 @@ async function wireIpc(): Promise<void> {
       ...(await pluginService.list('personal')),
       ...(activeWorkspace === null ? [] : await pluginService.list('project')),
     ],
+    entities: async () => {
+      const { entityService } = workspaceScoped;
+      const lists = await Promise.all((['skill', 'agent', 'instruction'] as const).map((kind) => entityService.list(kind)));
+      return lists.flat();
+    },
     clock,
   });
 
@@ -734,6 +739,7 @@ async function wireIpc(): Promise<void> {
     dialogPort,
     pluginService,
     credentialStore,
+    entityService: workspaceScoped.entityService,
     skillService: workspaceScoped.skillService,
     agentService: workspaceScoped.agentService,
     hookService,

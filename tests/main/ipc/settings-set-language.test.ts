@@ -6,7 +6,7 @@ import { WORKSPACE_SOURCE, type Instruction } from '../../../src/shared/entity.j
 
 const makeInstruction = (content: string): Instruction => ({
   urn: 'urn:instruction:default',
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name: 'default',
   description: 'test',
   scopes: ['personal'],
@@ -26,6 +26,7 @@ const baseDeps = (): IpcDeps => {
       merge: vi.fn().mockImplementation(async (partial) => ({ ...settings, ...partial })),
       getDefaults: vi.fn().mockReturnValue(getDefaults()),
     } as unknown as IpcDeps['settingsService'],
+    entityService: {} as IpcDeps['entityService'],
     instructionService: {
       get: vi.fn().mockResolvedValue(instruction),
       save: vi.fn().mockResolvedValue({ instruction, syncReport: [] }),

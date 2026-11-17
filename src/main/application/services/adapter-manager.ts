@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import type { SyncResult, SyncResultDetails } from '../../../shared/sync-result.js';
 import type { Entity } from '../../../shared/entity.js';
+import { coveringChannel, isChannelId, type ChannelId } from '../../../shared/channel.js';
+import type { Settings } from '../../../shared/settings.js';
 import type { SettingsService } from './settings-service.js';
 import type { EntityRepository } from '../ports/entity-repository.js';
 import type { Adapter, AdapterDestination, MergeTarget, OwnershipCheck } from '../ports/adapter.js';
@@ -61,6 +63,32 @@ export interface MergePlanEntry {
   target: MergeTarget;
 }
 
+/** A destination the app does not write because another channel's copy is read natively (see `coveringChannel`). */
+export interface CoveragePlanEntry {
+  adapterId: string;
+  entityUrn: string;
+  coveredBy: ChannelId;
+  /** The covering channel's destination — the file the covered channel actually reads. */
+  destination: string;
+}
+
+interface ResolvedDestination {
+  adapterId: string;
+  dest: AdapterDestination;
+}
+
+interface CoveredDestination extends ResolvedDestination {
+  coveredBy: ChannelId;
+  coveringDestination: string;
+}
+
+interface JointResolution {
+  active: ResolvedDestination[];
+  covered: CoveredDestination[];
+  /** Adapters whose resolution threw for this entity (e.g. a dangling scopeId). */
+  failed: Array<{ adapterId: string; error: unknown }>;
+}
+
 export interface InstallCommand {
   urn: string;
   adapterId: string;
@@ -96,7 +124,8 @@ export interface RemoveEntityCommand {
 
 /** An entity with `enabled: false` is removed from every harness by design, so it is never a health problem. */
 function isDisabled(entity: Entity): boolean {
-  return (entity as { enabled?: boolean }).enabled === false;
+  // `=== false`, not `!enabled`: absent means enabled, the same rule the files on disk follow.
+  return entity.enabled === false;
 }
 
 export class AdapterManager {
@@ -151,34 +180,22 @@ export class AdapterManager {
 
   async syncAll(command: SyncAllCommand): Promise<SyncResult[]> {
     const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
-    const enabledAdapters = this.enabledAdapters(settings).filter((adapter) =>
-      command.adapterId ? adapter.adapterId === command.adapterId : true,
-    );
 
     const entities = await this.deps.entityRepository.list();
     const results: SyncResult[] = [];
     for (const entity of entities) {
-      if ((entity as { enabled?: boolean }).enabled === false) continue;
-      for (const adapter of enabledAdapters) {
-        let destinations: AdapterDestination[];
-        try {
-          destinations = await adapter.resolveEntityDestinations({ entity });
-        } catch (err) {
-          // One entity's resolution failure (e.g. a dangling scopeId) must not
-          // abort sync for every other entity — degrade to a per-entity error.
-          results.push(this.symlinkError(adapter.adapterId, entity.urn, err));
-          continue;
-        }
-        for (const destination of destinations) {
-          results.push(
-            await this.syncDestination(
-              adapter.adapterId,
-              this.entitySourcePath(entity),
-              destination,
-            ),
-          );
-        }
+      if (isDisabled(entity)) continue;
+      // Coverage is decided across every enabled adapter, even when the write is filtered to one.
+      const joint = await this.resolveJoint(entity, this.enabledAdapters(settings), settings);
+      const inScope = (adapterId: string): boolean => command.adapterId === undefined || command.adapterId === adapterId;
+      // One entity's resolution failure (e.g. a dangling scopeId) must not
+      // abort sync for every other entity — degrade to a per-entity error.
+      for (const { adapterId, error } of joint.failed) if (inScope(adapterId)) results.push(this.symlinkError(adapterId, entity.urn, error));
+      const source = this.entitySourcePath(entity);
+      for (const { adapterId, dest } of joint.active) {
+        if (inScope(adapterId)) results.push(await this.syncDestination(adapterId, source, dest));
       }
+      results.push(...(await this.removeCovered(entity, joint.covered)));
     }
     await this.deps.afterSync?.().catch(() => undefined);
     return results;
@@ -191,21 +208,20 @@ export class AdapterManager {
   }
 
   async syncEntity(command: SyncEntityCommand): Promise<SyncResult[]> {
-    // A disabled mcp/hook keeps its canonical copy but is written to no harness.
-    if ((command.entity as { enabled?: boolean }).enabled === false) {
+    // A disabled entity keeps its canonical copy but is written to no channel.
+    if (isDisabled(command.entity)) {
       return this.removeEntity({ entity: command.entity });
     }
     const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
-    const enabledAdapters = this.enabledAdapters(settings);
+    const joint = await this.resolveJoint(command.entity, this.enabledAdapters(settings), settings);
+    const first = joint.failed[0];
+    if (first !== undefined) throw first.error;
     const results: SyncResult[] = [];
-
     const source = this.entitySourcePath(command.entity);
-    for (const adapter of enabledAdapters) {
-      const destinations = await adapter.resolveEntityDestinations({ entity: command.entity });
-      for (const destination of destinations) {
-        results.push(await this.syncDestination(adapter.adapterId, source, destination));
-      }
+    for (const { adapterId, dest } of joint.active) {
+      results.push(await this.syncDestination(adapterId, source, dest));
     }
+    results.push(...(await this.removeCovered(command.entity, joint.covered)));
     await this.deps.afterSync?.().catch(() => undefined);
     return results;
   }
@@ -403,18 +419,9 @@ export class AdapterManager {
     for (const entity of entities) {
       if (isDisabled(entity)) continue;
       const source = this.entitySourcePath(entity);
-      for (const adapter of enabledAdapters) {
-        const destinations = await adapter.resolveEntityDestinations({ entity });
-        for (const dest of destinations) {
-          if (dest.strategy !== 'symlink') continue;
-          entries.push({
-            adapterId: adapter.adapterId,
-            entityUrn: entity.urn,
-            source,
-            destination: dest.destination,
-            scope: dest.scope,
-          });
-        }
+      for (const { adapterId, dest } of (await this.resolveJoint(entity, enabledAdapters, settings, { strict: true })).active) {
+        if (dest.strategy !== 'symlink') continue;
+        entries.push({ adapterId, entityUrn: entity.urn, source, destination: dest.destination, scope: dest.scope });
       }
     }
     return entries;
@@ -428,19 +435,16 @@ export class AdapterManager {
     const entries: GeneratedFilePlanEntry[] = [];
     for (const entity of entities) {
       if (isDisabled(entity)) continue;
-      for (const adapter of enabledAdapters) {
-        const destinations = await adapter.resolveEntityDestinations({ entity });
-        for (const dest of destinations) {
-          if (dest.strategy !== 'write') continue;
-          entries.push({
-            adapterId: adapter.adapterId,
-            entityUrn: entity.urn,
-            destination: dest.destination,
-            content: dest.content,
-            ...(dest.ownershipMarker !== undefined ? { ownershipMarker: dest.ownershipMarker } : {}),
-            ...(dest.ownershipCheck !== undefined ? { ownershipCheck: dest.ownershipCheck } : {}),
-          });
-        }
+      for (const { adapterId, dest } of (await this.resolveJoint(entity, enabledAdapters, settings, { strict: true })).active) {
+        if (dest.strategy !== 'write') continue;
+        entries.push({
+          adapterId,
+          entityUrn: entity.urn,
+          destination: dest.destination,
+          content: dest.content,
+          ...(dest.ownershipMarker !== undefined ? { ownershipMarker: dest.ownershipMarker } : {}),
+          ...(dest.ownershipCheck !== undefined ? { ownershipCheck: dest.ownershipCheck } : {}),
+        });
       }
     }
     return entries;
@@ -454,15 +458,107 @@ export class AdapterManager {
     const entries: MergePlanEntry[] = [];
     for (const entity of entities) {
       if (isDisabled(entity)) continue;
-      for (const adapter of enabledAdapters) {
-        const destinations = await adapter.resolveEntityDestinations({ entity });
-        for (const dest of destinations) {
-          if (dest.strategy !== 'merge') continue;
-          entries.push({ adapterId: adapter.adapterId, entityUrn: entity.urn, destination: dest.destination, target: dest.target });
-        }
+      for (const { adapterId, dest } of (await this.resolveJoint(entity, enabledAdapters, settings, { strict: true })).active) {
+        if (dest.strategy !== 'merge') continue;
+        entries.push({ adapterId, entityUrn: entity.urn, destination: dest.destination, target: dest.target });
       }
     }
     return entries;
+  }
+
+  /** Read-only plan of every destination left unwritten because another channel's copy is read natively. */
+  async planCoverage(): Promise<CoveragePlanEntry[]> {
+    const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
+    const enabledAdapters = this.enabledAdapters(settings);
+    const entries: CoveragePlanEntry[] = [];
+    for (const entity of await this.deps.entityRepository.list()) {
+      if (isDisabled(entity)) continue;
+      // Not strict: an entity that fails to resolve is reported by the plan methods' collectors, not here.
+      const { covered } = await this.resolveJoint(entity, enabledAdapters, settings);
+      // One entry per covered adapter (an adapter may emit several destinations for one entity).
+      const seen = new Set<string>();
+      for (const { adapterId, coveredBy, coveringDestination } of covered) {
+        if (seen.has(adapterId)) continue;
+        seen.add(adapterId);
+        entries.push({ adapterId, entityUrn: entity.urn, coveredBy, destination: coveringDestination });
+      }
+    }
+    return entries;
+  }
+
+  /**
+   * Resolves one entity's destinations across every given adapter at once, then splits off the ones a coverage rule
+   * says another channel already serves. `strict` rethrows a resolution failure (the plan methods' behaviour);
+   * otherwise it is reported in `failed` and the other adapters still resolve.
+   */
+  private async resolveJoint(
+    entity: Entity,
+    adapters: Adapter[],
+    settings: Settings,
+    options: { strict?: boolean } = {},
+  ): Promise<JointResolution> {
+    const resolved: Array<{ adapterId: string; dests: AdapterDestination[] }> = [];
+    const failed: JointResolution['failed'] = [];
+    for (const adapter of adapters) {
+      try {
+        resolved.push({ adapterId: adapter.adapterId, dests: await adapter.resolveEntityDestinations({ entity }) });
+      } catch (error) {
+        if (options.strict) throw error;
+        failed.push({ adapterId: adapter.adapterId, error });
+      }
+    }
+    const served = new Set<ChannelId>();
+    for (const { adapterId, dests } of resolved) {
+      if (isChannelId(adapterId) && dests.some((d) => d.strategy !== 'skip')) served.add(adapterId);
+    }
+    const firstServed = (adapterId: string): string | undefined =>
+      resolved.find((r) => r.adapterId === adapterId)?.dests.find((d) => d.strategy !== 'skip')?.destination;
+
+    const active: ResolvedDestination[] = [];
+    const covered: CoveredDestination[] = [];
+    for (const { adapterId, dests } of resolved) {
+      const coveredBy = isChannelId(adapterId) ? coveringChannel({ covered: adapterId, kind: entity.kind, settings, served }) : undefined;
+      const coveringDestination = coveredBy === undefined ? undefined : firstServed(coveredBy);
+      for (const dest of dests) {
+        if (coveredBy !== undefined && coveringDestination !== undefined) covered.push({ adapterId, dest, coveredBy, coveringDestination });
+        else active.push({ adapterId, dest });
+      }
+    }
+    return { active, covered, failed };
+  }
+
+  /**
+   * Removes the app's own copies at destinations another channel now covers. Ownership-safe: a symlink goes only
+   * when it points into the app's data, a written file only when it carries the app's marker, a merge entry only
+   * when the merge index owns it — a user's own file there is left alone. Only actual removals and errors are reported.
+   */
+  private async removeCovered(entity: Entity, covered: readonly CoveredDestination[]): Promise<SyncResult[]> {
+    const results: SyncResult[] = [];
+    for (const { adapterId, dest } of covered) {
+      try {
+        let removed = false;
+        if (dest.strategy === 'symlink') {
+          removed = (await this.deps.symlinkManager.removeIfPointsToWorkspace(dest.destination, this.deps.entityDataDir(entity))) === 'removed';
+        } else if (dest.strategy === 'write') {
+          removed = (await this.deps.fileMaterializer.removeIfOwned(this.removeArgs(dest))).removed;
+        } else if (dest.strategy === 'merge') {
+          if (this.deps.mergeMaterializer === undefined) continue;
+          removed = (await this.deps.mergeMaterializer.remove({ file: dest.destination, target: dest.target })).removed;
+        }
+        if (removed) results.push({ adapter: adapterId, destination: dest.destination, status: 'ok', message: 'covered by another channel' });
+      } catch (err) {
+        results.push(this.symlinkError(adapterId, dest.destination, err));
+      }
+    }
+    return results;
+  }
+
+  private removeArgs(dest: Extract<AdapterDestination, { strategy: 'write' }>): Parameters<FileMaterializer['removeIfOwned']>[0] {
+    return {
+      destination: dest.destination,
+      ...(dest.ownershipMarker !== undefined ? { ownershipMarker: dest.ownershipMarker } : {}),
+      ...(dest.ownershipCheck !== undefined ? { ownershipCheck: dest.ownershipCheck } : {}),
+    };
   }
 
   private async removeDestination(adapterId: string, dest: AdapterDestination): Promise<SyncResult> {

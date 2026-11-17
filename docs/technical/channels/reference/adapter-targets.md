@@ -53,6 +53,21 @@ because Cursor has no home-level equivalent of `~/.claude/CLAUDE.md`. This layou
 API and may break in a future Cursor release; the helper is isolated in
 `src/main/application/entity/cursor-plugin-manifest.ts`.
 
+### Coverage — what Cursor reads from Claude
+
+Cursor imports Claude's `.claude/skills`, `.claude/agents` and hooks natively (its "Include Third-Party Plugins,
+Skills, and Other Configs", on by default). The Cursor descriptor in `src/shared/channel.ts` declares it:
+`reads: { skill: ['claude'], agent: ['claude'], hook: ['claude'] }`. While Claude is enabled and produced a
+destination for the entity, `AdapterManager` writes **no** Cursor copy of a skill, agent or hook (the rows above for
+those kinds apply only when coverage is off), and the next sync removes the copies the app wrote there before —
+ownership-safe: a symlink only when it points into the app's data, a merge entry only when the merge index owns it,
+never a user's own file. Instructions and MCP are never covered: Cursor keeps its own `.mdc` and `mcp.json` entries.
+
+Coverage turns off when Claude is disabled, or when `settings.adapters.cursor.readsClaudeConfig` is `false` (absent =
+`true`; Config › Canais › Cursor, "O Cursor importa as configurações do Claude") — Cursor then gets its own copies on
+the same call (`adapter.setEnabled` and `adapter.setReadsClaudeConfig` run an unfiltered sync). Health reports a
+covered Cursor destination with Claude's verdict (`HealthCheck.coveredBy`).
+
 ## Ownership markers (✍️ targets)
 
 A generated file is app-owned when it contains its marker. Markers come from `src/shared/brand.ts`:

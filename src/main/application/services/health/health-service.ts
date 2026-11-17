@@ -3,18 +3,22 @@ import type { ClockPort } from '../../ports/clock-port.js';
 import type { Scope } from '../../ports/scope.js';
 import { worstSeverity, countBySeverity } from '../../../domain/health.js';
 import type { HealthCollector } from './health-collector.js';
+import type { CoveragePlanEntry } from '../adapter-manager.js';
+import { applyCoverage } from './coverage.js';
 
 export class HealthService {
   constructor(
     private readonly collectors: readonly HealthCollector[],
     private readonly clock: ClockPort,
+    /** What each channel reads from another instead of its own copy (`AdapterManager.planCoverage`). */
+    private readonly coverage: () => Promise<readonly CoveragePlanEntry[]> = async () => [],
   ) {}
 
   async getReport(scope: Scope): Promise<HealthReport> {
     const results = await Promise.all(
       this.collectors.map((collector) => this.runIsolated(collector, scope)),
     );
-    const checks = results.flat();
+    const checks = applyCoverage(results.flat(), await this.coverage());
     return {
       generatedAt: this.clock.now().toISOString(),
       worst: worstSeverity(checks.map((c) => c.severity)),

@@ -528,9 +528,9 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('editor-panel')).toBeInTheDocument();
     });
 
-    it('lists the workspace instructions by name; deleting one asks for confirmation first', async () => {
+    it('lists the workspace instructions by name; Excluir hides it and deletes after the undo window, with no confirm dialog', async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const confirmSpy = vi.spyOn(window, 'confirm');
       const workspaceInstruction = {
         urn: 'urn:instruction:acme', kind: 'instruction' as const, name: 'acme',
         description: '', scopes: ['workspace' as const], scopeId: 'w1',
@@ -548,9 +548,12 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('workspace-instruction-row-acme')).toHaveTextContent('Instructions');
       fireEvent.contextMenu(screen.getByTestId('workspace-instruction-row-acme'));
       await user.click(await screen.findByTestId('row-context-menu-delete'));
-      expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('acme'));
-      await waitFor(() =>
-        expect(ipc.callIpc).toHaveBeenCalledWith('instruction.delete', { name: 'acme', removeSymlinks: true }),
+      expect(confirmSpy).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.queryByTestId('workspace-instruction-row-acme')).not.toBeInTheDocument());
+      expect(ipc.callIpc).not.toHaveBeenCalledWith('instruction.delete', expect.anything());
+      await waitFor(
+        () => expect(ipc.callIpc).toHaveBeenCalledWith('instruction.delete', { name: 'acme', removeSymlinks: true }),
+        { timeout: 8000 },
       );
       confirmSpy.mockRestore();
     });
@@ -1244,7 +1247,7 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       fireEvent.contextMenu(await screen.findByTestId('tree-row-local::urn:skill:acme'));
-      await user.click(await screen.findByTestId('row-context-menu-preview'));
+      await user.click(await screen.findByTestId('row-context-menu-open'));
 
       expect(await screen.findByTestId('workbench-tab-preview:entity:urn:skill:acme')).toBeInTheDocument();
       expect(screen.getByTestId('markdown-preview')).toBeInTheDocument();
@@ -1267,7 +1270,7 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row-Acme'));
-      await user.click(await screen.findByTestId('row-context-menu-preview'));
+      await user.click(await screen.findByTestId('row-context-menu-open'));
 
       expect(await screen.findByTestId('workbench-tab-preview:entity:urn:instruction:w1')).toBeInTheDocument();
       expect(screen.getByTestId('markdown-preview')).toBeInTheDocument();
@@ -1276,7 +1279,7 @@ describe('WorkspaceScreen', () => {
   });
 
   describe('Properties via right-click', () => {
-    it('right-clicking a skill row opens (or focuses) its editing tab and shows the Properties modal', async () => {
+    it('right-clicking a skill row → Editar opens (or focuses) its editing tab and shows the Properties modal', async () => {
       const user = userEvent.setup();
       const acmeSkill = {
         urn: 'urn:skill:acme', kind: 'skill' as const, name: 'acme', description: '',
@@ -1291,14 +1294,14 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       fireEvent.contextMenu(await screen.findByTestId('tree-row-local::urn:skill:acme'));
-      await user.click(await screen.findByTestId('row-context-menu-properties'));
+      await user.click(await screen.findByTestId('row-context-menu-edit'));
 
       expect(await screen.findByTestId('workbench-tab-entity:urn:skill:acme')).toBeInTheDocument();
       expect(screen.getByTestId('properties-modal')).toBeInTheDocument();
       expect(screen.getByLabelText('Name')).toHaveValue('acme');
     });
 
-    it('right-clicking a configured workspace INSTRUCTIONS row opens its editing tab and shows the Properties modal', async () => {
+    it('right-clicking a configured workspace INSTRUCTIONS row → Editar opens its editing tab and shows the Properties modal', async () => {
       const user = userEvent.setup();
       const workspaceInstruction = {
         urn: 'urn:instruction:w1', kind: 'instruction' as const, name: 'Acme',
@@ -1314,7 +1317,7 @@ describe('WorkspaceScreen', () => {
       });
       renderScreen();
       fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row-Acme'));
-      await user.click(await screen.findByTestId('row-context-menu-properties'));
+      await user.click(await screen.findByTestId('row-context-menu-edit'));
 
       expect(await screen.findByTestId('workbench-tab-entity:urn:instruction:w1')).toBeInTheDocument();
       expect(screen.getByTestId('properties-modal')).toBeInTheDocument();
@@ -1337,7 +1340,7 @@ describe('WorkspaceScreen', () => {
       // The row renders before the instruction loads; it only offers a menu once it has one.
       await waitFor(() => {
         fireEvent.contextMenu(screen.getByTestId('personal-instruction-row'));
-        expect(screen.getByTestId('row-context-menu-preview')).toBeInTheDocument();
+        expect(screen.getByTestId('row-context-menu-open')).toBeInTheDocument();
       });
       expect(screen.queryByTestId('row-context-menu-properties')).not.toBeInTheDocument();
     });

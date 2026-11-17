@@ -22,7 +22,7 @@ const WORKSPACE = '/home/user/.air-ide';
 
 const skill = (name = 'foo'): Skill => ({
   urn: entityUrn('skill', name),
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: '',
   scopes: ['personal'],
@@ -33,7 +33,7 @@ const skill = (name = 'foo'): Skill => ({
 
 const workspaceScopedSkill = (name = 'acme', scopeId = 'ws-1'): Skill => ({
   urn: entityUrn('skill', name),
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: '',
   scopes: ['workspace'],
@@ -45,7 +45,7 @@ const workspaceScopedSkill = (name = 'acme', scopeId = 'ws-1'): Skill => ({
 
 const workspaceInstruction = (name = 'acme', scopeId = 'ws-1'): Instruction => ({
   urn: entityUrn('instruction', name),
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name,
   description: '',
   scopes: ['workspace'],

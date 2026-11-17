@@ -302,3 +302,24 @@ describe('SettingsService ui.wordWrap / ui.confirmTrash', () => {
     await expect(service.save({ ...baseSettings(), ui: { theme: 'light', confirmTrash: 1 as unknown as boolean } })).rejects.toMatchObject({ kind: 'validation' });
   });
 });
+
+describe('SettingsService — adapters.cursor.readsClaudeConfig', () => {
+  it('merges, persists and reloads readsClaudeConfig: false', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const service = new SettingsService(stubRepo({ load: () => Promise.resolve(baseSettings()), save }));
+    const result = await service.merge({ adapters: { cursor: { readsClaudeConfig: false } } });
+    expect(result.adapters.cursor).toEqual({ enabled: false, readsClaudeConfig: false });
+    expect(save).toHaveBeenCalled();
+
+    const persisted = { ...baseSettings(), adapters: { ...baseSettings().adapters, cursor: { enabled: true, readsClaudeConfig: false } } };
+    const reloaded = await new SettingsService(stubRepo({ load: () => Promise.resolve(persisted) })).load();
+    expect(reloaded?.adapters.cursor).toEqual({ enabled: true, readsClaudeConfig: false });
+  });
+
+  it('rejects a non-boolean readsClaudeConfig', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const service = new SettingsService(stubRepo({ save }));
+    const bad = { ...baseSettings(), adapters: { ...baseSettings().adapters, cursor: { enabled: true, readsClaudeConfig: 'yes' } } } as unknown as Settings;
+    await expect(service.save(bad)).rejects.toMatchObject({ kind: 'validation' });
+  });
+});

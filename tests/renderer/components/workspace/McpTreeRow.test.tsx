@@ -22,7 +22,7 @@ describe('McpTreeRow', () => {
     renderWithShell(<McpTreeRow item={item} />);
     fireEvent.contextMenu(screen.getByTestId(rowId(item)));
     await userEvent.setup().click(await screen.findByTestId('row-context-menu-toggle'));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('mcp.setEnabled', { id: 's1', enabled: false }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: 'urn:mcp:github', enabled: false }));
   });
 
   it('a disabled server reads desativado and offers Ativar', async () => {

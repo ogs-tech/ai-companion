@@ -18,7 +18,7 @@ const WORKSPACE = '/workspace';
 
 const globalInstruction = (): Instruction => ({
   urn: 'urn:instruction:default',
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name: 'default',
   description: 'global instruction',
   scopes: ['personal'],

@@ -14,6 +14,13 @@ import type { Agent, Skill } from '../../shared/entity.js';
 const DETECTED_KINDS = ['skill', 'agent', 'instruction'] as const;
 const EMPTY: readonly never[] = [];
 
+/** `own` plus the plugin-provided entries of the `project` listing it lacks (by urn). */
+function withProjectPlugins<T extends Skill | Agent>(own: readonly T[] | undefined, project: readonly T[] | undefined): readonly T[] | undefined {
+  if (project === undefined) return own;
+  const urns = new Set((own ?? []).map((e) => e.urn));
+  return [...(own ?? []), ...project.filter((e) => e.source.kind === 'plugin' && !urns.has(e.urn))];
+}
+
 export interface UseCustomizationTreeOptions {
   isHome: boolean;
   localScope?: { scope: 'workspace'; scopeId: string };
@@ -25,8 +32,13 @@ export interface UseCustomizationTreeOptions {
 
 /** The Customizações tree for the current scope: every list read once, built by one pure function. */
 export function useCustomizationTree({ isHome, localScope, mcpMatchPath, query, filter, channel }: UseCustomizationTreeOptions): CustomizationTree {
-  const skills = useCustomizationList('skill', 'skill.list').data as Skill[] | undefined;
-  const agents = useCustomizationList('agent', 'agent.list').data as Agent[] | undefined;
+  const ownSkills = useCustomizationList('skill', 'skill.list').data as Skill[] | undefined;
+  const ownAgents = useCustomizationList('agent', 'agent.list').data as Agent[] | undefined;
+  // A workspace's own plugins ship skills/agents only the `project` listing returns; they join their kind groups.
+  const projectSkills = useCustomizationList('skill', 'skill.list', 'project', !isHome).data as Skill[] | undefined;
+  const projectAgents = useCustomizationList('agent', 'agent.list', 'project', !isHome).data as Agent[] | undefined;
+  const skills = useMemo(() => withProjectPlugins(ownSkills, isHome ? undefined : projectSkills), [ownSkills, projectSkills, isHome]);
+  const agents = useMemo(() => withProjectPlugins(ownAgents, isHome ? undefined : projectAgents), [ownAgents, projectAgents, isHome]);
   const instructions = useInstructionsList().data;
   const personalInstruction = usePersonalInstruction().data;
   const mcps = useMcpList().data;

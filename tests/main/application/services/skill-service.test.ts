@@ -10,7 +10,7 @@ import { skillId } from '../../../../src/main/domain/skill-id.js';
 import { scopedRepository } from '../../helpers/scoped-repository.js';
 
 const skill = (name = 'demo'): Skill => ({
-  urn: `urn:skill:${name}`, kind: 'skill', name, description: 'd', scopes: ['personal'],
+  urn: `urn:skill:${name}`, kind: 'skill', enabled: true, name, description: 'd', scopes: ['personal'],
   metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'b',
 });
 

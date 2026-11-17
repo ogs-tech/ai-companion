@@ -52,7 +52,7 @@ test.describe('Customizations › channel warnings', () => {
   test('Saving an item from the editor clears its own warning at once, and leaves the others', async () => {
     const { page, app } = session;
     await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Properties' }).click();
+    await page.getByRole('menuitem', { name: 'Editar' }).click();
     await page.getByTestId('properties-modal').getByLabel('Description').fill('Steps to ship acme-api safely');
     await page.getByTestId('properties-modal').getByRole('button', { name: 'Fechar' }).click();
     await saveFromMenu(app);

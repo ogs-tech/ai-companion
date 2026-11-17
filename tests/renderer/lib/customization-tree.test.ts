@@ -24,6 +24,7 @@ function base(kind: Entity['kind'], name: string, opts: ScopeArg = {}): Entity {
   return {
     urn: `urn:${kind}:${name}`,
     kind,
+    enabled: true,
     name,
     description: `${name} description`,
     scopes: opts.ws !== undefined ? ['workspace'] : ['personal'],
@@ -124,7 +125,7 @@ describe('buildCustomizationTree', () => {
     );
     expect(tree.sections.map((s) => s.id)).toEqual(['local']);
     expect(groupIds(tree)).toEqual(['instruction', 'skill', 'agent', 'mcp', 'hook', 'plugin']);
-    expect(section(tree, 'local')?.groups.map((g) => g.label)).toEqual(['Instruções', 'Skills', 'Agents', 'MCP', 'Hooks', 'Plugins']);
+    expect(section(tree, 'local')?.groups.map((g) => g.label)).toEqual(['Instruções', 'Skills', 'Agents', 'MCP', 'Hooks', 'Plugins (origem)']);
   });
 
   it('splits a workspace into a Workspace section and a read-only Global section', () => {
@@ -184,14 +185,28 @@ describe('buildCustomizationTree', () => {
     expect(group(buildCustomizationTree(input(), { ...WS, filter: 'draft' }), 'instruction')).toBeUndefined();
   });
 
-  it('drops plugin-provided items and keeps one row per plugin', () => {
+  it('lists plugin-provided items in their kind groups with the plugin tag, and one origin row per plugin', () => {
     const tree = buildCustomizationTree(
       input({ skills: [skill('from-plugin', { plugin: 'p1' })], mcps: [mcp('pm', { plugin: 'p1' })], plugins: [plugin('p1')] }),
       HOME,
     );
-    expect(names(tree, 'skill')).toEqual([]);
-    expect(group(tree, 'mcp')).toBeUndefined();
+    expect(names(tree, 'skill')).toEqual(['from-plugin']);
+    expect(group(tree, 'skill')?.items[0]?.pluginTag).toBe('p1');
+    expect(group(tree, 'mcp')?.items[0]?.pluginTag).toBe('p1');
     expect(names(tree, 'plugin')).toEqual(['p1']);
+    expect(group(tree, 'plugin')?.label).toBe('Plugins (origem)');
+    const row = group(tree, 'plugin')?.items[0]?.entity;
+    expect(row?.kind === 'plugin' ? row.itemCount : undefined).toBe(2);
+  });
+
+  it("a disabled plugin's items stay listed and read desativado (Review Focus 5)", () => {
+    const tree = buildCustomizationTree(
+      input({ skills: [skill('brainstorming', { plugin: 'superpowers' })], plugins: [plugin('superpowers', { enabled: false })], status: { 'urn:skill:brainstorming': ok } }),
+      HOME,
+    );
+    const item = group(tree, 'skill')?.items[0];
+    expect(item?.pluginTag).toBe('superpowers');
+    expect(item !== undefined && isDisabled(item)).toBe(true);
   });
 
   it('computes chip totals on the searched set', () => {

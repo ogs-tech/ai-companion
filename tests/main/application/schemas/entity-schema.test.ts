@@ -8,7 +8,7 @@ import { WORKSPACE_SOURCE } from '../../../../src/shared/entity.js';
 
 const meta = { version: '0.1.0', createdAt: '', updatedAt: '' };
 const base = {
-  urn: 'urn:instruction:x', kind: 'instruction' as const, description: '',
+  urn: 'urn:instruction:x', kind: 'instruction' as const, enabled: true, description: '',
   metadata: meta, source: WORKSPACE_SOURCE, content: '# Body\n',
 };
 
@@ -55,7 +55,7 @@ describe.each([
   ['agentEntitySchema', agentEntitySchema, { kind: 'agent' as const, systemPrompt: 'body' }],
 ])('%s scopes', (_label, schema, kindFields) => {
   const skillAgentBase = {
-    urn: 'urn:x:y', description: 'd', name: 'demo',
+    urn: 'urn:x:y', description: 'd', name: 'demo', enabled: true,
     metadata: meta, source: WORKSPACE_SOURCE, ...kindFields,
   };
 

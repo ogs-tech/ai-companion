@@ -1,4 +1,5 @@
 import { CHANNEL_IDS, type ChannelId } from '../../shared/channel.js';
+import { CUSTOMIZATION_KINDS } from '../../shared/customization-kind.js';
 import type { DetectedEntity } from '../../shared/detected.js';
 import { entityUrn, isWorkspaceInstruction, type Agent, type Entity, type Instruction, type Skill } from '../../shared/entity.js';
 import type { McpServer } from '../../shared/mcp.js';
@@ -30,7 +31,8 @@ export type TreeEntity =
   | { kind: 'agent'; value: Agent }
   | { kind: 'mcp'; value: McpServer }
   | { kind: 'hook'; value: Hook }
-  | { kind: 'plugin'; value: PluginListItemIpc }
+  /** A plugin is an origin, not a kind: one row, not expandable; its items sit in their kind groups. */
+  | { kind: 'plugin'; value: PluginListItemIpc; itemCount?: number }
   /** A detected skill/agent; detected MCP servers and hooks keep their own kind. */
   | { kind: 'detected'; value: DetectedEntity };
 
@@ -43,6 +45,8 @@ export interface TreeItem {
   folderAlias?: string;
   /** From `customization.status`; absent when nothing was checked yet (a placeholder, no channel on, still loading). */
   status?: ItemStatus;
+  /** Set on an item a plugin ships: the plugin's id, shown as a tag. Such items are read-only. */
+  pluginTag?: string;
   entity: TreeEntity;
 }
 
@@ -118,12 +122,8 @@ const DETECTED_STATUS: ItemStatus = { status: 'draft', reason: 'detected', chann
 const DISABLED_STATUS: ItemStatus = { status: 'draft', reason: 'disabled', channels: {} };
 
 const GROUPS: ReadonlyArray<{ id: TreeGroupId; label: string }> = [
-  { id: 'instruction', label: 'Instruções' },
-  { id: 'skill', label: 'Skills' },
-  { id: 'agent', label: 'Agents' },
-  { id: 'mcp', label: 'MCP' },
-  { id: 'hook', label: 'Hooks' },
-  { id: 'plugin', label: 'Plugins' },
+  ...CUSTOMIZATION_KINDS.map((k) => ({ id: k.kind, label: k.label })),
+  { id: 'plugin', label: 'Plugins (origem)' },
 ];
 
 const ORIGIN_ORDER: Record<TreeOrigin, number> = { local: 0, global: 1, detected: 2 };
@@ -162,7 +162,7 @@ function aliasOf(folder: string | undefined, options: TreeOptions): string | und
 }
 
 function makeItem(
-  fields: { identity: string; urn: string; name: string; origin: TreeOrigin; folder?: string | undefined; disabled?: boolean; entity: TreeEntity },
+  fields: { identity: string; urn: string; name: string; origin: TreeOrigin; folder?: string | undefined; disabled?: boolean; pluginTag?: string; entity: TreeEntity },
   input: TreeInput,
   options: TreeOptions,
 ): TreeItem {
@@ -176,6 +176,7 @@ function makeItem(
     origin: fields.origin,
     ...(folderAlias !== undefined ? { folderAlias } : {}),
     ...(status !== undefined ? { status } : {}),
+    ...(fields.pluginTag !== undefined ? { pluginTag: fields.pluginTag } : {}),
     entity: fields.entity,
   };
 }
@@ -238,16 +239,26 @@ function instructionCandidates(input: TreeInput, options: TreeOptions): Candidat
   return out;
 }
 
+function pluginOrigin(plugin: PluginListItemIpc | undefined, options: TreeOptions): TreeOrigin {
+  return options.isHome || options.localScope === undefined || plugin?.scope === 'project' ? 'local' : 'global';
+}
+
 function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   const out: Candidate[] = instructionCandidates(input, options);
+  const pluginsById = new Map(input.plugins.map((p) => [p.id, p]));
+  /** A plugin item: tagged, placed where its plugin is, and off (`draft · desativado`) while the plugin is off. */
+  const fromPlugin = (pluginId: string): { pluginTag: string; origin: TreeOrigin; disabled: boolean } => {
+    const plugin = pluginsById.get(pluginId);
+    return { pluginTag: pluginId, origin: pluginOrigin(plugin, options), disabled: plugin?.enabled === false };
+  };
 
   const entityRows = (kind: 'skill' | 'agent', list: ReadonlyArray<Skill | Agent>): void => {
     for (const value of list) {
-      if (value.source.kind === 'plugin') continue;
       const urn = entityUrn(kind, value.name);
       const entity = (kind === 'skill' ? { kind, value } : { kind, value }) as TreeEntity;
+      const plugin = value.source.kind === 'plugin' ? fromPlugin(value.source.pluginId) : { origin: entityOrigin(value, options) };
       out.push({
-        item: makeItem({ identity: urn, urn, name: value.name, origin: entityOrigin(value, options), folder: value.folder, entity }, input, options),
+        item: makeItem({ identity: urn, urn, name: value.name, folder: value.folder, entity, ...plugin }, input, options),
         group: kind,
         haystack: [value.name, value.description],
       });
@@ -271,14 +282,14 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   }
 
   for (const server of input.mcps) {
-    if (server.source.kind === 'plugin') continue;
     const origin: TreeOrigin = server.source.kind === 'detected' ? 'detected' : isMcpLocal(server, options.mcpMatchPath) ? 'local' : 'global';
     const urn = entityUrn('mcp', server.name);
+    // Only the user's own servers can be turned off; a detected one (e.g. a claude.ai connector) reports
+    // `enabled: false` just because the app does not manage it.
+    const own = { origin, disabled: server.source.kind === 'workspace' && !server.enabled };
     out.push({
-      // Only the user's own servers can be turned off; a detected one (e.g. a claude.ai connector) reports
-      // `enabled: false` just because the app does not manage it.
       item: makeItem(
-        { identity: `mcp:${server.id}`, urn, name: server.name, origin, disabled: server.source.kind === 'workspace' && !server.enabled, entity: { kind: 'mcp', value: server } },
+        { identity: `mcp:${server.id}`, urn, name: server.name, entity: { kind: 'mcp', value: server }, ...(server.source.kind === 'plugin' ? fromPlugin(server.source.pluginId) : own) },
         input,
         options,
       ),
@@ -290,17 +301,16 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   // Hooks have no workspace scoping: all of them are Global's, read from inside a workspace.
   const hookOrigin: TreeOrigin = options.isHome || options.localScope === undefined ? 'local' : 'global';
   for (const value of input.hooks) {
-    if (value.source.kind === 'plugin') continue;
     const urn = entityUrn('hook', value.id);
+    const own = { origin: value.source.kind === 'detected' ? ('detected' as const) : hookOrigin, disabled: value.enabled === false };
     out.push({
       item: makeItem(
         {
           identity: urn,
           urn,
           name: hookRowLabel(value),
-          origin: value.source.kind === 'detected' ? 'detected' : hookOrigin,
-          disabled: value.enabled === false,
           entity: { kind: 'hook', value },
+          ...(value.source.kind === 'plugin' ? fromPlugin(value.source.pluginId) : own),
         },
         input,
         options,
@@ -310,12 +320,14 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
     });
   }
 
+  const itemCounts = new Map<string, number>();
+  for (const c of out) if (c.item.pluginTag !== undefined) itemCounts.set(c.item.pluginTag, (itemCounts.get(c.item.pluginTag) ?? 0) + 1);
   for (const value of input.plugins) {
     // Plugins are not an Entity kind, but the status report names them `urn:plugin:<id>` (children roll up in main).
     const urn = `urn:plugin:${value.id}`;
-    const origin: TreeOrigin = options.isHome || options.localScope === undefined || value.scope === 'project' ? 'local' : 'global';
+    const entity: TreeEntity = { kind: 'plugin', value, itemCount: itemCounts.get(value.id) ?? 0 };
     out.push({
-      item: makeItem({ identity: urn, urn, name: value.id, origin, disabled: !value.enabled, entity: { kind: 'plugin', value } }, input, options),
+      item: makeItem({ identity: urn, urn, name: value.id, origin: pluginOrigin(value, options), disabled: !value.enabled, entity }, input, options),
       group: 'plugin',
       haystack: [value.id],
     });

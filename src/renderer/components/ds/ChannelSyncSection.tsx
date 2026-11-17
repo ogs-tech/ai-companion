@@ -7,7 +7,7 @@ import { openDiagnosticsFor } from '../../lib/diagnostics-focus.js';
 
 const QUIET: Record<Exclude<SyncRow['status'], 'ok' | 'problem'>, string> = {
   off: 'Desativado',
-  'run-only': 'Só roda sessões, não recebe customizações',
+  'run-only': 'Só roda sessões',
   unchecked: 'Ainda não sincronizado',
 };
 

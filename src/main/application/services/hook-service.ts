@@ -100,7 +100,7 @@ export class HookService {
       event: input.hook.event,
       ...(input.hook.matcher !== undefined ? { matcher: input.hook.matcher } : {}),
       handler: handler as Record<string, unknown>,
-      enabled: existing?.enabled ?? true,
+      enabled: input.hook.enabled ?? existing?.enabled ?? true,
     };
     const result = await entities.save({ entity, isCreate: existing === undefined });
     return { hook: toHook(result.entity as HookEntity), syncReport: result.syncReport };

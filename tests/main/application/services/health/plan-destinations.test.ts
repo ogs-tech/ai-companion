@@ -14,7 +14,7 @@ const FROZEN = '2026-06-05T10:00:00.000Z';
 
 const skill = (name: string): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: name,
   scopes: ['personal'],
@@ -25,7 +25,7 @@ const skill = (name: string): Skill => ({
 
 const instruction = (): Instruction => ({
   urn: 'urn:instruction:default',
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name: 'default',
   description: '',
   scopes: ['personal'],

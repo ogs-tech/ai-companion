@@ -50,10 +50,11 @@ workspace's own items, and what was detected in its folders), then **Global** (I
 read-only here — tooltip *Somente leitura aqui — edite no Início*; edit them from Início).
 
 Each section starts with its **Instructions** row, then one group per type: **Skills**, **Agents**, **MCP**,
-**Hooks**, **Plugins**. A group with nothing in it is not shown, except **Skills** and **Agents** in the scope's
-own list, which read *Nada aqui ainda*. Hooks have no workspace scope, so inside a workspace they all sit under
-**Global**. A plugin is one row; click it to see what it provides. What a plugin provides is not listed again in
-the type groups.
+**Hooks**, then **Plugins (origem)**. A group with nothing in it is not shown, except **Skills** and **Agents** in
+the scope's own list, which read *Nada aqui ainda*. Hooks have no workspace scope, so inside a workspace they all
+sit under **Global**. A plugin is an origin, not a type: one row (`superpowers · 3 itens`, *ativo*/*desativado*)
+that does not expand. What it provides is listed in the type groups with the plugin's name as a tag
+(`brainstorming  superpowers`), read-only; turning the plugin off keeps those rows and marks them *desativado*.
 
 In a multi-folder workspace the folder is a tag on the row (`commit-msg · api`), not a level of the tree, and
 each folder has its own **Instructions · <folder>** row.
@@ -79,16 +80,19 @@ search and the chip.
 
 - A green **N sessões** beside a skill, agent or MCP server means running sessions used it in the last ten
   minutes; hover for the list.
-- Open a skill, agent or instruction's **Properties** (or edit an MCP server) to see **Sincronização**: for
+- Open a skill, agent or instruction's **Editar** (or the MCP or hook editor) to see **Sincronização**: for
   each channel, where the item lands and how (`Ligado por link simbólico`, `Arquivo gerado`,
-  `Entrada em mcp.json`), or what is wrong there with **Abrir diagnóstico**. A channel that is off reads
-  *Desativado*; LM Studio reads *Só roda sessões, não recebe customizações*.
+  `Entrada em mcp.json`, or *lê o mesmo arquivo do Claude* for a channel that reads Claude's copy), or what is
+  wrong there with **Abrir diagnóstico**. A channel that is off reads *Desativado*; LM Studio reads *Só roda
+  sessões*. An item you turned off shows one line: *Desativado — não vai para nenhum canal*.
 
 ## Edit, preview, rename
 
 - **Edit:** click the row. The tab reopens on the current file.
-- **Preview:** right-click the row → **Preview** renders the body as Markdown, read-only.
-- **Properties:** right-click → **Properties** reopens the form.
+- **Abrir:** right-click the row → **Abrir** renders the body as Markdown, read-only.
+- **Editar:** right-click → **Editar** reopens the Properties form.
+- **Desativar / Ativar:** right-click → **Desativar** takes it out of every channel and keeps the file
+  (frontmatter `enabled: false`); **Ativar** puts it back.
 - **Rename:** change **Name** and save. The old file and its links are removed and the new ones created.
 
 > **Changing Scope without renaming leaves the old link behind.** Save only cleans up previous
@@ -116,8 +120,9 @@ In Claude Code, invoke it as `/<name>`. Later saves from the app preserve the fl
 
 ## Delete one
 
-Hover the row and click the trash icon (**Excluir**). The canonical file and every link the app created for
-it are removed. Plugin-provided entries are read-only and have no delete action — manage them from
+Right-click the row → **Excluir**. The row disappears at once and a toast offers **Desfazer** for 6 seconds;
+when it ends, the canonical file and every link the app created for it are removed (also if you close the panel
+or switch scope first). Plugin-provided entries are read-only and have no delete action — manage them from
 [their plugin](install-plugins-and-marketplaces.md).
 
 ## Use it in a session right away

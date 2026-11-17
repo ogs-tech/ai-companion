@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  coveringChannel,
   CHANNELS,
   CHANNEL_IDS,
   channelSupports,
@@ -86,5 +87,47 @@ describe('isChannelId', () => {
       const id: ChannelId = candidate;
       expect(CHANNELS[id].displayName).toBe('Claude');
     }
+  });
+});
+
+describe('coveringChannel', () => {
+  type Adapters = Parameters<typeof coveringChannel>[0]['settings']['adapters'];
+  const adapters = (over: Partial<Record<'claude' | 'cursor', { enabled: boolean; readsClaudeConfig?: boolean }>> = {}): Adapters => ({
+    claude: { enabled: true },
+    cursor: { enabled: true },
+    lmstudio: { enabled: false },
+    ...over,
+  });
+  const served = new Set(['claude', 'cursor'] as const);
+
+  it('Cursor reads Claude skills, agents and hooks while Claude is on and served', () => {
+    for (const kind of ['skill', 'agent', 'hook'] as const) {
+      expect(coveringChannel({ covered: 'cursor', kind, settings: { adapters: adapters() }, served })).toBe('claude');
+    }
+  });
+
+  it('is undefined when Claude is disabled', () => {
+    expect(coveringChannel({ covered: 'cursor', kind: 'skill', settings: { adapters: adapters({ claude: { enabled: false } }) }, served })).toBeUndefined();
+  });
+
+  it('is undefined when Claude produced no destination for this entity', () => {
+    expect(coveringChannel({ covered: 'cursor', kind: 'skill', settings: { adapters: adapters() }, served: new Set(['cursor'] as const) })).toBeUndefined();
+  });
+
+  it('honors readsClaudeConfig: false and treats absent as true', () => {
+    const off = adapters({ cursor: { enabled: true, readsClaudeConfig: false } });
+    expect(coveringChannel({ covered: 'cursor', kind: 'skill', settings: { adapters: off }, served })).toBeUndefined();
+    const on = adapters({ cursor: { enabled: true } });
+    expect(coveringChannel({ covered: 'cursor', kind: 'skill', settings: { adapters: on }, served })).toBe('claude');
+  });
+
+  it('never covers instructions or MCP, and nothing covers Claude', () => {
+    expect(coveringChannel({ covered: 'cursor', kind: 'mcp', settings: { adapters: adapters() }, served })).toBeUndefined();
+    expect(coveringChannel({ covered: 'cursor', kind: 'instruction', settings: { adapters: adapters() }, served })).toBeUndefined();
+    expect(coveringChannel({ covered: 'claude', kind: 'skill', settings: { adapters: adapters() }, served })).toBeUndefined();
+  });
+
+  it('declares the coverage on the Cursor descriptor', () => {
+    expect(CHANNELS.cursor.reads).toEqual({ skill: ['claude'], agent: ['claude'], hook: ['claude'] });
   });
 });

@@ -36,8 +36,8 @@ in the file above (`args`, `env`, `headers`); editing the server from the app af
 
 ## Disable, edit, delete
 
-On the server's row: the switch disables/enables it, the pencil (**Editar**) reopens the dialog, the trash
-(**Excluir**) removes it.
+Right-click the server's row: **Editar** reopens the dialog, **Desativar**/**Ativar** turns it off or on,
+**Excluir** hides it and deletes it when the toast's **Desfazer** window ends.
 
 Disabling a server removes it from every harness's file but keeps the app's copy; enabling writes it back.
 
@@ -68,9 +68,13 @@ The **Hooks** group lists the app's hooks, hooks **detected** in `~/.claude/sett
 - **Review** them — event, matcher and handler are shown on the row.
 - **Import** a detected one — **Importar** on its menu. It is then written to every enabled harness; for
   Cursor only what it can express (the Sync report lists any hook that was skipped).
-- **Delete** a managed one — trash icon (**Excluir hook**), which also removes it from the harness files.
-  Plugin hooks and detected hooks are read-only.
-
-Creating or editing a hook is not available in the UI yet; the `hook.save` IPC method exists.
+- **Create** one — **Novo › Hooks** opens the hook editor: **Event** (the events every channel can carry),
+  **Matcher** (tools separated by `|`, empty = all), **Command**, an optional **Timeout** in seconds and **Ativo**.
+  Hooks are always Global's.
+- **Edit** a managed one — right-click → **Editar** opens the same editor, with **Sincronização** below.
+  Cursor reads Claude's hooks itself, so while Claude is on it shows *lê o mesmo arquivo do Claude*.
+- **Desativar / Ativar** a managed one — right-click; off removes it from every harness file and keeps the copy.
+- **Delete** a managed one — right-click → **Excluir**, with **Desfazer** in the toast; it is also removed from
+  the harness files. Plugin hooks and detected hooks are read-only.
 
 Hooks are personal-only: they are listed on **Início**, and inside a workspace under **Global**.

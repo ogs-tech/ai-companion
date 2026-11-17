@@ -22,7 +22,7 @@ const meta = { version: '1.0.0', createdAt: '', updatedAt: '' };
 
 const skillPersonal: Skill = {
   urn: 'urn:skill:review',
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name: 'review',
   description: 'desc',
   scopes: ['personal'],
@@ -33,7 +33,7 @@ const skillPersonal: Skill = {
 
 const projectInstruction: Instruction = {
   urn: 'urn:instruction:acme',
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name: 'acme',
   description: 'acme rules',
   scopes: ['workspace'],

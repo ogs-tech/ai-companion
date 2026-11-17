@@ -23,7 +23,7 @@ const adapter = new CursorAdapter({ homedir: '/home/u', ...scopeDeps });
 
 describe('CursorAdapter.resolveEntityDestinations', () => {
   it('routes a personal skill to ~/.cursor/skills/<name> (directory)', async () => {
-    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
       { scope: 'personal', destination: '/home/u/.cursor/skills/demo', strategy: 'symlink' },
@@ -31,7 +31,7 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
   });
 
   it('routes an explicit-only skill (slash-command) to the same skills directory', async () => {
-    const command: Skill = { urn: 'urn:skill:deploy', kind: 'skill', name: 'deploy', description: 'd',
+    const command: Skill = { urn: 'urn:skill:deploy', kind: 'skill', enabled: true, name: 'deploy', description: 'd',
       scopes: ['personal'], metadata: meta, source: WORKSPACE_SOURCE, content: 'b', explicitOnly: true };
     expect(await adapter.resolveEntityDestinations({ entity: command })).toEqual([
       { scope: 'personal', destination: '/home/u/.cursor/skills/deploy', strategy: 'symlink' },
@@ -39,7 +39,7 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
   });
 
   it('routes a workspace-scoped skill to <resolved workspace root>/.cursor/skills/<name>', async () => {
-    const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'd',
+    const skill: Skill = { urn: 'urn:skill:acme', kind: 'skill', enabled: true, name: 'acme', description: 'd',
       scopes: ['workspace'], scopeId: 'proj-1', metadata: meta, source: WORKSPACE_SOURCE, content: 'b' };
     expect(await adapter.resolveEntityDestinations({ entity: skill })).toEqual([
       { scope: 'workspace', destination: '/repos/acme/.cursor/skills/acme', strategy: 'symlink' },
@@ -51,7 +51,7 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
       homedir: '/home/u',
       workspaceService: { get: async (id: string) => ({ id, name: 'W', rootPath: '/repos/ws', createdAt: '' }) },
     });
-    const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'd',
+    const agent: Agent = { urn: 'urn:agent:triage', kind: 'agent', enabled: true, name: 'triage', description: 'd',
       scopes: ['workspace'], scopeId: 'ws-1', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
     expect(await wsAdapter.resolveEntityDestinations({ entity: agent })).toEqual([
       { scope: 'workspace', destination: '/repos/ws/.cursor/agents/triage.md', strategy: 'symlink' },
@@ -63,14 +63,14 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
       homedir: '/home/u',
       workspaceService: { get: async () => { throw new DomainError('not_found', 'Workspace not found'); } },
     });
-    const agent: Agent = { urn: 'urn:agent:gone', kind: 'agent', name: 'gone', description: 'd',
+    const agent: Agent = { urn: 'urn:agent:gone', kind: 'agent', enabled: true, name: 'gone', description: 'd',
       scopes: ['workspace'], scopeId: 'gone', metadata: meta, source: WORKSPACE_SOURCE, systemPrompt: 'b' };
     await expect(goneAdapter.resolveEntityDestinations({ entity: agent })).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('materializes the personal instruction as a Cursor plugin (manifest + rule)', async () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:default', kind: 'instruction', name: 'default',
+      urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default',
       description: 'Global instructions', scopes: ['personal'], metadata: meta,
       source: WORKSPACE_SOURCE, content: 'Reply in pt-BR.',
     };
@@ -99,7 +99,7 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
 
   it('routes a workspace instruction to <root>/.cursor/rules/<name>.mdc (write, marker-owned, alwaysApply)', async () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:acme', kind: 'instruction', name: 'acme',
+      urn: 'urn:instruction:acme', kind: 'instruction', enabled: true, name: 'acme',
       description: '', scopes: ['workspace'], scopeId: 'proj-1', metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };
@@ -118,7 +118,7 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
 
   it('routes a folder instruction to <folder>/.cursor/rules/<name>.mdc', async () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:ui-core', kind: 'instruction', name: 'ui-core',
+      urn: 'urn:instruction:ui-core', kind: 'instruction', enabled: true, name: 'ui-core',
       description: '', scopes: ['workspace'], scopeId: 'proj-1', folder: '/repos/ui-core', metadata: meta,
       source: WORKSPACE_SOURCE, content: 'body',
     };

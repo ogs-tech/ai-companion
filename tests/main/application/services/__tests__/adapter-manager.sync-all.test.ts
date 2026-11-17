@@ -8,7 +8,7 @@ const meta = { version: '1.0.0', createdAt: '', updatedAt: '' };
 
 const skillEntity = (name: string, scopes: Scope[] = ['personal']): Skill => ({
   urn: `urn:skill:${name}`,
-  kind: 'skill',
+  kind: 'skill', enabled: true,
   name,
   description: 'desc',
   scopes,
@@ -19,7 +19,7 @@ const skillEntity = (name: string, scopes: Scope[] = ['personal']): Skill => ({
 
 const agentEntity = (name: string, scopes: Scope[] = ['personal']): Agent => ({
   urn: `urn:agent:${name}`,
-  kind: 'agent',
+  kind: 'agent', enabled: true,
   name,
   description: 'desc',
   scopes,
@@ -34,7 +34,7 @@ const scopeDeps = {
 
 const instructionEntity = (): Instruction => ({
   urn: 'urn:instruction:default',
-  kind: 'instruction',
+  kind: 'instruction', enabled: true,
   name: 'default',
   description: '',
   scopes: ['personal'],

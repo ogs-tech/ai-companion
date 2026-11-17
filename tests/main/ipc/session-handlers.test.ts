@@ -11,7 +11,7 @@ import { WORKSPACE_SOURCE, entityUrn, type Skill } from '../../../src/shared/ent
 import { scopedRepository } from '../helpers/scoped-repository.js';
 
 const skill = (name = 'foo'): Skill => ({
-  urn: entityUrn('skill', name), kind: 'skill', name, description: '',
+  urn: entityUrn('skill', name), kind: 'skill', enabled: true, name, description: '',
   scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' },
   source: WORKSPACE_SOURCE, content: 'body',
 });

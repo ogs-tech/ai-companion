@@ -1,4 +1,5 @@
 import type { HookEntity } from '../../../shared/entity.js';
+import { CLAUDE_TO_CURSOR_HOOK_EVENT } from '../../../shared/hook-events.js';
 
 /**
  * Claude → Cursor hook translation. Only what Cursor can express is written;
@@ -6,18 +7,7 @@ import type { HookEntity } from '../../../shared/entity.js';
  * hook fire on every tool). Event list and matcher semantics:
  * https://cursor.com/docs/agent/hooks (checked 2026-11-02).
  */
-const EVENT_MAP: Readonly<Record<string, string>> = {
-  SessionStart: 'sessionStart',
-  SessionEnd: 'sessionEnd',
-  PreToolUse: 'preToolUse',
-  PostToolUse: 'postToolUse',
-  PostToolUseFailure: 'postToolUseFailure',
-  SubagentStart: 'subagentStart',
-  SubagentStop: 'subagentStop',
-  UserPromptSubmit: 'beforeSubmitPrompt',
-  PreCompact: 'preCompact',
-  Stop: 'stop',
-};
+const EVENT_MAP = CLAUDE_TO_CURSOR_HOOK_EVENT;
 
 /** Cursor events whose `matcher` filters by tool type. */
 const TOOL_MATCHER_EVENTS = new Set(['preToolUse', 'postToolUse', 'postToolUseFailure']);

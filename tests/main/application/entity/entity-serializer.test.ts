@@ -7,7 +7,7 @@ const baseMeta = { version: '0.1.0', createdAt: '2026-04-26T10:00:00.000Z', upda
 describe('renderEntityFile — skill', () => {
   it('emits flat Claude frontmatter and the content as body', () => {
     const skill: Skill = {
-      urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'a demo',
+      urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'a demo',
       scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE, content: '# Demo\n',
     };
     const raw = renderEntityFile(skill);
@@ -20,7 +20,7 @@ describe('renderEntityFile — skill', () => {
 
   it('maps explicitOnly to disable-model-invocation: true', () => {
     const skill: Skill = {
-      urn: 'urn:skill:cmd', kind: 'skill', name: 'cmd', description: 'a command skill',
+      urn: 'urn:skill:cmd', kind: 'skill', enabled: true, name: 'cmd', description: 'a command skill',
       scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body', explicitOnly: true,
     };
     expect(renderEntityFile(skill)).toContain('disable-model-invocation: true');
@@ -30,7 +30,7 @@ describe('renderEntityFile — skill', () => {
 describe('parseEntityFile — skill round-trip', () => {
   it('round-trips scopeId through frontmatter for a workspace-scoped skill', () => {
     const skill: Skill = {
-      urn: 'urn:skill:acme', kind: 'skill', name: 'acme', description: 'workspace skill',
+      urn: 'urn:skill:acme', kind: 'skill', enabled: true, name: 'acme', description: 'workspace skill',
       scopes: ['workspace'], scopeId: 'ws-1', metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body',
     };
     const raw = renderEntityFile(skill);
@@ -45,7 +45,7 @@ describe('parseEntityFile — skill round-trip', () => {
 
   it('emits no scopeId for a personal skill and parses none back', () => {
     const skill: Skill = {
-      urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'a demo',
+      urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'a demo',
       scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE, content: 'body',
     };
     const raw = renderEntityFile(skill);
@@ -75,7 +75,7 @@ describe('parseEntityFile — skill round-trip', () => {
 describe('agent', () => {
   it('maps systemPrompt to body and model/tools to frontmatter', () => {
     const agent: Agent = {
-      urn: 'urn:agent:rev', kind: 'agent', name: 'rev', description: 'reviewer',
+      urn: 'urn:agent:rev', kind: 'agent', enabled: true, name: 'rev', description: 'reviewer',
       scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE,
       systemPrompt: 'You review code.', model: 'inherit', tools: ['Read', 'Grep'],
     };
@@ -90,7 +90,7 @@ describe('agent', () => {
 
   it('round-trips scopeId through frontmatter for a workspace-scoped agent', () => {
     const agent: Agent = {
-      urn: 'urn:agent:triage', kind: 'agent', name: 'triage', description: 'triage agent',
+      urn: 'urn:agent:triage', kind: 'agent', enabled: true, name: 'triage', description: 'triage agent',
       scopes: ['workspace'], scopeId: 'ws-1', metadata: baseMeta, source: WORKSPACE_SOURCE,
       systemPrompt: 'Triage incoming issues.',
     };
@@ -105,7 +105,7 @@ describe('agent', () => {
 describe('instruction — frontmatter-free', () => {
   it('renders plain markdown with no frontmatter', () => {
     const ins: Instruction = {
-      urn: 'urn:instruction:default', kind: 'instruction', name: 'default', description: '',
+      urn: 'urn:instruction:default', kind: 'instruction', enabled: true, name: 'default', description: '',
       scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE,
       content: '# Global instructions\nReply in pt-BR.\n',
     };
@@ -155,5 +155,37 @@ describe('instruction — frontmatter-free', () => {
     expect(() =>
       parseEntityFile({ kind: 'instruction', name: 'acme', raw: 'x', source: WORKSPACE_SOURCE }),
     ).toThrow(/scopeId/);
+  });
+});
+
+describe('enabled — skill/agent frontmatter', () => {
+  const skill = (enabled: boolean): Skill => ({
+    urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'a demo', enabled,
+    scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE, content: '# Demo\n',
+  });
+  const agent = (enabled: boolean): Agent => ({
+    urn: 'urn:agent:rev', kind: 'agent', name: 'rev', description: 'reviewer', enabled,
+    scopes: ['personal'], metadata: baseMeta, source: WORKSPACE_SOURCE, systemPrompt: 'You review code.',
+  });
+
+  it('writes enabled: false only when disabled', () => {
+    expect(renderEntityFile(skill(false))).toContain('enabled: false');
+    expect(renderEntityFile(skill(true))).not.toContain('enabled');
+    expect(renderEntityFile(agent(false))).toContain('enabled: false');
+    expect(renderEntityFile(agent(true))).not.toContain('enabled');
+  });
+
+  it('reads an absent key as enabled and enabled: false as disabled', () => {
+    const parse = (kind: 'skill' | 'agent', raw: string): boolean =>
+      parseEntityFile({ kind, name: kind === 'skill' ? 'demo' : 'rev', raw, source: WORKSPACE_SOURCE }).enabled;
+    expect(parse('skill', renderEntityFile(skill(true)))).toBe(true);
+    expect(parse('skill', renderEntityFile(skill(false)))).toBe(false);
+    expect(parse('agent', renderEntityFile(agent(true)))).toBe(true);
+    expect(parse('agent', renderEntityFile(agent(false)))).toBe(false);
+  });
+
+  it('does not keep enabled in ext', () => {
+    const parsed = parseEntityFile({ kind: 'skill', name: 'demo', raw: renderEntityFile(skill(false)), source: WORKSPACE_SOURCE });
+    expect(parsed.ext).toBeUndefined();
   });
 });

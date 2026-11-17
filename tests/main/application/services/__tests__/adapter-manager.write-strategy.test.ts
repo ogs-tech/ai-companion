@@ -28,7 +28,7 @@ const settings: Settings = {
 };
 
 const skill: Skill = {
-  urn: 'urn:skill:demo', kind: 'skill', name: 'demo', description: 'd', scopes: ['workspace'],
+  urn: 'urn:skill:demo', kind: 'skill', enabled: true, name: 'demo', description: 'd', scopes: ['workspace'],
   metadata: { version: '1.0.0', createdAt: '', updatedAt: '' }, source: WORKSPACE_SOURCE, content: 'b',
 };
 

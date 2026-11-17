@@ -74,3 +74,21 @@ describe('HealthService.getReport', () => {
     expect(report.worst).toBe('error');
   });
 });
+
+describe('HealthService — coverage', () => {
+  it('applies the coverage plan after the collectors', async () => {
+    const { HealthService } = await import('../../../../../src/main/application/services/health/health-service.js');
+    const { FixedClock } = await import('../../../../../src/main/infrastructure/clock/fixed-clock.js');
+    const claude = {
+      id: 'link', category: 'symlink' as const, severity: 'ok' as const, title: 't', entityUrn: 'urn:skill:tdd',
+      channel: 'claude' as const, outcome: 'installed' as const, observedAt: '',
+    };
+    const service = new HealthService(
+      [{ category: 'symlink', collect: async () => [claude] }],
+      new FixedClock(new Date('2026-11-17T10:00:00.000Z')),
+      async () => [{ adapterId: 'cursor', entityUrn: 'urn:skill:tdd', coveredBy: 'claude', destination: '/c' }],
+    );
+    const report = await service.getReport('personal');
+    expect(report.checks.map((c) => c.channel)).toEqual(['claude', 'cursor']);
+  });
+});

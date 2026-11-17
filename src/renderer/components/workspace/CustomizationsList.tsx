@@ -17,6 +17,8 @@ import { ScopeSection } from './ScopeSection.js';
 import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { useCustomizationTree } from '../../hooks/use-customization-tree.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
+import { HookEditorDialog } from '../../screens/hooks/HookEditorDialog.js';
+import { CUSTOMIZATION_KINDS } from '../../../shared/customization-kind.js';
 import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js';
 import { usePersonalInstruction, useInstructionsList } from '../../hooks/use-instructions.js';
 import { pluginsQueryKey } from '../../hooks/use-plugins.js';
@@ -24,6 +26,8 @@ import { blankCustomization } from '../../lib/blank-customization.js';
 import type { TreeFilter, TreeGroup, TreeGroupId, TreeItem, TreeSection } from '../../lib/customization-tree.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import { invalidateHealth } from '../../hooks/use-health-report.js';
+import { UNDO_DELETE_WINDOW_MS, UndoableDeleteContext, useUndoableDelete } from '../../hooks/use-undoable-delete.js';
+import { Toast } from '../Toast.js';
 import type { ChannelId } from '../../../shared/channel.js';
 
 interface LocalScope {
@@ -60,12 +64,14 @@ export interface CustomizationsListProps {
   seedFolderInstruction?: (folder: string, takenNames: ReadonlySet<string>) => Instruction;
   /** Workspace only: opens a Global entity read-only, with an "Editar no Início" action. */
   onOpenInherited: (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction') => void;
+  /** Workspace only: "Editar no Início" from a Global row's menu — leaves the workspace and opens the entity there. */
+  onEditAtHome?: (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction') => void;
   /** Collapses the container to its header. Owned by the panel split, which sizes the container. */
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }
 
-type NewTarget = EntityKind | 'instruction' | 'mcp' | 'plugin';
+type NewTarget = EntityKind | 'instruction' | 'mcp' | 'hook' | 'plugin';
 
 /**
  * Every customization of the current scope: its instruction row(s) ("Instructions") first, then one group
@@ -91,10 +97,13 @@ export function CustomizationsList({
   seedWorkspaceInstruction,
   seedFolderInstruction,
   onOpenInherited,
+  onEditAtHome,
   collapsed = false,
   onToggleCollapsed,
 }: CustomizationsListProps): React.ReactElement {
   const qc = useQueryClient();
+  // Excluir/Remover on any row: hidden here at once, deleted when the undo window ends.
+  const undo = useUndoableDelete();
   const { data: personalInstruction } = usePersonalInstruction();
   const { data: instructions } = useInstructionsList();
 
@@ -108,6 +117,7 @@ export function CustomizationsList({
   };
   const [newMenuAnchor, setNewMenuAnchor] = useState<HTMLElement | null>(null);
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
+  const [hookEditorOpen, setHookEditorOpen] = useState(false);
   const [pluginImportOpen, setPluginImportOpen] = useState(false);
 
   const tree = useCustomizationTree({
@@ -132,13 +142,12 @@ export function CustomizationsList({
     else if (target === 'instruction') {
       onOpenInstruction(isHome ? (blankCustomization('instruction') as Instruction) : seedWorkspaceInstruction!(), true);
     } else if (target === 'mcp') setMcpEditorOpen(true);
+    else if (target === 'hook') setHookEditorOpen(true);
     else setPluginImportOpen(true);
   };
+  // One entry per kind, in the registry's (= the tree's) order; a plugin is an origin, so it is imported, not created.
   const menuTargets: ReadonlyArray<{ target: NewTarget; label: string }> = [
-    { target: 'skill', label: 'Skill' },
-    { target: 'agent', label: 'Agent' },
-    ...(instructionCreatable ? [{ target: 'instruction' as const, label: 'Instruction' }] : []),
-    { target: 'mcp', label: 'Servidor MCP' },
+    ...CUSTOMIZATION_KINDS.filter((k) => k.kind !== 'instruction' || instructionCreatable).map((k) => ({ target: k.kind, label: k.label })),
     { target: 'plugin', label: 'Importar plugin' },
   ];
   const handleNew = (e: React.MouseEvent<HTMLElement>): void => setNewMenuAnchor(e.currentTarget);
@@ -149,16 +158,17 @@ export function CustomizationsList({
     onPreview: onPreviewEntity,
     onProperties: onEntityProperties,
     onNewAction: onNewActionForEntity,
+    ...(onEditAtHome ? { onEditAtHome: (entity: Skill | Agent, kind: 'skill' | 'agent') => onEditAtHome(entity, kind) } : {}),
   };
   const instructionNames = new Set((instructions ?? []).map((i) => i.name));
 
   const instructionRow = (item: TreeItem, depth: number): React.ReactNode => {
-    if (item.entity.kind !== 'instruction') return null;
+    if (item.entity.kind !== 'instruction' || undo.pendingKeys.has(item.urn)) return null;
     const { value, placement, folder, detected } = item.entity;
     const shared = { key: item.key, item, depth, instruction: value, detected, onPreview: onPreviewEntity };
     if (placement === 'personal') {
       if (item.origin === 'global' && value) {
-        return <InstructionTreeRow {...shared} kind="personal" testId="inherited-instruction-row" seed={() => value} onOpen={(entity) => onOpenInherited(entity, 'instruction')} />;
+        return <InstructionTreeRow {...shared} kind="personal" testId="inherited-instruction-row" seed={() => value} onOpen={(entity) => onOpenInherited(entity, 'instruction')} {...(onEditAtHome ? { onEditAtHome: (entity: Instruction) => onEditAtHome(entity, 'instruction') } : {})} />;
       }
       return (
         <InstructionTreeRow
@@ -189,7 +199,7 @@ export function CustomizationsList({
     // Two MCP servers with the same name differ only by where they are configured — say so on those rows.
     const mcpNames = new Map<string, number>();
     if (group.id === 'mcp') for (const item of group.items) mcpNames.set(item.name, (mcpNames.get(item.name) ?? 0) + 1);
-    return group.items.map((item) => {
+    return group.items.filter((item) => !undo.pendingKeys.has(item.urn)).map((item) => {
       switch (item.entity.kind) {
         case 'instruction':
           return instructionRow(item, depth);
@@ -323,7 +333,7 @@ export function CustomizationsList({
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}>
-        {rows}
+        <UndoableDeleteContext.Provider value={undo.requestDelete}>{rows}</UndoableDeleteContext.Provider>
 
         {isEmpty && (
           <Typography variant="caption" color="text.secondary" data-testid="control-panel-empty" sx={{ display: 'block', px: 1.5, py: 1 }}>
@@ -356,6 +366,8 @@ export function CustomizationsList({
         ))}
       </Menu>
       {mcpEditorOpen && <McpEditorDialog open mode="create" onClose={() => setMcpEditorOpen(false)} />}
+      {/* Hooks have no workspace scoping: a new one is always Global's. */}
+      {hookEditorOpen && <HookEditorDialog open mode="create" scope="personal" onClose={() => setHookEditorOpen(false)} onSaved={() => undefined} />}
       <PluginImportDialog
         open={pluginImportOpen}
         scope={isHome ? 'personal' : 'project'}
@@ -364,9 +376,11 @@ export function CustomizationsList({
           setPluginImportOpen(false);
           void qc.invalidateQueries({ queryKey: pluginsQueryKey('personal') });
           void qc.invalidateQueries({ queryKey: pluginsQueryKey('project') });
+          void qc.invalidateQueries({ queryKey: ['entity'] });
           void invalidateHealth(qc);
         }}
       />
+      <Toast toast={undo.toast} durationMs={UNDO_DELETE_WINDOW_MS} onDismiss={undo.dismissToast} />
     </Box>
   );
 }
