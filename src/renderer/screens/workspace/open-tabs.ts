@@ -12,9 +12,8 @@ export type OpenTab =
   // disk but the tab (and any unsaved text) stays. `external`: `relPath` is an absolute path
   // outside the workspace roots, granted by a drop or "Abrir arquivo…"; never restored.
   | { id: string; kind: 'file'; relPath: string; dirty?: boolean; pinned?: boolean; removed?: boolean; external?: boolean }
-  // `inherited`: a Global entity opened read-only from a workspace's "Do Global" section.
-  | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean; inherited?: boolean }
-  | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean; inherited?: boolean }
+  | { id: string; kind: EntityKind; entity: Skill | Agent; isCreate: boolean; dirty?: boolean }
+  | { id: string; kind: 'instruction'; entity: Instruction; isCreate: boolean; dirty?: boolean }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
   | { id: string; kind: 'terminal'; terminalId: string }
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
@@ -44,7 +43,7 @@ export function toPersisted(tabs: readonly OpenTab[]): PersistedTab[] {
       case 'skill':
       case 'agent':
       case 'instruction':
-        return tab.isCreate ? [] : [{ id: tab.id, kind: 'entity', entityKind: tab.kind, urn: tab.entity.urn, inherited: tab.inherited === true }];
+        return tab.isCreate ? [] : [{ id: tab.id, kind: 'entity', entityKind: tab.kind, urn: tab.entity.urn }];
       case 'session':
         return [{ id: tab.id, kind: 'session', anchor: tab.anchor, sessionId: tab.sessionId, label: tab.label }];
       case 'terminal':
@@ -79,10 +78,9 @@ export async function restoreTabs(saved: readonly PersistedTab[], ctx: RestoreCo
         case 'entity': {
           const entity = ctx.entitiesByUrn.get(tab.urn);
           if (entity === undefined) return null;
-          const inherited = tab.inherited ? { inherited: true } : {};
           return tab.entityKind === 'instruction'
-            ? { id: tab.id, kind: 'instruction', entity: entity as Instruction, isCreate: false, ...inherited }
-            : { id: tab.id, kind: tab.entityKind, entity: entity as Skill | Agent, isCreate: false, ...inherited };
+            ? { id: tab.id, kind: 'instruction', entity: entity as Instruction, isCreate: false }
+            : { id: tab.id, kind: tab.entityKind, entity: entity as Skill | Agent, isCreate: false };
         }
         case 'session':
           return ctx.sessionIds.has(tab.sessionId)

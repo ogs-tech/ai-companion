@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 import { expect } from '../../fixtures/app.js';
 import { launchCustomizationsApp, type CustomizationsApp } from '../../fixtures/customizations-app.js';
 
-// Journey: Global's items are read-only inside a workspace but are the main list at Início — and the panel follows
+// Journey: Global's items sit in their own section inside a workspace but are the main list at Início — and the panel follows
 // the scope switch both ways (Início ↔ workspace) without leaking one scope's rows into the other.
 
 let session: CustomizationsApp;
@@ -36,10 +36,10 @@ test.describe('Customizations › scope switch', () => {
       await expect(page.getByTestId('control-panel-section-global')).toHaveCount(0);
     });
 
-    await test.step('a Global skill opens editable at Início (no read-only notice)', async () => {
+    await test.step('a Global skill opens editable at Início (no Global notice)', async () => {
       await page.getByTestId('tree-row-local::urn:skill:global-lint').click();
       await expect(page.getByTestId('workbench-tab-entity:urn:skill:global-lint')).toBeVisible();
-      await expect(page.getByTestId('inherited-notice')).toHaveCount(0);
+      await expect(page.getByTestId('global-notice')).toHaveCount(0);
     });
 
     await test.step('search at Início finds Global items by description', async () => {

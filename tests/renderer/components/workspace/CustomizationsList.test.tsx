@@ -47,7 +47,6 @@ const workspaceProps = (): CustomizationsListProps => ({
   onOpenInstruction: vi.fn(),
   onInstructionProperties: vi.fn(),
   onNewActionForInstruction: vi.fn(),
-  onOpenInherited: vi.fn(),
 });
 const homeProps = (): CustomizationsListProps => ({ ...workspaceProps(), isHome: true, localScope: undefined as never });
 const follows = (a: Element, b: Element): boolean => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
@@ -84,7 +83,7 @@ describe('CustomizationsList', () => {
     expect(screen.queryByTestId('tree-group-instruction')).not.toBeInTheDocument();
     expect(follows(screen.getByTestId('control-panel-section-local'), own) && follows(own, screen.getByTestId('tree-group-skill'))).toBe(true);
     await user.click(await screen.findByTestId('control-panel-section-global'));
-    const inherited = screen.getByTestId('inherited-instruction-row');
+    const inherited = screen.getByTestId('personal-instruction-row');
     expect(inherited).toHaveTextContent('Instructions');
     expect(follows(screen.getByTestId('control-panel-section-global'), inherited) && follows(inherited, screen.getByTestId('tree-group-global-skill'))).toBe(true);
   });
@@ -109,14 +108,13 @@ describe('CustomizationsList', () => {
     expect(follows(screen.getByTestId('personal-instruction-row'), screen.getByTestId('tree-group-skill'))).toBe(true);
   });
 
-  it('opening a Global skill calls onOpenInherited', async () => {
+  it('opening a Global skill in a workspace edits it like a local one', async () => {
     const user = userEvent.setup();
     const props = workspaceProps();
     renderWithShell(<CustomizationsList {...props} />);
     await user.click(await screen.findByTestId('control-panel-section-global'));
     await user.click(screen.getByTestId(row('global', 'urn:skill:lint')));
-    expect(props.onOpenInherited).toHaveBeenCalledWith(globalSkill, 'skill');
-    expect(props.onEditEntity).not.toHaveBeenCalled();
+    expect(props.onEditEntity).toHaveBeenCalledWith('skill', globalSkill, false);
     await user.click(screen.getByTestId(row('local', 'urn:skill:deploy')));
     expect(props.onEditEntity).toHaveBeenCalledWith('skill', localSkill, false);
   });
@@ -306,14 +304,13 @@ describe('CustomizationsList', () => {
     expect(screen.queryByTestId('control-panel-new-instruction')).not.toBeInTheDocument();
   });
 
-  it('the Global personal instruction opens read-only in a workspace', async () => {
+  it('the Global personal instruction opens its editor in a workspace', async () => {
     const user = userEvent.setup();
     const props = workspaceProps();
     renderWithShell(<CustomizationsList {...props} />);
     await user.click(await screen.findByTestId('control-panel-section-global'));
-    const inherited = screen.getByTestId('inherited-instruction-row');
-    await user.click(inherited);
-    expect(props.onOpenInherited).toHaveBeenCalledWith(personalInstruction, 'instruction');
+    await user.click(screen.getByTestId('personal-instruction-row'));
+    expect(props.onOpenInstruction).toHaveBeenCalledWith(personalInstruction, false);
   });
 });
 
@@ -342,18 +339,15 @@ describe('CustomizationsList — undoable delete', () => {
   });
 });
 
-describe('CustomizationsList — read-only Global rows', () => {
-  it('a Global skill in a workspace offers Abrir, Editar no Início and New Action; Editar no Início hands it over', async () => {
-    const user = userEvent.setup();
-    const onEditAtHome = vi.fn();
-    renderWithShell(<CustomizationsList {...workspaceProps()} onEditAtHome={onEditAtHome} />);
-    await user.click(await screen.findByTestId('control-panel-section-global'));
+describe('CustomizationsList — Global rows in a workspace', () => {
+  it('a Global skill offers the same menu as a local one', async () => {
+    renderWithShell(<CustomizationsList {...workspaceProps()} />);
+    await userEvent.setup().click(await screen.findByTestId('control-panel-section-global'));
     const target = screen.getByTestId(row('global', 'urn:skill:lint'));
     target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
     const items = within(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent);
-    expect(items).toEqual(['Abrir', 'Editar no Início', 'New Action']);
-    await user.click(screen.getByTestId('row-context-menu-edit-home'));
-    expect(onEditAtHome).toHaveBeenCalledWith(expect.objectContaining({ name: 'lint' }), 'skill');
+    expect(items).toContain('Excluir');
+    expect(items).not.toContain('Editar no Início');
   });
 });
 

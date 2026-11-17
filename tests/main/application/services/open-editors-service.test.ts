@@ -20,7 +20,7 @@ describe('OpenEditorsService', () => {
     const state = {
       tabs: [
         { id: 'file:a.ts', kind: 'file', relPath: 'a.ts' },
-        { id: 'entity:urn:skill:x', kind: 'entity', entityKind: 'skill', urn: 'urn:skill:x', inherited: false },
+        { id: 'entity:urn:skill:x', kind: 'entity', entityKind: 'skill', urn: 'urn:skill:x' },
         { id: 'terminal:t1', kind: 'terminal', terminalId: 't1' },
         { id: 'git-diff:index:a.ts', kind: 'git-diff', path: 'a.ts', source: { kind: 'index' } },
         { id: 'history', kind: 'history' },

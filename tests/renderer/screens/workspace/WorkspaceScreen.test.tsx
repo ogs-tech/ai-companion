@@ -891,7 +891,7 @@ describe('WorkspaceScreen', () => {
       expect(screen.getByTestId('workspace-sessions-panel')).toBeInTheDocument();
     });
 
-    it('inside a workspace, keeps Global entities out of Skills and lists them read-only after the workspace\'s own', async () => {
+    it('inside a workspace, keeps Global entities out of Skills and lists them after the workspace\'s own, editable with a Global notice', async () => {
       const user = userEvent.setup();
       const globalSkill = { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '# Global body' };
       (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
@@ -913,34 +913,10 @@ describe('WorkspaceScreen', () => {
       expect(await screen.findByTestId('tree-row-global::urn:skill:global')).toBeVisible();
       await user.click(screen.getByTestId('tree-row-global::urn:skill:global'));
 
-      // Opens read-only, with the way to edit it at Início.
-      expect(await screen.findByTestId('workbench-tab-inherited:urn:skill:global')).toBeInTheDocument();
-      expect(screen.getByTestId('inherited-notice')).toBeInTheDocument();
-      expect(screen.queryByTestId('body-editor')).not.toBeInTheDocument();
-    });
-
-    it('"Editar no Início" goes home and opens the entity there, editable', async () => {
-      const user = userEvent.setup();
-      const globalSkill = { urn: 'urn:skill:global', kind: 'skill', name: 'global', description: '', scopes: ['personal'], metadata: { version: '0.1.0', createdAt: '', updatedAt: '' }, source: { kind: 'workspace' }, content: '# Global body' };
-      let active: typeof projectWorkspace | null = projectWorkspace;
-      (ipc.callIpc as ReturnType<typeof vi.fn>).mockImplementation(async (method: string) => {
-        if (method === 'workspace.getActive') return active;
-        if (method === 'workspace.listDir') return [];
-        if (method === 'workspace.goHome') {
-          active = null;
-          return undefined;
-        }
-        if (method === 'skill.list') return [globalSkill];
-        return undefined;
-      });
-      renderScreen();
-      await user.click(await screen.findByTestId('tree-row-global::urn:skill:global'));
-      await user.click(await screen.findByTestId('inherited-edit-at-home'));
-
-      await waitFor(() => expect(ipc.callIpc).toHaveBeenCalledWith('workspace.goHome', {}));
+      // Opens editable right here, saying the change reaches every workspace.
       expect(await screen.findByTestId('workbench-tab-entity:urn:skill:global')).toBeInTheDocument();
-      expect(screen.queryByTestId('workbench-tab-inherited:urn:skill:global')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('inherited-notice')).not.toBeInTheDocument();
+      expect(screen.getByTestId('global-notice')).toBeInTheDocument();
+      expect(screen.getByTestId('body-editor')).toBeInTheDocument();
     });
   });
 

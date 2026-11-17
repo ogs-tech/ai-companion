@@ -4,7 +4,7 @@ import { TreeRow } from '../ds/TreeRow.js';
 import { usePersistedFlag } from '../../lib/use-persisted-flag.js';
 
 interface ScopeSectionProps {
-  /** `local` = the open workspace's own items; `global` = Início's, inherited read-only. */
+  /** `local` = the open workspace's own items; `global` = Início's, editable from here too. */
   section: 'local' | 'global';
   glyph: LucideIcon;
   label: string;

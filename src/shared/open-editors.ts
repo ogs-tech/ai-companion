@@ -11,7 +11,7 @@ import type { SessionAnchor } from './session.js';
 export type PersistedTab =
   | { id: string; kind: 'file'; relPath: string; pinned?: boolean }
   | { id: string; kind: 'file-preview'; relPath: string; pinned?: boolean }
-  | { id: string; kind: 'entity'; entityKind: 'skill' | 'agent' | 'instruction'; urn: string; inherited: boolean }
+  | { id: string; kind: 'entity'; entityKind: 'skill' | 'agent' | 'instruction'; urn: string }
   | { id: string; kind: 'session'; anchor: SessionAnchor; sessionId: string; label: string }
   | { id: string; kind: 'terminal'; terminalId: string }
   | { id: string; kind: 'git-diff'; path: string; source: GitDiffSource }

@@ -27,7 +27,7 @@ function parseTab(raw: unknown): PersistedTab | null {
         : null;
     case 'entity':
       return typeof raw['entityKind'] === 'string' && ENTITY_KINDS.has(raw['entityKind']) && isNonEmptyString(raw['urn'])
-        ? { id, kind: 'entity', entityKind: raw['entityKind'] as 'skill' | 'agent' | 'instruction', urn: raw['urn'], inherited: raw['inherited'] === true }
+        ? { id, kind: 'entity', entityKind: raw['entityKind'] as 'skill' | 'agent' | 'instruction', urn: raw['urn'] }
         : null;
     case 'session':
       return hasKindIn(raw['anchor'], ANCHOR_KINDS) && isNonEmptyString(raw['sessionId']) && typeof raw['label'] === 'string'

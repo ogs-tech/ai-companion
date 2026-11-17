@@ -1,7 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   Alert,
-  Button,
   Box,
   Dialog,
   DialogContent,
@@ -127,12 +126,8 @@ export type EditorPanelProps =
       /** Flips to `true` to open the Properties modal from outside (e.g. a tree row's right-click "Properties" action) — a one-shot signal, consumed via `onPropertiesRequestHandled`. */
       openPropertiesRequest?: boolean;
       onPropertiesRequestHandled?: () => void;
-      /**
-       * Opens a Global entity read-only from inside a workspace ("Herdado do
-       * Global"): the body renders as a preview, nothing is saved here, and the
-       * notice's action jumps to Início to edit it there.
-       */
-      inherited?: { onEditAtHome: () => void };
+      /** A Global (personal) entity edited from inside a workspace: a notice says the change reaches every workspace. */
+      fromGlobal?: boolean;
     }
   | {
       subject: 'file';
@@ -171,12 +166,11 @@ function EntitySubject({
   hiddenFields,
   openPropertiesRequest,
   onPropertiesRequestHandled,
-  inherited,
+  fromGlobal = false,
 }: EntitySubjectProps): React.ReactElement {
   // Plugin-provided entities can't be saved (OperationNotAllowedForOriginError
   // on the backend) — this tab becomes a read-only viewer instead of an editor.
-  // An inherited Global entity is editable, just not from here.
-  const readOnly = inherited !== undefined || !isWorkspaceSource(initial.source);
+  const readOnly = !isWorkspaceSource(initial.source);
   const pluginSource = initial.source.kind === 'plugin' ? initial.source : null;
 
   const [entity, setEntity] = useState<EditableEntity>(initial);
@@ -287,18 +281,10 @@ function EntitySubject({
           <ReadOnlyNotice pluginId={pluginSource.pluginId} />
         </Box>
       )}
-      {inherited && !pluginSource && (
+      {fromGlobal && !pluginSource && (
         <Box sx={{ px: 2, pt: 2, flexShrink: 0 }}>
-          <Alert
-            severity="info"
-            data-testid="inherited-notice"
-            action={
-              <Button color="inherit" size="small" data-testid="inherited-edit-at-home" onClick={inherited.onEditAtHome}>
-                Editar no Início
-              </Button>
-            }
-          >
-            Herdado do Global — somente leitura neste workspace.
+          <Alert severity="info" data-testid="global-notice">
+            Global — alterações valem para todos os workspaces.
           </Alert>
         </Box>
       )}

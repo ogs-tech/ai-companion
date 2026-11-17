@@ -33,7 +33,7 @@ describe('restoreTabs', () => {
       [
         { id: 'file:gone.ts', kind: 'file', relPath: 'gone.ts' },
         { id: 'file:a.ts', kind: 'file', relPath: 'a.ts' },
-        { id: 'entity:urn:skill:y', kind: 'entity', entityKind: 'skill', urn: 'urn:skill:y', inherited: false },
+        { id: 'entity:urn:skill:y', kind: 'entity', entityKind: 'skill', urn: 'urn:skill:y' },
         { id: 'terminal:t2', kind: 'terminal', terminalId: 't2' },
         { id: 'session:s2', kind: 'session', anchor: { kind: 'personal' }, sessionId: 's2', label: 'l' },
         { id: 'terminal:t1', kind: 'terminal', terminalId: 't1' },
@@ -45,7 +45,7 @@ describe('restoreTabs', () => {
   });
 
   it('rebuilds an entity tab with the entity as it is on disk now', async () => {
-    const [tab] = await restoreTabs([{ id: 'inherited:urn:skill:x', kind: 'entity', entityKind: 'skill', urn: skill.urn, inherited: true }], ctx());
-    expect(tab).toMatchObject({ kind: 'skill', entity: skill, isCreate: false, inherited: true });
+    const [tab] = await restoreTabs([{ id: 'entity:urn:skill:x', kind: 'entity', entityKind: 'skill', urn: skill.urn }], ctx());
+    expect(tab).toMatchObject({ kind: 'skill', entity: skill, isCreate: false });
   });
 });

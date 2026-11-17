@@ -77,7 +77,7 @@ test.describe('Customizations › create and edit', () => {
     await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click();
     const tab = page.getByTestId('workbench-tab-entity:urn:skill:deploy-checklist');
     await expect(tab).toBeVisible();
-    await expect(page.getByTestId('inherited-notice')).toHaveCount(0);
+    await expect(page.getByTestId('global-notice')).toHaveCount(0);
     await expect(page.getByText('Instructions for deploy-checklist.')).toBeVisible();
 
     await test.step('Editar opens Properties; changing it marks the tab dirty', async () => {

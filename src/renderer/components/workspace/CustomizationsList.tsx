@@ -62,10 +62,6 @@ export interface CustomizationsListProps {
   seedWorkspaceInstruction?: () => Instruction;
   /** Multi-folder workspace only: a fresh, unsaved instruction for one folder; `takenNames` are the instruction names already used. */
   seedFolderInstruction?: (folder: string, takenNames: ReadonlySet<string>) => Instruction;
-  /** Workspace only: opens a Global entity read-only, with an "Editar no Início" action. */
-  onOpenInherited: (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction') => void;
-  /** Workspace only: "Editar no Início" from a Global row's menu — leaves the workspace and opens the entity there. */
-  onEditAtHome?: (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction') => void;
   /** Collapses the container to its header. Owned by the panel split, which sizes the container. */
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
@@ -96,8 +92,6 @@ export function CustomizationsList({
   onNewActionForInstruction,
   seedWorkspaceInstruction,
   seedFolderInstruction,
-  onOpenInherited,
-  onEditAtHome,
   collapsed = false,
   onToggleCollapsed,
 }: CustomizationsListProps): React.ReactElement {
@@ -154,11 +148,9 @@ export function CustomizationsList({
 
   const entityHandlers: EntityRowHandlers = {
     onEdit: onEditEntity,
-    onOpenInherited: (entity, kind) => onOpenInherited(entity, kind),
     onPreview: onPreviewEntity,
     onProperties: onEntityProperties,
     onNewAction: onNewActionForEntity,
-    ...(onEditAtHome ? { onEditAtHome: (entity: Skill | Agent, kind: 'skill' | 'agent') => onEditAtHome(entity, kind) } : {}),
   };
   const instructionNames = new Set((instructions ?? []).map((i) => i.name));
 
@@ -167,9 +159,6 @@ export function CustomizationsList({
     const { value, placement, folder, detected } = item.entity;
     const shared = { key: item.key, item, depth, instruction: value, detected, onPreview: onPreviewEntity };
     if (placement === 'personal') {
-      if (item.origin === 'global' && value) {
-        return <InstructionTreeRow {...shared} kind="personal" testId="inherited-instruction-row" seed={() => value} onOpen={(entity) => onOpenInherited(entity, 'instruction')} {...(onEditAtHome ? { onEditAtHome: (entity: Instruction) => onEditAtHome(entity, 'instruction') } : {})} />;
-      }
       return (
         <InstructionTreeRow
           {...shared}

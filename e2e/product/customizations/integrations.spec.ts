@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect } from '../../fixtures/app.js';
 import { launchCustomizationsApp, type CustomizationsApp } from '../../fixtures/customizations-app.js';
 
-// Hooks and MCP servers are top-level type groups (no "Integrações"). Global's sit under the read-only Global section in a
+// Hooks and MCP servers are top-level type groups (no "Integrações"). Global's sit under the Global section in a
 // workspace; at Início they are the user's own and "Servidor MCP" in the Novo menu creates one.
 
 let session: CustomizationsApp;

@@ -396,7 +396,7 @@ There is no standalone Instructions screen — instructions head the right panel
 
 - **Início** → one `InstructionTreeRow` (`kind="personal"`) for the Personal singleton
   (`scopes: ['personal']`) via `usePersonalInstruction()`.
-- **A workspace** → two sections, *Workspace* (`Layers`) and *Global* (`Globe`, read-only here), each starting
+- **A workspace** → two sections, *Workspace* (`Layers`) and *Global* (`Globe`), each starting
   with its Instructions row(s); in a multi-folder workspace each folder has its own row, tagged with the folder
   (folders are row tags, not tree levels). The workspace's **Instructions** row is always present: hollow
   (`SyncDot` `missing`) until created, "detected" (`DetectedBadge`: file name, "Aplicar", dashed ring) when a
@@ -458,7 +458,7 @@ Instalado · Draft · Com erro**, `TreeFilterChips`, with a channel row under Dr
 and the health report refetch on load, scope switch and after writes. Search and
 chip are local state; the list is keyed by scope, so they reset on a scope switch. Sections: at Início
 (`isHome`) none (one editable list); in a workspace, **Workspace** (editable) then **Global** (collapsed,
-read-only; see below). Each section starts with its Instructions row(s), outside any group. Collapse state is
+also editable; see below). Each section starts with its Instructions row(s), outside any group. Collapse state is
 kept per `tree-group:<scopeId|home>:<section>:<group>`. The Explorer ends in a **Terminais** section (`TerminalsSection`) under the file tree — the one list of everything running in the workspace; its ＋▾ menu starts a shell at the root, in a folder (`FolderPickerDialog`) or a launch configuration, and a folder row's context menu offers "Abrir terminal aqui". Rows open the same editors as before (`EditorPanel` tabs, `McpEditorDialog`); `PluginTreeRow` keeps the
 "Publicar" action (`PublishPluginDialog`) in its row menu, and "Importar plugin" lives in the "+" menu. Editing a
 skill, agent or instruction's Properties (or an MCP server) shows `ChannelSyncSection`: per channel, the
@@ -475,10 +475,10 @@ on Início's Visão geral card. "Ver todas" opens the Histórico tab with scope 
 An item is "local" when `scopes[0] === 'workspace'` and `scopeId` is the open workspace
 (`buildCustomizationTree`'s origin rule); at Início, or while the workspace loads, every item is local.
 Inside a workspace, Global's skills/agents, MCP servers, hooks, plugins and the personal instruction are listed
-read-only in the collapsed **Global** section below the workspace's own items (`EntityTreeRow` with origin
-`global`: no delete, no Properties). A row opens an `inherited:<urn>`
-tab whose `EditorPanel` is read-only (`inherited` prop) with an "Editar no Início" action — it runs the
-unsaved-tabs guard, goes home, then opens the entity's own editable `entity:<urn>` tab there.
+in the collapsed **Global** section below the workspace's own items, with the same menu and the same editable
+`entity:<urn>` tab as a local item — `ScopedEntityRepository` routes a `personal` save to Global whichever scope
+is open. `EditorPanel`'s `fromGlobal` prop (a `personal` entity with a workspace open) shows a notice that the
+change reaches every workspace.
 The same model decides the other kinds' origin: hooks have no workspace scoping, so inside a workspace they
 all fall under **Global**; an MCP server's `project-local`/`project-shared` scope is matched against the open
 workspace's `rootPath` (`isMcpLocal`); a `project` plugin is local, a `personal` one Global.

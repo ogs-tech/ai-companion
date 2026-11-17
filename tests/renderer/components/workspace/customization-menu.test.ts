@@ -27,11 +27,6 @@ describe('customizationMenu', () => {
     expect(labels(ctx({ entity: { kind: 'instruction', name: 'default', scopes: ['personal'] } }))).not.toContain('Excluir');
   });
 
-  it('Global in a workspace: Abrir and Editar no Início (New Action kept where the row has it)', () => {
-    expect(labels(ctx({ readOnly: 'global', newAction: false }))).toEqual(['Abrir', 'Editar no Início']);
-    expect(labels(ctx({ readOnly: 'global' }))).toEqual(['Abrir', 'Editar no Início', 'New Action']);
-  });
-
   it('plugin item: Abrir only', () => {
     expect(labels(ctx({ readOnly: 'plugin', newAction: false }))).toEqual(['Abrir']);
   });

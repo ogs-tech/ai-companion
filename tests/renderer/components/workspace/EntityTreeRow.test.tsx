@@ -17,7 +17,7 @@ const own = skill({ name: 'personal-skill' });
 const ownItem = treeItem({ kind: 'skill', value: own }, { urn: own.urn, name: own.name });
 const globalItem = treeItem({ kind: 'skill', value: own }, { urn: own.urn, name: own.name, origin: 'global' });
 
-const handlers = (): EntityRowHandlers => ({ onEdit: vi.fn(), onOpenInherited: vi.fn(), onPreview: vi.fn(), onProperties: vi.fn(), onNewAction: vi.fn() });
+const handlers = (): EntityRowHandlers => ({ onEdit: vi.fn(), onPreview: vi.fn(), onProperties: vi.fn(), onNewAction: vi.fn() });
 
 let call: CallSpy;
 beforeEach(() => {
@@ -33,17 +33,15 @@ describe('EntityTreeRow', () => {
     expect(h.onEdit).toHaveBeenCalledWith('skill', own, false);
   });
 
-  it('a Global item is read-only: opens inherited, dimmed, with Abrir and no Editar or Excluir', async () => {
+  it('a Global item seen from a workspace is editable: opens its editor, with Editar and Excluir', async () => {
     const h = handlers();
     renderWithShell(<EntityTreeRow item={globalItem} handlers={h} />);
     const row = screen.getByTestId(rowId(globalItem));
     await userEvent.setup().click(row);
-    expect(h.onOpenInherited).toHaveBeenCalledWith(own, 'skill');
-    expect(h.onEdit).not.toHaveBeenCalled();
+    expect(h.onEdit).toHaveBeenCalledWith('skill', own, false);
     fireEvent.contextMenu(row);
-    expect(await screen.findByTestId('row-context-menu-open')).toBeInTheDocument();
-    expect(screen.queryByTestId('row-context-menu-delete')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('row-context-menu-edit')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('row-context-menu-edit')).toBeInTheDocument();
+    expect(screen.getByTestId('row-context-menu-delete')).toBeInTheDocument();
   });
 
   it('Excluir hands the delete to the undo window, with no confirm dialog', async () => {

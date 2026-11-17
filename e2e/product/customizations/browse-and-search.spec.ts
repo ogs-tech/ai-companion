@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 import { expect, type AppSession } from '../../fixtures/app.js';
 import { launchCustomizationsApp } from '../../fixtures/customizations-app.js';
 
-// Journey: open a workspace and read the Customizações panel — own items first, Global's below and read-only —
+// Journey: open a workspace and read the Customizações panel — own items first, Global's below (editable from here too) —
 // then narrow the list with the search box and clear it again.
 
 let session: AppSession;
@@ -15,7 +15,7 @@ test.afterAll(async () => {
 });
 
 test.describe('Customizations › browse and search', () => {
-  test('The workspace lists its own items, Global stays collapsed and read-only', async () => {
+  test('The workspace lists its own items, Global stays collapsed below', async () => {
     const { page } = session;
     const panel = page.getByTestId('control-panel-customizations');
 
@@ -38,7 +38,7 @@ test.describe('Customizations › browse and search', () => {
 
     await test.step('expanding Global lists the personal skills, agent and instruction', async () => {
       await page.getByTestId('control-panel-section-global').click();
-      await expect(page.getByTestId('inherited-instruction-row')).toBeVisible();
+      await expect(page.getByTestId('personal-instruction-row')).toBeVisible();
       await expect(page.getByTestId('tree-row-global::urn:skill:global-lint')).toBeVisible();
       await expect(page.getByTestId('tree-row-global::urn:skill:release-notes')).toBeVisible();
       await expect(page.getByTestId('tree-row-global::urn:agent:global-reviewer')).toBeVisible();
@@ -47,10 +47,11 @@ test.describe('Customizations › browse and search', () => {
     await test.step('Global skills and agents offer no "create" — they are edited at Início', async () => {
     });
 
-    await test.step('a Global skill opens read-only with a way to edit it at Início', async () => {
+    await test.step('a Global skill opens editable right here, noting the change reaches every workspace', async () => {
       await page.getByTestId('tree-row-global::urn:skill:global-lint').click();
-      await expect(page.getByTestId('inherited-notice')).toBeVisible();
-      await expect(page.getByTestId('inherited-edit-at-home')).toBeVisible();
+      await expect(page.getByTestId('workbench-tab-entity:urn:skill:global-lint')).toBeVisible();
+      await expect(page.getByTestId('global-notice')).toBeVisible();
+      await expect(page.getByTestId('body-editor')).toBeVisible();
     });
   });
 

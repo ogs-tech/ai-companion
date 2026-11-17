@@ -36,16 +36,12 @@ export function seedNewEntity(kind: 'skill' | 'agent', localScope: LocalScope | 
 export interface EntityRowHandlers {
   /** Opens a create/edit tab for this entity in the Workbench. */
   onEdit: (kind: 'skill' | 'agent', entity: Skill | Agent, isCreate: boolean) => void;
-  /** Workspace only: opens a Global entity read-only, with an "Editar no Início" action. */
-  onOpenInherited: (entity: Skill | Agent, kind: 'skill' | 'agent') => void;
   /** Right-click → "Preview": a read-only rendered-Markdown tab. */
   onPreview?: (entity: Skill | Agent) => void;
   /** Right-click → "Properties": the entity's editing tab with its Properties modal. */
   onProperties?: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
   /** Right-click → "New Action": a new session with a draft first message referencing this entity. */
   onNewAction?: (kind: 'skill' | 'agent', entity: Skill | Agent) => void;
-  /** Workspace only: "Editar no Início" on a Global entity — leaves the workspace and opens it editable there. */
-  onEditAtHome?: (entity: Skill | Agent, kind: 'skill' | 'agent') => void;
 }
 
 interface EntityTreeRowProps {
@@ -55,8 +51,8 @@ interface EntityTreeRowProps {
 }
 
 /**
- * One skill or agent of the tree; its menu comes from the kind registry. A Global one is read-only here (Abrir,
- * Editar no Início); so is a plugin's, tagged with the plugin.
+ * One skill or agent of the tree; its menu comes from the kind registry. A plugin's is read-only (Abrir), tagged
+ * with the plugin; a Global one seen from a workspace is editable like any other.
  */
 export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps): React.ReactElement | null {
   const invalidate = useInvalidateCustomization();
@@ -67,7 +63,6 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
   const { entity } = item;
   if (entity.kind !== 'skill' && entity.kind !== 'agent') return null;
   const { kind, value } = entity;
-  const inherited = item.origin === 'global';
   const fromPlugin = value.source.kind === 'plugin';
 
   // Hidden at once; the list's undo toast runs the delete when its window ends (errors surface there).
@@ -82,13 +77,13 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
     });
 
   const target = rowMenu.state?.target;
-  const { onPreview, onProperties, onNewAction, onEditAtHome } = handlers;
+  const { onPreview, onProperties, onNewAction } = handlers;
   const actions = target
     ? toRowActions(
         customizationMenu({
           entity: target,
           enabled: target.enabled !== false,
-          readOnly: fromPlugin ? 'plugin' : inherited ? 'global' : false,
+          readOnly: fromPlugin ? 'plugin' : false,
           detected: false,
           canInstallOver: installOver.available,
           hasUndo: false,
@@ -96,7 +91,6 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
         }),
         {
           ...(onPreview ? { open: () => onPreview(target) } : {}),
-          ...(onEditAtHome ? { 'edit-home': () => onEditAtHome(target, kind) } : {}),
           ...(onProperties ? { edit: () => onProperties(kind, target) } : {}),
           toggle: () => setEnabled.mutate({ urn: target.urn, enabled: target.enabled === false }),
           delete: () => handleDelete(target),
@@ -107,7 +101,6 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
     : [];
   const open = (): void => {
     if (fromPlugin) onPreview?.(value);
-    else if (inherited) handlers.onOpenInherited(value, kind);
     else handlers.onEdit(kind, value, false);
   };
 

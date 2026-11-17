@@ -12,8 +12,9 @@ The app keeps the canonical copy and links it into each harness (`~/.claude/`, `
 Every kind follows one lifecycle, with the same words on every row's menu: **Abrir · Editar · Desativar/Ativar ·
 Excluir · Importar · Instalar por cima**. A verb a row can't do is not shown. **Desativar** keeps the item but
 takes it out of every channel (the row reads *draft · desativado*); **Excluir** hides the row at once and deletes
-it when the toast's **Desfazer** window (6 s) ends. Read-only rows — Global's items inside a workspace, a plugin's
-items — offer **Abrir** (and **Editar no Início** for Global's).
+it when the toast's **Desfazer** window (6 s) ends. A plugin's items are read-only and offer only
+**Abrir**. Global's items inside a workspace are edited right there, like the workspace's own — the editor notes
+that the change reaches every workspace.
 
 The app decides which channel gets what: Cursor reads Claude's skills, agents and hooks on its own, so while Claude
 is on the app writes them only to Claude, and the editor's **Sincronização** says *Cursor — lê o mesmo arquivo do

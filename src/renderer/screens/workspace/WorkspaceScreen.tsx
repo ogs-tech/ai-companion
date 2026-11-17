@@ -271,36 +271,6 @@ export function WorkspaceScreen(): React.ReactElement {
     setActiveTabId(id);
   };
 
-  // A Global entity seen from a workspace: its own tab id, so it never
-  // collides with an editable tab for the same urn.
-  const openInheritedTab = (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction'): void => {
-    const id = `inherited:${entity.urn}`;
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.id === id)) return prev;
-      const tab: OpenTab =
-        kind === 'instruction'
-          ? { id, kind, entity: entity as Instruction, isCreate: false, inherited: true }
-          : { id, kind, entity: entity as Skill | Agent, isCreate: false, inherited: true };
-      return [...prev, tab];
-    });
-    setActiveTabId(id);
-  };
-
-  // "Editar no Início": leave the workspace (same discard guard as any
-  // switch), then open the entity's real, editable tab there.
-  const editAtHome = (entity: Skill | Agent | Instruction, kind: EntityKind | 'instruction'): void => {
-    void resetTabs().then((ok) => {
-      if (!ok) return;
-      goHomeMutation
-        .mutateAsync()
-        .then(() => {
-          if (kind === 'instruction') openInstructionTab(entity as Instruction, false);
-          else openEntityTab(kind, entity as Skill | Agent, false);
-        })
-        .catch(showError);
-    });
-  };
-
   // Tab identity is keyed by the concrete sessionId (not the anchor), so a
   // workspace/personal anchor with several coexisting sessions gets one tab
   // per session — the caller always already has this id in hand, from a
@@ -1266,7 +1236,9 @@ export function WorkspaceScreen(): React.ReactElement {
     // `instruction-seed.ts`) — the same name a file/skill tab for that same
     // scope could also carry — so the tab label alone can't tell two tabs
     // apart. The scope name below is what actually does.
-    const scopeName = tab.inherited
+    // A personal entity opened inside a workspace still edits Global's copy.
+    const fromGlobal = activeWorkspace != null && tab.entity.scopes[0] === 'personal';
+    const scopeName = fromGlobal
       ? 'Global'
       : tab.entity.scopes[0] === 'workspace'
         ? activeWorkspace?.name
@@ -1309,7 +1281,7 @@ export function WorkspaceScreen(): React.ReactElement {
           registerSave={registerTabSave(tab.id)}
           openPropertiesRequest={tab.id === propertiesRequestTabId}
           onPropertiesRequestHandled={() => setPropertiesRequestTabId(null)}
-          {...(tab.inherited ? { inherited: { onEditAtHome: () => editAtHome(tab.entity, tab.kind) } } : {})}
+          fromGlobal={fromGlobal}
         />
       ),
     };
@@ -1614,8 +1586,6 @@ export function WorkspaceScreen(): React.ReactElement {
               onOpenInstruction={openInstructionEditor}
               onInstructionProperties={requestInstructionProperties}
               onNewActionForInstruction={newActionForInstruction}
-              onOpenInherited={openInheritedTab}
-              onEditAtHome={editAtHome}
               sessionsScope={sessionsScope}
               onOpenSession={openSessionAnywhere}
               onSessionRemoved={removeSessionTab}

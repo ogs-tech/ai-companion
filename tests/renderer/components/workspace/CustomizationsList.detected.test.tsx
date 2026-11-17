@@ -28,7 +28,7 @@ const props = (): CustomizationsListProps => ({
   isHome: false,
   localScope: { scope: 'workspace', scopeId: 'w1' },
   onEditEntity: vi.fn(), onPreviewEntity: vi.fn(), onEntityProperties: vi.fn(), onNewActionForEntity: vi.fn(),
-  onOpenInstruction: vi.fn(), onInstructionProperties: vi.fn(), onNewActionForInstruction: vi.fn(), onOpenInherited: vi.fn(),
+  onOpenInstruction: vi.fn(), onInstructionProperties: vi.fn(), onNewActionForInstruction: vi.fn(),
   seedWorkspaceInstruction: () => ({ urn: '', kind: 'instruction', enabled: true, name: 'core', description: '', scopes: ['workspace'], scopeId: 'w1', metadata, source: { kind: 'workspace' }, content: '' }),
   seedFolderInstruction: (folder, taken) => seedFolderInstruction(workspace, folder, taken),
 });

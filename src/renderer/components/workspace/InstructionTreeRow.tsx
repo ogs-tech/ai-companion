@@ -85,8 +85,6 @@ interface InstructionTreeRowProps {
   onProperties?: (entity: Instruction) => void;
   /** Right-click → "New Action" — opens a brand-new session with a draft first message referencing this instruction. Gated on `instruction` being configured (nothing to reference otherwise), but — unlike Properties — offered for `kind="personal"` too, since starting a session from it is meaningful even though there's nothing to edit. */
   onNewAction?: (entity: Instruction) => void;
-  /** Workspace only: "Editar no Início" on Global's instruction — leaves the workspace and opens it there. */
-  onEditAtHome?: (entity: Instruction) => void;
   /** Overrides the default `data-testid` (`${kind}-instruction-row`). */
   testId?: string;
   /** Overrides the row's "instructions" label — e.g. the instruction's own name, when a workspace lists several. */
@@ -109,7 +107,7 @@ interface InstructionTreeRowProps {
  * same trailing action-icon treatment) so it reads as one more node rather
  * than a distinct UI concept.
  */
-export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, onEditAtHome, testId, label, depth = 0, detected, item }: InstructionTreeRowProps): React.ReactElement {
+export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview, onProperties, onNewAction, testId, label, depth = 0, detected, item }: InstructionTreeRowProps): React.ReactElement {
   const copy = ROW_COPY[kind];
   const rowTestId = testId ?? `${kind}-instruction-row`;
   const invalidate = useInvalidateInstructions();
@@ -139,7 +137,7 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         customizationMenu({
           entity: rowMenuTarget,
           enabled: rowMenuTarget.enabled !== false,
-          readOnly: item?.origin === 'global' ? 'global' : false,
+          readOnly: false,
           detected: false,
           canInstallOver: installOver.available,
           hasUndo: false,
@@ -147,7 +145,6 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         }),
         {
           ...(onPreview ? { open: () => onPreview(rowMenuTarget) } : {}),
-          ...(onEditAtHome ? { 'edit-home': () => onEditAtHome(rowMenuTarget) } : {}),
           edit: kind !== 'personal' && onProperties ? () => onProperties(rowMenuTarget) : () => onOpen(rowMenuTarget, false),
           toggle: () => setEnabled.mutate({ urn: rowMenuTarget.urn, enabled: rowMenuTarget.enabled === false }),
           ...(canDelete ? { delete: () => handleDelete() } : {}),

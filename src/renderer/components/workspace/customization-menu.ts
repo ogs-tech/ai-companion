@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Download, Eye, Home, Pencil, Power, SquareTerminal, Trash2, Undo2, type LucideIcon } from 'lucide-react';
+import { ArrowDownToLine, Download, Eye, Pencil, Power, SquareTerminal, Trash2, Undo2, type LucideIcon } from 'lucide-react';
 import { itemVerbs, toggleLabel, VERB_LABEL, type CustomizationVerb } from '../../../shared/customization-kind.js';
 import type { Entity } from '../../../shared/entity.js';
 import type { RowContextMenuAction } from './RowContextMenu.js';
@@ -6,8 +6,8 @@ import type { RowContextMenuAction } from './RowContextMenu.js';
 export interface MenuContext {
   entity: Pick<Entity, 'kind' | 'name' | 'scopes'>;
   enabled: boolean;
-  /** `global`: Início's item seen from a workspace; `plugin`: shipped by a plugin. Both open read-only. */
-  readOnly: false | 'global' | 'plugin';
+  /** `plugin`: shipped by a plugin, opens read-only. */
+  readOnly: false | 'plugin';
   /** Found in a channel's own files, not yet the app's. */
   detected: boolean;
   /** A file the app doesn't own sits where the item goes. */
@@ -17,7 +17,7 @@ export interface MenuContext {
   newAction: boolean;
 }
 
-export type MenuActionKey = CustomizationVerb | 'undo' | 'open' | 'edit-home' | 'new-action';
+export type MenuActionKey = CustomizationVerb | 'undo' | 'open' | 'new-action';
 
 export interface MenuAction {
   key: MenuActionKey;
@@ -31,7 +31,7 @@ export interface MenuAction {
 export function customizationMenu(ctx: MenuContext): MenuAction[] {
   const newAction: MenuAction[] = ctx.newAction ? [{ key: 'new-action', label: 'New Action' }] : [];
   if (ctx.readOnly !== false) {
-    return [{ key: 'open', label: 'Abrir' }, ...(ctx.readOnly === 'global' ? [{ key: 'edit-home' as const, label: 'Editar no Início' }] : []), ...newAction];
+    return [{ key: 'open', label: 'Abrir' }, ...newAction];
   }
   if (ctx.detected) return [{ key: 'open', label: 'Abrir' }, { key: 'import', label: VERB_LABEL.import }];
 
@@ -56,7 +56,6 @@ const GLYPH: Record<MenuActionKey, LucideIcon> = {
   installOver: ArrowDownToLine,
   undo: Undo2,
   open: Eye,
-  'edit-home': Home,
   'new-action': SquareTerminal,
 };
 
