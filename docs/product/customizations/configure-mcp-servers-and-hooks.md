@@ -48,7 +48,7 @@ Servers provided by a plugin, and **detected** servers (see below), are read-onl
 Servers found in `~/.claude.json`, `<repo>/.mcp.json` and Cursor's `mcp.json` that the app did not create
 show as **detected**, labeled with the harness. Nothing is adopted automatically. On a detected row's menu
 choose **Importar**: it becomes a managed server and is written to every enabled harness. Skills and agents
-found in `.claude/` and `.cursor/` appear the same way under **Detectados**.
+found in `.claude/` and `.cursor/` appear the same way, under **Draft**.
 
 ## Fix a server that needs authentication
 

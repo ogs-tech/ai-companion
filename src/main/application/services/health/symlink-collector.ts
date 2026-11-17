@@ -1,4 +1,5 @@
 import type { HealthCheck, Severity } from '../../../../shared/health.js';
+import type { CustomizationStatus } from '../../../../shared/customization-status.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { SymlinkPlanEntry } from '../adapter-manager.js';
 import type { SymlinkValidateState } from '../symlink-manager.js';
@@ -45,6 +46,12 @@ function verdictFor(state: SymlinkValidateState, destination: string): Verdict {
   }
 }
 
+/** A real file at the destination is the user's: sync won't replace it silently, so the item waits as a draft. */
+function outcomeFor(state: SymlinkValidateState): CustomizationStatus {
+  if (state === 'symlink-to-source') return 'installed';
+  return state === 'real-file' ? 'draft' : 'error';
+}
+
 export class SymlinkCollector implements HealthCollector {
   readonly category = 'symlink' as const;
 
@@ -74,6 +81,7 @@ export class SymlinkCollector implements HealthCollector {
         title: verdict.title,
         target: entry.destination,
         entityUrn: entry.entityUrn,
+        outcome: outcomeFor(state),
         ...channelOf(entry.adapterId),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),

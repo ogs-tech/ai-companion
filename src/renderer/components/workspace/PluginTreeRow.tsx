@@ -11,6 +11,7 @@ import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
 import type { PluginDetailIpc, PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc-types.js';
+import { invalidateHealth } from '../../hooks/use-health-report.js';
 
 type PublishState = { pluginId: string; scope: PluginScope; currentVersion?: string; hasPublishInfo: boolean };
 
@@ -62,6 +63,7 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
   const invalidateLists = (): void => {
     void qc.invalidateQueries({ queryKey: pluginsQueryKey('personal') });
     void qc.invalidateQueries({ queryKey: pluginsQueryKey('project') });
+    void invalidateHealth(qc);
   };
 
   const artifacts = detail?.manifest?.artifacts;

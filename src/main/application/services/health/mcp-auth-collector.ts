@@ -24,6 +24,7 @@ export class McpAuthCollector implements HealthCollector {
       title: `MCP "${alert.name}" needs authentication`,
       target: alert.name,
       entityUrn: mcpCheckUrn(alert.name),
+      outcome: 'error',
       channel: 'claude',
       remediation: 'Run /mcp in Claude Code to authenticate.',
       observedAt,

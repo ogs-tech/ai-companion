@@ -64,6 +64,7 @@ interface Deps {
   healthService: HealthService;
   mcpService: McpService;
   detectionService: DetectionService;
+  customizationStatusService: IpcDeps['customizationStatusService'];
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
   launchConfigService: LaunchConfigService;
@@ -163,6 +164,7 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     healthService,
     mcpService,
     detectionService,
+    customizationStatusService: null as unknown as IpcDeps['customizationStatusService'],
     openWithService,
     notificationPort,
     launchConfigService,

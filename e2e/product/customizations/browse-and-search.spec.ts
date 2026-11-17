@@ -95,12 +95,12 @@ test.describe('Customizations › browse and search', () => {
     });
   });
 
-  test('Problemas chip narrows the tree and Limpar filtros restores it', async () => {
+  test('Com erro chip narrows the tree, its channel row narrows it further, and Limpar filtros restores it', async () => {
     const { page } = session;
-    const problems = page.getByTestId('chip-problems');
+    const problems = page.getByTestId('chip-error');
     const totalBefore = Number(await page.getByTestId('control-panel-footer-count').innerText());
     // The seed writes files straight to disk, never synced to Claude: those rows carry "⚠ Claude".
-    await expect(problems).toHaveText(/⚠ Problemas [1-9]/);
+    await expect(problems).toHaveText(/^Com erro [1-9]/);
     const failing = Number((await problems.innerText()).replace(/\D+/g, ''));
 
     await problems.click();
@@ -110,6 +110,13 @@ test.describe('Customizations › browse and search', () => {
     await expect(page.getByTestId('control-panel-footer')).toContainText(`de ${totalBefore} itens`);
     // Every listed row says what is wrong.
     for (const row of await page.locator('[data-testid^="tree-row-"]').all()) await expect(row.getByTestId('channel-warning')).toBeVisible();
+
+    // Every failure in the seed is on Claude (Cursor is off), so its channel chip lists them all.
+    await expect(page.getByTestId('chip-channel-all')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('chip-channel-claude')).toHaveText(`Claude ${failing}`);
+    await page.getByTestId('chip-channel-claude').click();
+    await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(failing));
+    await expect(page.getByTestId('chip-channel-cursor')).toBeDisabled();
 
     await page.getByTestId('control-panel-clear').click();
     await expect(page.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');

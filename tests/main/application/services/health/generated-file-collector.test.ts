@@ -63,4 +63,18 @@ describe('GeneratedFileCollector', () => {
     });
     expect(await collector.collect('personal')).toEqual([]);
   });
+
+  it.each([
+    ['ok', 'installed'],
+    ['foreign', 'draft'],
+    ['missing', 'error'],
+    ['drift', 'error'],
+  ] as const)('marks %s as outcome %s', async (state, outcome) => {
+    const collector = make({
+      plan: [{ adapterId: 'cursor', entityUrn: 'urn:instruction:default', destination: '/repos/app/AGENTS.md', content: 'x' }],
+      state,
+      settings: settings({}),
+    });
+    expect((await collector.collect('personal'))[0]?.outcome).toBe(outcome);
+  });
 });

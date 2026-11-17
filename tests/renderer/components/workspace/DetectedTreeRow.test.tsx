@@ -18,11 +18,11 @@ beforeEach(() => {
 });
 
 describe('DetectedTreeRow', () => {
-  it('reads "detectado · importar" with its harness, and imports from the row menu', async () => {
+  it('reads "draft · importar" with its harness, and imports from the row menu', async () => {
     const item = itemOf(detected());
     renderWithShell(<DetectedTreeRow item={item} />);
     const row = screen.getByTestId(rowId(item));
-    expect(row).toHaveTextContent('detectado · importar');
+    expect(row).toHaveTextContent('draft · importar');
     expect(row).toHaveTextContent('Claude');
     fireEvent.contextMenu(row);
     await userEvent.setup().click(await screen.findByTestId('row-context-menu-import'));
@@ -33,7 +33,7 @@ describe('DetectedTreeRow', () => {
     const item = itemOf(detected({ importable: false, reason: 'symlink' }));
     renderWithShell(<DetectedTreeRow item={item} />);
     const row = screen.getByTestId(rowId(item));
-    expect(row).toHaveTextContent('detectado · não importável');
+    expect(row).toHaveTextContent('draft · não importável');
     fireEvent.contextMenu(row);
     expect(screen.queryByTestId('row-context-menu-import')).not.toBeInTheDocument();
   });

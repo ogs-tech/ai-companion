@@ -433,14 +433,16 @@ There is no `instructions/` screen — instruction management is inline on the W
 row component (`EntityTreeRow` for Skill/Agent, `DetectedTreeRow`, `McpTreeRow`, `HookTreeRow`,
 `PluginTreeRow`, `InstructionTreeRow`) rendered by `CustomizationsList`, the lower half of `WorkspaceScreen`'s
 Control Panel (`ControlPanelContent`). The rows hold no lists: `useCustomizationTree` reads every query once
-(skills, agents, instructions, MCP, hooks, plugins, detected, health, folder routing) and hands them to the pure
+(skills, agents, instructions, MCP, hooks, plugins, detected, `customization.status`, folder routing) and hands them to the pure
 `buildCustomizationTree` (`lib/customization-tree.ts`), which returns **sections** (`local`, plus `global` inside a
 workspace) › type groups (Instruções, Skills, Agents, MCP, Hooks, Plugins) › items, each with origin
-(`local`/`global`/`detected`), state (`problems` per channel, `disabled`), chip totals on the searched set, and
+(`local`/`global`/`detected`), `status` (`installed`/`draft`/`error` per item and per channel, computed in main by
+`CustomizationStatusService` — see [ipc-contract.md](ipc-contract.md#customization)), chip totals on the searched set, and
 `shown`/`grandTotal` for the footer. Plugin-provided items are dropped from the type groups (listed inside their
-plugin). A row's trailing slot shows one tag by precedence (`rowBadge`): `⚠ <channels>` > `desativado` >
-`detectado · importar`. The panel has a search box, state chips (**Todos · ⚠ Problemas · Desativados ·
-Detectados**, `TreeFilterChips`) and a "+" menu (Skill/Agent/Instruction/Servidor MCP/Importar plugin). Search and
+plugin). A row's trailing slot shows its status (`rowBadge`): `⚠ <channels>` (error) or `draft · importar |
+conflito <channels> | desativado`; installed is silent. The panel has a search box, status chips (**Todos ·
+Instalado · Draft · Com erro**, `TreeFilterChips`, with a channel row under Draft / Com erro) and a "+" menu (Skill/Agent/Instruction/Servidor MCP/Importar plugin). Nothing polls: the status
+and the health report refetch on load, scope switch and after writes. Search and
 chip are local state; the list is keyed by scope, so they reset on a scope switch. Sections: at Início
 (`isHome`) none (one editable list); in a workspace, **Workspace** (editable) then **Global** (collapsed,
 read-only; see below). Each section starts with its Instructions row(s), outside any group. Collapse state is

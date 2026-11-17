@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCustomizationTree,
+  channelsWith,
+  isDisabled,
   rowBadge,
   type TreeInput,
   type TreeItem,
   type TreeOptions,
 } from '../../../src/renderer/lib/customization-tree.js';
-import type { ChannelProblems } from '../../../src/renderer/lib/entity-health.js';
+import type { ChannelId } from '../../../src/shared/channel.js';
+import type { ItemStatus } from '../../../src/shared/customization-status.js';
 import type { Agent, Entity, Instruction, Skill } from '../../../src/shared/entity.js';
 import type { McpServer } from '../../../src/shared/mcp.js';
 import type { Hook } from '../../../src/renderer/hooks/use-hooks.js';
@@ -79,12 +82,19 @@ function detected(name: string, opts: { kind?: 'skill' | 'agent' | 'instruction'
   };
 }
 
-const NONE: ChannelProblems = new Map();
+const NONE: Record<string, ItemStatus> = {};
+const err = (...channels: ChannelId[]): ItemStatus => ({ status: 'error', channels: Object.fromEntries(channels.map((c) => [c, { status: 'error' }])) });
+const conflict = (...channels: ChannelId[]): ItemStatus => ({
+  status: 'draft',
+  reason: 'foreign',
+  channels: Object.fromEntries(channels.map((c) => [c, { status: 'draft', reason: 'foreign' }])),
+});
+const ok: ItemStatus = { status: 'installed', channels: { claude: { status: 'installed' } } };
 
 function input(partial: Partial<TreeInput> = {}): TreeInput {
   return {
     skills: [], agents: [], instructions: [], personalInstruction: null,
-    mcps: [], hooks: [], plugins: [], detected: [], problems: NONE,
+    mcps: [], hooks: [], plugins: [], detected: [], status: NONE,
     ...partial,
   };
 }
@@ -171,7 +181,7 @@ describe('buildCustomizationTree', () => {
     expect(tree.totals.all).toBe(0);
     expect(tree.shown).toBe(0);
     expect(group(buildCustomizationTree(input(), { ...WS, query: 'x' }), 'instruction')).toBeUndefined();
-    expect(group(buildCustomizationTree(input(), { ...WS, filter: 'disabled' }), 'instruction')).toBeUndefined();
+    expect(group(buildCustomizationTree(input(), { ...WS, filter: 'draft' }), 'instruction')).toBeUndefined();
   });
 
   it('drops plugin-provided items and keeps one row per plugin', () => {
@@ -185,31 +195,46 @@ describe('buildCustomizationTree', () => {
   });
 
   it('computes chip totals on the searched set', () => {
-    const problems: ChannelProblems = new Map([['urn:skill:review-pr', ['cursor'] as const]]);
     const tree = buildCustomizationTree(
-      input({ skills: [skill('review-pr', { ws: 'ws1' }), skill('commit-msg', { ws: 'ws1' })], mcps: [mcp('off', { enabled: false })], problems }),
+      input({
+        skills: [skill('review-pr', { ws: 'ws1' }), skill('commit-msg', { ws: 'ws1' })],
+        mcps: [mcp('off', { enabled: false })],
+        status: { 'urn:skill:review-pr': err('cursor'), 'urn:skill:commit-msg': ok },
+      }),
       { ...WS, query: 'rev' },
     );
-    expect(tree.totals).toEqual({ all: 1, global: 0, problems: 1, disabled: 0, detected: 0 });
+    expect(tree.totals).toEqual({ all: 1, global: 0, installed: 0, draft: 0, error: 1, byChannel: { draft: {}, error: { cursor: 1 } } });
   });
 
-  it('problems filter keeps only failing items and counts per group', () => {
-    const problems: ChannelProblems = new Map([
-      ['urn:skill:a', ['claude'] as const],
-      ['urn:mcp:m', ['cursor'] as const],
-    ]);
-    const tree = buildCustomizationTree(
-      input({ skills: [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' })], mcps: [mcp('m', { repoPath: '/r/app' }), mcp('n', { repoPath: '/r/app' })], problems }),
-      { ...WS, filter: 'problems' },
-    );
-    expect(names(tree, 'skill')).toEqual(['a']);
-    expect(names(tree, 'mcp')).toEqual(['m']);
-    expect(group(tree, 'skill')).toMatchObject({ count: 1, problems: 1 });
-    expect(tree.shown).toBe(2);
+  it('a status chip keeps only the items with that status and counts errors per group', () => {
+    const status = { 'urn:skill:a': err('claude'), 'urn:mcp:m': err('cursor'), 'urn:skill:b': ok, 'urn:mcp:n': conflict('cursor') };
+    const skills = [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' })];
+    const mcps = [mcp('m', { repoPath: '/r/app' }), mcp('n', { repoPath: '/r/app' })];
+    const errors = buildCustomizationTree(input({ skills, mcps, status }), { ...WS, filter: 'error' });
+    expect(names(errors, 'skill')).toEqual(['a']);
+    expect(names(errors, 'mcp')).toEqual(['m']);
+    expect(group(errors, 'skill')).toMatchObject({ count: 1, problems: 1 });
+    expect(errors.shown).toBe(2);
+    expect(names(buildCustomizationTree(input({ skills, mcps, status }), { ...WS, filter: 'installed' }), 'skill')).toEqual(['b']);
+    expect(names(buildCustomizationTree(input({ skills, mcps, status }), { ...WS, filter: 'draft' }), 'mcp')).toEqual(['n']);
+  });
+
+  it('the channel sub-filter keeps the items with that status on that channel, and counts per channel', () => {
+    const status = {
+      'urn:skill:a': err('claude'),
+      'urn:skill:b': err('claude', 'cursor'),
+      // Error overall, but only a conflict on Cursor: it is not an error *on Cursor*.
+      'urn:skill:c': { status: 'error', channels: { claude: { status: 'error' }, cursor: { status: 'draft', reason: 'foreign' } } } satisfies ItemStatus,
+    };
+    const skills = [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' }), skill('c', { ws: 'ws1' })];
+    const tree = buildCustomizationTree(input({ skills, status }), { ...WS, filter: 'error', channel: 'cursor' });
+    expect(names(tree, 'skill')).toEqual(['b']);
+    expect(tree.totals.byChannel.error).toEqual({ claude: 3, cursor: 1 });
+    expect(tree.totals.byChannel.draft).toEqual({});
   });
 
   it('an active chip with zero matches yields no groups and shown 0', () => {
-    const tree = buildCustomizationTree(input({ skills: [skill('a', { ws: 'ws1' }), skill('g')] }), { ...WS, filter: 'disabled' });
+    const tree = buildCustomizationTree(input({ skills: [skill('a', { ws: 'ws1' }), skill('g')] }), { ...WS, filter: 'draft' });
     expect(tree.sections).toEqual([{ id: 'local', groups: [], count: 0, problems: 0 }]);
     expect(tree.shown).toBe(0);
     expect(tree.grandTotal).toBe(2);
@@ -222,30 +247,36 @@ describe('buildCustomizationTree', () => {
     expect(groupIds(searched)).toEqual(['mcp']);
   });
 
-  it('flags disabled MCP, hook and plugin', () => {
+  it('makes disabled MCP, hook and plugin a draft, whatever the report says', () => {
     const tree = buildCustomizationTree(
-      input({ mcps: [mcp('m', { enabled: false })], hooks: [hook('h', { enabled: false }), hook('on')], plugins: [plugin('p', { enabled: false })] }),
+      input({
+        mcps: [mcp('m', { enabled: false })],
+        hooks: [hook('h', { enabled: false }), hook('on')],
+        plugins: [plugin('p', { enabled: false })],
+        status: { 'urn:mcp:m': err('claude') },
+      }),
       HOME,
     );
-    expect(group(tree, 'mcp')?.items[0]?.state.disabled).toBe(true);
-    expect(group(tree, 'hook')?.items.map((i) => i.state.disabled)).toEqual([true, false]);
-    expect(group(tree, 'plugin')?.items[0]?.state.disabled).toBe(true);
-    expect(tree.totals.disabled).toBe(3);
+    expect(group(tree, 'mcp')?.items[0] && isDisabled(group(tree, 'mcp')!.items[0]!)).toBe(true);
+    expect(group(tree, 'hook')?.items.map(isDisabled)).toEqual([true, false]);
+    expect(group(tree, 'plugin')?.items[0]?.status).toEqual({ status: 'draft', reason: 'disabled', channels: {} });
+    expect(tree.totals).toMatchObject({ draft: 3, error: 0 });
   });
 
   it('a detected MCP server reporting enabled false is not "desativado" — only the user’s own can be turned off', () => {
     const tree = buildCustomizationTree(input({ mcps: [{ ...mcp('claude-ai-Gmail', { detected: true }), enabled: false }] }), HOME);
-    expect(group(tree, 'mcp')?.items[0]?.state.disabled).toBe(false);
-    expect(tree.totals.disabled).toBe(0);
+    const item = group(tree, 'mcp')?.items[0];
+    expect(item && isDisabled(item)).toBe(false);
+    expect(item?.status).toMatchObject({ status: 'draft', reason: 'detected' });
   });
 
-  it('ignores problems on detected items and while health is empty', () => {
-    const problems: ChannelProblems = new Map([['urn:skill:ghost', ['claude'] as const]]);
-    const withDetected = buildCustomizationTree(input({ detected: [detected('ghost')], problems }), WS);
-    expect(withDetected.totals).toMatchObject({ problems: 0, detected: 1 });
+  it('detected rows are drafts even before the report arrives; nothing else has a status meanwhile', () => {
+    const withDetected = buildCustomizationTree(input({ detected: [detected('ghost')] }), WS);
+    expect(withDetected.totals).toMatchObject({ draft: 1, error: 0 });
     expect(group(withDetected, 'skill')?.items[0]?.origin).toBe('detected');
     const empty = buildCustomizationTree(input({ skills: [skill('a', { ws: 'ws1' })] }), WS);
-    expect(empty.totals.problems).toBe(0);
+    expect(empty.totals).toMatchObject({ installed: 0, draft: 0, error: 0 });
+    expect(group(empty, 'skill')?.items[0]?.status).toBeUndefined();
   });
 
   it('lists detected items after local and Global ones, one row per harness', () => {
@@ -279,22 +310,28 @@ describe('buildCustomizationTree', () => {
   });
 
   it('grandTotal ignores query and filter', () => {
-    const tree = buildCustomizationTree(input({ skills: [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' })], hooks: [hook('h')] }), { ...WS, query: 'a', filter: 'problems' });
+    const tree = buildCustomizationTree(input({ skills: [skill('a', { ws: 'ws1' }), skill('b', { ws: 'ws1' })], hooks: [hook('h')] }), { ...WS, query: 'a', filter: 'error' });
     expect(tree.grandTotal).toBe(3);
   });
 });
 
 describe('rowBadge', () => {
   const item = (patch: Partial<TreeItem>): TreeItem => ({
-    key: 'k', urn: 'urn:skill:x', name: 'x', origin: 'local', state: { problems: [], disabled: false },
+    key: 'k', urn: 'urn:skill:x', name: 'x', origin: 'local',
     entity: { kind: 'skill', value: skill('x') }, ...patch,
   });
-  it('rowBadge precedence', () => {
-    expect(rowBadge(item({ state: { problems: ['claude'], disabled: true } }))).toBe('problem');
-    expect(rowBadge(item({ origin: 'global', state: { problems: [], disabled: true } }))).toBe('disabled');
-    expect(rowBadge(item({ origin: 'detected' }))).toBe('detected');
+  it('shows the status unless installed', () => {
+    expect(rowBadge(item({ status: err('claude') }))).toBe('error');
+    expect(rowBadge(item({ origin: 'global', status: conflict('cursor') }))).toBe('draft');
     // The Global section names the origin; its rows carry no tag of their own.
     expect(rowBadge(item({ origin: 'global' }))).toBeNull();
+    expect(rowBadge(item({ status: ok }))).toBeNull();
     expect(rowBadge(item({}))).toBeNull();
+  });
+
+  it('channelsWith lists the channels with a status in registry order', () => {
+    const status: ItemStatus = { status: 'error', channels: { cursor: { status: 'error' }, claude: { status: 'error' } } };
+    expect(channelsWith(item({ status }), 'error')).toEqual(['claude', 'cursor']);
+    expect(channelsWith(item({ status }), 'draft')).toEqual([]);
   });
 });

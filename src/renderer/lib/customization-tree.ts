@@ -1,4 +1,4 @@
-import type { ChannelId } from '../../shared/channel.js';
+import { CHANNEL_IDS, type ChannelId } from '../../shared/channel.js';
 import type { DetectedEntity } from '../../shared/detected.js';
 import { entityUrn, isWorkspaceInstruction, type Agent, type Entity, type Instruction, type Skill } from '../../shared/entity.js';
 import type { McpServer } from '../../shared/mcp.js';
@@ -6,12 +6,14 @@ import type { PluginListItemIpc } from '../../shared/plugin-ipc-types.js';
 import type { Hook } from '../hooks/use-hooks.js';
 import { describeHookHandler, hookRowLabel } from './describe-hook-handler.js';
 import { matchesQuery } from './control-panel-filter.js';
-import type { ChannelProblems } from './entity-health.js';
+import type { CustomizationStatus, ItemStatus } from '../../shared/customization-status.js';
 
-export type TreeFilter = 'all' | 'problems' | 'disabled' | 'detected';
+/** The state chips: everything, or one status (`installed` · `draft` · `error`). */
+export type TreeFilter = 'all' | CustomizationStatus;
 export type TreeGroupId = 'instruction' | 'skill' | 'agent' | 'mcp' | 'hook' | 'plugin';
 export type TreeOrigin = 'local' | 'global' | 'detected';
-export type RowBadge = 'problem' | 'disabled' | 'detected' | null;
+/** What a row's trailing slot shows; `installed` is silent. */
+export type RowBadge = 'error' | 'draft' | null;
 /** `local` = the open workspace's own items (and what was detected in it); `global` = Início's, read-only here. */
 export type TreeSectionId = 'local' | 'global';
 
@@ -39,7 +41,8 @@ export interface TreeItem {
   name: string;
   origin: TreeOrigin;
   folderAlias?: string;
-  state: { problems: readonly ChannelId[]; disabled: boolean };
+  /** From `customization.status`; absent when nothing was checked yet (a placeholder, no channel on, still loading). */
+  status?: ItemStatus;
   entity: TreeEntity;
 }
 
@@ -48,6 +51,7 @@ export interface TreeGroup {
   label: string;
   items: TreeItem[];
   count: number;
+  /** Items with status `error`: the group header's ⚠. */
   problems: number;
 }
 
@@ -61,9 +65,11 @@ export interface TreeSection {
 export interface TreeTotals {
   all: number;
   global: number;
-  problems: number;
-  disabled: number;
-  detected: number;
+  installed: number;
+  draft: number;
+  error: number;
+  /** Per channel, how many draft / error items have that status there — the channel sub-chips. */
+  byChannel: Record<'draft' | 'error', Partial<Record<ChannelId, number>>>;
 }
 
 export interface CustomizationTree {
@@ -90,7 +96,8 @@ export interface TreeInput {
   plugins: readonly PluginListItemIpc[];
   /** Detected skills, agents and instructions (any scope; filtered here). */
   detected: readonly DetectedEntity[];
-  problems: ChannelProblems;
+  /** urn → status, from `customization.status`. */
+  status: Readonly<Record<string, ItemStatus>>;
 }
 
 export interface TreeOptions {
@@ -103,7 +110,12 @@ export interface TreeOptions {
   multi: boolean;
   query: string;
   filter: TreeFilter;
+  /** Narrows a `draft` / `error` filter to the items with that status on this channel. */
+  channel?: ChannelId;
 }
+
+const DETECTED_STATUS: ItemStatus = { status: 'draft', reason: 'detected', channels: {} };
+const DISABLED_STATUS: ItemStatus = { status: 'draft', reason: 'disabled', channels: {} };
 
 const GROUPS: ReadonlyArray<{ id: TreeGroupId; label: string }> = [
   { id: 'instruction', label: 'Instruções' },
@@ -155,16 +167,15 @@ function makeItem(
   options: TreeOptions,
 ): TreeItem {
   const folderAlias = aliasOf(fields.folder, options);
+  // The lists already say what is off or detected, so those rows read right before the status report arrives.
+  const status = fields.disabled === true ? DISABLED_STATUS : (input.status[fields.urn] ?? (fields.origin === 'detected' ? DETECTED_STATUS : undefined));
   return {
     key: `${fields.origin}:${folderAlias ?? ''}:${fields.identity}`,
     urn: fields.urn,
     name: fields.name,
     origin: fields.origin,
     ...(folderAlias !== undefined ? { folderAlias } : {}),
-    state: {
-      problems: fields.origin === 'detected' ? [] : (input.problems.get(fields.urn) ?? []),
-      disabled: fields.disabled ?? false,
-    },
+    ...(status !== undefined ? { status } : {}),
     entity: fields.entity,
   };
 }
@@ -300,7 +311,7 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   }
 
   for (const value of input.plugins) {
-    // Plugins are not an Entity kind, but health checks name them `urn:plugin:<id>` (see `rollUpToPlugins`).
+    // Plugins are not an Entity kind, but the status report names them `urn:plugin:<id>` (children roll up in main).
     const urn = `urn:plugin:${value.id}`;
     const origin: TreeOrigin = options.isHome || options.localScope === undefined || value.scope === 'project' ? 'local' : 'global';
     out.push({
@@ -312,26 +323,29 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   return out;
 }
 
-function passesFilter(item: TreeItem, filter: TreeFilter): boolean {
-  switch (filter) {
-    case 'all':
-      return true;
-    case 'problems':
-      return item.state.problems.length > 0;
-    case 'disabled':
-      return item.state.disabled;
-    case 'detected':
-      return item.origin === 'detected';
-  }
+function passesFilter(item: TreeItem, filter: TreeFilter, channel: ChannelId | undefined): boolean {
+  if (filter === 'all') return true;
+  if (item.status?.status !== filter) return false;
+  return channel === undefined || item.status.channels[channel]?.status === filter;
 }
 
 function totalsOf(items: readonly TreeItem[]): TreeTotals {
+  const byChannel: TreeTotals['byChannel'] = { draft: {}, error: {} };
+  for (const { status } of items) {
+    if (status === undefined || status.status === 'installed') continue;
+    const counts = byChannel[status.status];
+    for (const [channel, c] of Object.entries(status.channels) as Array<[ChannelId, NonNullable<ItemStatus['channels'][ChannelId]>]>) {
+      if (c.status === status.status) counts[channel] = (counts[channel] ?? 0) + 1;
+    }
+  }
+  const count = (s: CustomizationStatus): number => items.filter((i) => i.status?.status === s).length;
   return {
     all: items.length,
     global: items.filter((i) => i.origin === 'global').length,
-    problems: items.filter((i) => i.state.problems.length > 0).length,
-    disabled: items.filter((i) => i.state.disabled).length,
-    detected: items.filter((i) => i.origin === 'detected').length,
+    installed: count('installed'),
+    draft: count('draft'),
+    error: count('error'),
+    byChannel,
   };
 }
 
@@ -355,7 +369,7 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
       : matchesQuery(options.query, ...c.haystack),
   );
   const totals = totalsOf(searched.filter(counted).map((c) => c.item));
-  const visible = searched.filter((c) => c.placeholder !== undefined || passesFilter(c.item, options.filter));
+  const visible = searched.filter((c) => c.placeholder !== undefined || passesFilter(c.item, options.filter, options.channel));
 
   const section = (id: TreeSectionId, members: readonly Candidate[]): TreeSection => {
     const groups: TreeGroup[] = [];
@@ -370,7 +384,7 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
         label,
         items: inGroup.map((c) => c.item),
         count: countedItems.length,
-        problems: countedItems.filter((i) => i.state.problems.length > 0).length,
+        problems: countedItems.filter((i) => i.status?.status === 'error').length,
       });
     }
     return { id, groups, count: groups.reduce((sum, g) => sum + g.count, 0), problems: groups.reduce((sum, g) => sum + g.problems, 0) };
@@ -386,10 +400,18 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
   };
 }
 
-/** The one trailing tag a row shows: Problem > Disabled > Detected. A Global row needs none: its section says it. */
+/** The one trailing tag a row shows: its status when it isn't `installed`. A Global row needs none: its section says it. */
 export function rowBadge(item: TreeItem): RowBadge {
-  if (item.state.problems.length > 0) return 'problem';
-  if (item.state.disabled) return 'disabled';
-  if (item.origin === 'detected') return 'detected';
-  return null;
+  const status = item.status?.status;
+  return status === 'error' || status === 'draft' ? status : null;
+}
+
+/** The channels where an item has `status` (registry order), e.g. where an error or a conflict is. */
+export function channelsWith(item: TreeItem, status: CustomizationStatus): ChannelId[] {
+  const channels = item.status?.channels ?? {};
+  return CHANNEL_IDS.filter((id) => channels[id]?.status === status);
+}
+
+export function isDisabled(item: TreeItem): boolean {
+  return item.status?.reason === 'disabled';
 }

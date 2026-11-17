@@ -59,6 +59,7 @@ export class McpRuntimeCollector implements HealthCollector {
             : `MCP "${name}" runtime problem`,
         target: name,
         entityUrn: mcpCheckUrn(name),
+        outcome: severity === 'ok' ? 'installed' : 'error',
         channel: 'claude',
         observedAt,
         ...(summary?.detail !== undefined ? { detail: summary.detail } : {}),

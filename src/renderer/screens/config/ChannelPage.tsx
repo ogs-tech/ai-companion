@@ -12,6 +12,7 @@ import { ConfigPageFrame } from './ConfigPageFrame.js';
 import { ChannelSetupDialog } from './ChannelSetupDialog.js';
 import { useChannelStatus, channelStatusQueryKey } from '../../hooks/use-channel-status.js';
 import type { ChannelSetupAction, ChannelSetupStart } from '../../../shared/channel-setup.js';
+import { invalidateHealth } from '../../hooks/use-health-report.js';
 
 // What each harness capability promises, in this screen's own voice. The list of
 // channels comes from the registry in shared/channel.ts — adding one there is
@@ -72,6 +73,7 @@ export function ChannelPage({ harnessId }: { harnessId: ChannelId }): React.Reac
     if (enabled) {
       const result = await callIpc<{ syncReport: SyncResult[] }>('adapter.setEnabled', { adapterId: harnessId, enabled: true });
       void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+      void invalidateHealth(queryClient);
       await refetch();
       if (result.syncReport.some((e) => e.status !== 'ok')) setSyncReport(result.syncReport);
     } else {
@@ -88,6 +90,7 @@ export function ChannelPage({ harnessId }: { harnessId: ChannelId }): React.Reac
       removeSymlinks,
     });
     void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+    void invalidateHealth(queryClient);
     await refetch();
     if (removeSymlinks) {
       setDisableToast(`${result.removed} removidos, ${result.skipped} ignorados`);

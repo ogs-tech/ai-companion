@@ -58,19 +58,23 @@ the type groups.
 In a multi-folder workspace the folder is a tag on the row (`commit-msg · api`), not a level of the tree, and
 each folder has its own **Instructions · <folder>** row.
 
-A row speaks only when something needs attention; silence means it is in sync:
+Every item is in one of three states. A row speaks only when it is not installed; silence means it is:
 
-| Row shows | Meaning |
-|---|---|
-| `⚠ Claude · Cursor` | It failed to reach those channels. Click it to open Diagnósticos on the item. |
-| `desativado` | You turned it off (an MCP server, a hook or a plugin). It goes to no channel. |
-| `detectado · importar` | Found in Claude's or Cursor's own files, not yet managed by the app. Click the tag to import it. |
+| State | Row shows | Meaning |
+|---|---|---|
+| **Instalado** | nothing | It reached every channel that is on. |
+| **Draft** | `draft · importar` | Found in Claude's or Cursor's own files, not yet managed by the app. Click the tag to import it. |
+| | `draft · conflito Cursor` | A file the app doesn't manage is where the item goes in that channel, so the sync won't overwrite it. Click to open Diagnósticos. |
+| | `draft · desativado` | You turned it off (an MCP server, a hook or a plugin). It goes to no channel. |
+| **Com erro** | `⚠ Claude · Cursor` | Something is wrong in those channels (missing, out of date, needs sign-in). Click it to open Diagnósticos on the item. |
 
-If a row has more than one state, it shows only the first that applies, in the table's order.
+An error in one channel outranks a draft in another: the row shows the error.
 
-Under the search box, the chips **Todos** · **⚠ Problemas N** · **Desativados N** · **Detectados N** keep only
-the rows in that state. They combine with the search, and each count is what selecting the chip shows. A chip
-at 0 is disabled. The footer reads `N itens, G do Global`; while a search or chip is active it reads
+Under the search box, the chips **Todos** · **Instalado N** · **Draft N** · **Com erro N** keep only the rows in
+that state. With **Draft** or **Com erro** on, a second row (**Todos** · **Claude N** · **Cursor N**) narrows it to
+one channel. They combine with the search, and each count is what selecting the chip shows. A chip at 0 is
+disabled. The states are checked when the app opens or reloads, when you switch between Início and a workspace,
+and after you change something — not on a timer. The footer reads `N itens, G do Global`; while a search or chip is active it reads
 `n de N itens` with **Limpar filtros**, which clears both. Switching between Início and a workspace resets the
 search and the chip.
 

@@ -69,4 +69,14 @@ describe('SymlinkCollector', () => {
     });
     expect((await collector.collect())[0]?.severity).toBe('warning');
   });
+
+  it.each([
+    ['symlink-to-source', 'installed'],
+    ['real-file', 'draft'],
+    ['none', 'error'],
+    ['symlink-to-other', 'error'],
+  ] as const)('marks %s as outcome %s', async (state, outcome) => {
+    const collector = setup([entry('alpha')], { '/home/.claude/skills/alpha': state });
+    expect((await collector.collect())[0]?.outcome).toBe(outcome);
+  });
 });

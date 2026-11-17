@@ -1,4 +1,5 @@
 import type { HealthCheck, Severity } from '../../../../shared/health.js';
+import type { CustomizationStatus } from '../../../../shared/customization-status.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { MergePlanEntry } from '../adapter-manager.js';
 import type { MergeState } from '../merge-materializer.js';
@@ -36,6 +37,12 @@ function verdictFor(state: MergeState, label: string): Verdict {
   }
 }
 
+/** An entry the app doesn't own blocks the key: sync won't overwrite it silently (draft). */
+function outcomeFor(state: MergeState): CustomizationStatus {
+  if (state === 'ok') return 'installed';
+  return state === 'foreign' ? 'draft' : 'error';
+}
+
 /**
  * MCP servers and hooks are `merge` destinations — one entry inside a JSON file the user also
  * edits — so neither the symlink nor the generated-file collector sees them.
@@ -65,6 +72,7 @@ export class MergeEntryCollector implements HealthCollector {
         title: verdict.title,
         target: entry.destination,
         entityUrn: entry.entityUrn,
+        outcome: outcomeFor(state),
         ...channelOf(entry.adapterId),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),

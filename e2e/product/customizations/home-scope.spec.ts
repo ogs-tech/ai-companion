@@ -61,8 +61,8 @@ test.describe('Customizations › scope switch', () => {
 
   test('switching scope resets the active chip to Todos', async () => {
     const { page } = session;
-    await page.getByTestId('chip-problems').click();
-    await expect(page.getByTestId('chip-problems')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('chip-error').click();
+    await expect(page.getByTestId('chip-error')).toHaveAttribute('aria-pressed', 'true');
 
     await page.getByTestId('context-switcher').click();
     await page.getByTestId('context-switcher-home').click();
@@ -71,6 +71,6 @@ test.describe('Customizations › scope switch', () => {
     await page.locator('[data-testid^="workspace-list-row-"]').first().click();
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
     await expect(page.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('chip-problems')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('chip-error')).toHaveAttribute('aria-pressed', 'false');
   });
 });

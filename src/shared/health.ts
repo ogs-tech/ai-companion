@@ -2,6 +2,8 @@ import type { ChannelId } from './channel.js';
 
 export type Severity = 'ok' | 'warning' | 'error';
 
+import type { CustomizationStatus } from './customization-status.js';
+
 export type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry' | 'plugin-entity';
 
 export interface HealthCheck {
@@ -17,6 +19,12 @@ export interface HealthCheck {
   entityUrn?: string;
   /** The harness (channel) this check concerns. Absent for checks that are not channel-specific. */
   channel?: ChannelId;
+  /**
+   * What this check means for its customization's status, set by the collector (the only layer that knows a
+   * destination is blocked by a file the app doesn't own — `draft` — rather than missing or stale — `error`).
+   * Set whenever `entityUrn` is.
+   */
+  outcome?: CustomizationStatus;
   /** Actionable hint, e.g. "Run /mcp to authenticate". */
   remediation?: string;
   /** ISO timestamp, stamped by the service via ClockPort. */

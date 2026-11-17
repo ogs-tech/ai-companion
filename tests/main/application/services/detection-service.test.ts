@@ -173,4 +173,26 @@ describe('DetectionService — instructions', () => {
     const backup = await fs.readFile('/home/u/.air-ide/_backups/2026-11-05T12-00-00-000Z/detected/repos__app__.cursor__rules__style.mdc');
     expect(backup).toContain('Use tabs');
   });
+
+  it('shares one scan between concurrent callers and filters it per caller, then scans afresh', async () => {
+    const { fs, service } = make();
+    fs.createFile(`${HOME}/.claude/skills/review/SKILL.md`, '---\nname: review\ndescription: Reviews code\n---\nBody');
+    fs.createFile(`${HOME}/.claude.json`, JSON.stringify({ mcpServers: { gh: { command: 'gh-mcp' } } }));
+    let scans = 0;
+    const readdir = fs.readdir.bind(fs);
+    fs.readdir = async (dir: string) => {
+      if (dir === `${HOME}/.claude/skills`) scans++;
+      return readdir(dir);
+    };
+
+    const [skills, mcps] = await Promise.all([service.list({ kinds: ['skill'] }), service.list({ kinds: ['mcp'] })]);
+    expect(scans).toBe(1);
+    expect(skills.map((d) => d.kind)).toEqual(['skill']);
+    expect(mcps.map((d) => d.kind)).toEqual(['mcp']);
+
+    fs.createFile(`${HOME}/.claude/skills/tdd/SKILL.md`, '---\nname: tdd\ndescription: Tests\n---\nBody');
+    const later = await service.list({ kinds: ['skill'] });
+    expect(scans).toBe(2);
+    expect(later.map((d) => d.name).sort()).toEqual(['review', 'tdd']);
+  });
 });

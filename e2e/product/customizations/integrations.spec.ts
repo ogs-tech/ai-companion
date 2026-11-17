@@ -39,14 +39,14 @@ test.describe('Customizations › integrations', () => {
     await page.getByTestId('control-panel-search-clear').click();
   });
 
-  test('disabled MCP shows desativado', async () => {
+  test('disabled MCP is a draft that says desativado', async () => {
     const { page } = session;
     const notion = page.locator('[data-testid^="tree-row-global:"]').filter({ hasText: 'notion' });
     await expect(notion).toBeVisible();
     await notion.click({ button: 'right' });
     await page.getByTestId('row-context-menu-toggle').click();
-    await expect(notion.getByTestId('row-tag-disabled')).toHaveText('desativado');
-    await expect(page.getByTestId('chip-disabled')).toHaveText('Desativados 1');
+    await expect(notion.getByTestId('row-tag-disabled')).toHaveText('draft · desativado');
+    await expect(page.getByTestId('chip-draft')).toHaveText(/^Draft [1-9]/);
     // Turn it back on so the following tests see the seed as it was.
     await notion.click({ button: 'right' });
     await page.getByTestId('row-context-menu-toggle').click();

@@ -52,10 +52,28 @@ const ALL_KINDS: DetectedKind[] = ['skill', 'agent', 'mcp', 'hook', 'instruction
  * (same kind + name; hooks by event/matcher/command) are filtered out.
  */
 export class DetectionService {
+  /** The scan in flight, shared by every caller that arrives before it settles. */
+  private inFlight: Promise<DetectedEntity[]> | null = null;
+
   constructor(private readonly deps: DetectionServiceDeps) {}
 
+  /**
+   * One refresh fires several readers at once (the status report, `hook.list`, `mcp.list`): they share a
+   * single full scan and filter it by `kinds`. Nothing is kept once it settles, so a later call never sees
+   * a result from before a write.
+   */
   async list(params: DetectedListParams = {}): Promise<DetectedEntity[]> {
-    const kinds = params.kinds ?? ALL_KINDS;
+    this.inFlight ??= this.scan().finally(() => {
+      this.inFlight = null;
+    });
+    const found = await this.inFlight;
+    if (params.kinds === undefined) return found;
+    const kinds = params.kinds;
+    return found.filter((d) => kinds.includes(d.kind));
+  }
+
+  private async scan(): Promise<DetectedEntity[]> {
+    const kinds = ALL_KINDS;
     const found: DetectedEntity[] = [];
     const takenInstructionNames = new Set((await this.deps.entities.list('instruction')).map((e) => e.name));
     for (const location of this.locations()) {

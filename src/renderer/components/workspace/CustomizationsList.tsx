@@ -23,6 +23,8 @@ import { pluginsQueryKey } from '../../hooks/use-plugins.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
 import type { TreeFilter, TreeGroup, TreeGroupId, TreeItem, TreeSection } from '../../lib/customization-tree.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
+import { invalidateHealth } from '../../hooks/use-health-report.js';
+import type { ChannelId } from '../../../shared/channel.js';
 
 interface LocalScope {
   scope: 'workspace';
@@ -68,8 +70,9 @@ type NewTarget = EntityKind | 'instruction' | 'mcp' | 'plugin';
 /**
  * Every customization of the current scope: its instruction row(s) ("Instructions") first, then one group
  * per type (Skills, Agents, MCP, Hooks, Plugins). Inside a workspace the tree splits into a Workspace section and a read-only
- * Global section (Início's items, collapsed by default). Rows show only the exception (`⚠`, `desativado`,
- * `detectado · importar`); the chips filter by that state and combine with the search. The tree comes
+ * Global section (Início's items, collapsed by default). Rows show only the exception — `⚠ <canais>` (error) or
+ * `draft · importar | conflito | desativado` — from `customization.status`; the chips (Todos · Instalado · Draft ·
+ * Com erro, plus a channel row for the last two) filter by it and combine with the search. The tree comes
  * from one pure model (`buildCustomizationTree`), so every count equals what the list shows.
  *
  * Search and chip are local state: the parent keys this component by scope, so they reset on a switch.
@@ -96,7 +99,13 @@ export function CustomizationsList({
   const { data: instructions } = useInstructionsList();
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<TreeFilter>('all');
+  const [filter, setFilterState] = useState<TreeFilter>('all');
+  const [channel, setChannel] = useState<ChannelId | undefined>(undefined);
+  // The channel sub-filter belongs to the status chip it narrows.
+  const setFilter = (next: TreeFilter): void => {
+    setFilterState(next);
+    setChannel(undefined);
+  };
   const [newMenuAnchor, setNewMenuAnchor] = useState<HTMLElement | null>(null);
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [pluginImportOpen, setPluginImportOpen] = useState(false);
@@ -107,6 +116,7 @@ export function CustomizationsList({
     ...(mcpMatchPath !== undefined ? { mcpMatchPath } : {}),
     query,
     filter,
+    ...(channel !== undefined ? { channel } : {}),
   });
   const searching = query.trim() !== '';
   const filtered = searching || filter !== 'all';
@@ -309,7 +319,7 @@ export function CustomizationsList({
             )}
           </Box>
         </Stack>
-        <TreeFilterChips value={filter} totals={tree.totals} onChange={setFilter} />
+        <TreeFilterChips value={filter} channel={channel} totals={tree.totals} onChange={setFilter} onChannelChange={setChannel} />
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}>
@@ -354,6 +364,7 @@ export function CustomizationsList({
           setPluginImportOpen(false);
           void qc.invalidateQueries({ queryKey: pluginsQueryKey('personal') });
           void qc.invalidateQueries({ queryKey: pluginsQueryKey('project') });
+          void invalidateHealth(qc);
         }}
       />
     </Box>

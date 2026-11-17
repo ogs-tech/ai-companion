@@ -57,7 +57,7 @@ test.describe('Customizations › channel warnings', () => {
     await page.getByTestId('properties-modal').getByRole('button', { name: 'Fechar' }).click();
     await saveFromMenu(app);
 
-    // well under the 30 s health poll: the save itself refreshes the report
+    // Nothing polls: the save itself refreshes the status
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveCount(0, { timeout: 8_000 });
     await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toBeVisible();
   });

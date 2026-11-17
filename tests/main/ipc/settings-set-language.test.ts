@@ -53,6 +53,7 @@ const baseDeps = (): IpcDeps => {
     healthService: {} as IpcDeps['healthService'],
     mcpService: {} as IpcDeps['mcpService'],
     detectionService: {} as IpcDeps['detectionService'],
+    customizationStatusService: {} as IpcDeps['customizationStatusService'],
     notificationPort: {} as IpcDeps['notificationPort'],
     launchConfigService: {} as IpcDeps['launchConfigService'],
     terminalService: {} as IpcDeps['terminalService'],

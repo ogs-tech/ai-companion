@@ -44,4 +44,14 @@ describe('MergeEntryCollector', () => {
       expect(check?.remediation).toBeDefined();
     }
   });
+
+  it.each([
+    ['ok', 'installed'],
+    ['foreign', 'draft'],
+    ['missing', 'error'],
+    ['drift', 'error'],
+  ] as const)('marks %s as outcome %s', async (state, outcome) => {
+    const checks = await make([entry('claude', 'urn:hook:stop')], state).collect();
+    expect(checks[0]?.outcome).toBe(outcome);
+  });
 });

@@ -30,6 +30,7 @@ import { FsSettingsRepository } from './infrastructure/settings/fs-settings-repo
 import { FsWorkspaceBootstrap } from './infrastructure/workspace/fs-workspace-bootstrap.js';
 import { FsWorkspaceRegistry } from './infrastructure/workspace/fs-workspace-registry.js';
 import { SystemClock } from './infrastructure/clock/system-clock.js';
+import { CustomizationStatusService } from './application/services/customization-status-service.js';
 import { ElectronDialogAdapter } from './infrastructure/dialog/electron-dialog-adapter.js';
 import { NodeFsAdapter } from './infrastructure/filesystem/node-fs-adapter.js';
 import { NodeFileOperationsAdapter } from './infrastructure/filesystem/node-file-operations-adapter.js';
@@ -410,6 +411,20 @@ async function wireIpc(): Promise<void> {
     refreshHealth: () => claudeRuntimeReader.refresh(),
   });
 
+  const customizationStatusService = new CustomizationStatusService({
+    // Health and detection are rebuilt per workspace activation, hence getters over the live graph.
+    health: { getReport: (scope) => workspaceScoped.healthService.getReport(scope) },
+    detection: { list: (params) => workspaceScoped.detectionService.list(params) },
+    mcps: () => mcpService.list(),
+    // Hooks have no workspace scoping: every hook is Global's.
+    hooks: () => hookService.list('personal'),
+    plugins: async () => [
+      ...(await pluginService.list('personal')),
+      ...(activeWorkspace === null ? [] : await pluginService.list('project')),
+    ],
+    clock,
+  });
+
   const embeddedBrowserAdapter = new EmbeddedBrowserAdapter({
     getMainWindow: () => mainWindow,
     fs: nodeFsAdapter,
@@ -738,6 +753,7 @@ async function wireIpc(): Promise<void> {
     healthService: workspaceScoped.healthService,
     mcpService,
     detectionService: workspaceScoped.detectionService,
+    customizationStatusService,
     openWithService,
     notificationPort,
     launchConfigService: workspaceScoped.launchConfigService,

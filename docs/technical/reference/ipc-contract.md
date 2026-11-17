@@ -547,9 +547,25 @@ Hooks are not part of the canonical `Entity` model yet — they live in `.claude
 
 `plugin.installFromMarketplace` and `plugin.previewFromMarketplace` (in the `plugin` namespace) install or inspect a plugin from a marketplace entry.
 
-### `customization` *(removed)*
+### `customization`
 
-The `customization.*` IPC namespace has been **removed**, and so has the polymorphic `Customization`/`CustomizationFrontmatter` model behind it. All entity access now goes through the typed namespaces above (`skill`, `agent`, `instruction`, `hook`) backed by the canonical `Entity` contract in [`src/shared/entity.ts`](../../../src/shared/entity.ts) — `src/shared/customization.ts` no longer exists. The renderer's `CustomizationListScreen` component and `useCustomizationList` hook keep their (now generic) names but are parameterized by a concrete `listMethod` (e.g. `skill.list`) rather than calling a `customization.*` method.
+| Method | Params | Result |
+|---|---|---|
+| `customization.status` | `{}` | `CustomizationStatusReport` — `{ generatedAt, items: Record<urn, ItemStatus> }` |
+
+One status per customization for the Customizações tree (`src/shared/customization-status.ts`), built by
+`CustomizationStatusService` from the personal health report, detection, and what the user turned off:
+
+- `installed` — every check `ok`; `draft` — sync can't install it silently: `reason` `foreign` (a file/entry the
+  app doesn't own blocks a destination — the check's `outcome: 'draft'`), `detected` (found in a channel's files,
+  not imported) or `disabled` (`enabled: false`; `channels` is empty, whatever the checks say); `error` — any other
+  non-ok check.
+- `ItemStatus = { status, reason?, channels: Partial<Record<ChannelId, { status, reason? }>> }`; per channel and
+  overall, error > draft > installed. A plugin's MCP/hook statuses roll up to `urn:plugin:<id>`.
+- An item with nothing checked (no channel on) is absent: it has no status. Computed per call — nothing polls it;
+  the renderer reads it on load, scope switch and after writes (its query key sits under `['health', 'personal']`).
+
+The CRUD `customization.*` methods (pre-Entity) were **removed**, and so was the polymorphic `Customization`/`CustomizationFrontmatter` model behind it. All entity access now goes through the typed namespaces above (`skill`, `agent`, `instruction`, `hook`) backed by the canonical `Entity` contract in [`src/shared/entity.ts`](../../../src/shared/entity.ts) — `src/shared/customization.ts` no longer exists. The renderer's `CustomizationListScreen` component and `useCustomizationList` hook keep their (now generic) names but are parameterized by a concrete `listMethod` (e.g. `skill.list`) rather than calling a `customization.*` method.
 
 `SyncResult` still lives in [`src/shared/sync-result.ts`](../../../src/shared/sync-result.ts). See [Entity schema](customization-schema.md) for the current field contract.
 
@@ -561,13 +577,8 @@ The `customization.*` IPC namespace has been **removed**, and so has the polymor
 | `adapter.removeAll` | `{ adapterId: string }` | `RemoveAdapterResult` |
 | `adapter.setEnabled` | `{ adapterId: string; enabled: boolean; removeSymlinks?: boolean; runSyncAll?: boolean }` | See below |
 | `adapter.countDestinations` | `{ adapterId: string }` | `{ count: number }` |
-| `adapter.entitySyncStates` | none | `Record<urn, 'synced' \| 'pending'>` — read-only; see below |
 
-`adapter.entitySyncStates` checks the disk on every call (never a cached Sync report, so a file changed outside
-the app flips the state). An entity is `synced` only when every destination of every enabled harness is in place
-(symlink points at our source; generated/merged entry matches); `skip` destinations are ignored; an entity with
-nothing to materialize is absent from the map. A destination occupied by a file the app does not own (see
-"Foreign files" in [adapter-targets.md](adapter-targets.md)) makes the entity `pending`.
+`adapter.entitySyncStates` was removed (it had no consumer): per-entity state is `customization.status`.
 
 `adapter.setEnabled` returns:
 
@@ -667,6 +678,9 @@ Instruction it would become, `folder` is set only in a multi-folder workspace, a
 removes it, then saves the Instruction (so the sync can put our symlink/rule in its place); if the save fails the
 file is restored.
 
+Concurrent `detected.list` calls (and the `hook.list` / `mcp.list` / `customization.status` that read detection)
+share one in-flight scan; nothing is cached once it settles.
+
 Workspace-scope items are listed only while that workspace is open. See [Adapter targets → Detected items
 and import](adapter-targets.md#detected-items-and-import).
 
@@ -703,7 +717,7 @@ Disable semantics: project-shared servers use `projects[repoPath].disabledMcpjso
 
 ```ts
 type Severity = 'ok' | 'warning' | 'error';
-type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file';
+type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry' | 'plugin-entity';
 
 interface HealthCheck {
   id: string;           // stable id used for notification diffing
@@ -712,6 +726,9 @@ interface HealthCheck {
   title: string;
   detail?: string;
   target?: string;      // MCP/plugin/symlink name this check concerns
+  entityUrn?: string;   // the customization it concerns
+  channel?: ChannelId;  // the channel it concerns
+  outcome?: 'installed' | 'draft' | 'error'; // set with entityUrn: draft = blocked by a file the app doesn't own
   remediation?: string; // actionable hint, e.g. "Run /mcp to authenticate"
   observedAt: string;   // ISO timestamp
 }

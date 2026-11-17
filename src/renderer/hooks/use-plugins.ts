@@ -4,6 +4,7 @@ import {
 } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
 import type { PluginListItemIpc } from '../../shared/plugin-ipc-types.js';
+import { invalidateHealth } from './use-health-report.js';
 
 export type PluginScope = 'personal' | 'project';
 
@@ -30,6 +31,7 @@ function invalidatePluginLists(qc: QueryClient): Promise<void[]> {
   return Promise.all([
     qc.invalidateQueries({ queryKey: pluginsQueryKey('personal') }),
     qc.invalidateQueries({ queryKey: pluginsQueryKey('project') }),
+    invalidateHealth(qc),
   ]);
 }
 

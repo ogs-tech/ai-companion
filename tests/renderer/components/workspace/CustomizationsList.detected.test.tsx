@@ -49,7 +49,7 @@ describe('CustomizationsList detected items and folders', () => {
     expect((own.compareDocumentPosition(backlog) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
     expect(within(backlog).getByTestId('row-folder')).toHaveTextContent('bees');
     expect(screen.getByTestId(row('detected', 'detected:planner', 'ui'))).toHaveTextContent('Cursor');
-    expect(screen.getByTestId('chip-detected')).toHaveTextContent('Detectados 2');
+    expect(screen.getByTestId('chip-draft')).toHaveTextContent('Draft 2');
 
     await user.click(within(backlog).getByTestId('row-tag-detected'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'backlog' }));

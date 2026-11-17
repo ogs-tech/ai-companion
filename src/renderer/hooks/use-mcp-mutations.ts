@@ -10,7 +10,7 @@ export function useSaveMcp(): UseMutationResult<{ ok: true }, Error, { server: M
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars) => callIpc<{ ok: true }>('mcp.save', vars),
-    onSuccess: () => qc.invalidateQueries({ queryKey: mcpListQueryKey() }),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: mcpListQueryKey() }), qc.invalidateQueries({ queryKey: HEALTH_QUERY_ROOT })]),
   });
 }
 
@@ -18,7 +18,7 @@ export function useDeleteMcp(): UseMutationResult<{ ok: true }, Error, { id: str
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars) => callIpc<{ ok: true }>('mcp.delete', vars),
-    onSuccess: () => qc.invalidateQueries({ queryKey: mcpListQueryKey() }),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: mcpListQueryKey() }), qc.invalidateQueries({ queryKey: HEALTH_QUERY_ROOT })]),
   });
 }
 
@@ -26,7 +26,7 @@ export function useSetMcpEnabled(): UseMutationResult<{ ok: true }, Error, { id:
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars) => callIpc<{ ok: true }>('mcp.setEnabled', vars),
-    onSuccess: () => qc.invalidateQueries({ queryKey: mcpListQueryKey() }),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: mcpListQueryKey() }), qc.invalidateQueries({ queryKey: HEALTH_QUERY_ROOT })]),
   });
 }
 

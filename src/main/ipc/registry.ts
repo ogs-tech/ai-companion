@@ -33,7 +33,9 @@ import { buildCredentialsHandlers } from './credentials-handlers.js';
 import { buildSkillHandlers } from './skill-handlers.js';
 import { buildAgentHandlers } from './agent-handlers.js';
 import { buildHookHandlers } from './hook-handlers.js';
+import { buildCustomizationStatusHandlers } from './customization-status-handlers.js';
 import { buildDetectedHandlers } from './detected-handlers.js';
+import type { CustomizationStatusService } from '../application/services/customization-status-service.js';
 import type { DetectionService } from '../application/services/detection-service.js';
 import { buildInstructionHandlers } from './instruction-handlers.js';
 import { buildMarketplaceHandlers } from './marketplace-handlers.js';
@@ -86,6 +88,7 @@ export interface IpcDeps {
   healthService: HealthService;
   mcpService: McpService;
   detectionService: DetectionService;
+  customizationStatusService: CustomizationStatusService;
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
   launchConfigService: LaunchConfigService;
@@ -136,6 +139,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     healthService,
     mcpService,
     detectionService,
+    customizationStatusService,
     openWithService,
     notificationPort,
     launchConfigService,
@@ -235,7 +239,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       return { count };
     },
 
-    'adapter.entitySyncStates': async () => adapterManager.entitySyncStates(),
 
     ...buildPluginHandlers(pluginService),
     ...buildCredentialsHandlers(credentialStore),
@@ -257,6 +260,7 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     ...buildHealthHandlers(healthService, notificationPort),
     ...buildMcpHandlers(mcpService),
     ...buildDetectedHandlers(detectionService),
+    ...buildCustomizationStatusHandlers(customizationStatusService),
     ...buildOpenWithHandlers({
       openWithService,
       workspaceBrowser: fileBrowserService,

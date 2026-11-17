@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { callIpc } from '../lib/ipc.js';
 import type { HookHandler } from '../lib/describe-hook-handler.js';
+import { invalidateHealth } from './use-health-report.js';
 
 export interface Hook {
   id: string;
@@ -32,6 +33,6 @@ export function useDeleteHook() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (hook: Hook) => callIpc('hook.delete', { id: hook.id, scope: 'personal' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: hooksQueryKey }),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: hooksQueryKey }), invalidateHealth(qc)]),
   });
 }

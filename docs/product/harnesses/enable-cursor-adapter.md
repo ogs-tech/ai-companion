@@ -27,7 +27,7 @@ A hook Cursor cannot express (an event it lacks, a matcher or a non-`command` ty
 written to Cursor at all; it stays active in Claude Code and the **Sync report** lists it as a warning.
 
 Skills, agents, MCP servers and hooks that already exist in `~/.cursor/` (or `<repo>/.cursor/`) appear as
-**Detectados** rows. Import one from its row menu (**Importar**) and it becomes managed by the app and is
+**Draft · importar** rows. Import one from its row menu (**Importar**) and it becomes managed by the app and is
 written to every enabled channel. See
 [Adapter targets → Detected items and import](../../technical/reference/adapter-targets.md#detected-items-and-import).
 
