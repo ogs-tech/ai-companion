@@ -1,7 +1,7 @@
-import { Bell, Bot, EyeOff, KeyRound, Languages, PencilLine, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { Bell, Bot, EyeOff, KeyRound, Languages, PencilLine, type LucideIcon } from 'lucide-react';
 import { CHANNELS, CHANNEL_IDS, isChannelId } from '../../../shared/channel.js';
 
-/** Fixed per page — `channel:<id>`, `sessions`, `editor`, `language`, `github`, `danger`. */
+/** Fixed per page — `channel:<id>`, `sessions`, `editor`, `language`, `github`. */
 export type ConfigPageId = string;
 
 export interface ConfigPageDef {
@@ -23,9 +23,6 @@ export const configTabId = (page: ConfigPageId): string => `config:${page}`;
 export const isConfigTabId = (id: string): boolean => id.startsWith('config:');
 export const configPageOfTabId = (id: string): ConfigPageId => id.slice('config:'.length);
 
-/** The danger zone only exists in dev builds, same as before. */
-const showDanger = (): boolean => window.api?.isDev === true;
-
 /** The Config view's tree. Harness leaves come from the registry, so a new harness gets a page for free. */
 export function configGroups(): ConfigGroupDef[] {
   const groups: ConfigGroupDef[] = [
@@ -46,11 +43,10 @@ export function configGroups(): ConfigGroupDef[] {
       ],
     },
   ];
-  if (showDanger()) groups.push({ id: 'maintenance', label: 'Manutenção', pages: [{ id: 'danger', label: 'Zona de perigo', glyph: TriangleAlert }] });
   return groups;
 }
 
-/** The page's def, or `undefined` for a stale id (e.g. a restored tab whose harness left the registry, or `danger` outside dev). */
+/** The page's def, or `undefined` for a stale id (e.g. a restored tab whose harness left the registry). */
 export function findConfigPage(page: ConfigPageId): ConfigPageDef | undefined {
   return configGroups()
     .flatMap((g) => g.pages)

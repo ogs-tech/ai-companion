@@ -1,6 +1,6 @@
 ---
 title: Diagnose and reset
-description: Read the Diagnóstico screen, fix broken links, MCP auth and plugin drift, recover a backed-up file, and factory-reset the app.
+description: Read the Diagnóstico screen, fix broken links, MCP auth and plugin drift, recover a backed-up file, and start over by hand.
 ---
 
 # Diagnose and reset
@@ -38,17 +38,35 @@ for example, into the body of the instruction that replaced it. Backups are neve
 The file tree, previews and lists refresh by themselves when the app's own data changes. If something you
 edited elsewhere still looks stale, use **Reler do disco** (refresh icon) next to the **Arquivos | Git** toggle in the left panel.
 
-## Factory reset
+## Start over by hand
 
-**Settings** → **Zona de perigo** → **Restaurar para estado inicial**, then confirm. The app:
+The app has no reset button — it was removed because a button can only undo what the app *knows* it
+created, and it left hooks and MCP entries behind (the **Integrações** list still showed them). Wiping by
+hand is explicit about what goes. Quit the app first, then work through this list; every step is optional,
+pick the depth you want.
 
-1. removes every symlink and owned generated file it created for the entities in view (Global's, plus the
-   open workspace's if one is open);
-2. deletes Global's data dir `~/.air-ide/` — personal entities, settings, the workspace registry,
-   backups. Each workspace's own `<folder>/.air-ide/` stays in place;
-3. resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to empty —
-   **including entries you added outside the app**;
-4. quits.
+1. **Turn off the signal hooks first.** Open **Config → Sessões** and revoke "Ver o estado exato de
+   sessões fora do app" (or set it to "só estimado"). That removes the app's `signals` hooks from
+   `~/.claude/settings.json` and `~/.cursor/hooks.json`. If you skip this, those hooks stay in the files
+   and keep showing up under **Integrações** as items detected in Claude and Cursor.
+2. **Copy `~/.air-ide/_backups/` somewhere else** if you might need the files the app overwrote.
+3. **Delete the app's links and generated files** in each harness's config surface — the list is in
+   [Adapter targets](../../technical/reference/adapter-targets.md). In short: symlinks under
+   `~/.claude/` (`skills/`, `agents/`, `CLAUDE.md`) and `~/AGENTS.md` that point into `~/.air-ide/`;
+   `~/.cursor/plugins/air-ide/`; and, in every workspace folder you opened, the same symlinks under
+   `<folder>/.claude/` and `<folder>/.cursor/`, plus `<folder>/.cursor/rules/*.mdc` files carrying the
+   app's marker. Check with `ls -l` that a link points into `.air-ide` before removing it — never delete a
+   real file you wrote yourself.
+4. **Remove the MCP and hook entries the app merged** into `~/.claude.json`, `~/.claude/settings.json`,
+   `~/.cursor/mcp.json`, `~/.cursor/hooks.json` and each folder's `.mcp.json` / `.cursor/{mcp,hooks}.json`.
+   `~/.air-ide/merge-index.json` lists which entries are the app's. Entries you added yourself stay.
+5. **Clear plugin registrations** (optional): `enabledPlugins` and `extraKnownMarketplaces` in
+   `~/.claude/settings.json`, and the symlinks in `~/.claude/plugins/cache/local/`. These keys also hold
+   what you added from Claude Code itself, so edit rather than empty them if that matters.
+6. **Delete the data dirs:** `rm -rf ~/.air-ide` and, for each workspace you want to forget,
+   `<folder>/.air-ide`. Your project files are untouched.
+7. **Optional:** delete `~/Library/Application Support/<app name>/credentials.enc` to drop the stored
+   GitHub token.
 
-Copy `~/.air-ide/_backups/` somewhere else first if you might need it. The next launch starts from scratch, re-seeding
-the official marketplace. Details: [On-disk layout → Factory reset](../../technical/reference/on-disk-layout.md#factory-reset).
+The next launch starts from scratch and re-seeds the official marketplace. Details of every path:
+[On-disk layout](../../technical/reference/on-disk-layout.md#removing-the-apps-footprint-by-hand).

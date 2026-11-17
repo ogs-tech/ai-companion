@@ -37,7 +37,7 @@ describe('ConfigDriftCollector', () => {
     const collector = setup([
       item('clean'),
       item('ghost', { kind: 'not_in_registry' }),
-      item('missing', { kind: 'symlink_missing', details: 'link gone' }),
+      item('missing', { kind: 'not_cached', details: 'cache gone' }),
     ]);
 
     const checks = await collector.collect('personal');
@@ -51,6 +51,6 @@ describe('ConfigDriftCollector', () => {
       observedAt: FROZEN.toISOString(),
     });
     expect(ghost?.detail).toContain('not_in_registry');
-    expect(checks.find((c) => c.target === 'missing')?.detail).toContain('link gone');
+    expect(checks.find((c) => c.target === 'missing')?.detail).toContain('cache gone');
   });
 });

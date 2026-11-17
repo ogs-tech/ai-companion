@@ -54,11 +54,9 @@ const baseDeps = (): IpcDeps => {
     mcpService: {} as IpcDeps['mcpService'],
     detectionService: {} as IpcDeps['detectionService'],
     notificationPort: {} as IpcDeps['notificationPort'],
-    workspaceTeardownService: {} as IpcDeps['workspaceTeardownService'],
     launchConfigService: {} as IpcDeps['launchConfigService'],
     terminalService: {} as IpcDeps['terminalService'],
     openEditorsService: {} as IpcDeps['openEditorsService'],
-    appQuit: vi.fn(),
     desktop: {} as IpcDeps['desktop'],
   };
 };

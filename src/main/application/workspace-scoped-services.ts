@@ -5,7 +5,6 @@ import type { ClockPort } from './ports/clock-port.js';
 import type { PluginProvenanceService } from './services/plugin-provenance.js';
 import type { PluginService } from './services/plugin-service.js';
 import type { ClaudeRuntimePort } from './ports/claude-runtime-port.js';
-import type { ClaudeSettingsFile } from '../infrastructure/settings/claude-settings-file.js';
 import type { WorkspaceService } from './services/workspace-service.js';
 import { SymlinkManager } from './services/symlink-manager.js';
 import { FileMaterializer } from './services/file-materializer.js';
@@ -30,7 +29,6 @@ import { SymlinkCollector } from './services/health/symlink-collector.js';
 import { MergeEntryCollector } from './services/health/merge-entry-collector.js';
 import { GeneratedFileCollector } from './services/health/generated-file-collector.js';
 import type { HealthCollector } from './services/health/health-collector.js';
-import { WorkspaceTeardownService } from './services/workspace-teardown.js';
 import { ClaudeAdapter } from '../infrastructure/adapters/claude-adapter.js';
 import { CursorAdapter } from '../infrastructure/adapters/cursor-adapter.js';
 import { EntityWatchService } from './services/entity-watch-service.js';
@@ -60,7 +58,6 @@ export interface WorkspaceScopedSharedDeps {
   pluginProvenance: PluginProvenanceService;
   pluginService: PluginService;
   claudeRuntimeReader: ClaudeRuntimePort;
-  claudeSettingsFile: ClaudeSettingsFile;
   sessionTranscriptPort: SessionTranscriptPort;
   fileWatcherPort: FileWatcherPort;
   launchConfigReaderPort: LaunchConfigReaderPort;
@@ -83,7 +80,6 @@ export interface WorkspaceScopedServices {
   instructionService: InstructionService;
   sessionHistoryService: SessionHistoryService;
   healthService: HealthService;
-  workspaceTeardownService: WorkspaceTeardownService;
   entityWatchService: EntityWatchService;
   launchConfigService: LaunchConfigService;
   terminalService: TerminalService;
@@ -112,7 +108,7 @@ export function buildWorkspaceScopedServices(
 ): WorkspaceScopedServices {
   const {
     clock, nodeFsAdapter, settingsService, homedir, workspaceService, globalEntities,
-    pluginProvenance, pluginService, claudeRuntimeReader, claudeSettingsFile,
+    pluginProvenance, pluginService, claudeRuntimeReader,
     sessionTranscriptPort, fileWatcherPort,
     launchConfigReaderPort, terminalPort, repoGitPort,
     conventionSourcePort, commitMessageGeneratorFor,
@@ -202,14 +198,6 @@ export function buildWorkspaceScopedServices(
   ];
   const healthService = new HealthService(healthCollectors, clock);
 
-  // Factory reset wipes Global's data dir; a workspace's own `.air-ide` stays in its folder.
-  const workspaceTeardownService = new WorkspaceTeardownService(
-    adapterManager,
-    nodeFsAdapter,
-    globalDataDir,
-    claudeSettingsFile,
-  );
-
   const entityWatchService = new EntityWatchService(
     active === null
       ? [globalDataDir]
@@ -244,7 +232,7 @@ export function buildWorkspaceScopedServices(
   return {
     entityRepository, symlinkManager, fileMaterializer, adapterManager, gitIgnoreService, entityService, detectionService,
     skillService, agentService, instructionService, sessionHistoryService,
-    healthService, workspaceTeardownService, entityWatchService, launchConfigService, terminalService, openEditorsService,
+    healthService, entityWatchService, launchConfigService, terminalService, openEditorsService,
     gitService, commitMessageService,
   };
 }

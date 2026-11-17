@@ -125,7 +125,6 @@ function buildShared(): WorkspaceScopedSharedDeps {
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,
-    claudeSettingsFile,
     sessionTranscriptPort: new FsClaudeTranscriptAdapter(join(homedir, '.claude', 'projects')),
     fileWatcherPort: noopFileWatcherPort,
     launchConfigReaderPort: new FsLaunchConfigReader(),

@@ -39,6 +39,15 @@ export function needsAuth(server: McpServer): boolean {
   return server.health?.state === 'needs-auth';
 }
 
+/**
+ * Servers the Claude Code runtime owns itself — the built-in IDE integration (`ide`) and the
+ * claude.ai connectors (`claude-ai-*`). They are not configured by the user, so a runtime
+ * problem (IDE not connected, connector offline) is informational, never a warning.
+ */
+export function isClaudeManagedMcp(name: string): boolean {
+  return name === 'ide' || name.startsWith('claude-ai-');
+}
+
 /** Payload sent from the renderer to create/update a server (never plugin). */
 export interface McpServerInput {
   id?: string;

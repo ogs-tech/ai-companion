@@ -53,7 +53,6 @@ import type { LaunchConfigService } from '../application/services/launch-config-
 import type { TerminalService } from '../application/services/terminal-service.js';
 import type { McpService } from '../application/services/mcp-service.js';
 import type { NotificationPort } from '../application/ports/notification-port.js';
-import type { WorkspaceTeardownService } from '../application/services/workspace-teardown.js';
 import { updateLanguageSection } from '../application/services/language-section.js';
 import { asLanguagePreference } from './_validators.js';
 
@@ -89,11 +88,9 @@ export interface IpcDeps {
   detectionService: DetectionService;
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
-  workspaceTeardownService: WorkspaceTeardownService;
   launchConfigService: LaunchConfigService;
   terminalService: TerminalService;
   openEditorsService: OpenEditorsService;
-  appQuit: () => void;
   desktop: DesktopDeps;
 }
 
@@ -141,11 +138,9 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     detectionService,
     openWithService,
     notificationPort,
-    workspaceTeardownService,
     launchConfigService,
     terminalService,
     openEditorsService,
-    appQuit,
     desktop,
   } = deps;
 
@@ -241,11 +236,6 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
     },
 
     'adapter.entitySyncStates': async () => adapterManager.entitySyncStates(),
-
-    'app.restore': async () => {
-      await workspaceTeardownService.restore();
-      appQuit();
-    },
 
     ...buildPluginHandlers(pluginService),
     ...buildCredentialsHandlers(credentialStore),

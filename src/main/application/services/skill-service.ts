@@ -30,8 +30,20 @@ export class SkillService {
       { kind: 'skill', relPath: (name) => `skills/${name}/SKILL.md` },
       scope,
     )) as Skill[];
+    // A plugin's slash-commands are explicit-only Skills. Workspace skills and real plugin skills win on a name clash.
+    const commands = (await collectPluginEntities(
+      this.pluginDeps,
+      { kind: 'skill', type: 'command', explicitOnly: true, relPath: (name) => `commands/${name}.md` },
+      scope,
+    )) as Skill[];
     const urns = new Set(workspace.map((s) => s.urn));
-    return [...workspace, ...plugin.filter((s) => !urns.has(s.urn))];
+    const merged = [...workspace];
+    for (const s of [...plugin, ...commands]) {
+      if (urns.has(s.urn)) continue;
+      urns.add(s.urn);
+      merged.push(s);
+    }
+    return merged;
   }
 
   async get(id: SkillId): Promise<Skill> {

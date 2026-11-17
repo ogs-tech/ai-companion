@@ -12,7 +12,7 @@ export interface PluginDriftLister {
 const REMEDIATION: Record<NonNullable<PluginListItem['drift']>['kind'], string> = {
   not_in_settings: 'Enable or remove this plugin so settings and registry agree.',
   not_in_registry: 'Reinstall the plugin or remove it from Claude settings.',
-  symlink_missing: 'Re-sync adapters to recreate the plugin symlink.',
+  not_cached: 'Claude has no cached copy of this plugin. Reinstall it with "claude plugin install" (or /plugin in Claude).',
 };
 
 export class ConfigDriftCollector implements HealthCollector {

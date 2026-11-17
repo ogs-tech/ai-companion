@@ -2,7 +2,6 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 import { useSettingsState } from '../../hooks/use-settings-state.js';
 import { SessionsSettingsSection } from '../settings/SessionsSettingsSection.js';
 import { isChannelId } from '../../../shared/channel.js';
-import { DangerPage } from './DangerPage.js';
 import { EditorPage } from './EditorPage.js';
 import { GitHubPage } from './GitHubPage.js';
 import { ChannelPage } from './ChannelPage.js';
@@ -21,7 +20,7 @@ function SessionsPage(): React.ReactElement {
 }
 
 /** Pages that need no settings snapshot render straight away; the rest wait for it (no flash of defaults). */
-const SETTINGS_FREE_PAGES: ReadonlySet<string> = new Set(['github', 'danger']);
+const SETTINGS_FREE_PAGES: ReadonlySet<string> = new Set(['github']);
 
 /** The Workbench body of one Config tab. Every page edits the same global settings. */
 export function ConfigPage({ page }: { page: ConfigPageId }): React.ReactElement {
@@ -49,8 +48,6 @@ export function ConfigPage({ page }: { page: ConfigPageId }): React.ReactElement
       return <GitIgnorePage />;
     case 'github':
       return <GitHubPage />;
-    case 'danger':
-      return <DangerPage />;
     default:
       return <Typography sx={{ p: 3, color: 'text.secondary' }}>Página de configuração desconhecida.</Typography>;
   }

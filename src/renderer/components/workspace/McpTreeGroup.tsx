@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Typography } from '@mui/material';
+import { Button, Typography } from '@mui/material';
 import { Download, KeyRound, Pencil, Plug, Power, Trash2 } from 'lucide-react';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
 import { useEntityHealth } from '../../hooks/use-entity-health.js';
@@ -17,7 +17,7 @@ import { useDeleteMcp, useSetMcpEnabled, useAuthenticateMcp } from '../../hooks/
 import { IpcCallError } from '../../lib/ipc.js';
 import { matchesOrigin, matchesQuery, useReportCount, type OriginSegment } from '../../lib/control-panel-filter.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
-import { needsAuth, type McpServer } from '../../../shared/mcp.js';
+import { isClaudeManagedMcp, needsAuth, type McpServer } from '../../../shared/mcp.js';
 
 const MCP_SCOPE_LABEL: Record<McpServer['scope'], string> = {
   global: 'usuário',
@@ -162,6 +162,25 @@ export function McpTreeGroup({ matchPath, showGlobal, onlyGlobal = false, flat =
                       <Typography component="span" data-testid={`tree-mcp-harness-${server.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
                         {HARNESS_LABEL[server.source.harness]}
                       </Typography>
+                    )}
+                    {isClaudeManagedMcp(server.name) && (
+                      <Typography component="span" data-testid={`tree-mcp-managed-${server.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+                        Gerenciado pelo Claude
+                      </Typography>
+                    )}
+                    {server.name.startsWith('claude-ai-') && (server.health?.state === 'error' || needsAuth(server)) && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        data-testid={`tree-mcp-connect-${server.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          authenticate.mutate({ id: server.id }, { onError: onMutationError });
+                        }}
+                        sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.75, fontSize: '0.6875rem', textTransform: 'none' }}
+                      >
+                        Conectar
+                      </Button>
                     )}
                     <SessionsUsingBadge usage={{ kind: 'mcp', name: server.name }} testId={`tree-mcp-using-${server.id}`} />
                     <ChannelWarning urn={entityUrn('mcp', server.name)} channels={health.get(entityUrn('mcp', server.name)) ?? []} />

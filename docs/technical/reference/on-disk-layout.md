@@ -110,11 +110,20 @@ writes is surgical — only the keys listed are touched.
 Claude Code's `project` tier (plugins, hooks, marketplaces) resolves against the **open workspace's root**;
 at Início, with no workspace open, it isn't available and those calls fail `validation`.
 
-## Factory reset
+## Removing the app's footprint by hand
 
-**Settings → Zona de perigo → Restaurar para estado inicial** (`app.restore`) removes every adapter symlink
-and owned generated file, then Global's whole data dir `~/.air-ide/` (each workspace's own
-`<rootPath>/.air-ide/` stays in its folder), and finally
-resets `enabledPlugins` and `extraKnownMarketplaces` in `~/.claude/settings.json` to `{}` — **including
-entries you added from Claude Code itself**, not only the app's own — before quitting. Backups live in Global's
-data dir and go with it, so copy `~/.air-ide/_backups/` out first if you need them.
+There is no in-app reset (the `app.restore` IPC and `WorkspaceTeardownService` were removed): it only
+undid what the app tracked as entities, and missed the signal hooks (`ExternalHooksInstaller`), plugin
+registrations written by Claude Code itself, and anything that had left the entity list. The footprint is
+everything in the tables above plus the adapter targets, so a clean slate is, in order:
+
+1. Revoke external-session consent in **Config → Sessões** (removes the `signals` hooks from
+   `~/.claude/settings.json` and `~/.cursor/hooks.json`).
+2. Remove the adapter symlinks and marker-owned generated files ([Adapter targets](adapter-targets.md)) —
+   only symlinks that resolve into a `.air-ide/` dir.
+3. Remove the merged entries from the shared JSON files, using `~/.air-ide/merge-index.json` as the list
+   of what the app owns.
+4. Optionally clear `enabledPlugins` / `extraKnownMarketplaces` and `~/.claude/plugins/cache/local/`.
+5. `rm -rf ~/.air-ide` (copy `_backups/` out first) and each workspace's `<rootPath>/.air-ide`.
+
+The user-facing version is in [Diagnose and reset](../../product/troubleshooting/diagnose-and-reset.md#start-over-by-hand).

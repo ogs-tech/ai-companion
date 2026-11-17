@@ -31,7 +31,13 @@ export function hookRowLabel(hook: { event: string; handler: HookHandler }): str
   const { handler } = hook;
   if (handler.type !== 'command' || !handler.command) return `${hook.event} · ${describeHookHandler(handler)}`;
   const tokens = [...handler.command.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? '');
-  const script = tokens.find((t) => t.includes('/')) ?? tokens[0] ?? handler.command;
-  const base = script.split('/').pop() ?? script;
-  return `${hook.event} · ${base.replace(/\.[^.]+$/, '')}`;
+  // Skip shell noise (`[`, `&&`, `test`, flags, `KEY=value`) so the label names the script, never a bare operator.
+  const candidates = tokens.filter((t) => /[A-Za-z0-9]/.test(t) && !t.startsWith('-') && !SHELL_WORDS.has(t) && !/^\w+=/.test(t));
+  // Prefer a real script file (path with an extension), then any path, then the first word.
+  const script = candidates.find((t) => t.includes('/') && /\.\w+$/.test(t)) ?? candidates.find((t) => t.includes('/')) ?? candidates[0];
+  const base = script?.split('/').pop()?.replace(/\.[^.]+$/, '');
+  if (base === undefined || base === '') return `${hook.event} · ${handler.command.trim().slice(0, 40)}`;
+  return `${hook.event} · ${base}`;
 }
+
+const SHELL_WORDS = new Set(['test', 'if', 'then', 'else', 'fi', 'bash', 'sh', 'zsh', 'env', 'exec']);

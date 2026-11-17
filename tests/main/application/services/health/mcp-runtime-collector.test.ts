@@ -62,4 +62,17 @@ describe('McpRuntimeCollector', () => {
     const check = byTarget(await collector.collect(), 'orphan');
     expect(check?.severity).toBe('warning');
   });
+
+  it.each(['ide', 'claude-ai-Google-Calendar'])(
+    'treats the Claude-managed server %s as informational even when its logs fail',
+    async (name) => {
+      const { runtime, collector } = setup();
+      runtime.seedRuntimeLogs([{ server: name, state: 'error', detail: 'Failed to connect' }]);
+
+      const check = byTarget(await collector.collect(), name);
+
+      expect(check).toMatchObject({ severity: 'ok', title: `MCP "${name}" managed by Claude`, detail: 'Failed to connect' });
+      expect(check?.remediation).toBeUndefined();
+    },
+  );
 });

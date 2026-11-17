@@ -39,15 +39,20 @@ export type PluginSummaryIpc = {
   source?: PluginSourceIpc;
   installedRef?: PluginRefIpc;
   publishInfo?: PluginPublishInfoIpc;
+  marketplaceId?: string;
+  /** Set when Claude Code's own `/plugin` also installed it: `claude` = only Claude, `both` = app + Claude. */
+  installedBy?: 'claude' | 'both';
+  version?: string;
 };
 
 export type PluginDrift = {
-  kind: 'not_in_settings' | 'not_in_registry' | 'symlink_missing';
+  kind: 'not_in_settings' | 'not_in_registry' | 'not_cached';
   details?: string;
 };
 
 export type PluginListItemIpc = PluginSummaryIpc & {
   drift?: PluginDrift;
+  installPath?: string;
 };
 
 export type PluginDetailIpc = PluginListItemIpc & {

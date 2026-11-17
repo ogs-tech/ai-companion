@@ -12,6 +12,10 @@ import type { MarketplaceManifest, MarketplacePlugin } from '../../domain/market
 import type { GitPort } from '../ports/git-port.js';
 import type { PluginCachePort } from '../ports/plugin-cache-port.js';
 import type { ClaudeSettingsPort } from '../ports/claude-settings-port.js';
+import type {
+  ClaudeCodePluginDescriptor,
+  ClaudeCodePluginRegistryPort,
+} from '../ports/claude-code-plugin-registry-port.js';
 import type { Scope } from '../ports/scope.js';
 import type { PluginSummary } from './plugin-installer.js';
 import { enablePlugin, disablePlugin } from './claude-settings-mutators.js';
@@ -65,15 +69,24 @@ export interface MarketplaceParserLike {
 
 export type PluginListItem = PluginSummary & {
   drift?: {
-    kind: 'not_in_settings' | 'not_in_registry' | 'symlink_missing';
+    kind: 'not_in_settings' | 'not_in_registry' | 'not_cached';
     details?: string;
   };
+  /** Where Claude Code keeps this plugin's files; set only when Claude registered it. */
+  installPath?: string;
 };
 
 export type PluginDetail = PluginListItem & {
   manifest?: PluginManifest;
   publishInfo?: PluginPublishInfo;
 };
+
+function notCachedDrift(native: ClaudeCodePluginDescriptor): NonNullable<PluginListItem['drift']> {
+  return {
+    kind: 'not_cached',
+    details: `Claude cache missing: ${native.installPath}. Run: claude plugin install ${native.pluginId}@${native.marketplace}`,
+  };
+}
 
 // ── PluginService ─────────────────────────────────────────────────────────────
 
@@ -89,8 +102,23 @@ export class PluginService {
       parser: PluginManifestParserLike;
       marketplaceParser: MarketplaceParserLike;
       fs: WritableFileSystemPort;
+      /** Claude Code's own plugin registry; plugins installed through `/plugin` are listed from it. */
+      claudeRegistry?: ClaudeCodePluginRegistryPort;
     },
   ) {}
+
+  /** Plugins Claude Code installed itself, keyed `id@marketplace`. Personal scope only. */
+  private async claudeDescriptors(scope: Scope): Promise<Map<string, ClaudeCodePluginDescriptor>> {
+    const out = new Map<string, ClaudeCodePluginDescriptor>();
+    const registry = this.deps.claudeRegistry;
+    if (scope !== 'personal' || registry === undefined) return out;
+    try {
+      for (const d of await registry.list()) out.set(`${d.pluginId}@${d.marketplace}`, d);
+    } catch (err) {
+      console.warn('[PluginService] Claude Code plugin registry unreadable', err);
+    }
+    return out;
+  }
 
   /**
    * Import a third-party plugin from a git URL.
@@ -242,10 +270,12 @@ export class PluginService {
    * SPEC §6.9
    */
   async list(scope: Scope): Promise<PluginListItem[]> {
-    const { cache, settings } = this.deps;
+    const { cache, settings, fs } = this.deps;
 
     const meta = await cache.readMeta(scope);
     const claudeSettings = await settings.read(scope);
+    const claude = await this.claudeDescriptors(scope);
+    const seen = new Set<string>();
 
     const result: PluginListItem[] = [];
 
@@ -275,8 +305,19 @@ export class PluginService {
         ...(entry.marketplaceId != null && { marketplaceId: entry.marketplaceId }),
       };
 
-      // Detect drift: entry says enabled=true but not in settings
-      if (entry.enabled && !inSettings) {
+      const native = claude.get(pluginKey);
+      if (native !== undefined) {
+        seen.add(pluginKey);
+        item.installedBy = 'both';
+        item.version = native.version;
+        item.installPath = native.installPath;
+      }
+
+      // Claude registered this plugin but its cache dir is gone: Claude cannot load it.
+      if (native !== undefined && !(await fs.pathExists(native.installPath))) {
+        item.drift = notCachedDrift(native);
+      } else if (entry.enabled && !inSettings) {
+        // Detect drift: entry says enabled=true but not in settings
         item.drift = { kind: 'not_in_settings' };
       }
 
@@ -306,6 +347,24 @@ export class PluginService {
       }
     }
 
+    // Plugins only Claude Code knows about (installed through its own `/plugin`).
+    for (const [key, native] of claude) {
+      if (seen.has(key)) continue;
+      const item: PluginListItem = {
+        id: native.pluginId,
+        origin: 'imported',
+        scope,
+        enabled: claudeSettings.enabledPlugins[key] === true,
+        installedAt: '',
+        marketplaceId: native.marketplace,
+        installedBy: 'claude',
+        version: native.version,
+        installPath: native.installPath,
+      };
+      if (!(await fs.pathExists(native.installPath))) item.drift = notCachedDrift(native);
+      result.push(item);
+    }
+
     return result;
   }
 
@@ -327,12 +386,13 @@ export class PluginService {
 
     const detail: PluginDetail = { ...item };
 
-    // Try to read manifest from disk
+    // Try to read manifest from disk — from Claude's copy when only Claude has the plugin.
+    const pluginDir = item.installedBy === 'claude' && item.installPath !== undefined ? item.installPath : cache.pluginDir(scope, id);
     try {
-      const pluginDir = cache.pluginDir(scope, id);
       detail.manifest = await parser.parse(pluginDir);
-    } catch {
-      // Manifest not available (drift case, etc.) — leave undefined
+    } catch (err) {
+      // Manifest not available (drift case, etc.) — leave undefined, but say why.
+      console.warn('[PluginService] cannot read plugin manifest', pluginDir, err);
     }
 
     // Attach publish info from meta if available
@@ -350,7 +410,21 @@ export class PluginService {
    */
   async remove(id: PluginId, scope: Scope): Promise<void> {
     const { installer } = this.deps;
+    await this.assertNotClaudeOnly(id, scope, 'remove');
     await installer.uninstall(id, scope);
+  }
+
+  /** A plugin only Claude Code installed has no app registry entry — the app must not change it. */
+  private async assertNotClaudeOnly(id: PluginId, scope: Scope, operation: string): Promise<void> {
+    const meta = await this.deps.cache.readMeta(scope);
+    if (meta.plugins.some((p) => p.id === id)) return;
+    const onlyInClaude = [...(await this.claudeDescriptors(scope)).values()].some((d) => d.pluginId === id);
+    if (onlyInClaude) {
+      throw new OperationNotAllowedForOriginError(
+        `Plugin '${id}' was installed by Claude Code; manage it with /plugin in Claude`,
+        { origin: 'claude', operation },
+      );
+    }
   }
 
   /**
@@ -359,6 +433,7 @@ export class PluginService {
   async toggle(id: PluginId, scope: Scope, enabled: boolean): Promise<void> {
     const { settings, cache } = this.deps;
 
+    await this.assertNotClaudeOnly(id, scope, 'toggle');
     // Read meta first to honor the plugin's marketplace attribution
     const meta = await cache.readMeta(scope);
     const entry = meta.plugins.find((p) => p.id === id);

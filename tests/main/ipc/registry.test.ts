@@ -22,7 +22,6 @@ import type { HookService } from '../../../src/main/application/services/hook-se
 import type { CredentialStorePort } from '../../../src/main/application/ports/credential-store-port.js';
 import type { HealthService } from '../../../src/main/application/services/health/health-service.js';
 import type { NotificationPort } from '../../../src/main/application/ports/notification-port.js';
-import type { WorkspaceTeardownService } from '../../../src/main/application/services/workspace-teardown.js';
 import type { McpService } from '../../../src/main/application/services/mcp-service.js';
 import type { OpenWithService } from '../../../src/main/application/services/open-with-service.js';
 import type { FileBrowserService } from '../../../src/main/application/services/file-browser-service.js';
@@ -67,11 +66,9 @@ interface Deps {
   detectionService: DetectionService;
   openWithService: OpenWithService;
   notificationPort: NotificationPort;
-  workspaceTeardownService: WorkspaceTeardownService;
   launchConfigService: LaunchConfigService;
   terminalService: TerminalService;
   openEditorsService: OpenEditorsService;
-  appQuit: () => void;
   desktop: IpcDeps['desktop'];
   settingsRepoSpy: {
     load: ReturnType<typeof vi.fn>;
@@ -131,9 +128,6 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
   const mcpService = null as unknown as McpService;
   const detectionService = null as unknown as DetectionService;
   const notificationPort = null as unknown as NotificationPort;
-  const workspaceTeardownService = {
-    restore: vi.fn().mockResolvedValue(undefined),
-  } as unknown as WorkspaceTeardownService;
   const launchConfigService = null as unknown as LaunchConfigService;
   const terminalService = null as unknown as TerminalService;
   const openEditorsService = null as unknown as OpenEditorsService;
@@ -171,11 +165,9 @@ const buildDeps = (initial: Settings | null = baseSettings()): Deps => {
     detectionService,
     openWithService,
     notificationPort,
-    workspaceTeardownService,
     launchConfigService,
     terminalService,
     openEditorsService,
-    appQuit: () => undefined,
     desktop: {} as IpcDeps['desktop'],
     settingsRepoSpy,
     dialogSpy,
@@ -262,23 +254,5 @@ describe('buildHandlers', () => {
     expect(deps.dialogSpy.selectFolder).toHaveBeenCalledWith({
       defaultPath: '/home',
     });
-  });
-
-  it('app.restore delegates to WorkspaceTeardownService.restore, then quits', async () => {
-    const deps = buildDeps();
-    const restore = vi.fn().mockResolvedValue(undefined);
-    const appQuit = vi.fn();
-    deps.workspaceTeardownService = { restore } as unknown as WorkspaceTeardownService;
-    deps.appQuit = appQuit;
-    const handlers = buildHandlers(deps);
-
-    await handlers['app.restore']?.({});
-
-    expect(restore).toHaveBeenCalledTimes(1);
-    expect(appQuit).toHaveBeenCalledTimes(1);
-    // Teardown must complete before the app quits.
-    const restoreOrder = restore.mock.invocationCallOrder[0] ?? Infinity;
-    const quitOrder = appQuit.mock.invocationCallOrder[0] ?? -Infinity;
-    expect(restoreOrder).toBeLessThan(quitOrder);
   });
 });

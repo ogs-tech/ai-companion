@@ -84,14 +84,6 @@ Grouped by namespace. Source: [`src/main/ipc/registry.ts`](../../../src/main/ipc
 
 A `scope?: 'personal' | 'project'` param (on `skill.list`/`agent.list`, `hook.*`, `marketplace.*`, `plugin.*`, `health.getReport`) is Claude Code's own plugin/settings tier, not an entity `Scope`: `'project'` resolves against the open workspace's root (`<root>/.claude/settings.json`, `<root>/.air-ide/plugins`, …) and is not available at Início — with no workspace open, resolving those paths throws `validation`, so the renderer only sends `'personal'` there.
 
-### `app`
-
-| Method | Params | Result |
-|---|---|---|
-| `app.restore` | — | `void` |
-
-> **Destructive (scoped).** `app.restore` restores the app to its initial state: it removes the app-created symlinks and generated files under adapter targets (`AdapterManager.removeAllAdapterSymlinks`/`removeAllGeneratedFiles`), deletes Global's data directory `~/.air-ide/`, and clears the app's marketplace/plugin registry in `~/.claude/settings.json`, then quits. Each workspace's own `<root>/.air-ide/` is left in its folder. It does **not** delete the rest of `~/.claude/` or any `.env.local` — only this app's own footprint. Orchestrated by `WorkspaceTeardownService`; no raw filesystem access lives in the IPC layer.
-
 ### `desktop`
 
 Desktop shell (window title, quit confirmation, error log). Contract types in [`src/shared/desktop.ts`](../../../src/shared/desktop.ts); handlers in `src/main/ipc/desktop-handlers.ts`.
@@ -597,7 +589,7 @@ interface RemoveAdapterResult {
 | Method | Params | Result |
 |---|---|---|
 | `plugin.import` | `{ url: string; ref?: string; scope?: string }` | `PluginSummary` |
-| `plugin.list` | `{ scope?: string }` | `PluginListItem[]` |
+| `plugin.list` | `{ scope?: string }` | `PluginListItem[]` — the app's registry plus, at personal scope, plugins Claude Code installed itself (`~/.claude/plugins/installed_plugins.json`): `installedBy` is `'claude'` (Claude only, read-only here) or `'both'`; `drift.kind` is `not_in_settings`, `not_in_registry` or `not_cached` (Claude registered it but its cache dir is gone) |
 | `plugin.get` | `{ id: string; scope?: string }` | `PluginDetail` |
 | `plugin.update` | `{ id: string; scope?: string }` | `PluginSummary` |
 | `plugin.remove` | `{ id: string; scope?: string }` | `void` |

@@ -350,6 +350,86 @@ describe('PluginService', () => {
     });
   });
 
+  describe('Claude Code installed plugins', () => {
+    const MP = 'claude-plugins-official';
+    const NATIVE_ID = pluginId('feature-dev');
+    const INSTALL_PATH = '/home/u/.claude/plugins/cache/claude-plugins-official/feature-dev/1.0.1';
+    const descriptor = { pluginId: NATIVE_ID, marketplace: MP, installPath: INSTALL_PATH, version: '1.0.1', scope: 'user' as const };
+
+    const withRegistry = (descriptors: unknown[], fs = new InMemoryFileSystem()): { svc: PluginService; fs: InMemoryFileSystem } => ({
+      fs,
+      svc: new PluginService({
+        installer, author, publisher, git, cache, settings, parser, marketplaceParser, fs,
+        claudeRegistry: { list: async () => descriptors as never },
+      }),
+    });
+
+    it('lists a plugin only Claude installed, enabled from Claude settings', async () => {
+      cache.seedMeta(SCOPE, { version: 2, plugins: [] });
+      settings.seedSettings(SCOPE, { extraKnownMarketplaces: {}, enabledPlugins: { [`${NATIVE_ID}@${MP}`]: true } });
+      const fs = new InMemoryFileSystem();
+      fs.createFile(`${INSTALL_PATH}/README.md`, 'x');
+      const { svc } = withRegistry([descriptor], fs);
+
+      const item = (await svc.list(SCOPE)).find((p) => p.id === NATIVE_ID);
+
+      expect(item).toMatchObject({ installedBy: 'claude', version: '1.0.1', enabled: true, marketplaceId: MP, installPath: INSTALL_PATH });
+      expect(item?.drift).toBeUndefined();
+    });
+
+    it('lists one row, marked as both, when the app imported the same plugin', async () => {
+      cache.seedMeta(SCOPE, { version: 2, plugins: [makeImportedEntry(NATIVE_ID, { marketplaceId: MP })] });
+      settings.seedSettings(SCOPE, { extraKnownMarketplaces: {}, enabledPlugins: { [`${NATIVE_ID}@${MP}`]: true } });
+      const fs = new InMemoryFileSystem();
+      fs.createFile(`${INSTALL_PATH}/README.md`, 'x');
+      const { svc } = withRegistry([descriptor], fs);
+
+      const items = (await svc.list(SCOPE)).filter((p) => p.id === NATIVE_ID);
+
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ installedBy: 'both', origin: 'imported', version: '1.0.1' });
+    });
+
+    it('flags not_cached, with the reinstall command, when Claude registered it but its cache is gone', async () => {
+      cache.seedMeta(SCOPE, { version: 2, plugins: [] });
+      settings.seedSettings(SCOPE, { extraKnownMarketplaces: {}, enabledPlugins: {} });
+      const { svc } = withRegistry([descriptor]);
+
+      const item = (await svc.list(SCOPE)).find((p) => p.id === NATIVE_ID);
+
+      expect(item?.drift?.kind).toBe('not_cached');
+      expect(item?.drift?.details).toContain(`claude plugin install ${NATIVE_ID}@${MP}`);
+    });
+
+    it('does not merge Claude plugins into the project scope', async () => {
+      cache.seedMeta('project', { version: 2, plugins: [] });
+      settings.seedSettings('project', { extraKnownMarketplaces: {}, enabledPlugins: {} });
+      const { svc } = withRegistry([descriptor]);
+      expect(await svc.list('project')).toEqual([]);
+    });
+
+    it('still lists the app plugins when the Claude registry throws', async () => {
+      cache.seedMeta(SCOPE, { version: 2, plugins: [makeOwnedEntry(OWNED_ID)] });
+      settings.seedSettings(SCOPE, { extraKnownMarketplaces: {}, enabledPlugins: { [`${OWNED_ID}@local`]: true } });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const svc = new PluginService({
+        installer, author, publisher, git, cache, settings, parser, marketplaceParser, fs: new InMemoryFileSystem(),
+        claudeRegistry: { list: async () => { throw new Error('boom'); } },
+      });
+      expect((await svc.list(SCOPE)).map((p) => p.id)).toEqual([OWNED_ID]);
+      warn.mockRestore();
+    });
+
+    it('refuses to remove or toggle a plugin only Claude installed', async () => {
+      cache.seedMeta(SCOPE, { version: 2, plugins: [] });
+      settings.seedSettings(SCOPE, { extraKnownMarketplaces: {}, enabledPlugins: {} });
+      const { svc } = withRegistry([descriptor]);
+      await expect(svc.remove(NATIVE_ID, SCOPE)).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+      await expect(svc.toggle(NATIVE_ID, SCOPE, false)).rejects.toBeInstanceOf(OperationNotAllowedForOriginError);
+      expect(installer.uninstalled).toEqual([]);
+    });
+  });
+
   // ── get ─────────────────────────────────────────────────────────────────────
 
   describe('get', () => {

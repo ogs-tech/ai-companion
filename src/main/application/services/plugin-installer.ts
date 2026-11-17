@@ -22,6 +22,10 @@ export type PluginSummary = {
   source?: PluginSource;
   installedRef?: PluginRef;
   marketplaceId?: string;
+  /** Set when Claude Code's own `/plugin` also installed it: `claude` = only Claude, `both` = app + Claude. */
+  installedBy?: 'claude' | 'both';
+  /** Version Claude Code installed (from `installed_plugins.json`). */
+  version?: string;
 };
 
 type InstallInput = {

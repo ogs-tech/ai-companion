@@ -86,7 +86,7 @@ A harness is the program that turns a language model into an agent working on yo
 
 When something looks out of sync or broken.
 
-- [Diagnose and reset](product/troubleshooting/diagnose-and-reset.md) — Diagnóstico, backups, factory reset.
+- [Diagnose and reset](product/troubleshooting/diagnose-and-reset.md) — Diagnóstico, backups, starting over by hand.
 
 ### [About](product/about/index.md)
 

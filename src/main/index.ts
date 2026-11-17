@@ -339,6 +339,11 @@ async function wireIpc(): Promise<void> {
     clock,
   });
 
+  const claudeCodePluginReader = new ClaudeCodePluginReader({
+    registryPath: join(homedir(), '.claude', 'plugins', 'installed_plugins.json'),
+    fs: nodeFsAdapter,
+  });
+
   const pluginService = new PluginService({
     installer: pluginInstaller,
     author: pluginAuthor,
@@ -349,11 +354,7 @@ async function wireIpc(): Promise<void> {
     parser: manifestParser,
     marketplaceParser,
     fs: nodeFsAdapter,
-  });
-
-  const claudeCodePluginReader = new ClaudeCodePluginReader({
-    registryPath: join(homedir(), '.claude', 'plugins', 'installed_plugins.json'),
-    fs: nodeFsAdapter,
+    claudeRegistry: claudeCodePluginReader,
   });
 
   const pluginProvenance = new PluginProvenanceService({
@@ -446,7 +447,6 @@ async function wireIpc(): Promise<void> {
     pluginProvenance,
     pluginService,
     claudeRuntimeReader,
-    claudeSettingsFile,
     // The CLI's own transcript directory — resolved here, like every other
     // `~/.claude` path, so the adapter stays a pure reader of a given folder.
     sessionTranscriptPort: new CompositeTranscriptAdapter({
@@ -735,11 +735,9 @@ async function wireIpc(): Promise<void> {
     detectionService: workspaceScoped.detectionService,
     openWithService,
     notificationPort,
-    workspaceTeardownService: workspaceScoped.workspaceTeardownService,
     launchConfigService: workspaceScoped.launchConfigService,
     terminalService: workspaceScoped.terminalService,
     openEditorsService: workspaceScoped.openEditorsService,
-    appQuit: () => app.quit(),
     desktop: {
       logger,
       setWindowTitle: desktopShell.setWindowTitle,

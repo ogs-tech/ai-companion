@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { InMemoryFileSystem } from '../../../../src/main/infrastructure/filesystem/in-memory-filesystem.js';
 import {
   collectPluginEntities,
@@ -28,6 +28,45 @@ describe('collectPluginEntities', () => {
     expect(skills).toHaveLength(1);
     expect(skills[0]?.urn).toBe('urn:skill:demo');
     expect(skills[0]?.source).toEqual({ kind: 'plugin', pluginId: 'p1', provenance: 'workspace-managed' });
+  });
+});
+
+describe('collectPluginEntities with plugin commands', () => {
+  const COMMAND_MD = ['---', 'description: Guided feature development', 'argument-hint: Optional feature description', '---', '', '# Feature Development', ''].join('\n');
+
+  const commandDeps = (files: Record<string, string>): EntityPluginDeps => {
+    const fs = new InMemoryFileSystem();
+    for (const [path, body] of Object.entries(files)) fs.createFile(path, body);
+    const provenance = {
+      scan: async () => [
+        { type: 'command', name: 'feature-dev', dir: '/plugins/p1', pluginId: 'p1', provenance: 'claude-code' },
+        { type: 'command', name: 'broken', dir: '/plugins/p1', pluginId: 'p1', provenance: 'claude-code' },
+        { type: 'skill', name: 'demo', dir: '/plugins/p1', pluginId: 'p1', provenance: 'claude-code' },
+      ],
+    } as unknown as PluginProvenanceService;
+    return { provenance, fs };
+  };
+  const spec = { kind: 'skill', type: 'command', explicitOnly: true, relPath: (n: string) => `commands/${n}.md` } as const;
+
+  it('reads commands/*.md as read-only, explicit-only plugin skills', async () => {
+    const deps = commandDeps({ '/plugins/p1/commands/feature-dev.md': COMMAND_MD });
+    const skills = (await collectPluginEntities(deps, spec, 'personal')) as Skill[];
+    expect(skills.map((s) => s.name)).toEqual(['feature-dev']);
+    expect(skills[0]).toMatchObject({
+      urn: 'urn:skill:feature-dev',
+      explicitOnly: true,
+      description: 'Guided feature development',
+      source: { kind: 'plugin', pluginId: 'p1', provenance: 'claude-code' },
+    });
+  });
+
+  it('skips (and logs) an unreadable command instead of breaking the list', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const deps = commandDeps({ '/plugins/p1/commands/feature-dev.md': COMMAND_MD });
+    const skills = await collectPluginEntities(deps, spec, 'personal');
+    expect(skills).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[plugin-entities]'), '/plugins/p1/commands/broken.md', expect.anything());
+    warn.mockRestore();
   });
 });
 

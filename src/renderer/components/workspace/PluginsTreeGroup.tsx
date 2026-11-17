@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
-import { Menu, MenuItem, Tooltip } from '@mui/material';
+import { Menu, MenuItem, Tooltip, Typography } from '@mui/material';
 import { Plug, Puzzle, Terminal, Webhook, type LucideIcon } from 'lucide-react';
 import type { ChannelId } from '../../../shared/channel.js';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
@@ -119,12 +119,17 @@ export function PluginsTreeGroup({ isProjectContext, showGlobal, onlyGlobal = fa
               item={item}
               depth={depth}
               muted={!item.enabled || global}
-              tooltip={`${item.origin === 'owned' ? 'Próprio' : 'Importado'}${ref ? ` · ${ref}` : ''}${item.enabled ? '' : ' · desabilitado'}`}
+              tooltip={pluginTooltip(item, ref)}
               channels={health.get(pluginUrn(item.id)) ?? []}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setRowMenu({ anchorPosition: { top: e.clientY, left: e.clientX }, item });
-              }}
+              // A plugin only Claude installed is read-only here: the app has no registry entry to act on.
+              {...(item.installedBy === 'claude'
+                ? {}
+                : {
+                    onContextMenu: (e: React.MouseEvent) => {
+                      e.preventDefault();
+                      setRowMenu({ anchorPosition: { top: e.clientY, left: e.clientX }, item });
+                    },
+                  })}
             />
           );
         })}
@@ -225,7 +230,20 @@ interface PluginFolderProps {
   muted: boolean;
   tooltip: string;
   channels: readonly ChannelId[];
-  onContextMenu: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}
+
+const INSTALLED_BY_LABEL = { claude: 'Claude', both: 'App + Claude' } as const;
+
+function pluginTooltip(item: PluginListItemIpc, ref: string | undefined): string {
+  const parts = [
+    item.installedBy === 'claude' ? 'Instalado pelo Claude' : item.origin === 'owned' ? 'Próprio' : 'Importado',
+    ...(item.version !== undefined ? [`Claude ${item.version}`] : []),
+    ...(ref ? [ref] : []),
+    ...(item.enabled ? [] : ['desabilitado']),
+    ...(item.drift?.details !== undefined ? [item.drift.details] : []),
+  ];
+  return parts.join(' · ');
 }
 
 /** A plugin as a droplist: the row toggles, and what the plugin provides lists inline underneath. */
@@ -257,8 +275,17 @@ function PluginFolder({ item, depth, muted, tooltip, channels, onContextMenu }: 
         muted={muted}
         onClick={() => setOpen((v) => !v)}
         primary={<Tooltip title={tooltip}><span>{item.id}</span></Tooltip>}
-        badge={<ChannelWarning urn={pluginUrn(item.id)} channels={channels} />}
-        onContextMenu={onContextMenu}
+        badge={
+          <>
+            {item.installedBy !== undefined && (
+              <Typography component="span" data-testid={`tree-plugin-installed-by-${item.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+                {INSTALLED_BY_LABEL[item.installedBy]}
+              </Typography>
+            )}
+            <ChannelWarning urn={pluginUrn(item.id)} channels={channels} />
+          </>
+        }
+        {...(onContextMenu ? { onContextMenu } : {})}
       />
       {open &&
         provided.map((p) => (

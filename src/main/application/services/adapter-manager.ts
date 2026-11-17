@@ -216,22 +216,6 @@ export class AdapterManager {
     return { removed, skipped, errors };
   }
 
-  /**
-   * Removes every app-created symlink (those pointing into the workspace) across
-   * all registered adapters, aggregating the per-adapter results. Used by the
-   * factory-reset flow — it never touches symlinks pointing elsewhere or real files.
-   */
-  async removeAllAdapterSymlinks(): Promise<RemoveAdapterResult> {
-    const aggregate: RemoveAdapterResult = { removed: 0, skipped: 0, errors: [] };
-    for (const adapterId of this.deps.adapters.keys()) {
-      const result = await this.removeAdapterSymlinks(adapterId);
-      aggregate.removed += result.removed;
-      aggregate.skipped += result.skipped;
-      aggregate.errors.push(...result.errors);
-    }
-    return aggregate;
-  }
-
   /** Marker-guarded removal of every generated (write) file for one adapter. */
   async removeAdapterGeneratedFiles(adapterId: string): Promise<RemoveAdapterResult> {
     const adapter = this.deps.adapters.get(adapterId);
@@ -292,18 +276,6 @@ export class AdapterManager {
       }
     }
     return { removed, skipped, errors };
-  }
-
-  /** Removes every app-generated file across all adapters (factory reset). */
-  async removeAllGeneratedFiles(): Promise<RemoveAdapterResult> {
-    const aggregate: RemoveAdapterResult = { removed: 0, skipped: 0, errors: [] };
-    for (const adapterId of this.deps.adapters.keys()) {
-      const result = await this.removeAdapterGeneratedFiles(adapterId);
-      aggregate.removed += result.removed;
-      aggregate.skipped += result.skipped;
-      aggregate.errors.push(...result.errors);
-    }
-    return aggregate;
   }
 
   async countDestinations(adapterId: string): Promise<number> {

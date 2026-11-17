@@ -17,25 +17,30 @@ export interface EntityPluginDeps {
  * as a canonical {@link Entity} via {@link parseEntityFile}. Each entity is
  * read from the dir resolved by the provenance scan, so the source registry
  * is transparent here. Files that are unreadable or unparseable are skipped
- * silently — a single bad plugin entity must not break the whole read-only
+ * (and logged) — a single bad plugin entity must not break the whole read-only
  * list (plugin files are owned by their plugin's lifecycle).
+ *
+ * `spec.type` reads another provenance ref type as `spec.kind` (plugin `commands/*.md`
+ * become Skills); `spec.explicitOnly` marks them slash-command-only, as a command file
+ * carries no `disable-model-invocation` of its own.
  */
 export async function collectPluginEntities(
   deps: EntityPluginDeps,
-  spec: { kind: 'skill' | 'agent'; relPath: (name: string) => string },
+  spec: { kind: 'skill' | 'agent'; type?: 'skill' | 'agent' | 'command'; explicitOnly?: boolean; relPath: (name: string) => string },
   scope: Scope,
 ): Promise<Entity[]> {
   const refs = await deps.provenance.scan(scope);
   const out: Entity[] = [];
   for (const ref of refs) {
-    if (ref.type !== spec.kind) continue;
+    if (ref.type !== (spec.type ?? spec.kind)) continue;
     const file = join(ref.dir, spec.relPath(ref.name));
     try {
       const raw = await deps.fs.readFile(file);
       const source: EntitySource = { kind: 'plugin', pluginId: ref.pluginId, provenance: ref.provenance };
-      out.push(parseEntityFile({ kind: spec.kind, name: ref.name, raw, source }));
-    } catch {
-      // one bad file is skipped silently, mirroring the previous helper
+      const entity = parseEntityFile({ kind: spec.kind, name: ref.name, raw, source });
+      out.push(spec.explicitOnly === true ? ({ ...entity, explicitOnly: true } as Entity) : entity);
+    } catch (err) {
+      console.warn('[plugin-entities] skipped unreadable plugin file', file, err);
     }
   }
   return out;

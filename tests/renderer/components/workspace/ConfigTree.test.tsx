@@ -17,13 +17,6 @@ describe('config pages registry', () => {
     expect(app?.pages.map((p) => p.id)).toEqual(['editor', 'git-ignore', 'language', 'github']);
   });
 
-  it('hides the danger zone outside dev builds', () => {
-    window.api = { ...(window.api ?? {}), isDev: false } as typeof window.api;
-    expect(configGroups().some((g) => g.id === 'maintenance')).toBe(false);
-    window.api = { ...(window.api ?? {}), isDev: true } as typeof window.api;
-    expect(findConfigPage('danger')).toBeDefined();
-  });
-
   it('round-trips tab ids and resolves the default page', () => {
     expect(configPageOfTabId(configTabId('language'))).toBe('language');
     expect(findConfigPage(DEFAULT_CONFIG_PAGE)).toBeDefined();

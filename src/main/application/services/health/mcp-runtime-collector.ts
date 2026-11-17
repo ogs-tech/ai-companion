@@ -1,5 +1,6 @@
 import type { HealthCheck, Severity } from '../../../../shared/health.js';
 import { entityUrn } from '../../../../shared/entity.js';
+import { isClaudeManagedMcp } from '../../../../shared/mcp.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type {
   ClaudeRuntimePort,
@@ -43,13 +44,19 @@ export class McpRuntimeCollector implements HealthCollector {
     for (const name of names) {
       const summary = byServer.get(name);
       const state: McpLogState = summary?.state ?? 'ok';
-      const severity = SEVERITY[state];
+      const managed = isClaudeManagedMcp(name);
+      // Claude-managed servers (`ide`, `claude-ai-*`) fail for reasons the user cannot fix from
+      // here (no IDE attached, connector offline): report them as informational, not a problem.
+      const severity: Severity = managed ? 'ok' : SEVERITY[state];
       checks.push({
         id: `mcp-runtime:${name}`,
         category: 'mcp-runtime',
         severity,
-        title:
-          severity === 'ok' ? `MCP "${name}" healthy` : `MCP "${name}" runtime problem`,
+        title: managed
+          ? `MCP "${name}" managed by Claude`
+          : severity === 'ok'
+            ? `MCP "${name}" healthy`
+            : `MCP "${name}" runtime problem`,
         target: name,
         entityUrn: entityUrn('mcp', name),
         channel: 'claude',

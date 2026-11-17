@@ -191,7 +191,7 @@ queue, so overlapping requests can't interleave. The rebuilt graph holds the `Sc
 (Global's `FsEntityRepository`, built once at boot and shared by every graph, plus the open workspace's),
 `SymlinkManager`, `FileMaterializer`, `AdapterManager`, `EntityService`, `SkillService`, `AgentService`,
 `InstructionService`, `SessionService`, `SessionHistoryService`, `HealthService`,
-`WorkspaceTeardownService`, `EntityWatchService`, `LaunchConfigService`/`TerminalService`,
+`EntityWatchService`, `LaunchConfigService`/`TerminalService`,
 `OpenEditorsService` and `GitService`. It is rebuilt on going home too: at Início it still serves Global's entities, sessions, health
 and adapters, while git and `terminal.*` fail `validation`, `launchConfig.list` returns `null`, and the file browser
 (`workspace.listDir`/`readFile`/`writeFile`/`resolvePath`, `openWith.*`) fails `validation`.
@@ -210,9 +210,7 @@ built by `workspaceIndexMarkerPath()` in `src/shared/brand-paths.ts`, content in
 on every activation, so a workspace that predates the marker (or a future bootstrap addition) self-heals.
 Not routed through `AdapterManager` — a Workspace isn't an Entity — so the marker is invisible to
 `syncAll()`/health drift checks. The project-era `<project>/.air-ide/index.md` **symlinks** no longer
-exist (the migration removes any that pointed into a data dir). Factory reset (`WorkspaceTeardownService.restore()`)
-removes the app's adapter destinations, then deletes Global's data dir only — each workspace's own
-`.air-ide` stays in its folder.
+exist (the migration removes any that pointed into a data dir). There is no in-app factory reset; cleanup is manual — see [On-disk layout](on-disk-layout.md#removing-the-apps-footprint-by-hand).
 
 `resolveScopePath(entity, { workspaceService })` (`src/main/application/resolve-scope-path.ts`) maps a
 `workspace`-scoped entity's `scopeId` to that workspace's `rootPath` at the point of use — the Claude/Cursor

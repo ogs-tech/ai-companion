@@ -70,15 +70,6 @@ describe('AdapterManager generated-file lifecycle', () => {
     expect(await fs.pathExists(rulePath)).toBe(false);
   });
 
-  it('removeAllGeneratedFiles clears every adapter', async () => {
-    const { manager, fs } = await setup();
-    await manager.syncAll({ adapterId: 'cursor' });
-    const result = await manager.removeAllGeneratedFiles();
-    expect(result.removed).toBe(2);
-    expect(await fs.pathExists(manifestPath)).toBe(false);
-    expect(await fs.pathExists(rulePath)).toBe(false);
-  });
-
   it('removeAdapterGeneratedFiles isolates a per-entity resolveEntityDestinations failure without aborting removal for other entities', async () => {
     const settingsRepo = new InMemorySettingsRepository();
     await settingsRepo.save(settings);

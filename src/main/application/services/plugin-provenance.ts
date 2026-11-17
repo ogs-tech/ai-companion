@@ -97,8 +97,8 @@ export class PluginProvenanceService {
           provenance: 'workspace-managed',
         });
       }
-    } catch {
-      // No workspace meta — skip this tier.
+    } catch (err) {
+      console.warn('[PluginProvenance] cannot read plugin registry; skipping workspace-managed plugins', err);
     }
 
     // Tier 2 — Claude Code plugins (registry scope "user" → app personal).
@@ -107,8 +107,8 @@ export class PluginProvenanceService {
         for (const d of await claudeCodeRegistry.list()) {
           roots.push({ pluginId: d.pluginId, dir: d.installPath, provenance: 'claude-code' });
         }
-      } catch {
-        // Registry unavailable — skip this tier.
+      } catch (err) {
+        console.warn('[PluginProvenance] Claude Code registry unavailable; skipping its plugins', err);
       }
     }
 
@@ -150,7 +150,8 @@ async function scanDir(
   try {
     if (!(await fs.pathExists(dir))) return;
     for (const entry of await fs.readdir(dir)) onEntry(entry);
-  } catch {
-    // Dir removed since meta was written, or unreadable — skip.
+  } catch (err) {
+    // Dir removed since the registry was written, or unreadable — skip it, but say so.
+    console.warn('[PluginProvenance] cannot scan plugin dir', dir, err);
   }
 }
