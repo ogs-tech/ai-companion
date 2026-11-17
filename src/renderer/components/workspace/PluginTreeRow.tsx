@@ -5,7 +5,13 @@ import { Puzzle } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import { pluginsQueryKey, useRemovePlugin, useTogglePlugin, useUpdatePlugin, type PluginScope } from '../../hooks/use-plugins.js';
+import {
+  pluginsQueryKey,
+  useRemovePlugin,
+  useTogglePlugin,
+  useUpdatePlugin,
+  type PluginScope,
+} from '../../hooks/use-plugins.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
@@ -13,7 +19,12 @@ import type { PluginListItemIpc, PluginRefIpc } from '../../../shared/plugin-ipc
 import { invalidateHealth } from '../../hooks/use-health-report.js';
 import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 
-type PublishState = { pluginId: string; scope: PluginScope; currentVersion?: string; hasPublishInfo: boolean };
+type PublishState = {
+  pluginId: string;
+  scope: PluginScope;
+  currentVersion?: string;
+  hasPublishInfo: boolean;
+};
 
 const INSTALLED_BY_LABEL = { claude: 'Claude', both: 'App + Claude' } as const;
 
@@ -23,7 +34,11 @@ function errorMessage(err: unknown): string {
 
 function pluginTooltip(item: PluginListItemIpc, ref: PluginRefIpc | undefined): string {
   const parts = [
-    item.installedBy === 'claude' ? 'Instalado pelo Claude' : item.origin === 'owned' ? 'Próprio' : 'Importado',
+    item.installedBy === 'claude'
+      ? 'Instalado pelo Claude'
+      : item.origin === 'owned'
+        ? 'Próprio'
+        : 'Importado',
     ...(item.version !== undefined ? [`Claude ${item.version}`] : []),
     ...(ref?.value ? [ref.value] : []),
     ...(item.enabled ? [] : ['desabilitado']),
@@ -32,11 +47,25 @@ function pluginTooltip(item: PluginListItemIpc, ref: PluginRefIpc | undefined): 
   return parts.join(' · ');
 }
 
+interface PluginTreeRowProps {
+  item: TreeItem;
+  depth?: number;
+  /** Renders one item the plugin ships (a skill, agent, MCP server or hook row) one level deeper. */
+  renderChild?: (child: TreeItem, depth: number) => React.ReactNode;
+  /** Keeps the plugin open regardless of the user's choice (an active search or chip shows its matches). */
+  forceOpen?: boolean;
+}
+
 /**
- * One plugin as an origin, not a kind: `<id> · N itens` and `ativo`/`desativado`, never expanded — what it provides
- * is listed in the type groups, tagged with it. Menu: Atualizar · Ativar/Desativar · (Publicar) · Remover.
+ * One plugin as a closed folder with `ativo`/`desativado`: clicking it lists what it ships underneath, one level
+ * deeper — those items are listed only here, never in the kind groups. Menu: Atualizar · Ativar/Desativar · (Publicar) · Remover.
  */
-export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: number }): React.ReactElement | null {
+export function PluginTreeRow({
+  item,
+  depth = 1,
+  renderChild,
+  forceOpen = false,
+}: PluginTreeRowProps): React.ReactElement | null {
   const qc = useQueryClient();
   const toggle = useTogglePlugin();
   const update = useUpdatePlugin();
@@ -45,12 +74,16 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
   const [menuAt, setMenuAt] = useState<{ top: number; left: number } | null>(null);
   const [publishing, setPublishing] = useState<PublishState | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [userOpen, setUserOpen] = useState(false);
   if (item.entity.kind !== 'plugin') return null;
   const plugin = item.entity.value;
-  const itemCount = item.entity.itemCount ?? 0;
+  const children = item.entity.items;
+  const expandable = children.length > 0;
+  const open = expandable && (forceOpen || userOpen);
 
   const closeMenu = (): void => setMenuAt(null);
-  const onError = (err: unknown): void => setToast({ variant: 'error', message: errorMessage(err) });
+  const onError = (err: unknown): void =>
+    setToast({ variant: 'error', message: errorMessage(err) });
   const handleRemove = (): void => {
     closeMenu();
     requestDelete({
@@ -73,21 +106,37 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
         depth={depth}
         mono
         muted={rowMuted(item)}
+        {...(expandable
+          ? {
+              chevron: open ? ('expanded' as const) : ('collapsed' as const),
+              onClick: () => setUserOpen((v) => !v),
+            }
+          : {})}
         primary={
           <Tooltip title={pluginTooltip(plugin, plugin.installedRef)}>
             <span>
-              <RowLabel item={item} label={`${plugin.id} · ${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`} />
+              <RowLabel item={item} />
             </span>
           </Tooltip>
         }
         badge={
           <>
             {plugin.installedBy !== undefined && (
-              <Typography component="span" data-testid={`tree-plugin-installed-by-${plugin.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+              <Typography
+                component="span"
+                data-testid={`tree-plugin-installed-by-${plugin.id}`}
+                noWrap
+                sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}
+              >
                 {INSTALLED_BY_LABEL[plugin.installedBy]}
               </Typography>
             )}
-            <Typography component="span" data-testid={`tree-plugin-state-${plugin.id}`} noWrap sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}>
+            <Typography
+              component="span"
+              data-testid={`tree-plugin-state-${plugin.id}`}
+              noWrap
+              sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}
+            >
               {plugin.enabled ? 'ativo' : 'desativado'}
             </Typography>
             {/* Errors of what it provides roll up here; "desativado" is already said above. */}
@@ -104,8 +153,14 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
               },
             })}
       />
+      {open && renderChild && children.map((child) => renderChild(child, depth + 1))}
 
-      <Menu anchorReference="anchorPosition" {...(menuAt ? { anchorPosition: menuAt } : {})} open={menuAt !== null} onClose={closeMenu}>
+      <Menu
+        anchorReference="anchorPosition"
+        {...(menuAt ? { anchorPosition: menuAt } : {})}
+        open={menuAt !== null}
+        onClose={closeMenu}
+      >
         {plugin.origin === 'imported' && plugin.installedRef?.kind === 'branch' && (
           <MenuItem
             onClick={() => {
@@ -120,7 +175,10 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
           data-testid={`tree-plugin-toggle-${plugin.id}`}
           onClick={() => {
             closeMenu();
-            toggle.mutate({ id: plugin.id, scope: plugin.scope, enabled: !plugin.enabled }, { onError });
+            toggle.mutate(
+              { id: plugin.id, scope: plugin.scope, enabled: !plugin.enabled },
+              { onError },
+            );
           }}
         >
           {plugin.enabled ? 'Desativar' : 'Ativar'}
@@ -133,7 +191,9 @@ export function PluginTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: num
                 pluginId: plugin.id,
                 scope: plugin.scope,
                 hasPublishInfo: Boolean(plugin.publishInfo),
-                ...(plugin.publishInfo?.lastPublishedVersion ? { currentVersion: plugin.publishInfo.lastPublishedVersion } : {}),
+                ...(plugin.publishInfo?.lastPublishedVersion
+                  ? { currentVersion: plugin.publishInfo.lastPublishedVersion }
+                  : {}),
               });
             }}
           >

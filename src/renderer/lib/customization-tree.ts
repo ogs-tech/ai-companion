@@ -1,7 +1,14 @@
 import { CHANNEL_IDS, type ChannelId } from '../../shared/channel.js';
 import { CUSTOMIZATION_KINDS } from '../../shared/customization-kind.js';
 import type { DetectedEntity } from '../../shared/detected.js';
-import { entityUrn, isWorkspaceInstruction, type Agent, type Entity, type Instruction, type Skill } from '../../shared/entity.js';
+import {
+  entityUrn,
+  isWorkspaceInstruction,
+  type Agent,
+  type Entity,
+  type Instruction,
+  type Skill,
+} from '../../shared/entity.js';
 import type { McpServer } from '../../shared/mcp.js';
 import type { PluginListItemIpc } from '../../shared/plugin-ipc-types.js';
 import type { Hook } from '../hooks/use-hooks.js';
@@ -26,13 +33,19 @@ export type TreeEntity =
    * `value` undefined = a placeholder row: the level has no saved instruction yet, so the row is the
    * place to create one (and to apply a `detected` file found there). Placeholders are never counted.
    */
-  | { kind: 'instruction'; value: Instruction | undefined; placement: InstructionPlacement; folder?: string; detected?: DetectedEntity }
+  | {
+      kind: 'instruction';
+      value: Instruction | undefined;
+      placement: InstructionPlacement;
+      folder?: string;
+      detected?: DetectedEntity;
+    }
   | { kind: 'skill'; value: Skill }
   | { kind: 'agent'; value: Agent }
   | { kind: 'mcp'; value: McpServer }
   | { kind: 'hook'; value: Hook }
-  /** A plugin is an origin, not a kind: one row, not expandable; its items sit in their kind groups. */
-  | { kind: 'plugin'; value: PluginListItemIpc; itemCount?: number }
+  /** A plugin row expands to what it ships (`items`, search- and chip-filtered); those are never listed in the kind groups. */
+  | { kind: 'plugin'; value: PluginListItemIpc; items: TreeItem[] }
   /** A detected skill/agent; detected MCP servers and hooks keep their own kind. */
   | { kind: 'detected'; value: DetectedEntity };
 
@@ -45,8 +58,6 @@ export interface TreeItem {
   folderAlias?: string;
   /** From `customization.status`; absent when nothing was checked yet (a placeholder, no channel on, still loading). */
   status?: ItemStatus;
-  /** Set on an item a plugin ships: the plugin's id, shown as a tag. Such items are read-only. */
-  pluginTag?: string;
   entity: TreeEntity;
 }
 
@@ -123,8 +134,13 @@ const DISABLED_STATUS: ItemStatus = { status: 'draft', reason: 'disabled', chann
 
 const GROUPS: ReadonlyArray<{ id: TreeGroupId; label: string }> = [
   ...CUSTOMIZATION_KINDS.map((k) => ({ id: k.kind, label: k.label })),
-  { id: 'plugin', label: 'Plugins (origem)' },
+  { id: 'plugin', label: 'Plugins' },
 ];
+
+const GROUP_ORDER = Object.fromEntries(GROUPS.map((g, i) => [g.id, i])) as Record<
+  TreeGroupId,
+  number
+>;
 
 const ORIGIN_ORDER: Record<TreeOrigin, number> = { local: 0, global: 1, detected: 2 };
 
@@ -141,12 +157,17 @@ interface Candidate {
   placeholder?: { alwaysMatch: boolean };
   /** Keeps the row's position instead of sorting it by name (instruction rows follow their level's order). */
   order?: number;
+  /** Set on an item a plugin ships: the plugin's id. It is listed under that plugin's row, not in its kind group. */
+  parent?: string;
 }
 
 /** A server configured in the open workspace's own folder (`matchPath`); everything is local without one (Início). */
 export function isMcpLocal(server: McpServer, matchPath: string | undefined): boolean {
   if (matchPath === undefined) return true;
-  const projectScoped = server.scope === 'project-local' || server.scope === 'project-shared' || server.scope === 'detected';
+  const projectScoped =
+    server.scope === 'project-local' ||
+    server.scope === 'project-shared' ||
+    server.scope === 'detected';
   return projectScoped && server.repoPath === matchPath;
 }
 
@@ -162,13 +183,24 @@ function aliasOf(folder: string | undefined, options: TreeOptions): string | und
 }
 
 function makeItem(
-  fields: { identity: string; urn: string; name: string; origin: TreeOrigin; folder?: string | undefined; disabled?: boolean; pluginTag?: string; entity: TreeEntity },
+  fields: {
+    identity: string;
+    urn: string;
+    name: string;
+    origin: TreeOrigin;
+    folder?: string | undefined;
+    disabled?: boolean;
+    entity: TreeEntity;
+  },
   input: TreeInput,
   options: TreeOptions,
 ): TreeItem {
   const folderAlias = aliasOf(fields.folder, options);
   // The lists already say what is off or detected, so those rows read right before the status report arrives.
-  const status = fields.disabled === true ? DISABLED_STATUS : (input.status[fields.urn] ?? (fields.origin === 'detected' ? DETECTED_STATUS : undefined));
+  const status =
+    fields.disabled === true
+      ? DISABLED_STATUS
+      : (input.status[fields.urn] ?? (fields.origin === 'detected' ? DETECTED_STATUS : undefined));
   return {
     key: `${fields.origin}:${folderAlias ?? ''}:${fields.identity}`,
     urn: fields.urn,
@@ -176,15 +208,22 @@ function makeItem(
     origin: fields.origin,
     ...(folderAlias !== undefined ? { folderAlias } : {}),
     ...(status !== undefined ? { status } : {}),
-    ...(fields.pluginTag !== undefined ? { pluginTag: fields.pluginTag } : {}),
     entity: fields.entity,
   };
 }
 
 function instructionCandidates(input: TreeInput, options: TreeOptions): Candidate[] {
   const out: Candidate[] = [];
-  const detectedInstruction = (scope: 'personal' | 'workspace', folder: string | undefined): DetectedEntity | undefined =>
-    input.detected.find((d) => d.kind === 'instruction' && d.scope === scope && (scope === 'personal' || d.folder === folder));
+  const detectedInstruction = (
+    scope: 'personal' | 'workspace',
+    folder: string | undefined,
+  ): DetectedEntity | undefined =>
+    input.detected.find(
+      (d) =>
+        d.kind === 'instruction' &&
+        d.scope === scope &&
+        (scope === 'personal' || d.folder === folder),
+    );
   const row = (
     value: Instruction | undefined,
     placement: InstructionPlacement,
@@ -204,26 +243,45 @@ function instructionCandidates(input: TreeInput, options: TreeOptions): Candidat
     };
     const identity = value?.urn ?? `instruction-slot:${placement}:${folder ?? ''}`;
     return {
-      item: makeItem({ identity, urn: value?.urn ?? identity, name, origin, folder, entity }, input, options),
+      item: makeItem(
+        { identity, urn: value?.urn ?? identity, name, origin, folder, entity },
+        input,
+        options,
+      ),
       group: 'instruction',
-      haystack: placement === 'personal' ? ['instructions', value?.name, value?.description] : [value?.name, value?.description],
+      haystack:
+        placement === 'personal'
+          ? ['instructions', value?.name, value?.description]
+          : [value?.name, value?.description],
       ...(value === undefined ? { placeholder: { alwaysMatch: placement === 'personal' } } : {}),
       order,
     };
   };
 
   if (options.isHome) {
-    out.push(row(input.personalInstruction ?? undefined, 'personal', 'local', INSTRUCTION_LABEL, undefined, 0));
+    out.push(
+      row(
+        input.personalInstruction ?? undefined,
+        'personal',
+        'local',
+        INSTRUCTION_LABEL,
+        undefined,
+        0,
+      ),
+    );
     return out;
   }
   const local = options.localScope;
   if (local !== undefined) {
-    const own = input.instructions.filter((i) => isWorkspaceInstruction(i) && i.scopeId === local.scopeId);
+    const own = input.instructions.filter(
+      (i) => isWorkspaceInstruction(i) && i.scopeId === local.scopeId,
+    );
     const wide = own.filter((i) => i.folder === undefined || !options.multi);
     const [primary, ...extras] = [...wide].sort((a, b) => a.name.localeCompare(b.name));
     let order = 0;
     out.push(row(primary, 'workspace', 'local', INSTRUCTION_LABEL, undefined, order++));
-    for (const extra of extras) out.push(row(extra, 'workspace', 'local', extra.name, undefined, order++));
+    for (const extra of extras)
+      out.push(row(extra, 'workspace', 'local', extra.name, undefined, order++));
     if (options.multi) {
       for (const folder of options.folders) {
         const saved = own.find((i) => i.folder === folder);
@@ -234,32 +292,49 @@ function instructionCandidates(input: TreeInput, options: TreeOptions): Candidat
   // Inside a workspace Global's singleton is a read-only row, so only a saved one shows.
   if (input.personalInstruction != null) {
     const origin: TreeOrigin = local === undefined ? 'local' : 'global';
-    out.push(row(input.personalInstruction, 'personal', origin, INSTRUCTION_LABEL, undefined, 1000));
+    out.push(
+      row(input.personalInstruction, 'personal', origin, INSTRUCTION_LABEL, undefined, 1000),
+    );
   }
   return out;
 }
 
 function pluginOrigin(plugin: PluginListItemIpc | undefined, options: TreeOptions): TreeOrigin {
-  return options.isHome || options.localScope === undefined || plugin?.scope === 'project' ? 'local' : 'global';
+  return options.isHome || options.localScope === undefined || plugin?.scope === 'project'
+    ? 'local'
+    : 'global';
 }
 
 function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   const out: Candidate[] = instructionCandidates(input, options);
   const pluginsById = new Map(input.plugins.map((p) => [p.id, p]));
-  /** A plugin item: tagged, placed where its plugin is, and off (`draft · desativado`) while the plugin is off. */
-  const fromPlugin = (pluginId: string): { pluginTag: string; origin: TreeOrigin; disabled: boolean } => {
+  /** A plugin item: placed where its plugin is, and off (`draft · desativado`) while the plugin is off. */
+  const fromPlugin = (pluginId: string): { origin: TreeOrigin; disabled: boolean } => {
     const plugin = pluginsById.get(pluginId);
-    return { pluginTag: pluginId, origin: pluginOrigin(plugin, options), disabled: plugin?.enabled === false };
+    return { origin: pluginOrigin(plugin, options), disabled: plugin?.enabled === false };
   };
+  /** Nests a plugin's item under its row; one whose plugin is not listed stays in its kind group rather than vanish. */
+  const parentOf = (
+    source: Entity['source'] | McpServer['source'] | Hook['source'],
+  ): { parent: string } | Record<string, never> =>
+    source.kind === 'plugin' && pluginsById.has(source.pluginId) ? { parent: source.pluginId } : {};
 
   const entityRows = (kind: 'skill' | 'agent', list: ReadonlyArray<Skill | Agent>): void => {
     for (const value of list) {
       const urn = entityUrn(kind, value.name);
       const entity = (kind === 'skill' ? { kind, value } : { kind, value }) as TreeEntity;
-      const plugin = value.source.kind === 'plugin' ? fromPlugin(value.source.pluginId) : { origin: entityOrigin(value, options) };
+      const plugin =
+        value.source.kind === 'plugin'
+          ? fromPlugin(value.source.pluginId)
+          : { origin: entityOrigin(value, options) };
       out.push({
-        item: makeItem({ identity: urn, urn, name: value.name, folder: value.folder, entity, ...plugin }, input, options),
+        item: makeItem(
+          { identity: urn, urn, name: value.name, folder: value.folder, entity, ...plugin },
+          input,
+          options,
+        ),
         group: kind,
+        ...parentOf(value.source),
         haystack: [value.name, value.description],
       });
     }
@@ -272,7 +347,14 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
     if ((d.kind !== 'skill' && d.kind !== 'agent') || d.scope !== detectedScope) continue;
     out.push({
       item: makeItem(
-        { identity: `detected:${d.id}`, urn: entityUrn(d.kind, d.name), name: d.name, origin: 'detected', folder: d.folder, entity: { kind: 'detected', value: d } },
+        {
+          identity: `detected:${d.id}`,
+          urn: entityUrn(d.kind, d.name),
+          name: d.name,
+          origin: 'detected',
+          folder: d.folder,
+          entity: { kind: 'detected', value: d },
+        },
         input,
         options,
       ),
@@ -282,27 +364,43 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   }
 
   for (const server of input.mcps) {
-    const origin: TreeOrigin = server.source.kind === 'detected' ? 'detected' : isMcpLocal(server, options.mcpMatchPath) ? 'local' : 'global';
+    const origin: TreeOrigin =
+      server.source.kind === 'detected'
+        ? 'detected'
+        : isMcpLocal(server, options.mcpMatchPath)
+          ? 'local'
+          : 'global';
     const urn = entityUrn('mcp', server.name);
     // Only the user's own servers can be turned off; a detected one (e.g. a claude.ai connector) reports
     // `enabled: false` just because the app does not manage it.
     const own = { origin, disabled: server.source.kind === 'workspace' && !server.enabled };
     out.push({
       item: makeItem(
-        { identity: `mcp:${server.id}`, urn, name: server.name, entity: { kind: 'mcp', value: server }, ...(server.source.kind === 'plugin' ? fromPlugin(server.source.pluginId) : own) },
+        {
+          identity: `mcp:${server.id}`,
+          urn,
+          name: server.name,
+          entity: { kind: 'mcp', value: server },
+          ...(server.source.kind === 'plugin' ? fromPlugin(server.source.pluginId) : own),
+        },
         input,
         options,
       ),
       group: 'mcp',
+      ...parentOf(server.source),
       haystack: [server.name],
     });
   }
 
   // Hooks have no workspace scoping: all of them are Global's, read from inside a workspace.
-  const hookOrigin: TreeOrigin = options.isHome || options.localScope === undefined ? 'local' : 'global';
+  const hookOrigin: TreeOrigin =
+    options.isHome || options.localScope === undefined ? 'local' : 'global';
   for (const value of input.hooks) {
     const urn = entityUrn('hook', value.id);
-    const own = { origin: value.source.kind === 'detected' ? ('detected' as const) : hookOrigin, disabled: value.enabled === false };
+    const own = {
+      origin: value.source.kind === 'detected' ? ('detected' as const) : hookOrigin,
+      disabled: value.enabled === false,
+    };
     out.push({
       item: makeItem(
         {
@@ -316,18 +414,28 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
         options,
       ),
       group: 'hook',
+      ...parentOf(value.source),
       haystack: [describeHookHandler(value.handler), value.event],
     });
   }
 
-  const itemCounts = new Map<string, number>();
-  for (const c of out) if (c.item.pluginTag !== undefined) itemCounts.set(c.item.pluginTag, (itemCounts.get(c.item.pluginTag) ?? 0) + 1);
   for (const value of input.plugins) {
     // Plugins are not an Entity kind, but the status report names them `urn:plugin:<id>` (children roll up in main).
     const urn = `urn:plugin:${value.id}`;
-    const entity: TreeEntity = { kind: 'plugin', value, itemCount: itemCounts.get(value.id) ?? 0 };
+    const entity: TreeEntity = { kind: 'plugin', value, items: [] };
     out.push({
-      item: makeItem({ identity: urn, urn, name: value.id, origin: pluginOrigin(value, options), disabled: !value.enabled, entity }, input, options),
+      item: makeItem(
+        {
+          identity: urn,
+          urn,
+          name: value.id,
+          origin: pluginOrigin(value, options),
+          disabled: !value.enabled,
+          entity,
+        },
+        input,
+        options,
+      ),
       group: 'plugin',
       haystack: [value.id],
     });
@@ -346,11 +454,14 @@ function totalsOf(items: readonly TreeItem[]): TreeTotals {
   for (const { status } of items) {
     if (status === undefined || status.status === 'installed') continue;
     const counts = byChannel[status.status];
-    for (const [channel, c] of Object.entries(status.channels) as Array<[ChannelId, NonNullable<ItemStatus['channels'][ChannelId]>]>) {
+    for (const [channel, c] of Object.entries(status.channels) as Array<
+      [ChannelId, NonNullable<ItemStatus['channels'][ChannelId]>]
+    >) {
       if (c.status === status.status) counts[channel] = (counts[channel] ?? 0) + 1;
     }
   }
-  const count = (s: CustomizationStatus): number => items.filter((i) => i.status?.status === s).length;
+  const count = (s: CustomizationStatus): number =>
+    items.filter((i) => i.status?.status === s).length;
   return {
     all: items.length,
     global: items.filter((i) => i.origin === 'global').length,
@@ -363,7 +474,10 @@ function totalsOf(items: readonly TreeItem[]): TreeTotals {
 
 function compare(a: Candidate, b: Candidate): number {
   if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
-  return ORIGIN_ORDER[a.item.origin] - ORIGIN_ORDER[b.item.origin] || a.item.name.localeCompare(b.item.name);
+  return (
+    ORIGIN_ORDER[a.item.origin] - ORIGIN_ORDER[b.item.origin] ||
+    a.item.name.localeCompare(b.item.name)
+  );
 }
 
 /**
@@ -374,23 +488,67 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
   const all = candidates(input, options);
   const narrowing = options.query.trim() !== '' || options.filter !== 'all';
   const counted = (c: Candidate): boolean => c.placeholder === undefined;
+  const isPluginRow = (c: Candidate): boolean => c.item.entity.kind === 'plugin';
 
-  const searched = all.filter((c) =>
+  const ownMatch = (c: Candidate): boolean =>
     c.placeholder !== undefined
-      ? options.filter === 'all' && (options.query.trim() === '' || (c.placeholder.alwaysMatch && matchesQuery(options.query, ...c.haystack)))
-      : matchesQuery(options.query, ...c.haystack),
+      ? options.filter === 'all' &&
+        (options.query.trim() === '' ||
+          (c.placeholder.alwaysMatch && matchesQuery(options.query, ...c.haystack)))
+      : matchesQuery(options.query, ...c.haystack);
+  // A plugin that matches brings everything it ships; one that doesn't still shows when something it ships matches.
+  const matchedPlugins = new Set(
+    all.filter((c) => isPluginRow(c) && ownMatch(c)).map((c) => c.item.name),
   );
+  const searchedChildren = all.filter(
+    (c) => c.parent !== undefined && (ownMatch(c) || matchedPlugins.has(c.parent)),
+  );
+  const searchedParents = new Set(searchedChildren.map((c) => c.parent));
+  const searched = [
+    ...all.filter(
+      (c) =>
+        c.parent === undefined &&
+        (ownMatch(c) || (isPluginRow(c) && searchedParents.has(c.item.name))),
+    ),
+    ...searchedChildren,
+  ];
   const totals = totalsOf(searched.filter(counted).map((c) => c.item));
-  const visible = searched.filter((c) => c.placeholder !== undefined || passesFilter(c.item, options.filter, options.channel));
+
+  const childrenOf = new Map<string, Candidate[]>();
+  for (const c of searchedChildren) {
+    if (c.parent === undefined || !passesFilter(c.item, options.filter, options.channel)) continue;
+    childrenOf.set(c.parent, [...(childrenOf.get(c.parent) ?? []), c]);
+  }
+  const visible = searched
+    .filter((c) => c.parent === undefined)
+    .filter(
+      (c) =>
+        c.placeholder !== undefined ||
+        passesFilter(c.item, options.filter, options.channel) ||
+        (isPluginRow(c) && childrenOf.has(c.item.name)),
+    )
+    .map((c): Candidate => {
+      if (c.item.entity.kind !== 'plugin') return c;
+      const items = (childrenOf.get(c.item.name) ?? [])
+        .sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || compare(a, b))
+        .map((k) => k.item);
+      return { ...c, item: { ...c.item, entity: { ...c.item.entity, items } } };
+    });
 
   const section = (id: TreeSectionId, members: readonly Candidate[]): TreeSection => {
     const groups: TreeGroup[] = [];
     for (const { id: groupId, label } of GROUPS) {
       const inGroup = members.filter((c) => c.group === groupId).sort(compare);
       // Skills and Agents stay in the scope's own section as the place to create, while nothing narrows the list.
-      const keepEmpty = id === 'local' && !narrowing && (groupId === 'skill' || groupId === 'agent');
+      const keepEmpty =
+        id === 'local' && !narrowing && (groupId === 'skill' || groupId === 'agent');
       if (inGroup.length === 0 && !keepEmpty) continue;
-      const countedItems = inGroup.filter(counted).map((c) => c.item);
+      // A plugin's nested items count in its group, so the header totals still add up.
+      const countedItems = inGroup
+        .filter(counted)
+        .flatMap((c) =>
+          c.item.entity.kind === 'plugin' ? [c.item, ...c.item.entity.items] : [c.item],
+        );
       groups.push({
         id: groupId,
         label,
@@ -399,10 +557,23 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
         problems: countedItems.filter((i) => i.status?.status === 'error').length,
       });
     }
-    return { id, groups, count: groups.reduce((sum, g) => sum + g.count, 0), problems: groups.reduce((sum, g) => sum + g.problems, 0) };
+    return {
+      id,
+      groups,
+      count: groups.reduce((sum, g) => sum + g.count, 0),
+      problems: groups.reduce((sum, g) => sum + g.problems, 0),
+    };
   };
-  const sections = [section('local', visible.filter((c) => c.item.origin !== 'global'))];
-  const global = section('global', visible.filter((c) => c.item.origin === 'global'));
+  const sections = [
+    section(
+      'local',
+      visible.filter((c) => c.item.origin !== 'global'),
+    ),
+  ];
+  const global = section(
+    'global',
+    visible.filter((c) => c.item.origin === 'global'),
+  );
   if (global.groups.length > 0) sections.push(global);
   return {
     sections,

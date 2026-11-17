@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Box, Divider, IconButton, InputBase, List, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Divider,
+  IconButton,
+  InputBase,
+  List,
+  Menu,
+  MenuItem,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
 import { Globe, Layers, Plus, Puzzle, ScrollText, Search, X } from 'lucide-react';
 import { Icon } from '../ds/Icon.js';
@@ -23,10 +34,20 @@ import { PluginImportDialog } from '../../screens/plugins/PluginImportDialog.js'
 import { usePersonalInstruction, useInstructionsList } from '../../hooks/use-instructions.js';
 import { pluginsQueryKey } from '../../hooks/use-plugins.js';
 import { blankCustomization } from '../../lib/blank-customization.js';
-import type { TreeFilter, TreeGroup, TreeGroupId, TreeItem, TreeSection } from '../../lib/customization-tree.js';
+import type {
+  TreeFilter,
+  TreeGroup,
+  TreeGroupId,
+  TreeItem,
+  TreeSection,
+} from '../../lib/customization-tree.js';
 import type { Agent, Instruction, Skill } from '../../../shared/entity.js';
 import { invalidateHealth } from '../../hooks/use-health-report.js';
-import { UNDO_DELETE_WINDOW_MS, UndoableDeleteContext, useUndoableDelete } from '../../hooks/use-undoable-delete.js';
+import {
+  UNDO_DELETE_WINDOW_MS,
+  UndoableDeleteContext,
+  useUndoableDelete,
+} from '../../hooks/use-undoable-delete.js';
 import { Toast } from '../Toast.js';
 import type { ChannelId } from '../../../shared/channel.js';
 
@@ -129,19 +150,27 @@ export function CustomizationsList({
     setFilter('all');
   };
 
-  const instructionCreatable = isHome ? !personalInstruction : seedWorkspaceInstruction !== undefined;
+  const instructionCreatable = isHome
+    ? !personalInstruction
+    : seedWorkspaceInstruction !== undefined;
   const create = (target: NewTarget): void => {
     setNewMenuAnchor(null);
-    if (target === 'skill' || target === 'agent') onEditEntity(target, seedNewEntity(target, localScope), true);
+    if (target === 'skill' || target === 'agent')
+      onEditEntity(target, seedNewEntity(target, localScope), true);
     else if (target === 'instruction') {
-      onOpenInstruction(isHome ? (blankCustomization('instruction') as Instruction) : seedWorkspaceInstruction!(), true);
+      onOpenInstruction(
+        isHome ? (blankCustomization('instruction') as Instruction) : seedWorkspaceInstruction!(),
+        true,
+      );
     } else if (target === 'mcp') setMcpEditorOpen(true);
     else if (target === 'hook') setHookEditorOpen(true);
     else setPluginImportOpen(true);
   };
   // One entry per kind, in the registry's (= the tree's) order; a plugin is an origin, so it is imported, not created.
   const menuTargets: ReadonlyArray<{ target: NewTarget; label: string }> = [
-    ...CUSTOMIZATION_KINDS.filter((k) => k.kind !== 'instruction' || instructionCreatable).map((k) => ({ target: k.kind, label: k.label })),
+    ...CUSTOMIZATION_KINDS.filter((k) => k.kind !== 'instruction' || instructionCreatable).map(
+      (k) => ({ target: k.kind, label: k.label }),
+    ),
     { target: 'plugin', label: 'Importar plugin' },
   ];
   const handleNew = (e: React.MouseEvent<HTMLElement>): void => setNewMenuAnchor(e.currentTarget);
@@ -157,7 +186,14 @@ export function CustomizationsList({
   const instructionRow = (item: TreeItem, depth: number): React.ReactNode => {
     if (item.entity.kind !== 'instruction' || undo.pendingKeys.has(item.urn)) return null;
     const { value, placement, folder, detected } = item.entity;
-    const shared = { key: item.key, item, depth, instruction: value, detected, onPreview: onPreviewEntity };
+    const shared = {
+      key: item.key,
+      item,
+      depth,
+      instruction: value,
+      detected,
+      onPreview: onPreviewEntity,
+    };
     if (placement === 'personal') {
       return (
         <InstructionTreeRow
@@ -169,13 +205,24 @@ export function CustomizationsList({
         />
       );
     }
-    const seed = placement === 'folder' ? (folder !== undefined && seedFolderInstruction ? () => seedFolderInstruction(folder, instructionNames) : undefined) : seedWorkspaceInstruction;
+    const seed =
+      placement === 'folder'
+        ? folder !== undefined && seedFolderInstruction
+          ? () => seedFolderInstruction(folder, instructionNames)
+          : undefined
+        : seedWorkspaceInstruction;
     if (value === undefined && seed === undefined) return null;
     return (
       <InstructionTreeRow
         {...shared}
         kind={placement}
-        testId={placement === 'folder' ? `folder-instruction-row-${item.folderAlias ?? folder ?? ''}` : value ? `workspace-instruction-row-${value.name}` : 'workspace-instruction-row'}
+        testId={
+          placement === 'folder'
+            ? `folder-instruction-row-${item.folderAlias ?? folder ?? ''}`
+            : value
+              ? `workspace-instruction-row-${value.name}`
+              : 'workspace-instruction-row'
+        }
         seed={() => value ?? seed!()}
         onOpen={onOpenInstruction}
         onProperties={onInstructionProperties}
@@ -187,24 +234,37 @@ export function CustomizationsList({
   const groupRows = (group: TreeGroup, depth: number): React.ReactNode => {
     // Two MCP servers with the same name differ only by where they are configured — say so on those rows.
     const mcpNames = new Map<string, number>();
-    if (group.id === 'mcp') for (const item of group.items) mcpNames.set(item.name, (mcpNames.get(item.name) ?? 0) + 1);
-    return group.items.filter((item) => !undo.pendingKeys.has(item.urn)).map((item) => {
-      switch (item.entity.kind) {
-        case 'instruction':
-          return instructionRow(item, depth);
-        case 'skill':
-        case 'agent':
-          return <EntityTreeRow key={item.key} item={item} handlers={entityHandlers} depth={depth} />;
-        case 'detected':
-          return <DetectedTreeRow key={item.key} item={item} depth={depth} />;
-        case 'mcp':
-          return <McpTreeRow key={item.key} item={item} showScope={(mcpNames.get(item.name) ?? 0) > 1} depth={depth} />;
-        case 'hook':
-          return <HookTreeRow key={item.key} item={item} depth={depth} />;
-        case 'plugin':
-          return <PluginTreeRow key={item.key} item={item} depth={depth} />;
-      }
-    });
+    if (group.id === 'mcp')
+      for (const item of group.items) mcpNames.set(item.name, (mcpNames.get(item.name) ?? 0) + 1);
+    return group.items
+      .filter((item) => !undo.pendingKeys.has(item.urn))
+      .map((item) => itemRow(item, depth, (mcpNames.get(item.name) ?? 0) > 1));
+  };
+
+  const itemRow = (item: TreeItem, depth: number, showMcpScope = false): React.ReactNode => {
+    switch (item.entity.kind) {
+      case 'instruction':
+        return instructionRow(item, depth);
+      case 'skill':
+      case 'agent':
+        return <EntityTreeRow key={item.key} item={item} handlers={entityHandlers} depth={depth} />;
+      case 'detected':
+        return <DetectedTreeRow key={item.key} item={item} depth={depth} />;
+      case 'mcp':
+        return <McpTreeRow key={item.key} item={item} showScope={showMcpScope} depth={depth} />;
+      case 'hook':
+        return <HookTreeRow key={item.key} item={item} depth={depth} />;
+      case 'plugin':
+        return (
+          <PluginTreeRow
+            key={item.key}
+            item={item}
+            depth={depth}
+            forceOpen={filtered}
+            renderChild={(child, d) => itemRow(child, d)}
+          />
+        );
+    }
   };
 
   const scopeKey = localScope?.scopeId ?? 'home';
@@ -257,7 +317,9 @@ export function CustomizationsList({
       )}
       {globalSection && (
         <>
-          {!isEmpty && localSection !== undefined && !(filtered && localSection.count === 0) && <Divider sx={{ mx: 1, my: 0.75 }} />}
+          {!isEmpty && localSection !== undefined && !(filtered && localSection.count === 0) && (
+            <Divider sx={{ mx: 1, my: 0.75 }} />
+          )}
           <ScopeSection
             section="global"
             glyph={Globe}
@@ -279,7 +341,10 @@ export function CustomizationsList({
     : `${tree.grandTotal === 1 ? ' item' : ' itens'}${tree.totals.global > 0 ? `, ${tree.totals.global} do Global` : ''}`;
 
   return (
-    <Box data-testid="control-panel-customizations" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <Box
+      data-testid="control-panel-customizations"
+      sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+    >
       <ContainerHeader
         title="Customizações"
         testId="control-panel"
@@ -288,18 +353,33 @@ export function CustomizationsList({
         count={tree.grandTotal}
         actions={
           <Tooltip title="Novo">
-            <IconButton size="small" aria-label="Novo" data-testid="control-panel-new" onClick={handleNew} sx={{ p: 0.5 }}>
+            <IconButton
+              size="small"
+              aria-label="Novo"
+              data-testid="control-panel-new"
+              onClick={handleNew}
+              sx={{ p: 0.5 }}
+            >
               <Icon glyph={Plus} size={14} />
             </IconButton>
           </Tooltip>
         }
       />
-      <Stack spacing={0.75} sx={{ px: 1.5, pb: 0.75, flexShrink: 0, ...(collapsed ? { display: 'none' } : {}) }}>
+      <Stack
+        spacing={0.75}
+        sx={{ px: 1.5, pb: 0.75, flexShrink: 0, ...(collapsed ? { display: 'none' } : {}) }}
+      >
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <Box
             sx={(theme) => ({
-              display: 'flex', alignItems: 'center', gap: 0.5, flexGrow: 1, minWidth: 0, px: 0.75,
-              border: `1px solid ${theme.palette.divider}`, borderRadius: `${theme.ogs.radius.xs}px`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              flexGrow: 1,
+              minWidth: 0,
+              px: 0.75,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: `${theme.ogs.radius.xs}px`,
             })}
           >
             <Icon glyph={Search} size={13} />
@@ -308,24 +388,48 @@ export function CustomizationsList({
               placeholder="Buscar por nome ou descrição"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              inputProps={{ 'aria-label': 'Buscar customizações', 'data-testid': 'control-panel-search' }}
+              inputProps={{
+                'aria-label': 'Buscar customizações',
+                'data-testid': 'control-panel-search',
+              }}
               sx={{ fontSize: '0.8rem', py: 0.25 }}
             />
             {searching && (
-              <IconButton size="small" aria-label="Limpar busca" data-testid="control-panel-search-clear" onClick={() => setQuery('')} sx={{ p: 0.25 }}>
+              <IconButton
+                size="small"
+                aria-label="Limpar busca"
+                data-testid="control-panel-search-clear"
+                onClick={() => setQuery('')}
+                sx={{ p: 0.25 }}
+              >
                 <Icon glyph={X} size={12} />
               </IconButton>
             )}
           </Box>
         </Stack>
-        <TreeFilterChips value={filter} channel={channel} totals={tree.totals} onChange={setFilter} onChannelChange={setChannel} />
+        <TreeFilterChips
+          value={filter}
+          channel={channel}
+          totals={tree.totals}
+          onChange={setFilter}
+          onChannelChange={setChannel}
+        />
       </Stack>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}>
-        <UndoableDeleteContext.Provider value={undo.requestDelete}>{rows}</UndoableDeleteContext.Provider>
+      <Box
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}
+      >
+        <UndoableDeleteContext.Provider value={undo.requestDelete}>
+          {rows}
+        </UndoableDeleteContext.Provider>
 
         {isEmpty && (
-          <Typography variant="caption" color="text.secondary" data-testid="control-panel-empty" sx={{ display: 'block', px: 1.5, py: 1 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            data-testid="control-panel-empty"
+            sx={{ display: 'block', px: 1.5, py: 1 }}
+          >
             {searching ? `Nada encontrado para "${query.trim()}"` : 'Nenhum item neste filtro'}
           </Typography>
         )}
@@ -334,7 +438,16 @@ export function CustomizationsList({
       {!collapsed && (
         <ContainerFooter testId="control-panel-footer">
           <span>
-            <Box component="span" data-testid="control-panel-footer-count" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontWeight: 500, color: 'text.primary', fontVariantNumeric: 'tabular-nums' })}>
+            <Box
+              component="span"
+              data-testid="control-panel-footer-count"
+              sx={(theme) => ({
+                fontFamily: theme.ogs.fonts.mono,
+                fontWeight: 500,
+                color: 'text.primary',
+                fontVariantNumeric: 'tabular-nums',
+              })}
+            >
               {filtered ? tree.shown : tree.grandTotal}
             </Box>
             {footerTail}
@@ -347,16 +460,34 @@ export function CustomizationsList({
         </ContainerFooter>
       )}
 
-      <Menu anchorEl={newMenuAnchor} open={newMenuAnchor !== null} onClose={() => setNewMenuAnchor(null)}>
+      <Menu
+        anchorEl={newMenuAnchor}
+        open={newMenuAnchor !== null}
+        onClose={() => setNewMenuAnchor(null)}
+      >
         {menuTargets.map(({ target, label }) => (
-          <MenuItem key={target} data-testid={`control-panel-new-${target}`} onClick={() => create(target)}>
+          <MenuItem
+            key={target}
+            data-testid={`control-panel-new-${target}`}
+            onClick={() => create(target)}
+          >
             {label}
           </MenuItem>
         ))}
       </Menu>
-      {mcpEditorOpen && <McpEditorDialog open mode="create" onClose={() => setMcpEditorOpen(false)} />}
+      {mcpEditorOpen && (
+        <McpEditorDialog open mode="create" onClose={() => setMcpEditorOpen(false)} />
+      )}
       {/* Hooks have no workspace scoping: a new one is always Global's. */}
-      {hookEditorOpen && <HookEditorDialog open mode="create" scope="personal" onClose={() => setHookEditorOpen(false)} onSaved={() => undefined} />}
+      {hookEditorOpen && (
+        <HookEditorDialog
+          open
+          mode="create"
+          scope="personal"
+          onClose={() => setHookEditorOpen(false)}
+          onSaved={() => undefined}
+        />
+      )}
       <PluginImportDialog
         open={pluginImportOpen}
         scope={isHome ? 'personal' : 'project'}

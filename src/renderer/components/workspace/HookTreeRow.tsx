@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Tooltip } from '@mui/material';
 import { Webhook } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
-import { PluginTag, RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
 import { HarnessTag } from './DetectedTreeRow.js';
@@ -76,7 +76,6 @@ export function HookTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: numbe
         }
         badge={
           <>
-            {item.pluginTag !== undefined && <PluginTag pluginId={item.pluginTag} />}
             {hook.source.kind === 'detected' && <HarnessTag harness={hook.source.harness} />}
             <RowBadgeSlot item={item} {...(runImport !== undefined ? { onImport: runImport } : {})} busy={importer.isPending} />
           </>

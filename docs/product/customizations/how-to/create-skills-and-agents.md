@@ -50,11 +50,10 @@ workspace's own items, and what was detected in its folders), then **Global** (I
 read-only here — tooltip *Somente leitura aqui — edite no Início*; edit them from Início).
 
 Each section starts with its **Instructions** row, then one group per type: **Skills**, **Agents**, **MCP**,
-**Hooks**, then **Plugins (origem)**. A group with nothing in it is not shown, except **Skills** and **Agents** in
+**Hooks**, then **Plugins**. A group with nothing in it is not shown, except **Skills** and **Agents** in
 the scope's own list, which read *Nada aqui ainda*. Hooks have no workspace scope, so inside a workspace they all
-sit under **Global**. A plugin is an origin, not a type: one row (`superpowers · 3 itens`, *ativo*/*desativado*)
-that does not expand. What it provides is listed in the type groups with the plugin's name as a tag
-(`brainstorming  superpowers`), read-only; turning the plugin off keeps those rows and marks them *desativado*.
+sit under **Global**. A plugin is one row (*ativo*/*desativado*) that expands to what it provides, read-only;
+those items are not repeated in the type groups. Turning the plugin off keeps them listed and marks them *desativado*.
 
 In a multi-folder workspace the folder is a tag on the row (`commit-msg · api`), not a level of the tree, and
 each folder has its own **Instructions · <folder>** row.

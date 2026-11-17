@@ -28,7 +28,7 @@ every channel.
 - One **kind registry** declaring what each customization kind supports; menus, editors and validators derive from it.
 - One verb set, same labels everywhere: **Editar · Ativar/Desativar · Excluir · Importar · Instalar por cima / Desfazer**.
 - `enabled` on every entity; disabled = removed from every channel (the only uniform expression).
-- **Plugin is an origin, not a kind**: a package with its own verbs; its items appear in their type groups, read-only.
+- **Plugin is an origin, not a kind**: a package with its own verbs; its items are listed under its row (not in the type groups), read-only.
 - **The app decides which channel gets what** (user chose option A in the visual companion): no per-item channel
   choice. `AdapterManager` resolves destinations across channels jointly, so nothing a channel already reads natively
   is written twice.
@@ -115,10 +115,11 @@ of the verbs — same as today.
 
 ### 4. Plugin as an origin
 
-- The "Plugins" tree group becomes **Plugins (origem)**: one row per plugin (`<name> · N itens`, `ativo`/`desativado`),
-  verbs **Atualizar · Ativar/Desativar · Remover** (`plugin.update`/`toggle`/`remove`), no expansion.
-- A plugin's items are listed in their kind groups with a plugin tag (`brainstorming  superpowers`), read-only, like
-  Global items. Disabling the plugin hides nothing; its items show `draft · desativado`.
+- The **Plugins** tree group: one row per plugin (`ativo`/`desativado`), verbs **Atualizar · Ativar/Desativar ·
+  Remover** (`plugin.update`/`toggle`/`remove`).
+- *Superseded 2026-11-17:* a plugin's items were first listed in their kind groups with a plugin tag. Reverted — the
+  plugin row expands to list its items (real, read-only rows with status), and they are never repeated in the kind
+  groups. Disabling the plugin hides nothing; its items show `draft · desativado`.
 - "Reconciliar" is removed from the row; if its function is still needed it becomes Atualizar (builder confirms what
   `Reconciliar` calls today).
 

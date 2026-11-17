@@ -42,10 +42,10 @@ delete its cached clone. Removing a marketplace does not uninstall plugins alrea
 
 ## Manage installed plugins
 
-A plugin is an origin, not a type. The **Plugins (origem)** group (after Skills, Agents, MCP and Hooks) has one
-row per plugin — `<name> · N itens` and *ativo*/*desativado* — that does not expand: what the plugin provides is
-listed in its type group with the plugin's name as a tag, read-only (right-click → **Abrir**). On the plugin's
-row menu:
+The **Plugins** group (after Skills, Agents, MCP and Hooks) has one row per plugin, marked *ativo*/*desativado*.
+Click it to list what the plugin provides — skills, agents, MCP servers, hooks — one level deeper; those items are
+listed only there, never again in the type groups, and are read-only (right-click → **Abrir**). A search opens the
+plugins whose items match. On the plugin's row menu:
 
 - **Atualizar** (imported plugins) re-fetches from the source.
 - **Desativar / Ativar** — disabled plugins keep their files but Claude Code ignores them; their items stay

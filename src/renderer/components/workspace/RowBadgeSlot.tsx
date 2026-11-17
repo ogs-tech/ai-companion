@@ -106,15 +106,6 @@ function InstallTag({ item }: { item: TreeItem }): React.ReactElement {
   );
 }
 
-/** The plugin an item ships with, after its name (`brainstorming  superpowers`): the item is read-only. */
-export function PluginTag({ pluginId }: { pluginId: string }): React.ReactElement {
-  return (
-    <Typography component="span" data-testid="row-tag-plugin" noWrap sx={{ ...TAG_SX, flexShrink: 0, color: 'text.secondary' }}>
-      {pluginId}
-    </Typography>
-  );
-}
-
 /**
  * The row's single trailing tag, from its status: `⚠ <canais>` (error — something the app installed went wrong),
  * or `draft · <why>` — `importar` (detected), `instalar` (a file the app doesn't own is there), `desativado`.

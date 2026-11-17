@@ -2,7 +2,7 @@ import { Stack } from '@mui/material';
 import { SessionStatusBadge } from '../SessionStatusBadge.js';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroupRow } from './TreeGroup.js';
-import { PluginTag, RowBadgeSlot, RowLabel, rowMuted, rowTestId, useInstallOver } from './RowBadgeSlot.js';
+import { RowBadgeSlot, RowLabel, rowMuted, rowTestId, useInstallOver } from './RowBadgeSlot.js';
 import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
@@ -117,7 +117,6 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
         onContextMenu={(e) => rowMenu.openMenu(e, value)}
         badge={
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            {item.pluginTag !== undefined && <PluginTag pluginId={item.pluginTag} />}
             <SessionsUsingBadge usage={{ kind, name: value.name }} testId={`${rowTestId(item)}-using`} />
             <SessionStatusBadge anchor={{ kind: 'entity', urn: value.urn }} />
             <RowBadgeSlot item={item} />

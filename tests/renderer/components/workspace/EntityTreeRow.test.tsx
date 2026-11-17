@@ -110,12 +110,11 @@ describe('EntityTreeRow — registry menu', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: ownItem.urn, enabled: false }));
   });
 
-  it("a plugin's skill is tagged, opens as a preview and offers only Abrir and New Action", async () => {
+  it("a plugin's skill opens as a preview and offers only Abrir and New Action", async () => {
     const h = handlers();
     const pluginSkill = { ...own, source: { kind: 'plugin' as const, pluginId: 'superpowers', provenance: 'workspace-managed' as const } };
-    const item = { ...ownItem, pluginTag: 'superpowers', entity: { kind: 'skill' as const, value: pluginSkill } };
+    const item = { ...ownItem, entity: { kind: 'skill' as const, value: pluginSkill } };
     renderWithShell(<EntityTreeRow item={item} handlers={h} />);
-    expect(screen.getByTestId('row-tag-plugin')).toHaveTextContent('superpowers');
     fireEvent.click(screen.getByTestId(rowId(item)));
     expect(h.onPreview).toHaveBeenCalledWith(pluginSkill);
     expect(h.onEdit).not.toHaveBeenCalled();

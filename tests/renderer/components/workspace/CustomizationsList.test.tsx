@@ -240,7 +240,8 @@ describe('CustomizationsList', () => {
     expect(within(tagged).getByTestId('row-folder')).toHaveTextContent('web');
   });
 
-  it('lists a plugin once as an origin row, and what it provides in the type groups with its tag', async () => {
+  it('lists a plugin once, with what it provides only under it, shown on click', async () => {
+    const user = userEvent.setup();
     const plugin = { kind: 'plugin' as const, pluginId: 'dev-kit@market' };
     respond({
       'skill.list': [localSkill, { ...localSkill, urn: 'urn:skill:scaffold', name: 'scaffold', source: plugin }],
@@ -251,10 +252,12 @@ describe('CustomizationsList', () => {
     renderWithShell(<CustomizationsList {...homeProps()} />);
     const pluginRow = (await screen.findAllByTestId(row('local', 'urn:plugin:dev-kit@market')))[0]!;
     expect(screen.getAllByTestId(row('local', 'urn:plugin:dev-kit@market'))).toHaveLength(1);
-    expect(pluginRow).toHaveTextContent('2 itens');
-    expect(screen.getByTestId('tree-group-plugin')).toHaveTextContent('Plugins (origem)');
-    expect(within(screen.getByTestId(row('local', 'urn:skill:scaffold'))).getByTestId('row-tag-plugin')).toHaveTextContent('dev-kit@market');
-    expect(within(screen.getByTestId(row('local', 'urn:hook:h2'))).getByTestId('row-tag-plugin')).toHaveTextContent('dev-kit@market');
+    expect(screen.getByTestId('tree-group-plugin')).toHaveTextContent('Plugins');
+    expect(screen.queryByTestId(row('local', 'urn:skill:scaffold'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(row('local', 'urn:hook:h2'))).not.toBeInTheDocument();
+    await user.click(pluginRow);
+    expect(await screen.findByTestId(row('local', 'urn:skill:scaffold'))).toBeInTheDocument();
+    expect(screen.getByTestId(row('local', 'urn:hook:h2'))).toBeInTheDocument();
   });
 
   it('+ Novo lists the kinds in registry order', async () => {
@@ -352,7 +355,7 @@ describe('CustomizationsList — Global rows in a workspace', () => {
 });
 
 describe('CustomizationsList — workspace plugins', () => {
-  it("lists a workspace plugin's skills in Skills, tagged, and counts them on its row", async () => {
+  it("lists a workspace plugin's skills under its row, not in Skills", async () => {
     const plugin = { kind: 'plugin' as const, pluginId: 'demo-plugin', provenance: 'workspace-managed' as const };
     const greet = { ...localSkill, urn: 'urn:skill:greet', name: 'greet', scopes: ['personal'], source: plugin };
     respond({ 'instruction.list': [] }, (method, params) => {
@@ -362,8 +365,9 @@ describe('CustomizationsList — workspace plugins', () => {
       return undefined;
     });
     renderWithShell(<CustomizationsList {...workspaceProps()} />);
-    const greetRow = await screen.findByTestId(row('local', 'urn:skill:greet'));
-    expect(within(greetRow).getByTestId('row-tag-plugin')).toHaveTextContent('demo-plugin');
-    expect(screen.getByTestId(row('local', 'urn:plugin:demo-plugin'))).toHaveTextContent('demo-plugin · 1 item');
+    const pluginRow = await screen.findByTestId(row('local', 'urn:plugin:demo-plugin'));
+    expect(screen.queryByTestId(row('local', 'urn:skill:greet'))).not.toBeInTheDocument();
+    await userEvent.setup().click(pluginRow);
+    expect(await screen.findByTestId(row('local', 'urn:skill:greet'))).toBeInTheDocument();
   });
 });

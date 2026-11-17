@@ -123,24 +123,25 @@ test.describe('Customizations › lifecycle', () => {
     });
   });
 
-  test('A plugin is an origin: one row in Plugins (origem); turning it off marks its items desativado', async () => {
+  test('A plugin lists what it ships under its row; turning it off marks its items desativado', async () => {
     const { page } = session;
 
-    await test.step('importing the plugin lists it once, with its item count', async () => {
+    await test.step('importing the plugin lists it once, in Plugins', async () => {
       await page.getByTestId('control-panel-new').click();
       await page.getByTestId('control-panel-new-plugin').click();
       await page.getByTestId('plugin-url-input').locator('input').fill(pluginUrl);
       await page.getByTestId('plugin-import-btn').click();
       await expect(page.getByTestId('plugin-import-dialog')).toBeHidden({ timeout: 30_000 });
-      await expect(page.getByTestId('tree-group-plugin')).toContainText('Plugins (origem)');
+      await expect(page.getByTestId('tree-group-plugin')).toContainText('Plugins');
     });
 
     const pluginRow = page.locator('[data-testid$=":urn:plugin:demo-plugin"]');
     const greet = page.locator('[data-testid$=":urn:skill:greet"]');
-    await test.step('its skill sits in Skills, tagged with the plugin', async () => {
-      await expect(pluginRow).toContainText('demo-plugin · 1 item');
+    await test.step('its skill is not in Skills; clicking the plugin lists it underneath', async () => {
       await expect(pluginRow).toContainText('ativo');
-      await expect(greet.getByTestId('row-tag-plugin')).toHaveText('demo-plugin');
+      await expect(greet).toHaveCount(0);
+      await pluginRow.click();
+      await expect(greet).toBeVisible();
     });
 
     await test.step('Desativar keeps the skill listed and marks it desativado', async () => {

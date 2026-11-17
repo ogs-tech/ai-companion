@@ -3,7 +3,7 @@ import { Button, Typography } from '@mui/material';
 import { KeyRound, Plug } from 'lucide-react';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroupRow } from './TreeGroup.js';
-import { PluginTag, RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 import { HarnessTag } from './DetectedTreeRow.js';
@@ -111,7 +111,6 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
         {...(hasMenu ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, server) } : {})}
         badge={
           <>
-            {item.pluginTag !== undefined && <PluginTag pluginId={item.pluginTag} />}
             {showScope && (
               <Typography component="span" data-testid={`tree-mcp-scope-${server.id}`} noWrap sx={QUIET_SX}>
                 {MCP_SCOPE_LABEL[server.scope]}

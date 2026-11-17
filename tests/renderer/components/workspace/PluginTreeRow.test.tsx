@@ -11,7 +11,7 @@ const plugin: PluginListItemIpc = {
   id: 'local-plugin', origin: 'imported', scope: 'project', enabled: true, installedAt: '2026-05-01T00:00:00Z', installedRef: { kind: 'branch', value: 'main' },
 };
 const itemOf = (p: PluginListItemIpc, opts: { disabled?: boolean; origin?: 'local' | 'global' } = {}) =>
-  treeItem({ kind: 'plugin', value: p }, { urn: `urn:plugin:${p.id}`, name: p.id, ...opts });
+  treeItem({ kind: 'plugin', value: p, items: [] }, { urn: `urn:plugin:${p.id}`, name: p.id, ...opts });
 
 let call: CallSpy;
 beforeEach(() => {
@@ -32,21 +32,29 @@ describe('PluginTreeRow', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('plugin.toggle', { id: 'local-plugin', scope: 'project', enabled: false }));
   });
 
-  it('is an origin row: <id> · N itens and ativo, and clicking it expands nothing', async () => {
-    const item = treeItem({ kind: 'plugin', value: plugin, itemCount: 3 }, { urn: `urn:plugin:${plugin.id}`, name: plugin.id });
-    renderWithShell(<PluginTreeRow item={item} />);
+  it('expands on click to render what it ships one level deeper, and says ativo', async () => {
+    const child = treeItem({ kind: 'skill', value: { name: 'brainstorm' } as never }, { urn: 'urn:skill:brainstorm', name: 'brainstorm' });
+    const item = treeItem({ kind: 'plugin', value: plugin, items: [child] }, { urn: `urn:plugin:${plugin.id}`, name: plugin.id });
+    const renderChild = vi.fn((c: typeof child, depth: number) => <div key={c.key} data-testid={`child-${c.name}-${depth}`} />);
+    renderWithShell(<PluginTreeRow item={item} depth={1} renderChild={renderChild} />);
     const rowEl = screen.getByTestId(rowId(item));
-    expect(rowEl).toHaveTextContent('local-plugin · 3 itens');
     expect(rowEl).toHaveTextContent('ativo');
+    expect(screen.queryByTestId('child-brainstorm-2')).not.toBeInTheDocument();
     await userEvent.setup().click(rowEl);
-    expect(screen.queryByTestId('tree-plugin-local-plugin-skill:brainstorm')).not.toBeInTheDocument();
+    expect(screen.getByTestId('child-brainstorm-2')).toBeInTheDocument();
+  });
+
+  it('forceOpen lists its items without a click', () => {
+    const child = treeItem({ kind: 'skill', value: { name: 'brainstorm' } as never }, { urn: 'urn:skill:brainstorm', name: 'brainstorm' });
+    const item = treeItem({ kind: 'plugin', value: plugin, items: [child] }, { urn: `urn:plugin:${plugin.id}`, name: plugin.id });
+    renderWithShell(<PluginTreeRow item={item} forceOpen renderChild={(c) => <div key={c.key} data-testid={`child-${c.name}`} />} />);
+    expect(screen.getByTestId('child-brainstorm')).toBeInTheDocument();
   });
 
   it('a disabled plugin reads desativado once', () => {
     const off = { ...plugin, enabled: false };
-    const item = treeItem({ kind: 'plugin', value: off, itemCount: 1 }, { urn: `urn:plugin:${off.id}`, name: off.id, disabled: true });
+    const item = treeItem({ kind: 'plugin', value: off, items: [] }, { urn: `urn:plugin:${off.id}`, name: off.id, disabled: true });
     renderWithShell(<PluginTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).toHaveTextContent('local-plugin · 1 item');
     expect(screen.getAllByText(/desativado/)).toHaveLength(1);
   });
 

@@ -125,7 +125,7 @@ describe('buildCustomizationTree', () => {
     );
     expect(tree.sections.map((s) => s.id)).toEqual(['local']);
     expect(groupIds(tree)).toEqual(['instruction', 'skill', 'agent', 'mcp', 'hook', 'plugin']);
-    expect(section(tree, 'local')?.groups.map((g) => g.label)).toEqual(['Instruções', 'Skills', 'Agents', 'MCP', 'Hooks', 'Plugins (origem)']);
+    expect(section(tree, 'local')?.groups.map((g) => g.label)).toEqual(['Instruções', 'Skills', 'Agents', 'MCP', 'Hooks', 'Plugins']);
   });
 
   it('splits a workspace into a Workspace section and a read-only Global section', () => {
@@ -185,27 +185,44 @@ describe('buildCustomizationTree', () => {
     expect(group(buildCustomizationTree(input(), { ...WS, filter: 'draft' }), 'instruction')).toBeUndefined();
   });
 
-  it('lists plugin-provided items in their kind groups with the plugin tag, and one origin row per plugin', () => {
+  it("nests a plugin's items under its row, never in the kind groups", () => {
     const tree = buildCustomizationTree(
-      input({ skills: [skill('from-plugin', { plugin: 'p1' })], mcps: [mcp('pm', { plugin: 'p1' })], plugins: [plugin('p1')] }),
+      input({ skills: [skill('own'), skill('from-plugin', { plugin: 'p1' })], mcps: [mcp('pm', { plugin: 'p1' })], plugins: [plugin('p1')] }),
       HOME,
     );
-    expect(names(tree, 'skill')).toEqual(['from-plugin']);
-    expect(group(tree, 'skill')?.items[0]?.pluginTag).toBe('p1');
-    expect(group(tree, 'mcp')?.items[0]?.pluginTag).toBe('p1');
+    expect(names(tree, 'skill')).toEqual(['own']);
+    expect(group(tree, 'mcp')).toBeUndefined();
     expect(names(tree, 'plugin')).toEqual(['p1']);
-    expect(group(tree, 'plugin')?.label).toBe('Plugins (origem)');
     const row = group(tree, 'plugin')?.items[0]?.entity;
-    expect(row?.kind === 'plugin' ? row.itemCount : undefined).toBe(2);
+    expect(row?.kind === 'plugin' ? row.items.map((i) => i.name) : undefined).toEqual(['from-plugin', 'pm']);
+    expect(group(tree, 'plugin')?.count).toBe(3);
+    expect(tree.shown).toBe(tree.grandTotal);
   });
 
-  it("a disabled plugin's items stay listed and read desativado (Review Focus 5)", () => {
+  it('keeps an item whose plugin is not listed in its kind group', () => {
+    const tree = buildCustomizationTree(input({ skills: [skill('orphan', { plugin: 'gone' })] }), HOME);
+    expect(names(tree, 'skill')).toEqual(['orphan']);
+  });
+
+  it('search: a matching item shows its plugin with only the match; a matching plugin shows all it ships', () => {
+    const base = input({ skills: [skill('alpha', { plugin: 'kit' }), skill('beta', { plugin: 'kit' })], plugins: [plugin('kit')] });
+    const nested = (tree: Tree) => {
+      const e = group(tree, 'plugin')?.items[0]?.entity;
+      return e?.kind === 'plugin' ? e.items.map((i) => i.name) : undefined;
+    };
+    expect(nested(buildCustomizationTree(base, { ...HOME, query: 'alpha' }))).toEqual(['alpha']);
+    expect(nested(buildCustomizationTree(base, { ...HOME, query: 'kit' }))).toEqual(['alpha', 'beta']);
+    expect(group(buildCustomizationTree(base, { ...HOME, query: 'zzz' }), 'plugin')).toBeUndefined();
+  });
+
+  it("a disabled plugin's items stay listed under it and read desativado (Review Focus 5)", () => {
     const tree = buildCustomizationTree(
       input({ skills: [skill('brainstorming', { plugin: 'superpowers' })], plugins: [plugin('superpowers', { enabled: false })], status: { 'urn:skill:brainstorming': ok } }),
       HOME,
     );
-    const item = group(tree, 'skill')?.items[0];
-    expect(item?.pluginTag).toBe('superpowers');
+    const row = group(tree, 'plugin')?.items[0]?.entity;
+    const item = row?.kind === 'plugin' ? row.items[0] : undefined;
+    expect(item?.name).toBe('brainstorming');
     expect(item !== undefined && isDisabled(item)).toBe(true);
   });
 
