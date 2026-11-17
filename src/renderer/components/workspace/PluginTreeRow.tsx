@@ -1,11 +1,10 @@
 import { Fragment, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Box, Button, Menu, MenuItem, Typography } from '@mui/material';
-import { Puzzle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { ChannelWarning } from '../ds/ChannelWarning.js';
-import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import {
   pluginsQueryKey,
@@ -133,9 +132,7 @@ export function PluginTreeRow({
     <>
       <TreeGroupRow
         testId={rowTestId(item)}
-        glyph={Puzzle}
         depth={depth}
-        mono
         muted={rowMuted(item)}
         {...(expandable
           ? {
@@ -151,7 +148,7 @@ export function PluginTreeRow({
               <Box
                 component="span"
                 data-testid={`tree-plugin-version-${plugin.id}`}
-                sx={{ color: 'text.disabled', ml: 0.75 }}
+                sx={{ color: 'text.secondary', ml: 0.75 }}
               >
                 {plugin.version}
               </Box>
@@ -177,7 +174,7 @@ export function PluginTreeRow({
                   minWidth: 0,
                   height: 18,
                   px: 0.5,
-                  fontSize: '0.6875rem',
+                  fontSize: '0.75rem',
                   fontWeight: 400,
                   textTransform: 'none',
                   '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
@@ -190,6 +187,8 @@ export function PluginTreeRow({
         }
         onContextMenu={(e: React.MouseEvent) => {
           e.preventDefault();
+          // The hover `⋯` opens this too; its click must not also toggle the row.
+          e.stopPropagation();
           setMenuAt({ top: e.clientY, left: e.clientX });
         }}
       />
@@ -201,16 +200,15 @@ export function PluginTreeRow({
             <Fragment key={group.kind}>
               <TreeGroupRow
                 testId={`tree-plugin-kind-${plugin.id}-${group.kind}`}
-                glyph={ENTITY_GROUP_ICONS[group.kind]}
                 depth={depth + 1}
-                muted
+                heading
                 chevron={kindOpen ? 'expanded' : 'collapsed'}
                 onClick={() => toggleKind(group.kind)}
                 primary={kindSpec(group.kind).label}
                 badge={
                   <Typography
                     component="span"
-                    sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' }}
+                    sx={{ flexShrink: 0, fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}
                   >
                     {group.items.length}
                   </Typography>

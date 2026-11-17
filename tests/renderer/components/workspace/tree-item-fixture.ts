@@ -12,7 +12,7 @@ export function treeItem(
     identity?: string;
     /** Channels in error: shorthand for an `error` status. */
     problems?: ChannelId[];
-    /** Shorthand for a `draft · desativado` status. */
+    /** Shorthand for a `Desativado` status. */
     disabled?: boolean;
     status?: ItemStatus;
     folderAlias?: string;

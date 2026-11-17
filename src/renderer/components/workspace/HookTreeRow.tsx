@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Tooltip } from '@mui/material';
-import { Webhook } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
@@ -63,8 +62,6 @@ export function HookTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: numbe
     <>
       <TreeGroupRow
         testId={rowTestId(item)}
-        glyph={Webhook}
-        mono
         depth={depth}
         muted={rowMuted(item)}
         primary={

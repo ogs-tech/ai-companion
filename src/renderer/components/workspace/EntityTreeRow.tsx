@@ -6,7 +6,6 @@ import { RowBadgeSlot, RowLabel, rowMuted, rowTestId, useInstallOver } from './R
 import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
-import { ENTITY_GROUP_ICONS } from '../shell/nav.js';
 import { useInvalidateCustomization } from '../../hooks/use-customization-list.js';
 import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
 import { callIpc } from '../../lib/ipc.js';
@@ -51,7 +50,7 @@ interface EntityTreeRowProps {
 }
 
 /**
- * One skill or agent of the tree; its menu comes from the kind registry. A plugin's is read-only (Abrir), tagged
+ * One skill or agent of the tree; its menu comes from the kind registry. A plugin's is read-only (Visualizar), tagged
  * with the plugin; a Global one seen from a workspace is editable like any other.
  */
 export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps): React.ReactElement | null {
@@ -108,9 +107,7 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
     <>
       <TreeGroupRow
         testId={rowTestId(item)}
-        glyph={ENTITY_GROUP_ICONS[kind]}
         primary={<RowLabel item={item} />}
-        mono
         depth={depth}
         muted={rowMuted(item)}
         onClick={open}

@@ -31,13 +31,11 @@ test.describe('Control panel › layout', () => {
     await page.getByTestId('control-panel-collapse').click();
     await expect(page.getByTestId('control-panel-search')).toBeHidden();
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeHidden();
-    await expect(page.getByTestId('control-panel-footer')).toBeHidden();
     await expect(page.getByTestId('control-panel-count')).toBeVisible();
 
     await page.getByTestId('control-panel-collapse').click();
     await expect(page.getByTestId('control-panel-search')).toBeVisible();
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
-    await expect(page.getByTestId('control-panel-footer')).toBeVisible();
   });
 
   test('Collapsing Sessões hands its height to Customizações, and the + stays available', async () => {
@@ -54,12 +52,11 @@ test.describe('Control panel › layout', () => {
     await expect(page.getByTestId('workspace-sessions-new')).toBeVisible();
   });
 
-  test('Typing in the search box keeps the footer count in step with what is on screen', async () => {
+  test('Typing in the search box keeps the header count in step with what is on screen', async () => {
     const { page } = session;
     await page.getByTestId('control-panel-search').fill('acme');
-    const count = Number(await page.getByTestId('control-panel-footer-count').innerText());
     // acme-rules (instruction), api-architect (agent: "Designs acme-api endpoints"), deploy-checklist (skill: "ship acme-api")
-    expect(count).toBe(3);
+    await expect(page.getByTestId('control-panel-shown')).toHaveText(/^3 de \d+$/);
     await page.getByTestId('control-panel-search-clear').click();
   });
 });

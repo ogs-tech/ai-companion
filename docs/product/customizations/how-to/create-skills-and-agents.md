@@ -45,15 +45,17 @@ If any target needed overwriting, a **Sync report** dialog lists it with the pat
 
 ## Read the Customizações tree
 
-At Início the panel lists Global's items. Inside a workspace it has two sections: **Workspace** (the open
-workspace's own items, and what was detected in its folders), then **Global** (Início's items, collapsed and
-read-only here — tooltip *Somente leitura aqui — edite no Início*; edit them from Início).
+At Início the panel lists Global's items. Inside a workspace it lists the open workspace's own items (and what was
+detected in its folders) first, then a **Global** section — *Global — vale para todos os workspaces* — with Início's
+items, collapsed. Global's items are edited right here like the workspace's own; a change reaches every workspace.
 
-Each section starts with its **Instructions** row, then one group per type: **Skills**, **Agents**, **MCP**,
-**Hooks**, then **Plugins**. A group with nothing in it is not shown, except **Skills** and **Agents** in
-the scope's own list, which read *Nada aqui ainda*. Hooks have no workspace scope, so inside a workspace they all
-sit under **Global**. A plugin is one row (name, version, `⚠ N` and **Atualizar** when they apply) that expands to one collapsible sub-header per type it provides, read-only;
-those items are not repeated in the type groups. Turning the plugin off keeps them listed and marks them *desativado*.
+Each scope starts with its **Instructions** row, then one group per type: **Skills**, **Agents**, **MCP**,
+**Hooks**, then **Plugins**. A group with nothing in it is not shown — **+** is where a new one starts; a scope with
+nothing at all says *Nenhuma customização ainda*. Hooks have no workspace scope, so inside a workspace they all
+sit under **Global**. The group already names the type, so item rows carry no icon. A plugin is one row (name,
+version, its error tag and **Atualizar** when they apply) that expands to one collapsible sub-header per type it
+provides, read-only; those items are not repeated in the type groups. Turning the plugin off keeps them listed and
+marks them *Desativado*.
 
 In a multi-folder workspace the folder is a tag on the row (`commit-msg · api`), not a level of the tree, and
 each folder has its own **Instructions · <folder>** row.
@@ -62,20 +64,24 @@ Every item is in one of three states. A row speaks only when it is not installed
 
 | State | Row shows | Meaning |
 |---|---|---|
-| **Instalado** | nothing | It reached every channel that is on. |
-| **Draft** | `draft · importar` | Found in Claude's or Cursor's own files, not yet managed by the app. Click the tag to import it. |
-| | `draft · desativado` | You turned it off (an MCP server, a hook or a plugin). It goes to no channel. |
-| **Com erro** | `⚠ Claude · Cursor` | Something is wrong in those channels (missing, out of date, needs sign-in, or a conflict — a file the app doesn't manage is where the item goes, so the sync won't overwrite it). Click it to open Diagnósticos on the item. |
+| Installed | nothing | It reached every channel that is on. |
+| Draft | **Importar** | Found in Claude's or Cursor's own files, not yet managed by the app. Click it to import. |
+| | **Instalar** | A file the app doesn't manage sits where the item goes. Click it to install over it (the file is backed up; the toast offers **Desfazer**). |
+| | *Desativado* | You turned it off. It goes to no channel; the row reads quieter. |
+| Error | ● *Erro no Claude* (or *Erro em 2 canais*) | Something is wrong in that channel (missing, out of date, needs sign-in). Click it to open Diagnósticos on the item. |
 
-An error in one channel outranks a draft in another: the row shows the error.
+An error in one channel outranks a draft in another: the row shows the error. A group header counts its errors
+(● N) before its total.
 
-Under the search box, the chips **Todos** · **Instalado N** · **Draft N** · **Com erro N** keep only the rows in
-that state. With **Draft** or **Com erro** on, a second row (**Todos** · **Claude N** · **Cursor N**) narrows it to
-one channel. They combine with the search, and each count is what selecting the chip shows. A chip at 0 is
-disabled. The states are checked when the app opens or reloads, when you switch between Início and a workspace,
-and after you change something — not on a timer. The footer reads `N itens, G do Global`; while a search or chip is active it reads
-`n de N itens` with **Limpar filtros**, which clears both. Switching between Início and a workspace resets the
-search and the chip.
+Under the search box, a chip appears only for what needs attention: **N com erro** and **N rascunhos**. Click one
+to keep only those rows, click it again to see everything; while one is on, a second row (**Todos os canais** ·
+**Claude N** · **Cursor N**) narrows it to one channel. They combine with the search, and each count is what
+selecting the chip shows. The header shows the total; while a search or chip is active it reads `n de N`. When
+nothing matches, the empty state names the query and offers **Limpar filtros**, which clears both. The states are
+checked when the app opens or reloads, when you switch between Início and a workspace, and after you change
+something — not on a timer. Switching between Início and a workspace resets the search and the chip.
+
+Every row's menu opens with a right-click or from the **⋯** the row shows on hover or keyboard focus.
 
 - A green **N sessões** beside a skill, agent or MCP server means running sessions used it in the last ten
   minutes; hover for the list.
@@ -88,7 +94,7 @@ search and the chip.
 ## Edit, preview, rename
 
 - **Edit:** click the row. The tab reopens on the current file.
-- **Abrir:** right-click the row → **Abrir** renders the body as Markdown, read-only.
+- **Visualizar:** right-click the row → **Visualizar** renders the body as Markdown, read-only.
 - **Editar:** right-click → **Editar** reopens the Properties form.
 - **Desativar / Ativar:** right-click → **Desativar** takes it out of every channel and keeps the file
   (frontmatter `enabled: false`); **Ativar** puts it back.
@@ -126,6 +132,6 @@ or switch scope first). Plugin-provided entries are read-only and have no delete
 
 ## Use it in a session right away
 
-Right-click the row → **New Action**. A fresh `claude` session opens in the entity's scope with
+Right-click the row (or **⋯**) → **Nova sessão**. A fresh `claude` session opens in the entity's scope with
 `@<path-to-the-entity>` drafted (not sent) as the first message, so you can ask the agent to work on it.
 See [Start and manage sessions](../../sessions/how-to/start-and-manage-sessions.md).

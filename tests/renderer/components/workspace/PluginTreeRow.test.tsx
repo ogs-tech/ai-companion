@@ -135,6 +135,6 @@ describe('PluginTreeRow', () => {
   it('a disabled plugin reads muted, with no desativado text', () => {
     const item = itemOf({ ...plugin, enabled: false }, { disabled: true });
     renderWithShell(<PluginTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('desativado');
+    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Desativado');
   });
 });

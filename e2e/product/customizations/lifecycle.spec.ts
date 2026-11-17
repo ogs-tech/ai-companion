@@ -44,7 +44,7 @@ test.describe('Customizations › lifecycle', () => {
 
     await test.step('Desativar: the row reads desativado and there is no Claude link', async () => {
       await toggle('Desativar');
-      await expect(row.getByTestId('row-tag-disabled')).toHaveText('draft · desativado');
+      await expect(row.getByTestId('row-tag-disabled')).toHaveText('Desativado');
       await expect.poll(() => isLink(link)).toBe(false);
     });
 
@@ -151,7 +151,7 @@ test.describe('Customizations › lifecycle', () => {
       await expect(page.getByRole('menuitem', { name: 'Ativar' })).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(greet).toBeVisible();
-      await expect(greet.getByTestId('row-tag-disabled')).toHaveText('draft · desativado');
+      await expect(greet.getByTestId('row-tag-disabled')).toHaveText('Desativado');
     });
   });
 });

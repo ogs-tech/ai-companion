@@ -2,6 +2,8 @@ import { Box, Stack } from '@mui/material';
 import { useState } from 'react';
 import { ScrollText } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
+import { RowMenuButton } from './RowMenuButton.js';
+import { treeIndent } from './TreeGroup.js';
 import { SyncDot } from '../ds/SyncDot.js';
 import { RowBadgeSlot, RowLabel, useInstallOver } from './RowBadgeSlot.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
@@ -38,7 +40,7 @@ function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; 
       <Box
         component="span"
         data-testid="detected-file"
-        sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem', color: 'text.disabled', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 })}
+        sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 })}
       >
         {String(detected.preview['file'] ?? detected.description)}
       </Box>
@@ -171,16 +173,21 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
     <>
       <TreeRow
         testId={rowTestId}
-        pl={1.5 + 2.5 + depth * 2}
+        pl={treeIndent(depth)}
         glyph={ScrollText}
         primary={item ? <RowLabel item={item} {...(label !== undefined ? { label } : {})} /> : (label ?? copy.label)}
-        labelVariant="mono"
-        muted={(instruction == null && offered === undefined) || item?.origin === 'global'}
+        labelVariant="item"
+        density="comfortable"
+        mutedStyle="quiet"
+        muted={instruction == null && offered === undefined}
         onClick={() => onOpen(instruction ?? seed(), !instruction)}
         onContextMenu={(e) => {
           if (!instruction) return;
           rowMenu.openMenu(e, instruction);
         }}
+        {...(instruction
+          ? { actions: <RowMenuButton testId={`row-actions-${rowTestId}-btn`} label="Ações" onOpen={(e) => rowMenu.openMenu(e, instruction)} /> }
+          : {})}
         badge={
           instruction ? (
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>

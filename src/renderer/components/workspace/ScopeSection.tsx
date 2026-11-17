@@ -1,44 +1,62 @@
 import { Box, Collapse, List, Tooltip, Typography } from '@mui/material';
-import type { LucideIcon } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
+import { treeIndent } from './TreeGroup.js';
 import { usePersistedFlag } from '../../lib/use-persisted-flag.js';
 
 interface ScopeSectionProps {
-  /** `local` = the open workspace's own items; `global` = Início's, editable from here too. */
-  section: 'local' | 'global';
-  glyph: LucideIcon;
+  /** `global` = Início's items, editable from here too. */
+  section: 'global';
   label: string;
+  /** Says what the section is, after the label — e.g. that a change applies to every workspace. */
+  caption?: string;
   count: number;
   /** Persistence key — one per workspace and section. */
   storageKey: string;
   /** Whether the section starts open when the user has not toggled it yet. */
   defaultOpen: boolean;
-  /** Explains the section on hover, e.g. why it is read-only. */
+  /** The longer explanation on hover. */
   tooltip?: string;
   /** Opens the section (an active search). */
   forceOpen: boolean;
-  /** Hides the header and rows without unmounting them. */
-  hidden?: boolean;
   children: React.ReactNode;
 }
 
 /**
- * A top-level, collapsible header for one scope of the Customizações tree
- * inside a workspace: the workspace's own items, or Global's (read-only here).
+ * The collapsible header of a scope other than the open workspace's own inside the Customizações tree — today,
+ * Global's items below the workspace's.
  */
-export function ScopeSection({ section, glyph, label, count, storageKey, forceOpen, defaultOpen, tooltip, hidden = false, children }: ScopeSectionProps): React.ReactElement {
+export function ScopeSection({ section, label, caption, count, storageKey, forceOpen, defaultOpen, tooltip, children }: ScopeSectionProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);
   const expanded = forceOpen || stored;
+  const title = (
+    <span>
+      <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+        {label}
+      </Box>
+      {caption && (
+        <Box component="span" sx={{ color: 'text.secondary' }}>
+          {' — '}
+          {caption}
+        </Box>
+      )}
+    </span>
+  );
   return (
-    <Box sx={hidden ? { display: 'none' } : {}}>
+    <Box>
       <TreeRow
         testId={`control-panel-section-${section}`}
-        pl={1.5}
+        pl={treeIndent(0)}
         chevron={expanded ? 'expanded' : 'collapsed'}
-        glyph={glyph}
-        primary={tooltip ? <Tooltip title={tooltip}><span>{label}</span></Tooltip> : label}
+        primary={tooltip ? <Tooltip title={tooltip}>{title}</Tooltip> : title}
+        labelVariant="heading"
+        density="comfortable"
         onClick={() => setStored(!stored)}
-        badge={<Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>}
+        badge={
+          <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+            {count}
+          </Typography>
+        }
+        rowProps={{ 'aria-expanded': expanded }}
       />
       <Collapse in={expanded}>
         <List disablePadding>{children}</List>

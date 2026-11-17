@@ -1,67 +1,84 @@
 import { Collapse, List, Stack, Typography } from '@mui/material';
-import type { LucideIcon } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
 import { ProblemCount } from '../ds/ChannelWarning.js';
+import { RowMenuButton } from './RowMenuButton.js';
 import { usePersistedFlag } from '../../lib/use-persisted-flag.js';
 
-/** `N ⚠` (only when N > 0) then the total, right-aligned on a folder row. */
-function FolderCounts({ problems, count }: { problems: number; count: number }): React.ReactElement {
+/**
+ * Left padding (theme units) of a Customizações row at `depth`. One level is the chevron's width, so a child's label
+ * starts where its parent's label does.
+ */
+export function treeIndent(depth: number): number {
+  return 0.75 + depth * 2.5;
+}
+
+const COUNT_SX = { fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' } as const;
+
+/** `● N` (only when N > 0) then the total, right-aligned on a group row. */
+function GroupCounts({ problems, count }: { problems: number; count: number }): React.ReactElement {
   return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
       <ProblemCount count={problems} />
-      <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>{count}</Typography>
+      <Typography component="span" sx={COUNT_SX}>
+        {count}
+      </Typography>
     </Stack>
   );
 }
 
 interface TreeGroupRowProps {
   testId: string;
-  glyph: LucideIcon;
   primary: React.ReactNode;
-  /** Small trailing chip/badge, e.g. the `⚠ Cursor` channel warning. */
+  /** Small trailing tag, e.g. the `Erro no Cursor` channel warning. */
   badge?: React.ReactNode;
   onClick?: () => void;
-  /** Right-click on the row — the home of edit/delete/etc.: a row reveals nothing on hover. */
+  /** The row's menu: opened by right-click and by the `⋯` the row reveals on hover or focus. */
   onContextMenu?: (e: React.MouseEvent) => void;
   /** Folder chevron — for a row that expands inline (a plugin); `spacer` keeps a sibling that can't expand aligned. */
   chevron?: 'expanded' | 'collapsed' | 'spacer';
+  /** Disabled or detected: secondary text colour, still readable. */
   muted?: boolean;
   disabled?: boolean;
-  /** Tree nesting level, matching FolderTree's indent formula. Defaults to `0`. */
+  /** Tree nesting level (see `treeIndent`). Defaults to `0`. */
   depth?: number;
-  /** Render `primary` in the mono face — for entity names (skills/agents). */
-  mono?: boolean;
+  /** Renders `primary` as a group heading (a plugin's per-kind rows). */
+  heading?: boolean;
 }
 
 /**
- * A dense entity row inside a group, styled like a FolderTree file row: icon + name, and a
- * badge only when there is something to say. Hover changes nothing — actions live in the context menu.
+ * One item of the Customizações tree: its name, and a tag only when there is something to say. The group above
+ * already names the type, so the row carries no icon.
  */
-export function TreeGroupRow({ testId, glyph, primary, badge, onClick, onContextMenu, chevron, muted, disabled, depth = 0, mono }: TreeGroupRowProps): React.ReactElement {
+export function TreeGroupRow({ testId, primary, badge, onClick, onContextMenu, chevron, muted, disabled, depth = 0, heading = false }: TreeGroupRowProps): React.ReactElement {
   return (
     <TreeRow
       testId={testId}
-      pl={1.5 + 2.5 + depth * 2}
-      glyph={glyph}
+      pl={treeIndent(depth)}
       primary={primary}
       badge={badge}
+      density="comfortable"
+      labelVariant={heading ? 'heading' : 'item'}
+      mutedStyle="quiet"
       {...(chevron ? { chevron } : {})}
       {...(onClick ? { onClick } : {})}
-      {...(onContextMenu ? { onContextMenu } : {})}
+      {...(onContextMenu
+        ? {
+            onContextMenu,
+            actions: <RowMenuButton testId={`row-actions-${testId}-btn`} label="Ações" onOpen={onContextMenu} />,
+          }
+        : {})}
       {...(muted !== undefined ? { muted } : {})}
       {...(disabled !== undefined ? { disabled } : {})}
-      {...(mono ? { labelVariant: 'mono' as const } : {})}
     />
   );
 }
 
 interface PersistedGroupProps {
-  /** Group id: the header is `tree-group-<id>`, its empty state `tree-group-empty-<id>`. */
+  /** Group id: the header is `tree-group-<id>`. */
   id: string;
-  glyph: LucideIcon;
   label: string;
   count: number;
-  /** Items inside with a problem in some channel — `N ⚠` before the count. */
+  /** Items inside with a problem in some channel — `● N` before the count. */
   problems?: number;
   /** Persistence key of the open state. */
   storageKey: string;
@@ -70,36 +87,28 @@ interface PersistedGroupProps {
   depth: number;
   /** Whether the group starts open when the user has not toggled it yet. */
   defaultOpen: boolean;
-  /** True when the group has no rows to list: it shows "Nada aqui ainda" instead. */
-  empty?: boolean;
   children: React.ReactNode;
 }
 
 /** A collapsible type group of the Customizações tree ("Skills", "MCP") whose open state is remembered. */
-export function PersistedGroup({ id, glyph, label, count, problems = 0, storageKey, forceOpen, depth, defaultOpen, empty = false, children }: PersistedGroupProps): React.ReactElement {
+export function PersistedGroup({ id, label, count, problems = 0, storageKey, forceOpen, depth, defaultOpen, children }: PersistedGroupProps): React.ReactElement {
   const [stored, setStored] = usePersistedFlag(storageKey, defaultOpen);
   const expanded = forceOpen || stored;
-  const pl = 1.5 + depth * 2;
   return (
     <>
       <TreeRow
         testId={`tree-group-${id}`}
-        pl={pl}
+        pl={treeIndent(depth)}
         chevron={expanded ? 'expanded' : 'collapsed'}
-        glyph={glyph}
         primary={label}
+        labelVariant="heading"
+        density="comfortable"
         onClick={() => setStored(!stored)}
-        badge={<FolderCounts problems={problems} count={count} />}
+        badge={<GroupCounts problems={problems} count={count} />}
         rowProps={{ 'aria-expanded': expanded }}
       />
       <Collapse in={expanded} unmountOnExit>
-        {empty ? (
-          <Typography variant="caption" color="text.secondary" data-testid={`tree-group-empty-${id}`} sx={{ display: 'block', pl: pl + 4.5, py: 0.5 }}>
-            Nada aqui ainda
-          </Typography>
-        ) : (
-          <List disablePadding>{children}</List>
-        )}
+        <List disablePadding>{children}</List>
       </Collapse>
     </>
   );

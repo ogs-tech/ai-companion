@@ -45,8 +45,8 @@ test.describe('Customizations › integrations', () => {
     await expect(notion).toBeVisible();
     await notion.click({ button: 'right' });
     await page.getByTestId('row-context-menu-toggle').click();
-    await expect(notion.getByTestId('row-tag-disabled')).toHaveText('draft · desativado');
-    await expect(page.getByTestId('chip-draft')).toHaveText(/^Draft [1-9]/);
+    await expect(notion.getByTestId('row-tag-disabled')).toHaveText('Desativado');
+    await expect(page.getByTestId('chip-draft')).toHaveText(/^[1-9]\d* rascunhos?$/);
     // Turn it back on so the following tests see the seed as it was.
     await notion.click({ button: 'right' });
     await page.getByTestId('row-context-menu-toggle').click();

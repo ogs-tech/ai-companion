@@ -710,7 +710,7 @@ export function FolderTree({
               },
             ]
           : []),
-        { key: 'new-action', label: 'New Action', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath) },
+        { key: 'new-action', label: 'Nova sessão', glyph: SquareTerminal, onSelect: () => onNewAction?.(rowMenuTarget.relPath) },
         ...(rowMenuTarget.kind === 'dir'
           ? [
               {

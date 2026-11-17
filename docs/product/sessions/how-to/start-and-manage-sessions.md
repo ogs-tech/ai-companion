@@ -41,7 +41,7 @@ Each click starts a fresh conversation; several can run side by side. Each opens
 center area.
 
 To start a session focused on one item instead, right-click a file, folder, skill, agent or
-instruction row → **New Action**. The session starts in that item's scope with `@<path>` already
+instruction row → **Nova sessão**. The session starts in that item's scope with `@<path>` already
 typed (not sent) as your first message.
 
 ## Work in the terminal

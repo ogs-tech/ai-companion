@@ -5,7 +5,7 @@ import { expect } from '../../fixtures/app.js';
 import { launchCustomizationsApp, saveFromMenu, type CustomizationsApp } from '../../fixtures/customizations-app.js';
 
 // Journey: items that exist canonically but were never materialized into Claude (the seed writes files straight to
-// disk, like a checkout from another machine) carry "⚠ Claude". The warning leads to Diagnósticos, and saving the
+// disk, like a checkout from another machine) carry "Erro no Claude". The warning leads to Diagnósticos, and saving the
 // item (which syncs it) clears it. Silence means ok — Global's items, which the seed also left unsynced, are in the
 // same state, so only the rows in the open scope are asserted.
 
@@ -19,12 +19,12 @@ test.afterAll(async () => {
 });
 
 test.describe('Customizations › channel warnings', () => {
-  test('An unsynced skill and agent show "⚠ Claude", and their groups count the problems', async () => {
+  test('An unsynced skill and agent show "Erro no Claude", and their groups count the problems', async () => {
     const { page } = session;
-    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveText('⚠ Claude');
-    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveText('⚠ Claude');
-    await expect(page.getByTestId('tree-group-skill')).toContainText('⚠');
-    await expect(page.getByTestId('tree-group-agent')).toContainText('⚠');
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveText('Erro no Claude');
+    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveText('Erro no Claude');
+    await expect(page.getByTestId('tree-group-skill').getByTestId('problem-count')).toBeVisible();
+    await expect(page.getByTestId('tree-group-agent').getByTestId('problem-count')).toBeVisible();
   });
 
   test('The warning is accessible: it names the channel and says it opens the diagnostic', async () => {
@@ -64,7 +64,7 @@ test.describe('Customizations › channel warnings', () => {
 
   test('Atualizar in Diagnósticos syncs to Claude and every warning in the tree goes away', async () => {
     const { page, acmeRoot } = session;
-    // the editor tab from the previous test is in front; the agent's own ⚠ leads back to Diagnósticos
+    // the editor tab from the previous test is in front; the agent's own error tag leads back to Diagnósticos
     await page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning').click();
     await page.getByTestId('health-refresh').click();
     const skillLink = join(acmeRoot, '.claude', 'skills', 'deploy-checklist');
@@ -75,6 +75,6 @@ test.describe('Customizations › channel warnings', () => {
 
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveCount(0);
     await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveCount(0);
-    await expect(page.getByTestId('tree-group-skill')).not.toContainText('⚠');
+    await expect(page.getByTestId('tree-group-skill').getByTestId('problem-count')).toHaveCount(0);
   });
 });

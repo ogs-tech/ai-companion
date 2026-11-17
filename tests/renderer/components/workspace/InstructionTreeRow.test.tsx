@@ -94,8 +94,8 @@ describe('InstructionTreeRow labels', () => {
   });
 });
 
-describe('InstructionTreeRow context menu — New Action', () => {
-  it('offers "New Action" for a configured personal instruction (unlike "Properties", it is not excluded there)', async () => {
+describe('InstructionTreeRow context menu — Nova sessão', () => {
+  it('offers "Nova sessão" for a configured personal instruction (unlike "Properties", it is not excluded there)', async () => {
     const onNewAction = vi.fn();
     const target = instruction();
     renderWithShell(
@@ -108,7 +108,7 @@ describe('InstructionTreeRow context menu — New Action', () => {
     expect(onNewAction).toHaveBeenCalledWith(target);
   });
 
-  it('offers "New Action" for a configured workspace instruction', async () => {
+  it('offers "Nova sessão" for a configured workspace instruction', async () => {
     const onNewAction = vi.fn();
     const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['workspace'], scopeId: 'w1' });
     renderWithShell(
@@ -221,18 +221,18 @@ describe('InstructionTreeRow — registry menu', () => {
     return inside(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent ?? '');
   };
 
-  it('the personal instruction: Abrir, Editar, Desativar, New Action — never Excluir', async () => {
+  it('the personal instruction: Visualizar, Editar, Desativar, Nova sessão — never Excluir', async () => {
     const target = instruction();
     renderWithShell(<InstructionTreeRow kind="personal" instruction={target} seed={() => target} onOpen={vi.fn()} onPreview={vi.fn()} onNewAction={vi.fn()} />);
     fireEvent.contextMenu(await screen.findByTestId('personal-instruction-row'));
-    expect(await menuLabels()).toEqual(['Abrir', 'Editar', 'Desativar', 'New Action']);
+    expect(await menuLabels()).toEqual(['Visualizar', 'Editar', 'Desativar', 'Nova sessão']);
   });
 
-  it('a workspace instruction: Editar, Desativar, Excluir, New Action; Desativar calls entity.setEnabled', async () => {
+  it('a workspace instruction: Editar, Desativar, Excluir, Nova sessão; Desativar calls entity.setEnabled', async () => {
     const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['workspace'], scopeId: 'w1' });
     renderWithShell(<InstructionTreeRow kind="workspace" instruction={target} seed={() => target} onOpen={vi.fn()} onProperties={vi.fn()} onNewAction={vi.fn()} />);
     fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
-    expect(await menuLabels()).toEqual(['Editar', 'Desativar', 'Excluir', 'New Action']);
+    expect(await menuLabels()).toEqual(['Editar', 'Desativar', 'Excluir', 'Nova sessão']);
     fireEvent.click(screen.getByTestId('row-context-menu-toggle'));
     await vi.waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: 'urn:instruction:acme', enabled: false }));
   });

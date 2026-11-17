@@ -25,10 +25,10 @@ describe('McpTreeRow', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: 'urn:mcp:github', enabled: false }));
   });
 
-  it('a disabled server reads desativado and offers Ativar', async () => {
+  it('a disabled server reads Desativado and offers Ativar', async () => {
     const item = itemOf({ ...own, enabled: false }, { disabled: true });
     renderWithShell(<McpTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).toHaveTextContent('desativado');
+    expect(screen.getByTestId(rowId(item))).toHaveTextContent('Desativado');
     fireEvent.contextMenu(screen.getByTestId(rowId(item)));
     expect(await screen.findByTestId('row-context-menu-toggle')).toHaveTextContent('Ativar');
   });
@@ -53,7 +53,7 @@ describe('McpTreeRow', () => {
     const connector: McpServer = { id: 'c1', name: 'claude-ai-Gmail', transport: 'http', def: {}, scope: 'detected', source: { kind: 'detected' }, enabled: false, health: { state: 'needs-auth' } };
     const item = itemOf(connector, { origin: 'detected' });
     renderWithShell(<McpTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('desativado');
+    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Desativado');
     await userEvent.setup().click(screen.getByTestId('tree-mcp-connect-c1'));
     expect(call).toHaveBeenCalledWith('mcp.authenticate', { id: 'c1' });
     expect(call).not.toHaveBeenCalledWith('mcp.refreshHealth', expect.anything());

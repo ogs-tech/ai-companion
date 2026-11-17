@@ -43,14 +43,14 @@ delete its cached clone. Removing a marketplace does not uninstall plugins alrea
 ## Manage installed plugins
 
 The **Plugins** group (after Skills, Agents, MCP and Hooks) has one row per plugin: its name and version, then only
-what needs attention — `⚠ N` when something it provides fails, and an **Atualizar** button on a plugin imported from
-a branch, which re-fetches it from the source (a toast confirms). A disabled plugin reads muted. Click the row to list
+what needs attention — its error tag when something it provides fails, and an **Atualizar** button on a plugin imported from
+a branch, which re-fetches it from the source (a toast confirms). A disabled plugin reads quieter. Click the row to list
 one collapsed sub-header per type it provides, with its count (Skills, Agents, MCP, Hooks); click one to list its
-items. Those items are listed only there, never again in the type groups, and are read-only (right-click →
-**Abrir**). A search opens the plugins whose items match, with every sub-header open. On the plugin's row menu:
+items. Those items are listed only there, never again in the type groups, and are read-only (right-click or **⋯** →
+**Visualizar**). A search opens the plugins whose items match, with every sub-header open. On the plugin's row menu:
 
 - **Desativar / Ativar** — disabled plugins keep their files but Claude Code ignores them; their items stay
-  listed and read *draft · desativado*.
+  listed and read *Desativado*.
 - **Remover** hides the row and, when the toast's **Desfazer** window ends, deletes the clone and its link and
   disables it in Claude Code.
 

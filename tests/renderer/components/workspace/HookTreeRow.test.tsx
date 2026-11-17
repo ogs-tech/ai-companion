@@ -44,10 +44,10 @@ describe('HookTreeRow', () => {
     confirmSpy.mockRestore();
   });
 
-  it('a disabled hook reads desativado', () => {
+  it('a disabled hook reads Desativado', () => {
     const item = itemOf({ ...own, enabled: false }, { disabled: true });
     renderWithShell(<HookTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).toHaveTextContent('desativado');
+    expect(screen.getByTestId(rowId(item))).toHaveTextContent('Desativado');
   });
 
   it('imports a detected hook from its tag', async () => {

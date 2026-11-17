@@ -74,7 +74,7 @@ test.describe('Customizations › create and edit', () => {
 
   test('Opening a workspace skill and changing its description saves to disk', async () => {
     const { page, app, acmeData } = session;
-    await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').click();
+    await page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByText('deploy-checklist', { exact: true }).click();
     const tab = page.getByTestId('workbench-tab-entity:urn:skill:deploy-checklist');
     await expect(tab).toBeVisible();
     await expect(page.getByTestId('global-notice')).toHaveCount(0);

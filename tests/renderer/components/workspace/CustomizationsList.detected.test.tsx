@@ -49,7 +49,7 @@ describe('CustomizationsList detected items and folders', () => {
     expect((own.compareDocumentPosition(backlog) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
     expect(within(backlog).getByTestId('row-folder')).toHaveTextContent('bees');
     expect(screen.getByTestId(row('detected', 'detected:planner', 'ui'))).toHaveTextContent('Cursor');
-    expect(screen.getByTestId('chip-draft')).toHaveTextContent('Draft 2');
+    expect(screen.getByTestId('chip-draft')).toHaveTextContent('2 rascunhos');
 
     await user.click(within(backlog).getByTestId('row-tag-detected'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'backlog' }));
@@ -88,7 +88,7 @@ describe('CustomizationsList detected items and folders', () => {
     expect((workspaceRow.compareDocumentPosition(ui) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
     expect(ui).toHaveTextContent('Instructions · ui');
     // Placeholders are places to create, not items.
-    expect(screen.getByTestId('control-panel-section-local')).toHaveTextContent('0');
+    expect(screen.getByTestId('control-panel-count')).toHaveTextContent('0');
 
     // "Criar do zero": the click seeds an empty instruction owned by that folder.
     await userEvent.setup().click(screen.getByTestId('folder-instruction-row-bees'));

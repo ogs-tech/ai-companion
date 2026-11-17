@@ -68,7 +68,7 @@ also call it explicitly as `/tldr`.)
 
 ## 4. Let the agent improve its own skill
 
-1. Right-click `tldr` under **Skills** → **New Action**.
+1. Right-click `tldr` under **Skills** → **Nova sessão**.
    A second session opens with `@/Users/you/.air-ide/skills/tldr/SKILL.md` already typed — not sent yet.
 2. Complete the message and press Enter:
 

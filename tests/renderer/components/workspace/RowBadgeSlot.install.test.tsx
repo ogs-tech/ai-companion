@@ -31,7 +31,7 @@ describe('RowBadgeSlot — not installed', () => {
     const user = userEvent.setup();
     renderWithShell(<RowBadgeSlot item={notInstalledInCursor} />);
     const tag = screen.getByTestId('row-tag-not-installed');
-    expect(tag).toHaveTextContent('draft · instalar');
+    expect(tag).toHaveTextContent('Instalar');
 
     await user.click(tag);
     await waitFor(() => expect(call).toHaveBeenCalledWith('adapter.install', { urn: 'urn:skill:backlog', adapterId: 'cursor' }));

@@ -341,7 +341,7 @@ describe('WorkspaceScreen', () => {
     });
   });
 
-  describe('"New Action" context menu', () => {
+  describe('"Nova sessão" context menu', () => {
     it('on the workspace INSTRUCTIONS row: resolves its path, spawns a workspace-anchored session, and writes the draft once ready (non-empty outputBuffer)', async () => {
       const user = userEvent.setup();
       const workspaceInstruction = {

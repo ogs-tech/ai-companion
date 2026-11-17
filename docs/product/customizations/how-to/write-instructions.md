@@ -66,6 +66,6 @@ English. The block is plain text in the instruction — you can see and edit it 
 
 ## Draft an instruction with an agent
 
-Right-click an **Instructions** row → **New Action**. A `claude` session opens with `@<instruction file>`
+Right-click an **Instructions** row → **Nova sessão**. A `claude` session opens with `@<instruction file>`
 drafted as the first message; ask it to write or refine the instruction. Its edits land in the canonical
 file and re-sync automatically.

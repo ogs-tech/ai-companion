@@ -14,8 +14,8 @@ const ctx = (over: Partial<MenuContext> = {}): MenuContext => ({
 const labels = (c: MenuContext): string[] => customizationMenu(c).map((a) => a.label);
 
 describe('customizationMenu', () => {
-  it('own skill: Abrir, Editar, Desativar, Excluir, then New Action', () => {
-    expect(labels(ctx())).toEqual(['Abrir', 'Editar', 'Desativar', 'Excluir', 'New Action']);
+  it('own skill: Visualizar, Editar, Desativar, Excluir, then Nova sessão', () => {
+    expect(labels(ctx())).toEqual(['Visualizar', 'Editar', 'Desativar', 'Excluir', 'Nova sessão']);
     expect(customizationMenu(ctx()).map((a) => a.key)).toEqual(['open', 'edit', 'toggle', 'delete', 'new-action']);
   });
 
@@ -27,8 +27,8 @@ describe('customizationMenu', () => {
     expect(labels(ctx({ entity: { kind: 'instruction', name: 'default', scopes: ['personal'] } }))).not.toContain('Excluir');
   });
 
-  it('plugin item: Abrir only', () => {
-    expect(labels(ctx({ readOnly: 'plugin', newAction: false }))).toEqual(['Abrir']);
+  it('plugin item: Visualizar only', () => {
+    expect(labels(ctx({ readOnly: 'plugin', newAction: false }))).toEqual(['Visualizar']);
   });
 
   it('toRowActions drops verbs with no handler and marks Excluir destructive', async () => {
@@ -38,8 +38,8 @@ describe('customizationMenu', () => {
     expect(actions[1]?.danger).toBe(true);
   });
 
-  it('detected: Abrir and Importar', () => {
-    expect(labels(ctx({ detected: true }))).toEqual(['Abrir', 'Importar']);
+  it('detected: Visualizar and Importar', () => {
+    expect(labels(ctx({ detected: true }))).toEqual(['Visualizar', 'Importar']);
   });
 
   it('installable: Instalar por cima, and Desfazer when there is something to undo', () => {
@@ -48,7 +48,7 @@ describe('customizationMenu', () => {
     expect(labels(ctx())).not.toContain('Instalar por cima');
   });
 
-  it('no New Action where the row has none', () => {
-    expect(labels(ctx({ newAction: false }))).toEqual(['Abrir', 'Editar', 'Desativar', 'Excluir']);
+  it('no Nova sessão where the row has none', () => {
+    expect(labels(ctx({ newAction: false }))).toEqual(['Visualizar', 'Editar', 'Desativar', 'Excluir']);
   });
 });

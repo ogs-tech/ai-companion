@@ -48,7 +48,7 @@ test.describe('Customizations › browse and search', () => {
     });
 
     await test.step('a Global skill opens editable right here, noting the change reaches every workspace', async () => {
-      await page.getByTestId('tree-row-global::urn:skill:global-lint').click();
+      await page.getByTestId('tree-row-global::urn:skill:global-lint').getByText('global-lint', { exact: true }).click();
       await expect(page.getByTestId('workbench-tab-entity:urn:skill:global-lint')).toBeVisible();
       await expect(page.getByTestId('global-notice')).toBeVisible();
       await expect(page.getByTestId('body-editor')).toBeVisible();
@@ -58,15 +58,15 @@ test.describe('Customizations › browse and search', () => {
   test('Search narrows by name or description, reports "N de M", and clears', async () => {
     const { page } = session;
     const search = page.getByTestId('control-panel-search');
-    const footer = page.getByTestId('control-panel-footer');
-    const totalBefore = Number(await page.getByTestId('control-panel-footer-count').innerText());
+    const shown = page.getByTestId('control-panel-shown');
+    const total = page.getByTestId('control-panel-count');
+    const totalBefore = Number(await total.innerText());
 
     await test.step('by name', async () => {
       await search.fill('deploy');
       await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
       await expect(page.getByTestId('tree-row-local::urn:agent:api-architect')).toBeHidden();
-      await expect(footer).toContainText(`de ${totalBefore} itens`);
-      await expect(page.getByTestId('control-panel-footer-count')).toHaveText('1');
+      await expect(shown).toHaveText(`1 de ${totalBefore}`);
     });
 
     await test.step('by description, reaching into collapsed Global', async () => {
@@ -78,49 +78,52 @@ test.describe('Customizations › browse and search', () => {
     await test.step('no match shows the empty state naming the query', async () => {
       await search.fill('zzz-nothing');
       await expect(page.getByTestId('control-panel-empty')).toContainText('zzz-nothing');
-      await expect(page.getByTestId('control-panel-footer-count')).toHaveText('0');
+      await expect(shown).toHaveText(`0 de ${totalBefore}`);
     });
 
     await test.step('the clear button in the box restores the full list', async () => {
       await page.getByTestId('control-panel-search-clear').click();
       await expect(search).toHaveValue('');
       await expect(page.getByTestId('control-panel-empty')).toHaveCount(0);
-      await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(totalBefore));
+      await expect(shown).toHaveCount(0);
+      await expect(total).toHaveText(String(totalBefore));
     });
 
-    await test.step('"Limpar filtros" in the footer does the same', async () => {
-      await search.fill('api');
+    await test.step('"Limpar filtros" in the empty state does the same', async () => {
+      await search.fill('zzz-nothing');
       await page.getByTestId('control-panel-clear').click();
       await expect(search).toHaveValue('');
       await expect(page.getByTestId('control-panel-clear')).toHaveCount(0);
     });
   });
 
-  test('Com erro chip narrows the tree, its channel row narrows it further, and Limpar filtros restores it', async () => {
+  test('"com erro" chip narrows the tree, its channel row narrows it further, and clicking it again restores it', async () => {
     const { page } = session;
     const problems = page.getByTestId('chip-error');
-    const totalBefore = Number(await page.getByTestId('control-panel-footer-count').innerText());
-    // The seed writes files straight to disk, never synced to Claude: those rows carry "⚠ Claude".
-    await expect(problems).toHaveText(/^Com erro [1-9]/);
+    const shown = page.getByTestId('control-panel-shown');
+    const totalBefore = Number(await page.getByTestId('control-panel-count').innerText());
+    // The seed writes files straight to disk, never synced to Claude: those rows carry "Erro no Claude".
+    await expect(problems).toHaveText(/^[1-9]\d* com erro$/);
     const failing = Number((await problems.innerText()).replace(/\D+/g, ''));
 
     await problems.click();
     await expect(problems).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
-    await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(failing));
-    await expect(page.getByTestId('control-panel-footer')).toContainText(`de ${totalBefore} itens`);
-    // Every listed row says what is wrong.
-    for (const row of await page.locator('[data-testid^="tree-row-"]').all()) await expect(row.getByTestId('channel-warning')).toBeVisible();
+    await expect(shown).toHaveText(`${failing} de ${totalBefore}`);
+    // Every listed row says what is wrong (the file tree's rows and chevron spacers are not customizations).
+    const rows = page.getByTestId('control-panel-customizations').locator('[data-testid^="tree-row-"]:not([data-testid="tree-row-chevron-spacer"])');
+    for (const row of await rows.all()) await expect(row.getByTestId('channel-warning')).toBeVisible();
 
     // Every failure in the seed is on Claude (Cursor is off), so its channel chip lists them all.
     await expect(page.getByTestId('chip-channel-all')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('chip-channel-claude')).toHaveText(`Claude ${failing}`);
     await page.getByTestId('chip-channel-claude').click();
-    await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(failing));
+    await expect(shown).toHaveText(`${failing} de ${totalBefore}`);
     await expect(page.getByTestId('chip-channel-cursor')).toBeDisabled();
 
-    await page.getByTestId('control-panel-clear').click();
-    await expect(page.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('control-panel-footer-count')).toHaveText(String(totalBefore));
+    await problems.click();
+    await expect(problems).toHaveAttribute('aria-pressed', 'false');
+    await expect(shown).toHaveCount(0);
+    await expect(page.getByTestId('control-panel-count')).toHaveText(String(totalBefore));
   });
 });

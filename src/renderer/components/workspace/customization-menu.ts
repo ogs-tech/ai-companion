@@ -29,15 +29,15 @@ export interface MenuAction {
  * Read-only and detected rows get their own short menus; a verb the item can't do is left out, never disabled.
  */
 export function customizationMenu(ctx: MenuContext): MenuAction[] {
-  const newAction: MenuAction[] = ctx.newAction ? [{ key: 'new-action', label: 'New Action' }] : [];
+  const newAction: MenuAction[] = ctx.newAction ? [{ key: 'new-action', label: 'Nova sessão' }] : [];
   if (ctx.readOnly !== false) {
-    return [{ key: 'open', label: 'Abrir' }, ...newAction];
+    return [{ key: 'open', label: 'Visualizar' }, ...newAction];
   }
-  if (ctx.detected) return [{ key: 'open', label: 'Abrir' }, { key: 'import', label: VERB_LABEL.import }];
+  if (ctx.detected) return [{ key: 'open', label: 'Visualizar' }, { key: 'import', label: VERB_LABEL.import }];
 
   const verbs = new Set(itemVerbs(ctx.entity));
-  // Abrir = today's read-only Preview, kept on own rows too (dropped by `toRowActions` where a row has no preview).
-  const out: MenuAction[] = [{ key: 'open', label: 'Abrir' }];
+  // Visualizar = today's read-only Preview, kept on own rows too (dropped by `toRowActions` where a row has no preview).
+  const out: MenuAction[] = [{ key: 'open', label: 'Visualizar' }];
   if (verbs.has('edit')) out.push({ key: 'edit', label: VERB_LABEL.edit });
   if (verbs.has('toggle')) out.push({ key: 'toggle', label: toggleLabel(ctx.enabled) });
   if (verbs.has('delete')) out.push({ key: 'delete', label: VERB_LABEL.delete });
@@ -61,7 +61,7 @@ const GLYPH: Record<MenuActionKey, LucideIcon> = {
 
 /**
  * Turns the menu into the row's context-menu actions. A verb the row has no handler for is left out (the rule is
- * "omit, never disable"); Excluir is drawn as destructive, and New Action sits after a divider.
+ * "omit, never disable"); Excluir is drawn as destructive, and Nova sessão sits after a divider.
  */
 export function toRowActions(menu: readonly MenuAction[], handlers: Partial<Record<MenuActionKey, () => void>>): RowContextMenuAction[] {
   const out: RowContextMenuAction[] = [];

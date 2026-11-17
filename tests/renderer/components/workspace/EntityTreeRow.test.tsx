@@ -63,7 +63,7 @@ describe('EntityTreeRow', () => {
     confirmSpy.mockRestore();
   });
 
-  it('right-click → "New Action" passes the row\'s kind and entity through', async () => {
+  it('right-click → "Nova sessão" passes the row\'s kind and entity through', async () => {
     const h = handlers();
     renderWithShell(<EntityTreeRow item={ownItem} handlers={h} />);
     fireEvent.contextMenu(screen.getByTestId(rowId(ownItem)));
@@ -85,7 +85,7 @@ describe('EntityTreeRow', () => {
   it('a problem shows the channel warning', () => {
     const failing = treeItem({ kind: 'skill', value: own }, { urn: own.urn, name: own.name, origin: 'global', problems: ['cursor'] });
     renderWithShell(<EntityTreeRow item={failing} handlers={handlers()} />);
-    expect(screen.getByTestId(rowId(failing))).toHaveTextContent('⚠ Cursor');
+    expect(screen.getByTestId(rowId(failing))).toHaveTextContent('Erro no Cursor');
   });
 
   it('seeds a new skill with the current localScope, and its folder when given', () => {
@@ -96,11 +96,11 @@ describe('EntityTreeRow', () => {
 });
 
 describe('EntityTreeRow — registry menu', () => {
-  it('an own skill offers Abrir, Editar, Desativar, Excluir, then New Action', async () => {
+  it('an own skill offers Visualizar, Editar, Desativar, Excluir, then Nova sessão', async () => {
     renderWithShell(<EntityTreeRow item={ownItem} handlers={handlers()} />);
     fireEvent.contextMenu(screen.getByTestId(rowId(ownItem)));
     const menu = await screen.findByRole('menu');
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Abrir', 'Editar', 'Desativar', 'Excluir', 'New Action']);
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Visualizar', 'Editar', 'Desativar', 'Excluir', 'Nova sessão']);
   });
 
   it('Desativar turns the skill off in every channel', async () => {
@@ -110,7 +110,7 @@ describe('EntityTreeRow — registry menu', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: ownItem.urn, enabled: false }));
   });
 
-  it("a plugin's skill opens as a preview and offers only Abrir and New Action", async () => {
+  it("a plugin's skill opens as a preview and offers only Visualizar and Nova sessão", async () => {
     const h = handlers();
     const pluginSkill = { ...own, source: { kind: 'plugin' as const, pluginId: 'superpowers', provenance: 'workspace-managed' as const } };
     const item = { ...ownItem, entity: { kind: 'skill' as const, value: pluginSkill } };
@@ -120,6 +120,6 @@ describe('EntityTreeRow — registry menu', () => {
     expect(h.onEdit).not.toHaveBeenCalled();
     fireEvent.contextMenu(screen.getByTestId(rowId(item)));
     const menu = await screen.findByRole('menu');
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Abrir', 'New Action']);
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Visualizar', 'Nova sessão']);
   });
 });

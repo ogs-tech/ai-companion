@@ -37,7 +37,7 @@ test.describe('Customizations › scope switch', () => {
     });
 
     await test.step('a Global skill opens editable at Início (no Global notice)', async () => {
-      await page.getByTestId('tree-row-local::urn:skill:global-lint').click();
+      await page.getByTestId('tree-row-local::urn:skill:global-lint').getByText('global-lint', { exact: true }).click();
       await expect(page.getByTestId('workbench-tab-entity:urn:skill:global-lint')).toBeVisible();
       await expect(page.getByTestId('global-notice')).toHaveCount(0);
     });
@@ -59,18 +59,20 @@ test.describe('Customizations › scope switch', () => {
     });
   });
 
-  test('switching scope resets the active chip to Todos', async () => {
+  test('switching scope turns the active chip off', async () => {
     const { page } = session;
     await page.getByTestId('chip-error').click();
     await expect(page.getByTestId('chip-error')).toHaveAttribute('aria-pressed', 'true');
 
     await page.getByTestId('context-switcher').click();
     await page.getByTestId('context-switcher-home').click();
-    await expect(page.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+    const pressed = page.locator('[data-testid^="chip-"][aria-pressed="true"]');
+    await expect(page.getByTestId('control-panel-shown')).toHaveCount(0);
+    await expect(pressed).toHaveCount(0);
 
     await page.locator('[data-testid^="workspace-list-row-"]').first().click();
     await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist')).toBeVisible();
-    await expect(page.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+    await expect(pressed).toHaveCount(0);
     await expect(page.getByTestId('chip-error')).toHaveAttribute('aria-pressed', 'false');
   });
 });

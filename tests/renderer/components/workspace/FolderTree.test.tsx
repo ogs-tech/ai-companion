@@ -109,7 +109,7 @@ describe('FolderTree', () => {
       listing({ '': [{ name: 'apps', kind: 'dir' }] });
       renderTree();
       fireEvent.contextMenu(await screen.findByText('apps'));
-      await screen.findByText('New Action');
+      await screen.findByText('Nova sessão');
       expect(screen.queryByText('Abrir terminal aqui')).not.toBeInTheDocument();
     });
   });
@@ -201,8 +201,8 @@ describe('FolderTree', () => {
     expect(await screen.findByTestId('tree-node-error-src')).toBeInTheDocument();
   });
 
-  describe('context menu — New Action', () => {
-    it('offers both "Preview" and "New Action" on a file row', async () => {
+  describe('context menu — Nova sessão', () => {
+    it('offers both "Preview" and "Nova sessão" on a file row', async () => {
       const onPreviewFile = vi.fn();
       const onNewAction = vi.fn();
       listing({ '': [{ name: 'README.md', kind: 'file' }] });
@@ -213,7 +213,7 @@ describe('FolderTree', () => {
       expect(onNewAction).toHaveBeenCalledWith('README.md');
     });
 
-    it('offers only "New Action" (no "Preview") on a folder row', async () => {
+    it('offers only "Nova sessão" (no "Preview") on a folder row', async () => {
       const onPreviewFile = vi.fn();
       const onNewAction = vi.fn();
       listing({ '': [{ name: 'src', kind: 'dir' }] });

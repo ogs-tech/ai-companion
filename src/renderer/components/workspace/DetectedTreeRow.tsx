@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Box, Tooltip } from '@mui/material';
-import { ScanSearch } from 'lucide-react';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowBadgeSlot, RowLabel, rowTestId } from './RowBadgeSlot.js';
 import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
@@ -16,7 +15,7 @@ export const HARNESS_LABEL: Record<DetectedEntity['harness'], string> = { claude
 /** The harness a detected item was found in, quiet after its name — two harnesses can hold the same name. */
 export function HarnessTag({ harness, testId }: { harness: DetectedEntity['harness']; testId?: string }): React.ReactElement {
   return (
-    <Box component="span" data-testid={testId} sx={{ flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled', whiteSpace: 'nowrap' }}>
+    <Box component="span" data-testid={testId} sx={{ flexShrink: 0, fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
       {HARNESS_LABEL[harness]}
     </Box>
   );
@@ -38,7 +37,7 @@ export function DetectedTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: n
         onError: (err) => setToast({ variant: 'error', message: err instanceof IpcCallError ? err.message : String(err) }),
       },
     );
-  // Detected rows: Abrir + Importar from the registry; there is no preview of a detected file yet, so Abrir is left out.
+  // Detected rows: Visualizar + Importar from the registry; there is no preview of a detected file yet, so Visualizar is left out.
   const menu = customizationMenu({
     entity: { kind: detected.kind === 'agent' ? 'agent' : 'skill', name: detected.name, scopes: ['personal'] },
     enabled: true,
@@ -54,10 +53,8 @@ export function DetectedTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: n
     <>
       <TreeGroupRow
         testId={rowTestId(item)}
-        glyph={ScanSearch}
         depth={depth}
         muted
-        mono
         primary={
           <Tooltip title={detected.importable ? detected.path : (detected.reason ?? 'Não pode ser importado')}>
             <span>

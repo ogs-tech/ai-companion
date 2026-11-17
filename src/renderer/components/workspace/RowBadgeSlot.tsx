@@ -7,7 +7,7 @@ import { IpcCallError } from '../../lib/ipc.js';
 import { channelsWith, isDisabled, rowBadge, type TreeItem } from '../../lib/customization-tree.js';
 import { CHANNEL_IDS, CHANNELS, type ChannelId } from '../../../shared/channel.js';
 
-const TAG_SX = { flexShrink: 0, fontSize: '0.6875rem', whiteSpace: 'nowrap' } as const;
+const TAG_SX = { flexShrink: 0, fontSize: '0.75rem', whiteSpace: 'nowrap' } as const;
 
 /** Whether a detected row can be imported (a detected MCP/hook carries it in `source`). */
 function importable(item: TreeItem): boolean {
@@ -31,11 +31,12 @@ function notInstalledChannels(item: TreeItem): ChannelId[] {
   return CHANNEL_IDS.filter((id) => channels[id]?.reason === 'not-installed');
 }
 
-/** The clickable tag's look: quiet text that reads as a link (info), like `draft · importar`. */
+/** The clickable tag's look: quiet text that reads as a link (info), like `Importar`. */
 const actionTagSx = (theme: Theme) => ({
   ...TAG_SX,
   font: 'inherit',
-  fontSize: '0.6875rem',
+  fontSize: '0.75rem',
+  fontWeight: 500,
   color: theme.palette.info.main,
   background: 'none',
   border: 0,
@@ -48,7 +49,7 @@ const actionTagSx = (theme: Theme) => ({
 
 /**
  * Installing over a file the app doesn't own (moved to `_backups/`), with "Desfazer" in its toast — shared by the
- * `draft · instalar` tag and the row menu's "Instalar por cima". `available` is false when nothing is in the way.
+ * `Instalar` tag and the row menu's "Instalar por cima". `available` is false when nothing is in the way.
  */
 export function useInstallOver(item: TreeItem | undefined): { available: boolean; run: () => void; pending: boolean; toast: React.ReactElement } {
   const install = useInstallEntity();
@@ -80,7 +81,7 @@ export function useInstallOver(item: TreeItem | undefined): { available: boolean
   };
 }
 
-/** `draft · instalar`: a file the app doesn't own sits where the item goes. Clicking installs over it. */
+/** `Instalar`: a file the app doesn't own sits where the item goes. Clicking installs over it. */
 function InstallTag({ item }: { item: TreeItem }): React.ReactElement {
   const installOver = useInstallOver(item);
   const where = notInstalledChannels(item).map((id) => CHANNELS[id].displayName).join(', ');
@@ -99,7 +100,7 @@ function InstallTag({ item }: { item: TreeItem }): React.ReactElement {
         }}
         sx={actionTagSx}
       >
-        draft · instalar
+        Instalar
       </Box>
       {installOver.toast}
     </>
@@ -107,8 +108,8 @@ function InstallTag({ item }: { item: TreeItem }): React.ReactElement {
 }
 
 /**
- * The row's single trailing tag, from its status: `⚠ <canais>` (error — something the app installed went wrong),
- * or `draft · <why>` — `importar` (detected), `instalar` (a file the app doesn't own is there), `desativado`.
+ * The row's single trailing tag, from its status: `● Erro no <canal>` (something the app installed went wrong), or a
+ * draft's one word — `Importar` (detected), `Instalar` (a file the app doesn't own is there), `Desativado`.
  * Installed is silent.
  */
 export function RowBadgeSlot({ item, onImport, busy = false }: RowBadgeSlotProps): React.ReactElement | null {
@@ -118,15 +119,15 @@ export function RowBadgeSlot({ item, onImport, busy = false }: RowBadgeSlotProps
   if (item.status?.reason === 'not-installed') return <InstallTag item={item} />;
   if (item.status?.reason === 'disabled') {
     return (
-      <Typography component="span" data-testid="row-tag-disabled" sx={{ ...TAG_SX, color: 'text.disabled' }}>
-        draft · desativado
+      <Typography component="span" data-testid="row-tag-disabled" sx={{ ...TAG_SX, color: 'text.secondary' }}>
+        Desativado
       </Typography>
     );
   }
   if (!importable(item) || onImport === undefined) {
     return (
-      <Typography component="span" data-testid="row-tag-detected" sx={{ ...TAG_SX, color: 'text.disabled' }}>
-        {importable(item) ? 'draft' : 'draft · não importável'}
+      <Typography component="span" data-testid="row-tag-detected" sx={{ ...TAG_SX, color: 'text.secondary' }}>
+        {importable(item) ? 'Detectado' : 'Não importável'}
       </Typography>
     );
   }
@@ -143,7 +144,7 @@ export function RowBadgeSlot({ item, onImport, busy = false }: RowBadgeSlotProps
       }}
       sx={actionTagSx}
     >
-      draft · importar
+      Importar
     </Box>
   );
 }
@@ -154,7 +155,7 @@ export function RowLabel({ item, label = item.name }: { item: TreeItem; label?: 
     <>
       {label}
       {item.folderAlias !== undefined && (
-        <Box component="span" data-testid="row-folder" sx={{ color: 'text.disabled' }}>
+        <Box component="span" data-testid="row-folder" sx={{ color: 'text.secondary' }}>
           {' · '}
           {item.folderAlias}
         </Box>
@@ -163,9 +164,12 @@ export function RowLabel({ item, label = item.name }: { item: TreeItem; label?: 
   );
 }
 
-/** Global, disabled and detected rows read quieter than the scope's own active items. */
+/**
+ * Disabled and detected rows read quieter than active ones. Global rows don't: inside a workspace they are as
+ * editable as the workspace's own, and their section header already says where they live.
+ */
 export function rowMuted(item: TreeItem): boolean {
-  return item.origin !== 'local' || isDisabled(item);
+  return item.origin === 'detected' || isDisabled(item);
 }
 
 export function rowTestId(item: TreeItem): string {

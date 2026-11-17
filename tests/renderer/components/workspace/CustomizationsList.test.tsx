@@ -52,14 +52,13 @@ const homeProps = (): CustomizationsListProps => ({ ...workspaceProps(), isHome:
 const follows = (a: Element, b: Element): boolean => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 describe('CustomizationsList', () => {
-  it('in a workspace, splits Workspace and a collapsed, read-only Global section, each grouped by type', async () => {
+  it('in a workspace, lists its own groups first, then a collapsed Global section, each grouped by type', async () => {
     const user = userEvent.setup();
     renderWithShell(<CustomizationsList {...workspaceProps()} />);
     const local = await screen.findByTestId(row('local', 'urn:skill:deploy'));
     const workspaceSection = screen.getByTestId('control-panel-section-local');
     const globalSection = screen.getByTestId('control-panel-section-global');
-    expect(workspaceSection).toHaveTextContent('Workspace');
-    expect(globalSection).toHaveTextContent('Global');
+    expect(globalSection).toHaveTextContent('Global — vale para todos os workspaces');
     expect(follows(workspaceSection, screen.getByTestId('tree-group-skill')) && follows(screen.getByTestId('tree-group-skill'), local)).toBe(true);
     // Global starts closed: the workspace's own items stay in view.
     await waitFor(() => expect(screen.getByTestId(row('global', 'urn:skill:lint'))).not.toBeVisible());
@@ -72,7 +71,7 @@ describe('CustomizationsList', () => {
     expect(screen.getByTestId(row('global', 'urn:hook:h1'))).toBeInTheDocument();
     expect(screen.queryByText('Integrações')).not.toBeInTheDocument();
     expect(screen.queryByTestId('row-tag-global')).not.toBeInTheDocument();
-    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent(/itens, 3 do Global/);
+    expect(screen.getByTestId('control-panel-count')).toHaveTextContent('5');
   });
 
   it('puts each section’s Instructions row right under it, not inside a group', async () => {
@@ -81,7 +80,7 @@ describe('CustomizationsList', () => {
     const own = await screen.findByTestId('workspace-instruction-row');
     expect(own).toHaveTextContent('Instructions');
     expect(screen.queryByTestId('tree-group-instruction')).not.toBeInTheDocument();
-    expect(follows(screen.getByTestId('control-panel-section-local'), own) && follows(own, screen.getByTestId('tree-group-skill'))).toBe(true);
+    expect(follows(own, await screen.findByTestId('tree-group-skill'))).toBe(true);
     await user.click(await screen.findByTestId('control-panel-section-global'));
     const inherited = screen.getByTestId('personal-instruction-row');
     expect(inherited).toHaveTextContent('Instructions');
@@ -125,7 +124,7 @@ describe('CustomizationsList', () => {
     expect(screen.getByTestId(row('local', 'urn:skill:deploy'))).toBeInTheDocument();
     expect(screen.getByTestId('personal-instruction-row')).toBeInTheDocument();
     expect(screen.queryByTestId('control-panel-section-global')).not.toBeInTheDocument();
-    expect(screen.getByTestId('control-panel-footer')).not.toHaveTextContent('Global');
+    expect(screen.getByTestId('control-panel-customizations')).not.toHaveTextContent('vale para todos os workspaces');
   });
 
   it('searches name and description, and counts "n de N itens"', async () => {
@@ -135,7 +134,7 @@ describe('CustomizationsList', () => {
     await user.type(screen.getByTestId('control-panel-search'), 'style');
     expect(await screen.findByTestId(row('global', 'urn:skill:lint'))).toBeVisible();
     expect(screen.queryByTestId(row('local', 'urn:skill:deploy'))).not.toBeInTheDocument();
-    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent('1 de 5 itens');
+    expect(screen.getByTestId('control-panel-shown')).toHaveTextContent('1 de 5');
   });
 
   it('selecting a chip filters rows and shows "n de N itens"', async () => {
@@ -143,23 +142,22 @@ describe('CustomizationsList', () => {
     respond({ 'mcp.list': [server('on'), server('off', false)] });
     renderWithShell(<CustomizationsList {...homeProps()} />);
     await screen.findByTestId(row('local', 'mcp:off-id'));
-    expect(screen.getByTestId('chip-draft')).toHaveTextContent('Draft 1');
+    expect(screen.getByTestId('chip-draft')).toHaveTextContent('1 rascunho');
     await user.click(screen.getByTestId('chip-draft'));
     expect(screen.getByTestId('chip-draft')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId(row('local', 'mcp:off-id'))).toBeVisible();
     expect(screen.queryByTestId(row('local', 'mcp:on-id'))).not.toBeInTheDocument();
     expect(screen.queryByTestId('tree-group-skill')).not.toBeInTheDocument();
     // 2 skills + 1 agent + 1 hook + 2 MCP + the saved personal instruction.
-    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent('1 de 7 itens');
+    expect(screen.getByTestId('control-panel-shown')).toHaveTextContent('1 de 7');
   });
 
-  it('a chip with zero matches is disabled', async () => {
+  it('offers no chip while nothing needs attention', async () => {
     renderWithShell(<CustomizationsList {...workspaceProps()} />);
     await screen.findByTestId(row('local', 'urn:skill:deploy'));
-    expect(screen.getByTestId('chip-error')).toBeDisabled();
-    expect(screen.getByTestId('chip-draft')).toBeDisabled();
-    expect(screen.getByTestId('chip-all')).toBeEnabled();
-    expect(screen.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('chip-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chip-draft')).not.toBeInTheDocument();
+    expect(screen.getByTestId('control-panel-count')).toHaveTextContent('5');
   });
 
   it('chip stays selected when search empties it and Limpar filtros resets both', async () => {
@@ -170,27 +168,26 @@ describe('CustomizationsList', () => {
     await user.click(screen.getByTestId('chip-draft'));
     await user.type(screen.getByTestId('control-panel-search'), 'deploy');
     expect(screen.getByTestId('chip-draft')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('chip-draft')).toBeDisabled();
     expect(screen.getByTestId('control-panel-empty')).toHaveTextContent('deploy');
-    expect(screen.getByTestId('control-panel-footer')).toHaveTextContent('0 de');
+    expect(screen.getByTestId('control-panel-shown')).toHaveTextContent('0 de');
 
     await user.click(screen.getByTestId('control-panel-clear'));
-    expect(screen.getByTestId('chip-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('chip-draft')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('control-panel-search')).toHaveValue('');
     expect(screen.getByTestId(row('local', 'urn:skill:deploy'))).toBeInTheDocument();
     expect(screen.queryByTestId('control-panel-empty')).not.toBeInTheDocument();
   });
 
-  it('disabled hook row shows desativado', async () => {
+  it('disabled hook row shows Desativado', async () => {
     respond({ 'hook.list': [{ ...hook, enabled: false }] });
     renderWithShell(<CustomizationsList {...homeProps()} />);
-    expect(await screen.findByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('draft · desativado');
+    expect(await screen.findByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('Desativado');
   });
 
-  it('disabled MCP row shows desativado', async () => {
+  it('disabled MCP row shows Desativado', async () => {
     respond({ 'mcp.list': [server('off', false)] });
     renderWithShell(<CustomizationsList {...homeProps()} />);
-    expect(await screen.findByTestId(row('local', 'mcp:off-id'))).toHaveTextContent('desativado');
+    expect(await screen.findByTestId(row('local', 'mcp:off-id'))).toHaveTextContent('Desativado');
   });
 
   it('shows each row its status from customization.status, counts errors once per item, and filters by channel', async () => {
@@ -209,14 +206,13 @@ describe('CustomizationsList', () => {
       },
     });
     renderWithShell(<CustomizationsList {...homeProps()} />);
-    await waitFor(() => expect(screen.getByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('⚠ Claude · Cursor'));
-    expect(screen.getByTestId(row('local', 'urn:hook:h2'))).toHaveTextContent('⚠ Cursor');
-    expect(screen.getByTestId(row('local', 'urn:hook:h3'))).not.toHaveTextContent('⚠');
-    expect(screen.getByTestId(row('local', 'urn:hook:h4'))).toHaveTextContent('draft');
-    expect(screen.getByTestId('tree-group-hook')).toHaveTextContent('2 ⚠');
-    expect(screen.getByTestId('chip-error')).toHaveTextContent('Com erro 2');
-    expect(screen.getByTestId('chip-installed')).toHaveTextContent('Instalado 1');
-    expect(screen.getByTestId('chip-draft')).toHaveTextContent('Draft 1');
+    await waitFor(() => expect(screen.getByTestId(row('local', 'urn:hook:h1'))).toHaveTextContent('Erro em 2 canais'));
+    expect(screen.getByTestId(row('local', 'urn:hook:h2'))).toHaveTextContent('Erro no Cursor');
+    expect(screen.getByTestId(row('local', 'urn:hook:h3'))).not.toHaveTextContent('Erro');
+    expect(screen.getByTestId(row('local', 'urn:hook:h4'))).toHaveTextContent('Não importável');
+    expect(within(screen.getByTestId('tree-group-hook')).getByTestId('problem-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('chip-error')).toHaveTextContent('2 com erro');
+    expect(screen.getByTestId('chip-draft')).toHaveTextContent('1 rascunho');
     expect(screen.queryByTestId('chip-channel-all')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('chip-error'));
@@ -270,11 +266,18 @@ describe('CustomizationsList', () => {
     expect(items).toEqual(['Instruções', 'Skills', 'Agents', 'MCP', 'Hooks', 'Importar plugin']);
   });
 
-  it('keeps Skills and Agents as the create affordance when empty', async () => {
+  it('leaves out a type with nothing in it — "+" is where it starts', async () => {
     respond({ 'skill.list': [], 'agent.list': [] });
     renderWithShell(<CustomizationsList {...homeProps()} />);
-    expect(await screen.findByTestId('tree-group-empty-skill')).toHaveTextContent('Nada aqui ainda');
-    expect(screen.getByTestId('tree-group-empty-agent')).toBeInTheDocument();
+    expect(await screen.findByTestId('tree-group-hook')).toBeInTheDocument();
+    expect(screen.queryByTestId('tree-group-skill')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tree-group-agent')).not.toBeInTheDocument();
+  });
+
+  it('a scope with no customization at all says how to start', async () => {
+    respond({ 'skill.list': [], 'agent.list': [], 'hook.list': [], 'mcp.list': [], 'plugin.list': [], 'instruction.list': [], 'instruction.get': null });
+    renderWithShell(<CustomizationsList {...homeProps()} />);
+    expect(await screen.findByTestId('control-panel-blank')).toHaveTextContent('Use + para criar');
   });
 
   it('remembers a collapsed group per scope and section', async () => {

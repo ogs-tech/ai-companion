@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Typography } from '@mui/material';
-import { KeyRound, Plug } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroupRow } from './TreeGroup.js';
 import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
@@ -26,7 +26,7 @@ const MCP_SCOPE_LABEL: Record<McpServer['scope'], string> = {
   detected: 'detectado',
 };
 
-const QUIET_SX = { flexShrink: 0, fontSize: '0.6875rem', color: 'text.disabled' } as const;
+const QUIET_SX = { flexShrink: 0, fontSize: '0.75rem', color: 'text.secondary' } as const;
 
 function errorMessage(err: unknown): string {
   return err instanceof IpcCallError ? err.message : String(err);
@@ -103,8 +103,6 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
     <>
       <TreeGroupRow
         testId={rowTestId(item)}
-        glyph={Plug}
-        mono
         depth={depth}
         muted={rowMuted(item)}
         primary={<RowLabel item={item} />}
@@ -134,7 +132,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
                   e.stopPropagation();
                   authenticate.mutate({ id: server.id }, { onSuccess: () => setAwaitingReturn(true), onError: onMutationError });
                 }}
-                sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.75, fontSize: '0.6875rem', textTransform: 'none' }}
+                sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.75, fontSize: '0.75rem', textTransform: 'none' }}
               >
                 {refreshHealth.isPending ? 'Verificando…' : 'Conectar'}
               </Button>

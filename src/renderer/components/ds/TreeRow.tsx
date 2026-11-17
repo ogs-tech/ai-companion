@@ -15,7 +15,8 @@ export interface TreeRowProps {
    * row already nested under its own group).
    */
   chevron?: 'expanded' | 'collapsed' | 'spacer';
-  glyph: LucideIcon;
+  /** Omitted for a row whose group already names its type (the Customizações items). */
+  glyph?: LucideIcon | undefined;
   /** Colours the glyph with a design-system role — file-type icons only; omitted keeps the inherited colour. */
   glyphTone?: FileTone | undefined;
   primary: React.ReactNode;
@@ -28,9 +29,16 @@ export interface TreeRowProps {
   /** 'hover' (default) reveals `actions` on hover/focus-within, keyboard-reachable via :focus-within; 'always' renders them plainly, for actions that should never hide. */
   actionsVisibility?: 'hover' | 'always';
   muted?: boolean;
+  /** How `muted` reads: 'fade' lowers the opacity (file tree); 'quiet' keeps it opaque in the secondary text colour, so it still passes contrast. */
+  mutedStyle?: 'fade' | 'quiet';
   disabled?: boolean;
-  /** 'mono' for entity names (skills/agents); 'group' for a group-header row, in the same Kicker style as every other group header in the side panels. */
-  labelVariant?: 'default' | 'mono' | 'group';
+  /** 'compact' (22px, file tree) or 'comfortable' (26px, Customizações). */
+  density?: 'compact' | 'comfortable';
+  /**
+   * 'mono' for file-like names; 'group' for a group-header row, in the same Kicker style as every other group header in
+   * the side panels; 'item' (13px) and 'heading' (12px semibold, secondary) are the Customizações tree's two sizes.
+   */
+  labelVariant?: 'default' | 'mono' | 'group' | 'item' | 'heading';
   /** Marks the row as the current selection (Explorer multi-select). */
   selected?: boolean;
   /** Drag-and-drop feedback: 'valid' highlights the row as the drop target, 'invalid' dims it with a not-allowed cursor. */
@@ -48,8 +56,12 @@ export const treeGroupLabelSx = {
   color: 'text.secondary',
 } as const;
 
-function labelSx(variant: 'default' | 'mono' | 'group'): SxProps<Theme> {
+function labelSx(variant: NonNullable<TreeRowProps['labelVariant']>): SxProps<Theme> {
   switch (variant) {
+    case 'item':
+      return { fontSize: '0.8125rem' };
+    case 'heading':
+      return { fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' };
     case 'default':
       return { fontSize: '0.8rem' };
     case 'mono':
@@ -78,7 +90,9 @@ export function TreeRow({
   actions,
   actionsVisibility = 'hover',
   muted,
+  mutedStyle = 'fade',
   disabled,
+  density = 'compact',
   labelVariant = 'default',
   glyphTone,
   selected,
@@ -96,11 +110,12 @@ export function TreeRow({
       onContextMenu={onContextMenu}
       sx={(theme) => ({
         pl,
-        minHeight: 22,
+        minHeight: density === 'comfortable' ? 26 : 22,
         py: 0,
         mx: 0.75,
         borderRadius: `${theme.ogs.radius.xs}px`,
-        opacity: muted || dropState === 'invalid' ? 0.45 : 1,
+        opacity: (muted && mutedStyle === 'fade') || dropState === 'invalid' ? 0.45 : 1,
+        ...(muted && mutedStyle === 'quiet' ? { color: 'text.secondary', '& .MuiListItemText-primary': { color: 'text.secondary' } } : {}),
         ...(dropState === 'invalid' ? { cursor: 'not-allowed' } : {}),
         ...(dropState === 'valid'
           ? { bgcolor: alpha(theme.palette.secondary.main, 0.16), outline: `1px solid ${theme.palette.secondary.main}` }
@@ -119,15 +134,17 @@ export function TreeRow({
         ) : chevron ? (
           <Icon glyph={chevron === 'expanded' ? ChevronDown : ChevronRight} size={14} />
         ) : null}
-        <Box
-          component="span"
-          sx={(theme) => {
-            const color = toneColor(theme, glyphTone);
-            return { display: 'inline-flex', ...(color ? { color } : {}) };
-          }}
-        >
-          <Icon glyph={glyph} size={14} />
-        </Box>
+        {glyph && (
+          <Box
+            component="span"
+            sx={(theme) => {
+              const color = toneColor(theme, glyphTone);
+              return { display: 'inline-flex', ...(color ? { color } : {}) };
+            }}
+          >
+            <Icon glyph={glyph} size={14} />
+          </Box>
+        )}
         <ListItemText primary={primary} sx={{ my: 0 }} slotProps={{ primary: { noWrap: true, sx: labelSx(labelVariant) } }} />
         {badge}
       </Stack>
