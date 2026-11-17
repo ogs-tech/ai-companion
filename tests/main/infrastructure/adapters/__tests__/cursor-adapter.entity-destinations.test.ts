@@ -112,7 +112,6 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
         content: expect.stringContaining('alwaysApply: true'),
         ownershipMarker: CURSOR_RULE_MDC_MARKER,
         ownershipCheck: 'includes',
-        keepForeign: true,
       },
     ]);
   });
@@ -124,6 +123,6 @@ describe('CursorAdapter.resolveEntityDestinations', () => {
       source: WORKSPACE_SOURCE, content: 'body',
     };
     const [dest] = await adapter.resolveEntityDestinations({ entity: ins });
-    expect(dest).toMatchObject({ destination: '/repos/ui-core/.cursor/rules/ui-core.mdc', strategy: 'write', keepForeign: true });
+    expect(dest).toMatchObject({ destination: '/repos/ui-core/.cursor/rules/ui-core.mdc', strategy: 'write' });
   });
 });

@@ -39,15 +39,16 @@ function verdictFor(state: SymlinkValidateState, destination: string): Verdict {
     case 'real-file':
       return {
         severity: 'warning',
-        title: `Real file blocks symlink: ${destination}`,
-        remediation: 'Remove or back up the real file, then re-sync.',
+        title: `Not installed — an unmanaged file is at: ${destination}`,
+        remediation: 'Install it from the customizations tree (the existing file is backed up).',
       };
   }
 }
 
-/** Anything but ok is an error — including a conflict (a file/entry the app doesn't own blocks the destination). */
+/** A real file/folder the app never put there means not installed (draft); any other deviation is an error. */
 function outcomeFor(state: SymlinkValidateState): CheckOutcome {
-  return state === 'symlink-to-source' ? 'installed' : 'error';
+  if (state === 'symlink-to-source') return 'installed';
+  return state === 'real-file' ? 'draft' : 'error';
 }
 
 export class SymlinkCollector implements HealthCollector {

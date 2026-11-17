@@ -67,7 +67,18 @@ describe('CustomizationStatusService', () => {
     });
   });
 
-  it('makes a failing check (a conflict included) an error on that channel', async () => {
+  it('makes a destination held by a file the app does not own a not-installed draft on that channel', async () => {
+    const report = await make({
+      checks: [check('urn:skill:a', 'claude', 'installed'), check('urn:skill:a', 'cursor', 'draft')],
+    }).getReport();
+    expect(report.items['urn:skill:a']).toEqual({
+      status: 'draft',
+      reason: 'not-installed',
+      channels: { claude: { status: 'installed' }, cursor: { status: 'draft', reason: 'not-installed' } },
+    });
+  });
+
+  it('makes a failing check an error on that channel', async () => {
     const report = await make({
       checks: [check('urn:skill:a', 'claude', 'installed'), check('urn:skill:a', 'cursor', 'error')],
     }).getReport();

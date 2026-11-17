@@ -61,6 +61,23 @@ export interface MergePlanEntry {
   target: MergeTarget;
 }
 
+export interface InstallCommand {
+  urn: string;
+  adapterId: string;
+}
+
+/** What `install` took over: undoing it puts each backup back (in memory, so a scope switch drops it). */
+interface TakenOver {
+  strategy: 'symlink' | 'write';
+  destination: string;
+  backupPath: string;
+}
+
+export interface InstallResult {
+  /** Present when something was backed up — pass it to `undoInstall`. */
+  undoToken?: string;
+}
+
 export interface SyncAllCommand {
   adapterId?: string;
 }
@@ -83,7 +100,54 @@ function isDisabled(entity: Entity): boolean {
 }
 
 export class AdapterManager {
+  private readonly pendingUndo = new Map<string, TakenOver[]>();
+  private undoSeq = 0;
+
   constructor(private readonly deps: AdapterManagerDeps) {}
+
+  /**
+   * Installs one entity into one channel over whatever is there: a file/folder the app doesn't own is moved to
+   * `_backups/` and replaced, so from now on the app controls it (and health reports deviations as errors).
+   */
+  async install(command: InstallCommand): Promise<InstallResult> {
+    const adapter = this.deps.adapters.get(command.adapterId);
+    if (adapter === undefined) throw new DomainError('not_found', `Unknown adapter: ${command.adapterId}`);
+    const entity = (await this.deps.entityRepository.list()).find((e) => e.urn === command.urn);
+    if (entity === undefined) throw new DomainError('not_found', `Unknown entity: ${command.urn}`);
+
+    const source = this.entitySourcePath(entity);
+    const takenOver: TakenOver[] = [];
+    for (const dest of await adapter.resolveEntityDestinations({ entity })) {
+      let backupPath: string | undefined;
+      if (dest.strategy === 'symlink') {
+        backupPath = (await this.deps.symlinkManager.create({ source, destination: dest.destination })).details?.backupPath;
+      } else if (dest.strategy === 'write') {
+        backupPath = (await this.deps.fileMaterializer.write(this.writeArgs(dest))).details?.backupPath;
+      } else {
+        await this.syncDestination(adapter.adapterId, source, dest);
+      }
+      if (backupPath !== undefined && dest.strategy !== 'merge' && dest.strategy !== 'skip') {
+        takenOver.push({ strategy: dest.strategy, destination: dest.destination, backupPath });
+      }
+    }
+    await this.deps.afterSync?.().catch(() => undefined);
+    if (takenOver.length === 0) return {};
+    const undoToken = `install-${++this.undoSeq}`;
+    this.pendingUndo.set(undoToken, takenOver);
+    return { undoToken };
+  }
+
+  /** Reverts an `install`: each replaced file/folder goes back, so the entity is a draft again in that channel. */
+  async undoInstall(args: { undoToken: string }): Promise<void> {
+    const takenOver = this.pendingUndo.get(args.undoToken);
+    if (takenOver === undefined) throw new DomainError('not_found', 'Nothing to undo');
+    this.pendingUndo.delete(args.undoToken);
+    for (const { strategy, destination, backupPath } of takenOver) {
+      if (strategy === 'symlink') await this.deps.symlinkManager.restoreBackup({ destination, backupPath });
+      else await this.deps.fileMaterializer.restoreBackup({ destination, backupPath });
+    }
+    await this.deps.afterSync?.().catch(() => undefined);
+  }
 
   async syncAll(command: SyncAllCommand): Promise<SyncResult[]> {
     const settings = (await this.deps.settingsService.load()) ?? this.deps.settingsService.getDefaults();
@@ -458,7 +522,8 @@ export class AdapterManager {
     source: string,
     dest: AdapterDestination,
   ): Promise<SyncResult> {
-    if ((dest.strategy === 'symlink' || dest.strategy === 'write') && dest.keepForeign === true) {
+    // A file the app doesn't own is never replaced by a sync: it stays a draft until the user installs over it.
+    if (dest.strategy === 'symlink' || dest.strategy === 'write') {
       const foreign = await this.foreignFileAt(dest, source);
       if (foreign) {
         const message = `${dest.destination} already exists and is not managed by the app; left untouched`;
@@ -539,13 +604,7 @@ export class AdapterManager {
 
   private async writeDestination(adapterId: string, dest: Extract<AdapterDestination, { strategy: 'write' }>): Promise<SyncResult> {
     try {
-      const writeArgs: Parameters<typeof this.deps.fileMaterializer.write>[0] = {
-        destination: dest.destination,
-        content: dest.content,
-      };
-      if (dest.ownershipMarker !== undefined) writeArgs.ownershipMarker = dest.ownershipMarker;
-      if (dest.ownershipCheck !== undefined) writeArgs.ownershipCheck = dest.ownershipCheck;
-      const result = await this.deps.fileMaterializer.write(writeArgs);
+      const result = await this.deps.fileMaterializer.write(this.writeArgs(dest));
       const payload: SyncResult = { adapter: adapterId, destination: dest.destination, status: result.status };
       if (result.status === 'conflict') payload.message = 'Overwrote an existing file and created a backup';
       if (result.details !== undefined) payload.details = result.details as SyncResultDetails;
@@ -553,6 +612,15 @@ export class AdapterManager {
     } catch (err) {
       return this.symlinkError(adapterId, dest.destination, err);
     }
+  }
+
+  private writeArgs(dest: Extract<AdapterDestination, { strategy: 'write' }>): Parameters<FileMaterializer['write']>[0] {
+    return {
+      destination: dest.destination,
+      content: dest.content,
+      ...(dest.ownershipMarker !== undefined ? { ownershipMarker: dest.ownershipMarker } : {}),
+      ...(dest.ownershipCheck !== undefined ? { ownershipCheck: dest.ownershipCheck } : {}),
+    };
   }
 
   private symlinkError(adapterId: string, destination: string, err: unknown): SyncResult {

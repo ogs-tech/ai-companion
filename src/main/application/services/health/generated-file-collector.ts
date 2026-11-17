@@ -44,15 +44,16 @@ function verdictFor(state: GeneratedFileState, destination: string): Verdict {
     case 'foreign':
       return {
         severity: 'warning',
-        title: `Unmanaged file blocks generation: ${destination}`,
-        remediation: 'Remove or back up the file, then re-sync.',
+        title: `Not installed — an unmanaged file is at: ${destination}`,
+        remediation: 'Install it from the customizations tree (the existing file is backed up).',
       };
   }
 }
 
-/** Anything but ok is an error — including a conflict (a file/entry the app doesn't own blocks the destination). */
+/** A file the app doesn't own means not installed (draft); a missing or drifted owned file is an error. */
 function outcomeFor(state: GeneratedFileState): CheckOutcome {
-  return state === 'ok' ? 'installed' : 'error';
+  if (state === 'ok') return 'installed';
+  return state === 'foreign' ? 'draft' : 'error';
 }
 
 export class GeneratedFileCollector implements HealthCollector {

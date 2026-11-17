@@ -1,6 +1,6 @@
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import type { ClockPort } from '../ports/clock-port.js';
-import type { FileSystemPort } from '../ports/filesystem-port.js';
+import type { WritableFileSystemPort } from '../ports/writable-filesystem-port.js';
 import { DomainError, ioError } from '../../domain/errors.js';
 
 export type RemoveIfPointsResult =
@@ -31,7 +31,7 @@ export interface SymlinkScanResult {
 
 export class SymlinkManager {
   constructor(
-    private readonly fs: FileSystemPort,
+    private readonly fs: WritableFileSystemPort,
     private readonly clock: ClockPort,
     private readonly workspacePath: string,
   ) {}
@@ -85,11 +85,10 @@ export class SymlinkManager {
         try {
           if (stat.kind === 'file') {
             await this.fs.copyFile(destinationPath, backupPath);
+            await this.fs.unlink(destinationPath);
           } else {
-            throw ioError({
-              message: `Cannot backup directory destination: ${destinationPath}`,
-              details: { reason: 'backup-directory' },
-            });
+            // A folder (a skill) is moved whole into the backup, so nothing in it is lost.
+            await this.fs.rename(destinationPath, backupPath);
           }
         } catch (err) {
           if (err instanceof DomainError) throw err;
@@ -106,7 +105,6 @@ export class SymlinkManager {
           }
           throw err;
         }
-        await this.fs.unlink(destinationPath);
         await this.fs.symlink({ target: sourcePath, path: destinationPath });
         return {
           status: 'conflict',
@@ -142,6 +140,13 @@ export class SymlinkManager {
       return 'symlink-to-other';
     }
     return 'real-file';
+  }
+
+  /** Undoes a take-over: drops the link at `destination` and moves the backed-up file/folder back in its place. */
+  async restoreBackup(args: { destination: string; backupPath: string }): Promise<void> {
+    const destinationPath = resolve(args.destination);
+    if ((await this.fs.lstat(destinationPath)).kind === 'symlink') await this.fs.unlink(destinationPath);
+    await this.fs.rename(resolve(args.backupPath), destinationPath);
   }
 
   async remove(args: { destination: string }): Promise<void> {

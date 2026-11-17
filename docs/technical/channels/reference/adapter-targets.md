@@ -70,7 +70,9 @@ written before the rename are still treated as owned.
 
 ## What happens when the destination already exists
 
-Applies on every sync (`AdapterManager` → `SymlinkManager.create` / `FileMaterializer.write`).
+A sync leaves a file or folder the app doesn't own untouched (`details.skipped: 'foreign-file'`; health reports the item as
+`draft · not-installed`). The table is what `AdapterManager.install` (`adapter.install`) does when the user installs over
+it, and what a sync does for everything else (`SymlinkManager.create` / `FileMaterializer.write`).
 
 | Found at destination | 🔗 symlink target | ✍️ write target |
 |---|---|---|
@@ -78,7 +80,7 @@ Applies on every sync (`AdapterManager` → `SymlinkManager.create` / `FileMater
 | Symlink to the right source | No-op. `ok`. | — |
 | Symlink elsewhere | Re-pointed. `ok` (`details.replacedTarget`). | Link target's content backed up, link removed, file written. `conflict`. |
 | Regular file | Backed up, replaced by the symlink. `conflict`. | Owned (marker present): overwritten. `ok`. Foreign: backed up, then overwritten. `conflict`. |
-| Directory | Refused — directories are not backed up. `error` (`reason: 'backup-directory'`). | — |
+| Directory | Moved whole into the backup, replaced by the symlink. `conflict`. | — |
 
 Backups go to `<data>/_backups/<timestamp>/<path relative to data dir, or absolute path without the leading slash>`.
 A `conflict` is not a failure: it means "overwritten, and here is the backup" (`details.backupPath`).
@@ -138,10 +140,11 @@ empty Instruction.
 
 ### Foreign files
 
-Instruction destinations carry `keepForeign: true`: when a file the app does not own already sits at one, the sync
+When a file or folder the app does not own already sits at a symlink or write destination (any kind), the sync
 does **not** replace it. The Sync report gets `details.skipped: 'foreign-file'` with a message naming the file,
-and the entity's sync state stays `pending` until the user imports the file or removes it. (Skills, agents, MCP
-and hooks keep the older behaviour: overwrite with a backup under `_backups/`.)
+and the item reads `draft · instalar` in that channel until the user installs over it (backed up, undoable) or
+removes it. Once installed, a deviation (missing, repointed, drifted) is an `error`. (MCP and hooks — merged
+entries — keep the older behaviour: overwrite with a backup under `_backups/`.)
 
 ## Removal
 

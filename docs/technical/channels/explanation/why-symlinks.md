@@ -44,10 +44,9 @@ nothing to diverge.
 
 ## What they cost
 
-- **Overwriting what was there.** A user who already had a hand-written `~/.claude/CLAUDE.md` gets it
-  replaced by a link. The app never discards it: the old file is copied to `<data>/_backups/<timestamp>/…`
-  first and the sync reports a `conflict` that names the backup. Directories are the one thing it will not
-  back up, so it refuses to replace them (`error`, `reason: 'backup-directory'`).
+- **Taking over what was there.** A sync never replaces a file or folder the app doesn't own — the item
+  shows as `draft · instalar` in that channel. Installing it (`adapter.install`) moves the old file/folder to
+  `<data>/_backups/<timestamp>/…` and puts the link in its place; the toast's Desfazer moves it back.
 - **Edits from anywhere land in the source.** The same property as above, seen from the other side: there
   is no way to make a harness-local tweak that the canonical copy does not see.
 - **Every link names one data dir.** Links point at Global's data dir (`personal` entities) or at one

@@ -232,6 +232,16 @@ export function buildHandlers(deps: IpcDeps): IpcHandlers {
       }
     },
 
+    'adapter.install': async (params) => {
+      const raw = asObject(params, 'adapter.install');
+      return adapterManager.install({ urn: asString(raw['urn'], 'urn'), adapterId: asString(raw['adapterId'], 'adapterId') });
+    },
+
+    'adapter.undoInstall': async (params) => {
+      const raw = asObject(params, 'adapter.undoInstall');
+      await adapterManager.undoInstall({ undoToken: asString(raw['undoToken'], 'undoToken') });
+    },
+
     'adapter.countDestinations': async (params) => {
       const raw = asObject(params, 'adapter.countDestinations');
       const adapterId = asString(raw['adapterId'], 'adapterId');

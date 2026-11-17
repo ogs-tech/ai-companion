@@ -188,15 +188,19 @@ export class InMemoryFileSystem implements WritableFileSystemPort {
     this.checkFail('rename', oldPath);
     const normalizedOld = this.normalize(oldPath);
     const normalizedNew = this.normalize(newPath);
-    const entry = this.entries.get(normalizedOld);
-    if (!entry) {
+    if (!this.entries.has(normalizedOld)) {
       const err: ErrorWithCode = new Error('ENOENT');
       err.code = 'ENOENT';
       throw err;
     }
     this.ensureDirectory(dirname(normalizedNew));
-    this.entries.delete(normalizedOld);
-    this.entries.set(normalizedNew, entry);
+    // Like fs.rename, a directory moves with everything under it.
+    for (const key of [...this.entries.keys()]) {
+      if (key !== normalizedOld && !key.startsWith(`${normalizedOld}/`)) continue;
+      const moved = this.entries.get(key);
+      this.entries.delete(key);
+      if (moved) this.entries.set(normalizedNew + key.slice(normalizedOld.length), moved);
+    }
   }
 
   async chmod(path: string, mode: number): Promise<void> {

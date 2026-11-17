@@ -92,6 +92,11 @@ export class FileMaterializer {
     }
   }
 
+  /** Undoes a take-over: puts the backed-up file back over the generated one. */
+  async restoreBackup(args: { destination: string; backupPath: string }): Promise<void> {
+    await this.fs.rename(resolve(args.backupPath), resolve(args.destination));
+  }
+
   async removeIfOwned(args: {
     destination: string;
     ownershipMarker?: string;

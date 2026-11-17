@@ -556,10 +556,11 @@ Hooks are not part of the canonical `Entity` model yet — they live in `.claude
 One status per customization for the Customizações tree (`src/shared/customization-status.ts`), built by
 `CustomizationStatusService` from the personal health report, detection, and what the user turned off:
 
-- `installed` — every check `ok`; `draft` — not meant to be installed yet: `reason` `detected` (found in a
-  channel's files, not imported) or `disabled` (`enabled: false`; `channels` is empty, whatever the checks say);
-  `error` — any non-ok check, a conflict included (a file/entry the app doesn't own blocks a destination). A
-  check's `outcome` is only ever `installed` or `error`.
+- `installed` — every check `ok`; `draft` — not installed: `reason` `detected` (found in a channel's files, not
+  imported), `disabled` (`enabled: false`; `channels` is empty, whatever the checks say) or `not-installed` (a
+  file/folder the app doesn't own holds a symlink/write destination — check `outcome: 'draft'`; `adapter.install`
+  takes it over); `error` — any other non-ok check (something the app installed is missing, repointed or drifted;
+  a merge entry the app doesn't own).
 - `ItemStatus = { status, reason?, channels: Partial<Record<ChannelId, { status, reason? }>> }`; per channel and
   overall, error > draft > installed. A plugin's MCP/hook statuses roll up to `urn:plugin:<id>`.
 - An item with nothing checked (no channel on) is absent: it has no status. Computed per call — nothing polls it;
@@ -577,6 +578,8 @@ The CRUD `customization.*` methods (pre-Entity) were **removed**, and so was the
 | `adapter.removeAll` | `{ adapterId: string }` | `RemoveAdapterResult` |
 | `adapter.setEnabled` | `{ adapterId: string; enabled: boolean; removeSymlinks?: boolean; runSyncAll?: boolean }` | See below |
 | `adapter.countDestinations` | `{ adapterId: string }` | `{ count: number }` |
+| `adapter.install` | `{ urn: string; adapterId: string }` | `{ undoToken?: string }` — installs one entity into one channel over a file/folder the app doesn't own (moved to `~/.air-ide/_backups/`); a sync never does that |
+| `adapter.undoInstall` | `{ undoToken: string }` | `void` — moves the backups back (token kept in memory; `not_found` after a scope switch) |
 
 `adapter.entitySyncStates` was removed (it had no consumer): per-entity state is `customization.status`.
 

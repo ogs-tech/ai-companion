@@ -37,10 +37,12 @@ export interface CustomizationStatusDeps {
 }
 
 const DETECTED: ChannelStatus = { status: 'draft', reason: 'detected' };
+const NOT_INSTALLED: ChannelStatus = { status: 'draft', reason: 'not-installed' };
 const DISABLED: ItemStatus = { status: 'draft', reason: 'disabled', channels: {} };
 
 function checkStatus(check: HealthCheck): ChannelStatus | undefined {
-  return check.outcome === undefined ? undefined : { status: check.outcome };
+  if (check.outcome === undefined) return undefined;
+  return check.outcome === 'draft' ? NOT_INSTALLED : { status: check.outcome };
 }
 
 /** Adds one channel's verdict to an item, keeping the worse per channel and overall. */

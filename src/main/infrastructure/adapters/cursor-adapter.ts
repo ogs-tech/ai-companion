@@ -73,7 +73,6 @@ export class CursorAdapter implements Adapter {
           content: renderCursorWorkspaceRule(instruction),
           ownershipMarker: CURSOR_RULE_MDC_MARKER,
           ownershipCheck: 'includes' as const,
-          keepForeign: true,
         },
       ];
     }
