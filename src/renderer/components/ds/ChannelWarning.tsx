@@ -17,6 +17,8 @@ export function channelErrorLabel(channels: readonly ChannelId[]): string {
 interface ChannelWarningProps {
   /** The item the warning belongs to; the click opens Diagnósticos on it. */
   urn: string;
+  /** Urns whose problems roll up into this row (a plugin's servers and hooks); Diagnósticos shows theirs too. */
+  relatedUrns?: readonly string[];
   channels: readonly ChannelId[];
 }
 
@@ -24,7 +26,7 @@ interface ChannelWarningProps {
  * `● Erro no Cursor` — the only error a tree row ever shows. Silence means ok. The dot and the words always travel
  * together, so colour is never the only carrier of meaning.
  */
-export function ChannelWarning({ urn, channels }: ChannelWarningProps): React.ReactElement | null {
+export function ChannelWarning({ urn, relatedUrns = [], channels }: ChannelWarningProps): React.ReactElement | null {
   if (channels.length === 0) return null;
   const names = channelNames(channels);
   return (
@@ -37,13 +39,13 @@ export function ChannelWarning({ urn, channels }: ChannelWarningProps): React.Re
       title={`Problema em ${names} — abrir diagnóstico`}
       onClick={(e) => {
         e.stopPropagation();
-        openDiagnosticsFor(urn);
+        openDiagnosticsFor(urn, relatedUrns);
       }}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
         e.stopPropagation();
-        openDiagnosticsFor(urn);
+        openDiagnosticsFor(urn, relatedUrns);
       }}
       sx={(theme) => ({
         display: 'inline-flex',

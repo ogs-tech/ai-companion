@@ -8,10 +8,11 @@ export function channelOf(adapterId: string): { channel?: ChannelId } {
 }
 
 /**
- * The tree item an MCP check belongs to. Claude names a plugin's server `plugin:<pluginId>:<server>`; that
- * server is the plugin's, so its problem shows on the plugin row, not as a stray MCP under Integrações.
+ * The tree item an MCP check belongs to. Claude names a plugin's server `plugin:<pluginId>:<server>`; the check
+ * goes on that server's own row (listed under its plugin), and `CustomizationStatusService` rolls it up to the
+ * plugin row — so the error shows on both, and the plugin's ⚠ still reaches it in Diagnósticos.
  */
 export function mcpCheckUrn(name: string): string {
-  const plugin = /^plugin:([^:]+):.+$/.exec(name);
-  return plugin !== null ? `urn:plugin:${plugin[1] as string}` : entityUrn('mcp', name);
+  const plugin = /^plugin:[^:]+:(.+)$/.exec(name);
+  return entityUrn('mcp', plugin !== null ? (plugin[1] as string) : name);
 }

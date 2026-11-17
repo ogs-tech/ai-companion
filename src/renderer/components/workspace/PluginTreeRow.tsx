@@ -159,7 +159,11 @@ export function PluginTreeRow({
           <>
             {/* Errors of what it provides roll up here; a disabled plugin has none to report. */}
             {plugin.enabled && rowBadge(item) === 'error' && (
-              <ChannelWarning urn={item.urn} channels={channelsWith(item, 'error')} />
+              <ChannelWarning
+                urn={item.urn}
+                relatedUrns={children.map((c) => c.urn)}
+                channels={channelsWith(item, 'error')}
+              />
             )}
             {canUpdate(plugin) && (
               <Button

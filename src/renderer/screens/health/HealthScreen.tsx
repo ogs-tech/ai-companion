@@ -59,9 +59,12 @@ export function HealthScreen(): React.ReactElement {
   const sync = useSyncThenRefresh('personal');
 
   // Arriving from a ⚠ in the customizations tree narrows the screen to that item's checks.
-  const focusUrn = useDiagnosticsFocus();
+  const focus = useDiagnosticsFocus();
   const allChecks = data?.checks ?? [];
-  const checks = focusUrn === null ? allChecks : allChecks.filter((c) => c.entityUrn === focusUrn);
+  const checks =
+    focus === null
+      ? allChecks
+      : allChecks.filter((c) => c.entityUrn !== undefined && focus.urns.includes(c.entityUrn));
   const actionable = checks.filter((c) => c.severity !== 'ok');
   const groups = groupByCategory(checks);
 
@@ -89,10 +92,10 @@ export function HealthScreen(): React.ReactElement {
         }
       />
 
-      {focusUrn !== null && (
+      {focus !== null && (
         <Box data-testid="health-focus" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Mostrando apenas <Box component="span" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono })}>{focusUrn}</Box>
+            Mostrando apenas <Box component="span" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono })}>{focus.urn}</Box>
           </Typography>
           <Button size="small" data-testid="health-focus-clear" onClick={clearDiagnosticsFocus}>
             Ver tudo

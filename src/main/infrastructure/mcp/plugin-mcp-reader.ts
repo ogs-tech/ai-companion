@@ -33,8 +33,14 @@ function serversOf(json: unknown): Record<string, unknown> {
 export class PluginMcpReader {
   constructor(private readonly deps: PluginMcpReaderDeps) {}
 
+  /**
+   * Roots come in tier order (app-managed, then Claude Code), so the same plugin installed in both registries is read
+   * twice: its servers are deduped by {plugin/name} keeping the first (higher) tier, as `PluginProvenanceService.scan`
+   * does for skills and agents. Two plugins shipping a same-named server each keep theirs.
+   */
   async read(scope: Scope): Promise<PluginMcpServer[]> {
     const out: PluginMcpServer[] = [];
+    const seen = new Set<string>();
     for (const root of await this.deps.listRoots(scope)) {
       const file = path.join(root.dir, '.mcp.json');
       let raw: string;
@@ -52,6 +58,9 @@ export class PluginMcpReader {
       for (const [name, def] of Object.entries(servers)) {
         const parsed = mcpServerDefSchema.safeParse(def);
         if (!parsed.success) continue;
+        const key = `${String(root.pluginId)}/${name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         out.push({
           location: { kind: 'plugin', pluginId: String(root.pluginId), pluginDir: root.dir },
           name,

@@ -82,4 +82,42 @@ describe('PluginMcpReader', () => {
     expect(servers).toHaveLength(1);
     expect(servers[0]?.name).toBe('context7');
   });
+
+  it('lists a plugin installed in both registries once, keeping the higher tier', async () => {
+    const managedDir = path.join(tmp, 'managed', 'context7');
+    const claudeDir = path.join(tmp, 'claude', 'context7');
+    for (const dir of [managedDir, claudeDir]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        path.join(dir, '.mcp.json'),
+        JSON.stringify({ mcpServers: { context7: { command: 'context7-mcp' } } }),
+        'utf8',
+      );
+    }
+    const reader = new PluginMcpReader({
+      listRoots: async () => [
+        { pluginId: 'context7' as never, dir: managedDir, provenance: 'workspace-managed' },
+        { pluginId: 'context7' as never, dir: claudeDir, provenance: 'claude-code' },
+      ],
+    });
+
+    const servers = await reader.read('personal');
+
+    expect(servers).toHaveLength(1);
+    expect(servers[0]?.provenance).toBe('workspace-managed');
+  });
+
+  it('keeps same-named servers shipped by two different plugins', async () => {
+    const dirs = ['a', 'b'].map((id) => path.join(tmp, id));
+    for (const dir of dirs) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, '.mcp.json'), JSON.stringify({ shared: { command: 'x' } }), 'utf8');
+    }
+    const reader = new PluginMcpReader({
+      listRoots: async () =>
+        dirs.map((dir, i) => ({ pluginId: (i === 0 ? 'a' : 'b') as never, dir, provenance: 'claude-code' as const })),
+    });
+
+    expect((await reader.read('personal')).map((s) => s.pluginId)).toEqual(['a', 'b']);
+  });
 });

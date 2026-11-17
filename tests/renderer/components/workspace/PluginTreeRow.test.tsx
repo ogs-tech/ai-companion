@@ -6,6 +6,7 @@ import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js'
 import { rowId, treeItem } from './tree-item-fixture.js';
 import type { PluginListItemIpc } from '../../../../src/shared/plugin-ipc-types.js';
 import { UndoableDeleteContext } from '../../../../src/renderer/hooks/use-undoable-delete.js';
+import { clearDiagnosticsFocus, useDiagnosticsFocus } from '../../../../src/renderer/lib/diagnostics-focus.js';
 
 const plugin: PluginListItemIpc = {
   id: 'local-plugin', origin: 'imported', scope: 'project', enabled: true, installedAt: '2026-05-01T00:00:00Z', installedRef: { kind: 'branch', value: 'main' },
@@ -136,5 +137,24 @@ describe('PluginTreeRow', () => {
     const item = itemOf({ ...plugin, enabled: false }, { disabled: true });
     renderWithShell(<PluginTreeRow item={item} />);
     expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Desativado');
+  });
+
+  it('its ⚠ opens Diagnósticos on the plugin and on what it ships, where the error was reported', async () => {
+    clearDiagnosticsFocus();
+    const server = treeItem({ kind: 'mcp', value: { name: 'context7' } as never }, { urn: 'urn:mcp:context7', name: 'context7', problems: ['claude'] });
+    const item = treeItem({ kind: 'plugin', value: plugin, items: [server] }, { urn: `urn:plugin:${plugin.id}`, name: plugin.id, problems: ['claude'] });
+    function FocusProbe(): React.ReactElement {
+      const focus = useDiagnosticsFocus();
+      return <div data-testid="focus">{focus?.urns.join(',') ?? ''}</div>;
+    }
+    renderWithShell(
+      <>
+        <PluginTreeRow item={item} />
+        <FocusProbe />
+      </>,
+    );
+    await userEvent.setup().click(screen.getByTestId('channel-warning'));
+    expect(screen.getByTestId('focus')).toHaveTextContent('urn:plugin:local-plugin,urn:mcp:context7');
+    clearDiagnosticsFocus();
   });
 });

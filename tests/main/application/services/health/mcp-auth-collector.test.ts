@@ -41,13 +41,13 @@ describe('McpAuthCollector', () => {
     expect(first.title).toContain('Gmail');
   });
 
-  it('puts a plugin server (`plugin:<id>:<server>`) on its plugin, and a plain server on its MCP', async () => {
+  it('puts a plugin server (`plugin:<id>:<server>`) on its own MCP row (the status report rolls it up to the plugin)', async () => {
     const { runtime, collector } = setup();
     runtime.seedAuthAlerts([{ name: 'plugin:figma:figma' }, { name: 'Gmail' }]);
 
     const checks = await collector.collect();
 
-    expect(checks.map((c) => c.entityUrn)).toEqual(['urn:plugin:figma', 'urn:mcp:Gmail']);
+    expect(checks.map((c) => c.entityUrn)).toEqual(['urn:mcp:figma', 'urn:mcp:Gmail']);
     expect(checks[0]?.target).toBe('plugin:figma:figma');
   });
 });
