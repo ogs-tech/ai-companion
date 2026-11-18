@@ -22,30 +22,38 @@ export type MenuActionKey = CustomizationVerb | 'undo' | 'open' | 'new-action';
 export interface MenuAction {
   key: MenuActionKey;
   label: string;
+  /** Resolves what the row's signal says (Importar, Instalar por cima, Ativar): drawn first and set apart. */
+  primary?: boolean;
 }
 
 /**
  * The one menu every customization row shows, from the kind registry: no row decides by itself which verbs exist.
- * Read-only and detected rows get their own short menus; a verb the item can't do is left out, never disabled.
+ * Fixed order — the action that resolves the row's signal, Visualizar, Editar, Ativar/Desativar, Nova sessão,
+ * Excluir last. Read-only and detected rows get their own short menus; a verb the item can't do is left out, never
+ * disabled.
  */
 export function customizationMenu(ctx: MenuContext): MenuAction[] {
   const newAction: MenuAction[] = ctx.newAction ? [{ key: 'new-action', label: 'Nova sessão' }] : [];
   if (ctx.readOnly !== false) {
     return [{ key: 'open', label: 'Visualizar' }, ...newAction];
   }
-  if (ctx.detected) return [{ key: 'open', label: 'Visualizar' }, { key: 'import', label: VERB_LABEL.import }];
+  if (ctx.detected) return [{ key: 'import', label: VERB_LABEL.import, primary: true }, { key: 'open', label: 'Visualizar' }];
 
   const verbs = new Set(itemVerbs(ctx.entity));
-  // Visualizar = today's read-only Preview, kept on own rows too (dropped by `toRowActions` where a row has no preview).
-  const out: MenuAction[] = [{ key: 'open', label: 'Visualizar' }];
-  if (verbs.has('edit')) out.push({ key: 'edit', label: VERB_LABEL.edit });
-  if (verbs.has('toggle')) out.push({ key: 'toggle', label: toggleLabel(ctx.enabled) });
-  if (verbs.has('delete')) out.push({ key: 'delete', label: VERB_LABEL.delete });
+  const primary: MenuAction[] = [];
   if (verbs.has('installOver') && ctx.canInstallOver) {
-    out.push({ key: 'installOver', label: VERB_LABEL.installOver });
-    if (ctx.hasUndo) out.push({ key: 'undo', label: 'Desfazer' });
+    primary.push({ key: 'installOver', label: VERB_LABEL.installOver, primary: true });
+    if (ctx.hasUndo) primary.push({ key: 'undo', label: 'Desfazer' });
+  } else if (verbs.has('toggle') && !ctx.enabled) {
+    primary.push({ key: 'toggle', label: toggleLabel(ctx.enabled), primary: true });
   }
-  return [...out, ...newAction];
+  // Visualizar = today's read-only Preview, kept on own rows too (dropped by `toRowActions` where a row has no preview).
+  const out: MenuAction[] = [...primary, { key: 'open', label: 'Visualizar' }];
+  if (verbs.has('edit')) out.push({ key: 'edit', label: VERB_LABEL.edit });
+  if (verbs.has('toggle') && !primary.some((a) => a.key === 'toggle')) out.push({ key: 'toggle', label: toggleLabel(ctx.enabled) });
+  out.push(...newAction);
+  if (verbs.has('delete')) out.push({ key: 'delete', label: VERB_LABEL.delete });
+  return out;
 }
 
 const GLYPH: Record<MenuActionKey, LucideIcon> = {
@@ -61,11 +69,13 @@ const GLYPH: Record<MenuActionKey, LucideIcon> = {
 
 /**
  * Turns the menu into the row's context-menu actions. A verb the row has no handler for is left out (the rule is
- * "omit, never disable"); Excluir is drawn as destructive, and Nova sessão sits after a divider.
+ * "omit, never disable"); the primary action is emphasized with a divider after it, and Excluir is drawn as
+ * destructive.
  */
 export function toRowActions(menu: readonly MenuAction[], handlers: Partial<Record<MenuActionKey, () => void>>): RowContextMenuAction[] {
   const out: RowContextMenuAction[] = [];
-  for (const { key, label } of menu) {
+  let afterPrimary = false;
+  for (const { key, label, primary } of menu) {
     const onSelect = handlers[key];
     if (onSelect === undefined) continue;
     out.push({
@@ -73,9 +83,12 @@ export function toRowActions(menu: readonly MenuAction[], handlers: Partial<Reco
       label,
       glyph: GLYPH[key],
       onSelect,
+      ...(primary === true ? { emphasis: true } : {}),
+      ...(afterPrimary && primary !== true && key !== 'undo' ? { separatorBefore: true } : {}),
       ...(key === 'delete' ? { danger: true } : {}),
-      ...(key === 'new-action' ? { separatorBefore: true } : {}),
     });
+    if (primary === true) afterPrimary = true;
+    else if (key !== 'undo') afterPrimary = false;
   }
   return out;
 }

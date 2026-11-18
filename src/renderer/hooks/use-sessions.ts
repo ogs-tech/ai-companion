@@ -71,3 +71,41 @@ export function useSessionsUsing(usage: SessionUsage): UsingSession[] {
   }, []);
   return sessionsUsing(data ?? [], usage, now);
 }
+
+export interface ItemSession {
+  sessionId: string;
+  label: string;
+  harness: SessionSnapshot['harness'];
+  state: SessionRowState;
+}
+
+/**
+ * The live sessions about one customization row: the ones anchored on it (started from its menu) and the ones that
+ * used it in the last 10 minutes, deduplicated, most urgent first. Ended sessions are left out — a row only says
+ * what is happening now.
+ */
+export function useItemSessions(usage: SessionUsage | undefined, anchorUrn: string | undefined): ItemSession[] {
+  const { data } = useSessions();
+  const [now, setNow] = useState(() => Date.now());
+  const tracksUsage = usage !== undefined;
+  useEffect(() => {
+    if (!tracksUsage) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [tracksUsage]);
+  const sessions = data ?? [];
+  const out = new Map<string, ItemSession>();
+  if (anchorUrn !== undefined) {
+    const key = sessionAnchorKey({ kind: 'entity', urn: anchorUrn });
+    for (const s of sessions) {
+      if (sessionAnchorKey(s.anchor) !== key || s.status !== 'running') continue;
+      out.set(s.sessionId, { sessionId: s.sessionId, label: s.label, harness: s.harness, state: rowStateOf(s) });
+    }
+  }
+  if (usage !== undefined) {
+    for (const s of sessionsUsing(sessions, usage, now)) {
+      out.set(s.sessionId, { sessionId: s.sessionId, label: s.label, harness: s.harness, state: s.activity ?? 'idle' });
+    }
+  }
+  return [...out.values()].sort((a, b) => (a.state === b.state ? 0 : mostUrgentState([a.state, b.state]) === a.state ? -1 : 1));
+}

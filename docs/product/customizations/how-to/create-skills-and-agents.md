@@ -49,7 +49,7 @@ At Início the panel lists Global's items. Inside a workspace it lists the open 
 detected in its folders) first, then a **Global** section — *Global — vale para todos os workspaces* — with Início's
 items, collapsed. Global's items are edited right here like the workspace's own; a change reaches every workspace.
 
-Each scope starts with its **Instructions** row, then one group per type: **Skills**, **Agents**, **MCP**,
+Each scope starts with its **Instruções** row, then one group per type: **Skills**, **Agents**, **MCP**,
 **Hooks**, then **Plugins**. A group with nothing in it is not shown — **+** is where a new one starts; a scope with
 nothing at all says *Nenhuma customização ainda*. Hooks have no workspace scope, so inside a workspace they all
 sit under **Global**. The group already names the type, so item rows carry no icon. A plugin is one row (name,
@@ -58,33 +58,43 @@ provides, read-only; those items are not repeated in the type groups. Turning th
 marks them *Desativado*.
 
 In a multi-folder workspace the folder is a tag on the row (`commit-msg · api`), not a level of the tree, and
-each folder has its own **Instructions · <folder>** row.
+each folder has its own **Instruções · <folder>** row.
 
-Every item is in one of three states. A row speaks only when it is not installed; silence means it is:
+Every item is in one of three states. A row shows at most one signal, the most urgent; silence means installed.
+A signal that happens in a channel is that channel's mark (Claude, Cursor) with a badge in its corner; one that
+belongs to the app is a quiet word. The words are in the tooltip. Signals only inform; the row's menu acts, and its
+first item is the one that resolves the signal.
 
-| State | Row shows | Meaning |
+| Row shows | Meaning | Menu leads with |
 |---|---|---|
-| Installed | nothing | It reached every channel that is on. |
-| Draft | **Importar** | Found in Claude's or Cursor's own files, not yet managed by the app. Click it to import. |
-| | **Instalar** | A file the app doesn't manage sits where the item goes. Click it to install over it (the file is backed up; the toast offers **Desfazer**). |
-| | *Desativado* | You turned it off. It goes to no channel; the row reads quieter. |
-| Error | ● *Erro no Claude* (or *Erro em 2 canais*) | Something is wrong in that channel (missing, out of date, needs sign-in). Click it to open Diagnósticos on the item. |
+| nothing | Installed: it reached every channel that is on. | — |
+| channel mark + red dot | Something is wrong in that channel (missing, out of date, sign-in pending). Click the mark to open Diagnósticos on the item. | **Conectar** when sign-in is pending |
+| channel mark + `!` | A session in that channel is asking you something about the item. | — |
+| channel mark + ◇ | A file the app doesn't manage sits where the item goes. | **Instalar por cima** (the file is backed up; the toast offers **Desfazer**) |
+| channel mark + session state | Sessions in that channel used it in the last ten minutes; hover for how many. | — |
+| *Desativado* | You turned it off. It goes to no channel; the row reads quieter. | **Ativar** |
+| the reason (e.g. *conector do claude.ai*) | Found in a channel's files but can't be imported. | — |
 
-An error in one channel outranks a draft in another: the row shows the error. A group header counts its errors
-(● N) before its total.
+Order when several apply: error (sign-in included), a session asking, a file in the way, in use, disabled.
 
-Under the search box, a chip appears only for what needs attention: **N com erro** and **N rascunhos**. Click one
-to keep only those rows, click it again to see everything; while one is on, a second row (**Todos os canais** ·
-**Claude N** · **Cursor N**) narrows it to one channel. They combine with the search, and each count is what
-selecting the chip shows. The header shows the total; while a search or chip is active it reads `n de N`. When
-nothing matches, the empty state names the query and offers **Limpar filtros**, which clears both. The states are
-checked when the app opens or reloads, when you switch between Início and a workspace, and after you change
-something — not on a timer. Switching between Início and a workspace resets the search and the chip.
+Items found in Claude's or Cursor's own files and not yet managed by the app stay in their group, lighter until you
+point at them; their menu leads with **Importar**. They are not counted. A plugin's menu leads with **Atualizar**
+when it can be pulled again — an update belongs to the plugin, not to a channel.
+
+The menu keeps one order everywhere: the action that resolves the signal, **Visualizar**, **Editar**,
+**Ativar/Desativar**, **Nova sessão**, and **Excluir** last. An action an item can't do is left out.
+
+A group header counts its errors (● N) before its total. Under the search box, **N com erro** appears while
+something is in error. Click it to keep only those rows, click it again to see everything; while it is on, a second
+row (**Todos os canais** · **Claude N** · **Cursor N**) narrows it to one channel. It combines with the search, and
+its count is what selecting it shows. The header shows the app's own items; while a search or the chip is active it
+reads `n de N`. When nothing matches, the empty state names the query and offers **Limpar filtros**, which clears
+both. The states are checked when the app opens or reloads, when you switch between Início and a workspace, and
+after you change something — not on a timer. Switching between Início and a workspace resets the search and the
+chip.
 
 Every row's menu opens with a right-click or from the **⋯** the row shows on hover or keyboard focus.
 
-- A green **N sessões** beside a skill, agent or MCP server means running sessions used it in the last ten
-  minutes; hover for the list.
 - Open a skill, agent or instruction's **Editar** (or the MCP or hook editor) to see **Sincronização**: for
   each channel, where the item lands and how (`Ligado por link simbólico`, `Arquivo gerado`,
   `Entrada em mcp.json`, or *lê o mesmo arquivo do Claude* for a channel that reads Claude's copy), or what is

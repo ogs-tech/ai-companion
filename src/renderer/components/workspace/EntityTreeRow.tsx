@@ -1,8 +1,5 @@
-import { Stack } from '@mui/material';
-import { SessionStatusBadge } from '../SessionStatusBadge.js';
-import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowBadgeSlot, RowLabel, rowMuted, rowTestId, useInstallOver } from './RowBadgeSlot.js';
+import { RowLabel, RowSignal, rowMuted, rowMutedStyle, rowTestId, useInstallOver } from './RowBadgeSlot.js';
 import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
@@ -110,15 +107,10 @@ export function EntityTreeRow({ item, handlers, depth = 1 }: EntityTreeRowProps)
         primary={<RowLabel item={item} />}
         depth={depth}
         muted={rowMuted(item)}
+        mutedStyle={rowMutedStyle(item)}
         onClick={open}
         onContextMenu={(e) => rowMenu.openMenu(e, value)}
-        badge={
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            <SessionsUsingBadge usage={{ kind, name: value.name }} testId={`${rowTestId(item)}-using`} />
-            <SessionStatusBadge anchor={{ kind: 'entity', urn: value.urn }} />
-            <RowBadgeSlot item={item} />
-          </Stack>
-        }
+        badge={<RowSignal item={item} usage={{ kind, name: value.name }} anchorUrn={value.urn} />}
       />
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={actions} />
       {installOver.toast}

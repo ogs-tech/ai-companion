@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { Button, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
 import { KeyRound } from 'lucide-react';
-import { SessionsUsingBadge } from './SessionsUsingBadge.js';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { RowLabel, RowSignal, rowMuted, rowMutedStyle, rowTestId } from './RowBadgeSlot.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useRequestDelete } from '../../hooks/use-undoable-delete.js';
-import { HarnessTag } from './DetectedTreeRow.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
@@ -41,8 +39,9 @@ interface McpTreeRowProps {
 }
 
 /**
- * One MCP server: a click opens its page (`McpPage`), where sign-in happens; toggle/edit/delete for the user's own,
- * "Conectar" when it needs auth (to the same page), "Importar" when detected.
+ * One MCP server: a click opens its page (`McpPage`), where sign-in happens. Its one signal is a channel mark with a
+ * badge (sign-in pending reads as an error there); the menu leads with what resolves it — Conectar (to the same
+ * page) or Importar — then toggle/edit/delete for the user's own.
  */
 export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowProps): React.ReactElement | null {
   const del = useDeleteMcp();
@@ -80,14 +79,16 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
         : {}),
     },
   );
+  // A detected server is the channel's until imported: it signs in once it is the app's.
+  const authPending = server.source.kind !== 'detected' && needsAuth(server);
   const actions: RowContextMenuAction[] = rowMenu.state
     ? [
-        ...(server.source.kind !== 'detected' && needsAuth(server) ? [{ key: 'authenticate', label: 'Autenticar', glyph: KeyRound, onSelect: () => openMcpPage(server) }] : []),
-        ...lifecycle,
+        ...(authPending ? [{ key: 'authenticate', label: 'Conectar', glyph: KeyRound, emphasis: true, onSelect: () => openMcpPage(server) }] : []),
+        ...lifecycle.map((a, i) => (authPending && i === 0 ? { ...a, separatorBefore: true } : a)),
       ]
     : [];
   // Detected servers offer a menu only when importable.
-  const hasMenu = own || (server.source.kind !== 'detected' && needsAuth(server)) || runImport !== undefined;
+  const hasMenu = own || authPending || runImport !== undefined;
 
   return (
     <>
@@ -95,6 +96,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
         testId={rowTestId(item)}
         depth={depth}
         muted={rowMuted(item)}
+        mutedStyle={rowMutedStyle(item)}
         primary={<RowLabel item={item} />}
         onClick={() => openMcpPage(server)}
         {...(hasMenu ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, server) } : {})}
@@ -105,26 +107,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
                 {MCP_SCOPE_LABEL[server.scope]}
               </Typography>
             )}
-            {server.source.kind === 'detected' && server.source.harness !== undefined && (
-              <HarnessTag harness={server.source.harness} testId={`tree-mcp-harness-${server.id}`} />
-            )}
-            {/* A detected server is the channel's until imported: it signs in once it is the app's. */}
-            {server.source.kind !== 'detected' && needsAuth(server) && (
-              <Button
-                size="small"
-                variant="outlined"
-                data-testid={`tree-mcp-connect-${server.id}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openMcpPage(server);
-                }}
-                sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.75, fontSize: '0.75rem', textTransform: 'none' }}
-              >
-                Conectar
-              </Button>
-            )}
-            <SessionsUsingBadge usage={{ kind: 'mcp', name: server.name }} testId={`tree-mcp-using-${server.id}`} />
-            <RowBadgeSlot item={item} {...(runImport !== undefined ? { onImport: runImport } : {})} busy={importer.isPending} />
+            <RowSignal item={item} usage={{ kind: 'mcp', name: server.name }} {...(authPending ? { authChannel: 'claude' as const } : {})} />
           </>
         }
       />

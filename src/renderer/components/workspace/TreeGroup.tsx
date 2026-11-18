@@ -36,8 +36,10 @@ interface TreeGroupRowProps {
   onContextMenu?: (e: React.MouseEvent) => void;
   /** Folder chevron — for a row that expands inline (a plugin); `spacer` keeps a sibling that can't expand aligned. */
   chevron?: 'expanded' | 'collapsed' | 'spacer';
-  /** Disabled or detected: secondary text colour, still readable. */
+  /** Disabled or detected: quieter than an active row, still readable. */
   muted?: boolean;
+  /** How `muted` reads: `quiet` (secondary text, disabled) or `recede` (lower opacity, detected). Defaults to `quiet`. */
+  mutedStyle?: 'quiet' | 'recede';
   disabled?: boolean;
   /** Tree nesting level (see `treeIndent`). Defaults to `0`. */
   depth?: number;
@@ -49,7 +51,7 @@ interface TreeGroupRowProps {
  * One item of the Customizações tree: its name, and a tag only when there is something to say. The group above
  * already names the type, so the row carries no icon.
  */
-export function TreeGroupRow({ testId, primary, badge, onClick, onContextMenu, chevron, muted, disabled, depth = 0, heading = false }: TreeGroupRowProps): React.ReactElement {
+export function TreeGroupRow({ testId, primary, badge, onClick, onContextMenu, chevron, muted, mutedStyle = 'quiet', disabled, depth = 0, heading = false }: TreeGroupRowProps): React.ReactElement {
   return (
     <TreeRow
       testId={testId}
@@ -58,7 +60,7 @@ export function TreeGroupRow({ testId, primary, badge, onClick, onContextMenu, c
       badge={badge}
       density="comfortable"
       labelVariant={heading ? 'heading' : 'item'}
-      mutedStyle="quiet"
+      mutedStyle={mutedStyle}
       {...(chevron ? { chevron } : {})}
       {...(onClick ? { onClick } : {})}
       {...(onContextMenu

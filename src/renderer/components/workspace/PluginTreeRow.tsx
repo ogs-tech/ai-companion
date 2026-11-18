@@ -1,10 +1,8 @@
 import { Fragment, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Menu, MenuItem, Typography } from '@mui/material';
-import { RefreshCw } from 'lucide-react';
+import { Box, Divider, Menu, MenuItem, Typography } from '@mui/material';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
-import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { RowLabel, RowSignal, rowMuted, rowTestId } from './RowBadgeSlot.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import {
   pluginsQueryKey,
@@ -15,7 +13,7 @@ import {
 } from '../../hooks/use-plugins.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { PublishPluginDialog } from '../../screens/plugins/PublishPluginDialog.js';
-import { channelsWith, rowBadge, type TreeItem } from '../../lib/customization-tree.js';
+import type { TreeItem } from '../../lib/customization-tree.js';
 import { kindSpec } from '../../../shared/customization-kind.js';
 import type { PluginListItemIpc } from '../../../shared/plugin-ipc-types.js';
 import { invalidateHealth } from '../../hooks/use-health-report.js';
@@ -62,11 +60,11 @@ interface PluginTreeRowProps {
 }
 
 /**
- * One plugin as a closed folder: name and version, then only what needs attention — `⚠ N` when something it ships
- * fails, and an `Atualizar` button (the one action shown on the row) when it can be pulled again. A disabled plugin
- * reads muted. Clicking it lists what it ships underneath, one collapsible sub-header per kind (closed until clicked, open while a
+ * One plugin as a closed folder: name and version, then only what needs attention — the error mark when something it
+ * ships fails. A disabled plugin reads muted. Pulling it again (Atualizar) is its menu's first item, not a channel
+ * signal: an update belongs to the plugin, not to a channel. Clicking it lists what it ships underneath, one collapsible sub-header per kind (closed until clicked, open while a
  * search or chip forces the plugin open) — those items are listed only here,
- * never in the kind groups. Menu: Ativar/Desativar · (Publicar) · Remover; read-only, with the reason, for a plugin
+ * never in the kind groups. Menu: (Atualizar) · Ativar/Desativar · (Publicar) · Remover; read-only, with the reason, for a plugin
  * only Claude installed.
  */
 export function PluginTreeRow({
@@ -108,8 +106,8 @@ export function PluginTreeRow({
     void invalidateHealth(qc);
   };
 
-  const handleUpdate = (e: React.MouseEvent): void => {
-    e.stopPropagation();
+  const handleUpdate = (): void => {
+    closeMenu();
     update.mutate(
       { id: plugin.id, scope: plugin.scope },
       {
@@ -155,40 +153,8 @@ export function PluginTreeRow({
             )}
           </>
         }
-        badge={
-          <>
-            {/* Errors of what it provides roll up here; a disabled plugin has none to report. */}
-            {plugin.enabled && rowBadge(item) === 'error' && (
-              <ChannelWarning
-                urn={item.urn}
-                relatedUrns={children.map((c) => c.urn)}
-                channels={channelsWith(item, 'error')}
-              />
-            )}
-            {canUpdate(plugin) && (
-              <Button
-                size="small"
-                data-testid={`tree-plugin-update-${plugin.id}`}
-                disabled={update.isPending}
-                onClick={handleUpdate}
-                onContextMenu={(e) => e.stopPropagation()}
-                startIcon={<RefreshCw size={11} />}
-                sx={{
-                  flexShrink: 0,
-                  minWidth: 0,
-                  height: 18,
-                  px: 0.5,
-                  fontSize: '0.75rem',
-                  fontWeight: 400,
-                  textTransform: 'none',
-                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
-                }}
-              >
-                {update.isPending ? 'Atualizando…' : 'Atualizar'}
-              </Button>
-            )}
-          </>
-        }
+        // Errors of what it provides roll up here.
+        badge={<RowSignal item={item} relatedUrns={children.map((c) => c.urn)} />}
         onContextMenu={(e: React.MouseEvent) => {
           e.preventDefault();
           // The hover `⋯` opens this too; its click must not also toggle the row.
@@ -229,6 +195,12 @@ export function PluginTreeRow({
         open={menuAt !== null}
         onClose={closeMenu}
       >
+        {canUpdate(plugin) && (
+          <MenuItem data-testid={`tree-plugin-update-${plugin.id}`} disabled={update.isPending} onClick={handleUpdate} sx={{ fontWeight: 600 }}>
+            {update.isPending ? 'Atualizando…' : 'Atualizar'}
+          </MenuItem>
+        )}
+        {canUpdate(plugin) && <Divider />}
         {claudeOnly && (
           <MenuItem
             disabled

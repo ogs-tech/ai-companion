@@ -27,6 +27,11 @@ beforeEach(() => {
   call.mockImplementation(async () => ok(undefined));
 });
 
+const menuLabels = async (): Promise<string[]> => {
+  const { within: inside } = await import('@testing-library/react');
+  return inside(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent ?? '');
+};
+
 describe('InstructionTreeRow session badge', () => {
   it('shows a running-session badge when this instruction has an active session', async () => {
     call.mockImplementation(async (method: string) =>
@@ -65,18 +70,18 @@ describe('InstructionTreeRow session badge', () => {
 });
 
 describe('InstructionTreeRow labels', () => {
-  it('labels the personal row plainly "Instructions"', () => {
+  it('labels the personal row plainly "Instruções"', () => {
     renderWithShell(
       <InstructionTreeRow kind="personal" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('Instructions');
+    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('Instruções');
   });
 
-  it('labels the workspace row plainly "Instructions"', () => {
+  it('labels the workspace row plainly "Instruções"', () => {
     renderWithShell(
       <InstructionTreeRow kind="workspace" instruction={null} seed={() => instruction()} onOpen={vi.fn()} />,
     );
-    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('Instructions');
+    expect(screen.getByTestId('workspace-instruction-row')).toHaveTextContent('Instruções');
   });
 
   it('overrides the default data-testid when a testId is supplied', () => {
@@ -145,11 +150,12 @@ describe('InstructionTreeRow status', () => {
     expect(screen.queryByTestId('detected-apply')).not.toBeInTheDocument();
   });
 
-  it('offers the detected file: its name, a single "Importar", and the detected dot', () => {
+  it('offers the detected file: its name on the row, importing it as the only menu item', async () => {
     renderWithShell(<InstructionTreeRow kind="personal" instruction={null} detected={detectedFile} seed={() => instruction()} onOpen={vi.fn()} />);
     expect(screen.getByTestId('detected-file')).toHaveTextContent('AGENTS.md');
-    expect(screen.getByTestId('detected-apply')).toHaveTextContent('Importar');
-    expect(screen.getByTestId('sync-dot')).toHaveAttribute('data-state', 'detected');
+    expect(screen.getByTestId('personal-instruction-row')).not.toHaveTextContent('Importar');
+    fireEvent.contextMenu(screen.getByTestId('personal-instruction-row'));
+    expect(await menuLabels()).toEqual(['Importar AGENTS.md']);
   });
 
   it('Importar imports the file and opens the imported instruction for editing, without starting an empty one', async () => {
@@ -157,7 +163,8 @@ describe('InstructionTreeRow status', () => {
     call.mockImplementation(async (method: string) => (method === 'detected.import' ? ok({ entity: imported, syncReport: [] }) : ok(undefined)));
     const onOpen = vi.fn();
     renderWithShell(<InstructionTreeRow kind="personal" instruction={null} detected={detectedFile} seed={() => instruction()} onOpen={onOpen} />);
-    fireEvent.click(screen.getByTestId('detected-apply'));
+    fireEvent.contextMenu(screen.getByTestId('personal-instruction-row'));
+    fireEvent.click(await screen.findByTestId('row-context-menu-import'));
     await vi.waitFor(() => expect(onOpen).toHaveBeenCalledTimes(1));
     expect(call).toHaveBeenCalledWith('detected.import', { id: 'det-1' });
     expect(onOpen).toHaveBeenCalledWith(imported, false);
@@ -173,25 +180,25 @@ describe('InstructionTreeRow status', () => {
 
   it('stays silent when the instruction is healthy: no mark, no tag', () => {
     const value = instruction();
-    const item = treeItem({ kind: 'instruction', value, placement: 'personal' }, { urn: value.urn, name: 'Instructions' });
+    const item = treeItem({ kind: 'instruction', value, placement: 'personal' }, { urn: value.urn, name: 'Instruções' });
     renderWithShell(<InstructionTreeRow kind="personal" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
-    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('Instructions');
+    expect(screen.getByTestId('personal-instruction-row')).toHaveTextContent('Instruções');
     expect(screen.queryByTestId('channel-warning')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sync-dot')).not.toBeInTheDocument();
   });
 
   it('flags only the channel that fails, with a warning and its name', () => {
     const value = instruction();
-    const item = treeItem({ kind: 'instruction', value, placement: 'personal' }, { urn: value.urn, name: 'Instructions', problems: ['cursor'] });
+    const item = treeItem({ kind: 'instruction', value, placement: 'personal' }, { urn: value.urn, name: 'Instruções', problems: ['cursor'] });
     renderWithShell(<InstructionTreeRow kind="personal" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
-    expect(screen.getByTestId('channel-warning')).toHaveAttribute('aria-label', 'Problema em Cursor. Abrir diagnóstico');
+    expect(screen.getByTestId('channel-warning')).toHaveAttribute('aria-label', 'Erro no Cursor. Abrir diagnóstico');
   });
 
   it('tags a folder instruction with its folder', () => {
     const value = instruction({ scopes: ['workspace'], scopeId: 'w1', folder: '/r/api' });
-    const item = treeItem({ kind: 'instruction', value, placement: 'folder', folder: '/r/api' }, { urn: value.urn, name: 'Instructions', folderAlias: 'api' });
+    const item = treeItem({ kind: 'instruction', value, placement: 'folder', folder: '/r/api' }, { urn: value.urn, name: 'Instruções', folderAlias: 'api' });
     renderWithShell(<InstructionTreeRow kind="folder" testId="folder-instruction-row-api" item={item} instruction={value} seed={() => value} onOpen={vi.fn()} />);
-    expect(screen.getByTestId('folder-instruction-row-api')).toHaveTextContent('Instructions · api');
+    expect(screen.getByTestId('folder-instruction-row-api')).toHaveTextContent('Instruções · api');
   });
 });
 
@@ -216,10 +223,6 @@ describe('InstructionTreeRow — delete', () => {
 });
 
 describe('InstructionTreeRow — registry menu', () => {
-  const menuLabels = async (): Promise<string[]> => {
-    const { within: inside } = await import('@testing-library/react');
-    return inside(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent ?? '');
-  };
 
   it('the personal instruction: Visualizar, Editar, Desativar, Nova sessão — never Excluir', async () => {
     const target = instruction();
@@ -228,11 +231,11 @@ describe('InstructionTreeRow — registry menu', () => {
     expect(await menuLabels()).toEqual(['Visualizar', 'Editar', 'Desativar', 'Nova sessão']);
   });
 
-  it('a workspace instruction: Editar, Desativar, Excluir, Nova sessão; Desativar calls entity.setEnabled', async () => {
+  it('a workspace instruction: Editar, Desativar, Nova sessão, Excluir; Desativar calls entity.setEnabled', async () => {
     const target = instruction({ urn: 'urn:instruction:acme', name: 'acme', scopes: ['workspace'], scopeId: 'w1' });
     renderWithShell(<InstructionTreeRow kind="workspace" instruction={target} seed={() => target} onOpen={vi.fn()} onProperties={vi.fn()} onNewAction={vi.fn()} />);
     fireEvent.contextMenu(await screen.findByTestId('workspace-instruction-row'));
-    expect(await menuLabels()).toEqual(['Editar', 'Desativar', 'Excluir', 'Nova sessão']);
+    expect(await menuLabels()).toEqual(['Editar', 'Desativar', 'Nova sessão', 'Excluir']);
     fireEvent.click(screen.getByTestId('row-context-menu-toggle'));
     await vi.waitFor(() => expect(call).toHaveBeenCalledWith('entity.setEnabled', { urn: 'urn:instruction:acme', enabled: false }));
   });

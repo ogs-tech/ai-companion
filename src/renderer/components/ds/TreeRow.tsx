@@ -29,8 +29,12 @@ export interface TreeRowProps {
   /** 'hover' (default) reveals `actions` on hover/focus-within, keyboard-reachable via :focus-within; 'always' renders them plainly, for actions that should never hide. */
   actionsVisibility?: 'hover' | 'always';
   muted?: boolean;
-  /** How `muted` reads: 'fade' lowers the opacity (file tree); 'quiet' keeps it opaque in the secondary text colour, so it still passes contrast. */
-  mutedStyle?: 'fade' | 'quiet';
+  /**
+   * How `muted` reads: 'fade' lowers the opacity (file tree); 'quiet' keeps it opaque in the secondary text colour, so it
+   * still passes contrast; 'recede' keeps the primary text colour at a lighter opacity that lifts back on hover/focus
+   * (a row found in a channel's files, not yet the app's).
+   */
+  mutedStyle?: 'fade' | 'quiet' | 'recede';
   disabled?: boolean;
   /** 'compact' (22px, file tree) or 'comfortable' (26px, Customizações). */
   density?: 'compact' | 'comfortable';
@@ -116,6 +120,9 @@ export function TreeRow({
         borderRadius: `${theme.ogs.radius.xs}px`,
         opacity: (muted && mutedStyle === 'fade') || dropState === 'invalid' ? 0.45 : 1,
         ...(muted && mutedStyle === 'quiet' ? { color: 'text.secondary', '& .MuiListItemText-primary': { color: 'text.secondary' } } : {}),
+        ...(muted && mutedStyle === 'recede'
+          ? { opacity: 0.6, transition: 'opacity 120ms ease', '&:hover, &:focus-visible, &:focus-within': { opacity: 1 } }
+          : {}),
         ...(dropState === 'invalid' ? { cursor: 'not-allowed' } : {}),
         ...(dropState === 'valid'
           ? { bgcolor: alpha(theme.palette.secondary.main, 0.16), outline: `1px solid ${theme.palette.secondary.main}` }

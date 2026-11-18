@@ -466,9 +466,23 @@ describe('buildCustomizationTree', () => {
       input({ skills: [skill('a', { ws: 'ws1' }), skill('g')] }),
       { ...WS, filter: 'draft' },
     );
-    expect(tree.sections).toEqual([{ id: 'local', groups: [], count: 0, problems: 0 }]);
+    expect(tree.sections).toEqual([{ id: 'local', groups: [], count: 0, rows: 0, problems: 0 }]);
     expect(tree.shown).toBe(0);
+    expect(tree.matched).toBe(0);
     expect(tree.grandTotal).toBe(2);
+  });
+
+  it('lists detected items in their group but counts only the app\'s own', () => {
+    const tree = buildCustomizationTree(
+      input({ skills: [skill('a')], detected: [detected('d', { scope: 'personal' })] }),
+      HOME,
+    );
+    const skills = tree.sections[0]?.groups.find((g) => g.id === 'skill');
+    expect(skills?.items.map((i) => i.name)).toEqual(['a', 'd']);
+    expect(skills?.count).toBe(1);
+    expect(skills?.rows).toBe(2);
+    expect(tree.grandTotal).toBe(1);
+    expect(tree.matched).toBe(tree.sections.reduce((n, s) => n + s.rows, 0));
   });
 
   it('hides empty groups except Skills and Agents when unfiltered', () => {

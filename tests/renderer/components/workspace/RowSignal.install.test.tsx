@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RowBadgeSlot } from '../../../../src/renderer/components/workspace/RowBadgeSlot.js';
+import { EntityTreeRow } from '../../../../src/renderer/components/workspace/EntityTreeRow.js';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { treeItem } from './tree-item-fixture.js';
 import type { Skill } from '../../../../src/shared/entity.js';
 
-const skill = { urn: 'urn:skill:backlog', kind: 'skill', name: 'backlog' } as unknown as Skill;
+const skill = { urn: 'urn:skill:backlog', kind: 'skill', name: 'backlog', scopes: ['personal'], source: { kind: 'workspace' } } as unknown as Skill;
 const notInstalledInCursor = treeItem(
   { kind: 'skill', value: skill },
   {
@@ -26,14 +26,22 @@ beforeEach(() => {
   call.mockImplementation(async (method: string) => ok(method === 'adapter.install' ? { undoToken: 'install-1' } : undefined));
 });
 
-describe('RowBadgeSlot — not installed', () => {
-  it('installs over the unmanaged file in that channel only, and Desfazer puts it back', async () => {
-    const user = userEvent.setup();
-    renderWithShell(<RowBadgeSlot item={notInstalledInCursor} />);
-    const tag = screen.getByTestId('row-tag-not-installed');
-    expect(tag).toHaveTextContent('Instalar');
+describe('RowSignal — not installed', () => {
+  it('marks the channel where a file is in the way, without acting', () => {
+    renderWithShell(<EntityTreeRow item={notInstalledInCursor} handlers={{ onEdit: vi.fn() }} />);
+    const mark = screen.getByTestId('row-tag-not-installed');
+    expect(mark).toHaveAccessibleName('Já existe um arquivo do Cursor neste lugar');
+    expect(mark).toHaveAttribute('role', 'img');
+  });
 
-    await user.click(tag);
+  it('leads the menu with Instalar por cima: installs in that channel only, and Desfazer puts it back', async () => {
+    const user = userEvent.setup();
+    renderWithShell(<EntityTreeRow item={notInstalledInCursor} handlers={{ onEdit: vi.fn() }} />);
+    fireEvent.contextMenu(screen.getByTestId(`tree-row-${notInstalledInCursor.key}`));
+    const items = within(await screen.findByRole('menu')).getAllByRole('menuitem');
+    expect(items[0]).toHaveTextContent('Instalar por cima');
+
+    await user.click(items[0]!);
     await waitFor(() => expect(call).toHaveBeenCalledWith('adapter.install', { urn: 'urn:skill:backlog', adapterId: 'cursor' }));
     expect(call).not.toHaveBeenCalledWith('adapter.install', expect.objectContaining({ adapterId: 'claude' }));
     expect(await screen.findByText('"backlog" instalado no Cursor')).toBeInTheDocument();

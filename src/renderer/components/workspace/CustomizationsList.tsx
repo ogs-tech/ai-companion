@@ -74,13 +74,13 @@ export interface CustomizationsListProps {
 type NewTarget = EntityKind | 'instruction' | 'mcp' | 'hook' | 'plugin';
 
 /**
- * Every customization of the current scope: its instruction row(s) ("Instructions") first, then one group per type
+ * Every customization of the current scope: its instruction row(s) ("Instruções") first, then one group per type
  * (Skills, Agents, MCP, Hooks, Plugins) — a type with nothing in it is left out. Inside a workspace the workspace's
- * own groups come first, then a Global section (Início's items, editable here too, collapsed by default). Rows show
- * only the exception — `● Erro no <canal>`, or a draft's `Importar | Instalar | Desativado` — from
- * `customization.status`; the attention chips (`N com erro`, `N rascunhos`, plus a channel row) filter by it and
- * combine with the search. The tree comes from one pure model (`buildCustomizationTree`), so every count equals what
- * the list shows.
+ * own groups come first, then a Global section (Início's items, editable here too, collapsed by default). Each row
+ * shows one signal at most (`RowSignal`: a channel mark with a badge, or a quiet word) and acts only through its menu
+ * (⋯ or right-click). Detected items stay in their groups, receded, and are not counted. The `N com erro` chip (plus a
+ * channel row) filters by status and combines with the search. The tree comes from one pure model
+ * (`buildCustomizationTree`), so every count equals the app's own items the list shows.
  *
  * Search and chip are local state: the parent keys this component by scope, so they reset on a switch.
  */
@@ -252,14 +252,14 @@ export function CustomizationsList({
   };
 
   const scopeKey = localScope?.scopeId ?? 'home';
-  const isEmpty = filtered && tree.shown === 0;
-  const isBlank = !filtered && tree.grandTotal === 0;
+  const isEmpty = filtered && tree.matched === 0;
+  const isBlank = !filtered && tree.matched === 0;
   // Inside a workspace, Global's items follow the workspace's own under their own header.
   const sectioned = !isHome && localScope !== undefined;
   const localSection = tree.sections.find((s) => s.id === 'local');
   const globalSection = tree.sections.find((s) => s.id === 'global');
-  const showGlobal = sectioned && globalSection !== undefined && !isEmpty && !(filtered && globalSection.count === 0);
-  const localVisible = localSection !== undefined && !(filtered && localSection.count === 0);
+  const showGlobal = sectioned && globalSection !== undefined && !isEmpty && !(filtered && globalSection.rows === 0);
+  const localVisible = localSection !== undefined && !(filtered && localSection.rows === 0);
   /** A section's body: its instruction row(s) right under it, ungrouped, then one collapsible group per type. */
   const sectionBody = (section: TreeSection, base: number): React.ReactNode =>
     section.groups.map((group) => {
@@ -292,7 +292,7 @@ export function CustomizationsList({
       )}
       {showGlobal && (
         <>
-          {localVisible && localSection.count > 0 && <Divider sx={{ mx: 1.5, mt: 1, mb: 0.5 }} />}
+          {localVisible && localSection.rows > 0 && <Divider sx={{ mx: 1.5, mt: 1, mb: 0.5 }} />}
           <ScopeSection
             section="global"
             label="Global"

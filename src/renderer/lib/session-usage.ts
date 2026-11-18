@@ -41,6 +41,7 @@ export function buildFileMarks(sessions: readonly SessionSnapshot[]): Map<string
 export interface UsingSession {
   sessionId: string;
   label: string;
+  harness: SessionSnapshot['harness'];
   activity: SessionSnapshot['activity'];
 }
 
@@ -49,5 +50,5 @@ export function sessionsUsing(sessions: readonly SessionSnapshot[], usage: Sessi
   const key = usageKey(usage);
   return sessions
     .filter((s) => s.status === 'running' && now - (s.usedAt?.[key] ?? -Infinity) <= IN_USE_WINDOW_MS)
-    .map((s) => ({ sessionId: s.sessionId, label: s.label, activity: s.activity }));
+    .map((s) => ({ sessionId: s.sessionId, label: s.label, harness: s.harness, activity: s.activity }));
 }

@@ -19,10 +19,10 @@ test.afterAll(async () => {
 });
 
 test.describe('Customizations › channel warnings', () => {
-  test('An unsynced skill and agent show "Erro no Claude", and their groups count the problems', async () => {
+  test('An unsynced skill and agent carry the Claude mark with an error badge ("Erro no Claude"), and their groups count the problems', async () => {
     const { page } = session;
-    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveText('Erro no Claude');
-    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveText('Erro no Claude');
+    await expect(page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning')).toHaveAccessibleName('Erro no Claude. Abrir diagnóstico');
+    await expect(page.getByTestId('tree-row-local::urn:agent:api-architect').getByTestId('channel-warning')).toHaveAccessibleName('Erro no Claude. Abrir diagnóstico');
     await expect(page.getByTestId('tree-group-skill').getByTestId('problem-count')).toBeVisible();
     await expect(page.getByTestId('tree-group-agent').getByTestId('problem-count')).toBeVisible();
   });
@@ -30,7 +30,7 @@ test.describe('Customizations › channel warnings', () => {
   test('The warning is accessible: it names the channel and says it opens the diagnostic', async () => {
     const { page } = session;
     const warning = page.getByTestId('tree-row-local::urn:skill:deploy-checklist').getByTestId('channel-warning');
-    await expect(warning).toHaveAttribute('aria-label', 'Problema em Claude. Abrir diagnóstico');
+    await expect(warning).toHaveAttribute('aria-label', 'Erro no Claude. Abrir diagnóstico');
   });
 
   test('Clicking the warning opens Diagnósticos narrowed to that item, without opening the skill', async () => {

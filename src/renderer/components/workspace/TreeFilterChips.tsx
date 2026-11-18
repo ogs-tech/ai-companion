@@ -5,10 +5,12 @@ import type { TreeFilter, TreeTotals } from '../../lib/customization-tree.js';
 
 type AttentionFilter = Extract<TreeFilter, 'error' | 'draft'>;
 
-/** The states worth a filter: installed is the silent default, so only what needs attention gets a chip. */
+/**
+ * The states worth a filter: only errors need attention. Drafts (detected, disabled, a file in the way) each say so on
+ * their own row, and "rascunho" lumped three different things under one word.
+ */
 const CHIPS: ReadonlyArray<{ filter: AttentionFilter; label: (n: number) => string }> = [
   { filter: 'error', label: (n) => `${n} com erro` },
-  { filter: 'draft', label: (n) => (n === 1 ? '1 rascunho' : `${n} rascunhos`) },
 ];
 
 /** Channels that receive customizations — the only ones an item can be draft or in error on. */
@@ -87,8 +89,8 @@ function Chip({
 }
 
 /**
- * What needs attention, as toggles: `N com erro`, `N rascunhos` — each shown only while it has items (or is on).
- * With one on, a second row narrows it to one channel. Nothing to report renders nothing.
+ * What needs attention, as a toggle: `N com erro` — shown only while it has items (or is on).
+ * While on, a second row narrows it to one channel. Nothing to report renders nothing.
  */
 export function TreeFilterChips({ value, channel, totals, onChange, onChannelChange }: TreeFilterChipsProps): React.ReactElement | null {
   const shown = CHIPS.filter(({ filter }) => totals[filter] > 0 || value === filter);

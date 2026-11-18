@@ -545,7 +545,7 @@ describe('WorkspaceScreen', () => {
         return undefined;
       });
       renderScreen();
-      expect(await screen.findByTestId('workspace-instruction-row-acme')).toHaveTextContent('Instructions');
+      expect(await screen.findByTestId('workspace-instruction-row-acme')).toHaveTextContent('Instruções');
       fireEvent.contextMenu(screen.getByTestId('workspace-instruction-row-acme'));
       await user.click(await screen.findByTestId('row-context-menu-delete'));
       expect(confirmSpy).not.toHaveBeenCalled();

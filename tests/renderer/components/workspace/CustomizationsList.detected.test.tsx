@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { CustomizationsList, type CustomizationsListProps } from '../../../../src/renderer/components/workspace/CustomizationsList.js';
 import userEvent from '@testing-library/user-event';
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
@@ -34,13 +34,14 @@ const props = (): CustomizationsListProps => ({
 });
 
 describe('CustomizationsList detected items and folders', () => {
-  it('lists detected skills in Skills after the scope’s own, tagged with their folder, importable from the tag', async () => {
+  it('lists detected skills in Skills after the scope’s own, tagged with their folder, uncounted, importable from the menu', async () => {
     const user = userEvent.setup();
     call.mockImplementation(async (method: string, params?: unknown) => {
       if (method === 'workspace.getActive') return ok(workspace);
       if (method === 'detected.list') return ok([detected('backlog', '/r/bees'), detected('planner', '/r/ui')]);
       if (method === 'skill.list') return ok([{ urn: 'urn:skill:zeta', kind: 'skill', name: 'zeta', description: '', scopes: ['workspace'], scopeId: 'w1', metadata, source: { kind: 'workspace' }, content: '' }]);
       if (method === 'detected.import') return ok({ params });
+      if (method === 'instruction.get') return ok(null);
       return ok([]);
     });
     renderWithShell(<CustomizationsList {...props()} />);
@@ -48,10 +49,13 @@ describe('CustomizationsList detected items and folders', () => {
     const own = screen.getByTestId(row('local', 'urn:skill:zeta'));
     expect((own.compareDocumentPosition(backlog) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
     expect(within(backlog).getByTestId('row-folder')).toHaveTextContent('bees');
-    expect(screen.getByTestId(row('detected', 'detected:planner', 'ui'))).toHaveTextContent('Cursor');
-    expect(screen.getByTestId('chip-draft')).toHaveTextContent('2 rascunhos');
+    // Where it was found is not on the row, and detected items are listed, not counted.
+    expect(screen.getByTestId(row('detected', 'detected:planner', 'ui'))).not.toHaveTextContent('Cursor');
+    expect(screen.getByTestId('control-panel-count')).toHaveTextContent('1');
+    expect(screen.queryByTestId('chip-draft')).not.toBeInTheDocument();
 
-    await user.click(within(backlog).getByTestId('row-tag-detected'));
+    fireEvent.contextMenu(backlog);
+    await user.click(await screen.findByTestId('row-context-menu-import'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'backlog' }));
   });
 
@@ -62,11 +66,11 @@ describe('CustomizationsList detected items and folders', () => {
       return ok([]);
     });
     renderWithShell(<CustomizationsList {...props()} />);
-    expect(await screen.findByTestId(row('detected', 'detected:smoke', 'ui'))).toHaveTextContent('Claude');
-    expect(screen.getByTestId(row('detected', 'detected:smoke-cursor', 'ui'))).toHaveTextContent('Cursor');
+    expect(await screen.findByTestId(row('detected', 'detected:smoke', 'ui'))).toHaveTextContent('smoke');
+    expect(screen.getByTestId(row('detected', 'detected:smoke-cursor', 'ui'))).toHaveTextContent('smoke');
   });
 
-  it('gives every folder its own Instructions row at the top of Workspace: hollow, or offering the file found there', async () => {
+  it('gives every folder its own Instruções row at the top of Workspace: hollow, or offering the file found there', async () => {
     const instructionFile: DetectedEntity = {
       id: 'ins-ui', kind: 'instruction', name: 'ui', description: 'AGENTS.md', harness: 'claude', scope: 'workspace', folder: '/r/ui',
       path: '/r/ui/AGENTS.md', importable: true, preview: { file: 'AGENTS.md' },
@@ -82,11 +86,11 @@ describe('CustomizationsList detected items and folders', () => {
 
     const ui = await screen.findByTestId('folder-instruction-row-ui');
     expect(ui).toHaveTextContent('AGENTS.md');
-    expect(ui).toHaveTextContent('Importar');
+    expect(ui).not.toHaveTextContent('Importar');
     expect(within(ui).getByTestId('row-folder')).toHaveTextContent('ui');
     const workspaceRow = screen.getByTestId('workspace-instruction-row');
     expect((workspaceRow.compareDocumentPosition(ui) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
-    expect(ui).toHaveTextContent('Instructions · ui');
+    expect(ui).toHaveTextContent('Instruções · ui');
     // Placeholders are places to create, not items.
     expect(screen.getByTestId('control-panel-count')).toHaveTextContent('0');
 

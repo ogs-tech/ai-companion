@@ -6,7 +6,7 @@ import { mcpLoginMarker, realBinaryOnHost } from '../../fixtures/cli-stubs.js';
 import { launchCustomizationsApp, type CustomizationsApp } from '../../fixtures/customizations-app.js';
 
 // Journey: a remote MCP server the user owns (Global's `context7`, written to Claude and Cursor) needs OAuth. Its row
-// says Conectar; that opens the server's page in the Workbench, where one click signs in to every channel — Claude's
+// menu leads with Conectar; that opens the server's page in the Workbench, where one click signs in to every channel — Claude's
 // `claude mcp login`, then Cursor's `cursor-agent mcp login`, each in a visible terminal (every CLI keeps its own
 // token). The stubs (fixtures/cli-stubs.ts) answer `mcp list` like the real Claude, so the page then reads Conectado.
 
@@ -64,12 +64,14 @@ test.describe('Customizations › MCP page', () => {
     );
   });
 
-  test('Conectar on the row opens the server page as a Workbench tab', async () => {
+  test('Conectar, first in the row menu, opens the server page as a Workbench tab', async () => {
     const { page } = session;
     await page.getByTestId('control-panel-section-global').click();
     await expect(row()).toBeVisible();
 
-    await row().getByRole('button', { name: 'Conectar' }).click();
+    await row().click({ button: 'right' });
+    await expect(page.getByRole('menuitem').first()).toHaveText('Conectar');
+    await page.getByTestId('row-context-menu-authenticate').click();
 
     const mcpPage = page.getByTestId('mcp-page');
     await expect(mcpTabs()).toHaveCount(1);
@@ -107,13 +109,16 @@ test.describe('Customizations › MCP page', () => {
 
     await test.step('Claude re-checks the connection; the row no longer asks to connect', async () => {
       await expect(page.getByTestId('mcp-page-channel-claude')).toContainText('Conectado', { timeout: 20_000 });
-      await expect(row().getByRole('button', { name: 'Conectar' })).toHaveCount(0);
+      await row().click({ button: 'right' });
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expect(page.getByTestId('row-context-menu-authenticate')).toHaveCount(0);
+      await page.keyboard.press('Escape');
     });
   });
 
   test('Clicking the row again focuses the open page instead of stacking a second tab', async () => {
     const { page } = session;
-    // The seed left the server unsynced, so its row carries an "Erro no …" tag: that one leads to Diagnósticos.
+    // The seed left the server unsynced, so its row carries the error mark: that one leads to Diagnósticos.
     await row().getByTestId('channel-warning').click();
     await expect(page.getByTestId('workbench-tab-diagnostico')).toHaveAttribute('aria-pressed', 'true');
     await expect(mcpTabs().first()).toHaveAttribute('aria-pressed', 'false');

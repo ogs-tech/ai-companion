@@ -71,21 +71,21 @@ describe('EntityTreeRow', () => {
     expect(h.onNewAction).toHaveBeenCalledWith('skill', own);
   });
 
-  it('shows a running-session badge when its entity has an active session', async () => {
+  it('marks a session asking about the entity with its channel, words in the accessible name', async () => {
     call.mockImplementation(async (method: string) =>
       method === 'session.list'
-        ? ok([{ sessionId: 'entity:urn:skill:personal-skill', anchor: { kind: 'entity', urn: own.urn }, cwd: '/x', label: own.name, status: 'running' }])
+        ? ok([{ sessionId: 'entity:urn:skill:personal-skill', anchor: { kind: 'entity', urn: own.urn }, cwd: '/x', label: own.name, status: 'running', harness: 'claude', activity: 'needs-input' }])
         : ok(undefined),
     );
     renderWithShell(<EntityTreeRow item={ownItem} handlers={handlers()} />);
     const row = screen.getByTestId(rowId(ownItem));
-    expect(await within(row).findByTestId(`session-status-entity:${own.urn}`)).toHaveTextContent('Ocioso');
+    expect(await within(row).findByTestId('row-signal-session')).toHaveAccessibleName('Uma sessão do Claude está perguntando');
   });
 
   it('a problem shows the channel warning', () => {
     const failing = treeItem({ kind: 'skill', value: own }, { urn: own.urn, name: own.name, origin: 'global', problems: ['cursor'] });
     renderWithShell(<EntityTreeRow item={failing} handlers={handlers()} />);
-    expect(screen.getByTestId(rowId(failing))).toHaveTextContent('Erro no Cursor');
+    expect(within(screen.getByTestId(rowId(failing))).getByTestId('channel-warning')).toHaveAccessibleName('Erro no Cursor. Abrir diagnóstico');
   });
 
   it('seeds a new skill with the current localScope, and its folder when given', () => {
@@ -96,11 +96,11 @@ describe('EntityTreeRow', () => {
 });
 
 describe('EntityTreeRow — registry menu', () => {
-  it('an own skill offers Visualizar, Editar, Desativar, Excluir, then Nova sessão', async () => {
+  it('an own skill offers Visualizar, Editar, Desativar, Nova sessão, then Excluir last', async () => {
     renderWithShell(<EntityTreeRow item={ownItem} handlers={handlers()} />);
     fireEvent.contextMenu(screen.getByTestId(rowId(ownItem)));
     const menu = await screen.findByRole('menu');
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Visualizar', 'Editar', 'Desativar', 'Excluir', 'Nova sessão']);
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Visualizar', 'Editar', 'Desativar', 'Nova sessão', 'Excluir']);
   });
 
   it('Desativar turns the skill off in every channel', async () => {

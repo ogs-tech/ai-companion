@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Box, Tooltip } from '@mui/material';
+import { Tooltip } from '@mui/material';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowBadgeSlot, RowLabel, rowTestId } from './RowBadgeSlot.js';
+import { RowLabel, RowSignal, rowTestId } from './RowBadgeSlot.js';
 import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { Toast, type ToastMessage } from '../Toast.js';
@@ -10,18 +10,10 @@ import { IpcCallError } from '../../lib/ipc.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
 import type { DetectedEntity } from '../../../shared/detected.js';
 
-export const HARNESS_LABEL: Record<DetectedEntity['harness'], string> = { claude: 'Claude', cursor: 'Cursor' };
-
-/** The harness a detected item was found in, quiet after its name — two harnesses can hold the same name. */
-export function HarnessTag({ harness, testId }: { harness: DetectedEntity['harness']; testId?: string }): React.ReactElement {
-  return (
-    <Box component="span" data-testid={testId} sx={{ flexShrink: 0, fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
-      {HARNESS_LABEL[harness]}
-    </Box>
-  );
-}
-
-/** A skill or agent found in Claude's or Cursor's own folders, read-only until imported (tag or "Importar" menu). */
+/**
+ * A skill or agent found in Claude's or Cursor's own folders, read-only until imported (menu: Importar). It recedes in
+ * place — where it was found is in the tooltip, not on the row.
+ */
 export function DetectedTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: number }): React.ReactElement | null {
   const importer = useImportDetected();
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -55,20 +47,16 @@ export function DetectedTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: n
         testId={rowTestId(item)}
         depth={depth}
         muted
+        mutedStyle="recede"
         primary={
-          <Tooltip title={detected.importable ? detected.path : (detected.reason ?? 'Não pode ser importado')}>
+          <Tooltip title={detected.path}>
             <span>
               <RowLabel item={item} />
             </span>
           </Tooltip>
         }
         {...(detected.importable ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, detected) } : {})}
-        badge={
-          <>
-            <HarnessTag harness={detected.harness} />
-            <RowBadgeSlot item={item} onImport={runImport} busy={importer.isPending} />
-          </>
-        }
+        badge={<RowSignal item={item} />}
       />
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={actions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

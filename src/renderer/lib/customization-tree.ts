@@ -65,7 +65,10 @@ export interface TreeGroup {
   id: TreeGroupId;
   label: string;
   items: TreeItem[];
+  /** The app's own items (detected ones are listed, not counted). */
   count: number;
+  /** Every listed item, detected included. */
+  rows: number;
   /** Items with status `error`: the group header's ⚠. */
   problems: number;
 }
@@ -74,6 +77,7 @@ export interface TreeSection {
   id: TreeSectionId;
   groups: TreeGroup[];
   count: number;
+  rows: number;
   problems: number;
 }
 
@@ -95,9 +99,11 @@ export interface CustomizationTree {
   sections: TreeSection[];
   /** Chip counts, on the search-filtered set. */
   totals: TreeTotals;
-  /** Items the groups list under the current search and chip. */
+  /** The app's own items the groups list under the current search and chip. */
   shown: number;
-  /** Items with no search and no chip — what the header names. */
+  /** Every row the groups list, detected included: zero means the search or chip found nothing. */
+  matched: number;
+  /** The app's own items with no search and no chip — what the header names. Detected ones are not counted. */
   grandTotal: number;
 }
 
@@ -145,7 +151,7 @@ const GROUP_ORDER = Object.fromEntries(GROUPS.map((g, i) => [g.id, i])) as Recor
 const ORIGIN_ORDER: Record<TreeOrigin, number> = { local: 0, global: 1, detected: 2 };
 
 /** What a level's instruction row is called; a folder's adds its folder tag, an extra workspace one shows its own name. */
-const INSTRUCTION_LABEL = 'Instructions';
+const INSTRUCTION_LABEL = 'Instruções';
 
 /** A candidate row before search and chip filtering. */
 interface Candidate {
@@ -497,6 +503,7 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
   const all = candidates(input, options);
   const narrowing = options.query.trim() !== '' || options.filter !== 'all';
   const counted = (c: Candidate): boolean => c.placeholder === undefined;
+  const owned = (item: TreeItem): boolean => item.origin !== 'detected';
   const isPluginRow = (c: Candidate): boolean => c.item.entity.kind === 'plugin';
 
   const ownMatch = (c: Candidate): boolean =>
@@ -577,7 +584,8 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
         id: groupId,
         label,
         items: inGroup.map((c) => c.item),
-        count: countedItems.length,
+        count: countedItems.filter(owned).length,
+        rows: countedItems.length,
         problems: countedItems.map(forCounting).filter((i) => i.status?.status === 'error').length,
       });
     }
@@ -585,6 +593,7 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
       id,
       groups,
       count: groups.reduce((sum, g) => sum + g.count, 0),
+      rows: groups.reduce((sum, g) => sum + g.rows, 0),
       problems: groups.reduce((sum, g) => sum + g.problems, 0),
     };
   };
@@ -605,7 +614,8 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
     sections,
     totals,
     shown: sections.reduce((sum, s) => sum + s.count, 0),
-    grandTotal: all.filter(counted).length,
+    matched: sections.reduce((sum, s) => sum + s.rows, 0),
+    grandTotal: all.filter((c) => counted(c) && owned(c.item)).length,
   };
 }
 

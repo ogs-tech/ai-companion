@@ -30,9 +30,9 @@ miss shows as Ocioso.
 
 While a session runs, the app marks what it touches:
 
-- **Skills, agents and MCP servers** — a green "1 sessão" / "N sessões" label beside the item in the
-  customization tree when a running session invoked it in the current turn or in the last 10 minutes. Hover
-  it to list those sessions with their state.
+- **Skills, agents and MCP servers** — the session's channel mark, with its state as a badge, beside the item in
+  the customization tree when a running session invoked it in the current turn or in the last 10 minutes (or was
+  started from it). Several sessions show the most urgent one; hover for how many.
 - **Files** — a dot beside the file in the Explorer: green while a session is editing it, grey if a session
   changed it this turn, amber if a session is editing a file where you have unsaved changes.
 - **Editor banner** — above an open file, a banner says which session is editing it or changed it this turn,

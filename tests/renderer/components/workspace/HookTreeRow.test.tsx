@@ -50,12 +50,13 @@ describe('HookTreeRow', () => {
     expect(screen.getByTestId(rowId(item))).toHaveTextContent('Desativado');
   });
 
-  it('imports a detected hook from its tag', async () => {
+  it('imports a detected hook from its menu', async () => {
     const detected: Hook = { ...own, enabled: undefined as never, source: { kind: 'detected', detectedId: 'det-h', harness: 'cursor', importable: true } };
     const item = itemOf(detected, { origin: 'detected' });
     renderWithShell(<HookTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).toHaveTextContent('Cursor');
-    await userEvent.setup().click(screen.getByTestId('row-tag-detected'));
+    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Cursor');
+    fireEvent.contextMenu(screen.getByTestId(rowId(item)));
+    await userEvent.setup().click(await screen.findByTestId('row-context-menu-import'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'det-h' }));
   });
 });

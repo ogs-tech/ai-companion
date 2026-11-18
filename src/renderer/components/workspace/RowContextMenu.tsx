@@ -56,6 +56,8 @@ export interface RowContextMenuAction {
   separatorBefore?: boolean;
   /** A destructive action — drawn in the error color and set apart from the others by a divider. */
   danger?: boolean;
+  /** The action that resolves the row's signal: drawn bold. */
+  emphasis?: boolean;
 }
 
 interface RowContextMenuProps {
@@ -87,7 +89,7 @@ export function RowContextMenu({ state, onClose, actions }: RowContextMenuProps)
           }}
         >
           <ListItemIcon sx={action.danger === true ? { color: 'inherit' } : {}}><Icon glyph={action.glyph} size={16} /></ListItemIcon>
-          <ListItemText>{action.label}</ListItemText>
+          <ListItemText {...(action.emphasis === true ? { slotProps: { primary: { sx: { fontWeight: 600 } } } } : {})}>{action.label}</ListItemText>
           {action.shortcut !== undefined && (
             <Typography variant="caption" sx={{ ml: 3, color: 'text.secondary' }}>{action.shortcut}</Typography>
           )}

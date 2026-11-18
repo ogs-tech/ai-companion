@@ -1,14 +1,13 @@
-import { Box, Stack } from '@mui/material';
+import { Box } from '@mui/material';
 import { useState } from 'react';
-import { ScrollText } from 'lucide-react';
+import { Download, ScrollText } from 'lucide-react';
 import { TreeRow } from '../ds/TreeRow.js';
 import { RowMenuButton } from './RowMenuButton.js';
 import { treeIndent } from './TreeGroup.js';
-import { SyncDot } from '../ds/SyncDot.js';
-import { RowBadgeSlot, RowLabel, useInstallOver } from './RowBadgeSlot.js';
+import { RowLabel, RowSignal, useInstallOver } from './RowBadgeSlot.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
 import { Toast, type ToastMessage } from '../Toast.js';
-import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
+import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
 import { callIpc, IpcCallError } from '../../lib/ipc.js';
@@ -22,57 +21,27 @@ import type { Instruction } from '../../../shared/entity.js';
 type InstructionRowKind = 'personal' | 'workspace' | 'folder';
 
 const ROW_COPY: Record<InstructionRowKind, { label: string; removeLabel?: (name: string) => string }> = {
-  personal: { label: 'Instructions' },
+  personal: { label: 'Instruções' },
   workspace: {
-    label: 'Instructions',
-    removeLabel: (name) => `Remover as instructions deste workspace (${name})?`,
+    label: 'Instruções',
+    removeLabel: (name) => `Remover as instruções deste workspace (${name})?`,
   },
   folder: {
-    label: 'Instructions',
-    removeLabel: (name) => `Remover as instructions desta pasta (${name})?`,
+    label: 'Instruções',
+    removeLabel: (name) => `Remover as instruções desta pasta (${name})?`,
   },
 };
 
-/** The detected file at the end of the row: its name, then a quiet "Importar" — one action per row. */
-function DetectedBadge({ detected, onApply, busy }: { detected: DetectedEntity; onApply: () => void; busy: boolean }): React.ReactElement {
+/** The detected file's name at the end of the row; importing it is the row menu's first item. */
+function DetectedFile({ detected }: { detected: DetectedEntity }): React.ReactElement {
   return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
-      <Box
-        component="span"
-        data-testid="detected-file"
-        sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 })}
-      >
-        {String(detected.preview['file'] ?? detected.description)}
-      </Box>
-      <Box
-        component="button"
-        type="button"
-        disabled={busy}
-        data-testid="detected-apply"
-        aria-label={`Importar ${String(detected.preview['file'] ?? 'arquivo detectado')} como instructions`}
-        onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          onApply();
-        }}
-        sx={(theme) => ({
-          font: 'inherit',
-          fontSize: '0.75rem',
-          color: theme.palette.info.main,
-          background: 'none',
-          border: 0,
-          borderRadius: `${theme.ogs.radius.xs}px`,
-          px: 0.5,
-          py: 0.25,
-          cursor: 'pointer',
-          flexShrink: 0,
-          '&:hover': { bgcolor: `${theme.palette.info.main}24` },
-          '&:disabled': { opacity: 0.5, cursor: 'default' },
-        })}
-      >
-        Importar
-      </Box>
-      <SyncDot state="detected" />
-    </Stack>
+    <Box
+      component="span"
+      data-testid="detected-file"
+      sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, fontSize: '0.6875rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 })}
+    >
+      {String(detected.preview['file'] ?? detected.description)}
+    </Box>
   );
 }
 
@@ -132,6 +101,15 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
     );
   const canDelete = instruction != null && copy.removeLabel !== undefined;
   const rowMenu = useRowContextMenu<Instruction>();
+  // While the level has no instruction, the file found there is offered: the row recedes and its menu imports it.
+  const offeredMenu = useRowContextMenu<DetectedEntity>();
+  const offeredActions: RowContextMenuAction[] =
+    offeredMenu.state && offered
+      ? toRowActions(
+          customizationMenu({ entity: { kind: 'instruction', name: offered.name, scopes: ['personal'] }, enabled: true, readOnly: false, detected: true, canInstallOver: false, hasUndo: false, newAction: false }),
+          { import: () => apply(offered) },
+        ).map((a) => (a.key === 'import' ? { ...a, glyph: Download, label: `Importar ${String(offered.preview['file'] ?? 'arquivo detectado')}` } : a))
+      : [];
   const rowMenuTarget = rowMenu.state?.target;
   // Editar: the Properties modal where there are properties to edit; the personal singleton has none, so it opens its editor.
   const rowMenuActions = rowMenuTarget
@@ -178,28 +156,28 @@ export function InstructionTreeRow({ kind, instruction, seed, onOpen, onPreview,
         primary={item ? <RowLabel item={item} {...(label !== undefined ? { label } : {})} /> : (label ?? copy.label)}
         labelVariant="item"
         density="comfortable"
-        mutedStyle="quiet"
-        muted={instruction == null && offered === undefined}
+        mutedStyle={offered ? 'recede' : 'quiet'}
+        muted={instruction == null}
         onClick={() => onOpen(instruction ?? seed(), !instruction)}
         onContextMenu={(e) => {
-          if (!instruction) return;
-          rowMenu.openMenu(e, instruction);
+          if (instruction) rowMenu.openMenu(e, instruction);
+          else if (offered) offeredMenu.openMenu(e, offered);
         }}
         {...(instruction
           ? { actions: <RowMenuButton testId={`row-actions-${rowTestId}-btn`} label="Ações" onOpen={(e) => rowMenu.openMenu(e, instruction)} /> }
-          : {})}
+          : offered
+            ? { actions: <RowMenuButton testId={`row-actions-${rowTestId}-btn`} label="Ações" onOpen={(e) => offeredMenu.openMenu(e, offered)} /> }
+            : {})}
         badge={
           instruction ? (
-            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-              <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
-              {item && <RowBadgeSlot item={item} />}
-            </Stack>
+            item ? <RowSignal item={item} anchorUrn={instruction.urn} /> : <SessionStatusBadge anchor={{ kind: 'entity', urn: instruction.urn }} />
           ) : offered ? (
-            <DetectedBadge detected={offered} onApply={() => apply(offered)} busy={importer.isPending} />
+            <DetectedFile detected={offered} />
           ) : undefined
         }
       />
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={rowMenuActions} />
+      <RowContextMenu state={offeredMenu.state} onClose={offeredMenu.closeMenu} actions={offeredActions} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       {installOver.toast}
     </>

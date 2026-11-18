@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Tooltip } from '@mui/material';
 import { TreeGroupRow } from './TreeGroup.js';
-import { RowBadgeSlot, RowLabel, rowMuted, rowTestId } from './RowBadgeSlot.js';
+import { RowLabel, RowSignal, rowMuted, rowMutedStyle, rowTestId } from './RowBadgeSlot.js';
 import { customizationMenu, toRowActions } from './customization-menu.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
-import { HarnessTag } from './DetectedTreeRow.js';
 import { RowContextMenu, useRowContextMenu } from './RowContextMenu.js';
 import { useDeleteHook, type Hook } from '../../hooks/use-hooks.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
@@ -64,6 +63,7 @@ export function HookTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: numbe
         testId={rowTestId(item)}
         depth={depth}
         muted={rowMuted(item)}
+        mutedStyle={rowMutedStyle(item)}
         primary={
           <Tooltip title={describeHookHandler(hook.handler)}>
             <span>
@@ -71,12 +71,7 @@ export function HookTreeRow({ item, depth = 1 }: { item: TreeItem; depth?: numbe
             </span>
           </Tooltip>
         }
-        badge={
-          <>
-            {hook.source.kind === 'detected' && <HarnessTag harness={hook.source.harness} />}
-            <RowBadgeSlot item={item} {...(runImport !== undefined ? { onImport: runImport } : {})} busy={importer.isPending} />
-          </>
-        }
+        badge={<RowSignal item={item} />}
         {...(hasMenu ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, hook) } : {})}
       />
       <RowContextMenu state={rowMenu.state} onClose={rowMenu.closeMenu} actions={actions} />

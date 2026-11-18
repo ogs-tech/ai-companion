@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { customizationMenu, type MenuContext } from '../../../../src/renderer/components/workspace/customization-menu.js';
+import { customizationMenu, toRowActions, type MenuContext } from '../../../../src/renderer/components/workspace/customization-menu.js';
 
 const ctx = (over: Partial<MenuContext> = {}): MenuContext => ({
   entity: { kind: 'skill', name: 'tdd', scopes: ['personal'] },
@@ -14,13 +14,15 @@ const ctx = (over: Partial<MenuContext> = {}): MenuContext => ({
 const labels = (c: MenuContext): string[] => customizationMenu(c).map((a) => a.label);
 
 describe('customizationMenu', () => {
-  it('own skill: Visualizar, Editar, Desativar, Excluir, then Nova sessão', () => {
-    expect(labels(ctx())).toEqual(['Visualizar', 'Editar', 'Desativar', 'Excluir', 'Nova sessão']);
-    expect(customizationMenu(ctx()).map((a) => a.key)).toEqual(['open', 'edit', 'toggle', 'delete', 'new-action']);
+  it('own skill: Visualizar, Editar, Desativar, Nova sessão, then Excluir last', () => {
+    expect(labels(ctx())).toEqual(['Visualizar', 'Editar', 'Desativar', 'Nova sessão', 'Excluir']);
+    expect(customizationMenu(ctx()).map((a) => a.key)).toEqual(['open', 'edit', 'toggle', 'new-action', 'delete']);
   });
 
-  it('a disabled item offers Ativar', () => {
-    expect(labels(ctx({ enabled: false }))).toContain('Ativar');
+  it('a disabled item leads with Ativar, the action that resolves its signal', () => {
+    const menu = customizationMenu(ctx({ enabled: false }));
+    expect(menu.map((a) => a.label)).toEqual(['Ativar', 'Visualizar', 'Editar', 'Nova sessão', 'Excluir']);
+    expect(menu[0]?.primary).toBe(true);
   });
 
   it('the personal instruction cannot be deleted', () => {
@@ -38,17 +40,38 @@ describe('customizationMenu', () => {
     expect(actions[1]?.danger).toBe(true);
   });
 
-  it('detected: Visualizar and Importar', () => {
-    expect(labels(ctx({ detected: true }))).toEqual(['Visualizar', 'Importar']);
+  it('detected: Importar first, then Visualizar', () => {
+    expect(labels(ctx({ detected: true }))).toEqual(['Importar', 'Visualizar']);
   });
 
-  it('installable: Instalar por cima, and Desfazer when there is something to undo', () => {
-    expect(labels(ctx({ canInstallOver: true }))).toContain('Instalar por cima');
-    expect(labels(ctx({ canInstallOver: true, hasUndo: true }))).toContain('Desfazer');
+  it('installable: Instalar por cima first, and Desfazer right after when there is something to undo', () => {
+    expect(labels(ctx({ canInstallOver: true }))[0]).toBe('Instalar por cima');
+    expect(labels(ctx({ canInstallOver: true, hasUndo: true })).slice(0, 2)).toEqual(['Instalar por cima', 'Desfazer']);
     expect(labels(ctx())).not.toContain('Instalar por cima');
   });
 
   it('no Nova sessão where the row has none', () => {
     expect(labels(ctx({ newAction: false }))).toEqual(['Visualizar', 'Editar', 'Desativar', 'Excluir']);
+  });
+});
+
+describe('toRowActions', () => {
+  const all = { open: () => undefined, edit: () => undefined, toggle: () => undefined, delete: () => undefined, import: () => undefined, installOver: () => undefined, undo: () => undefined };
+
+  it('emphasizes the primary action and sets the rest apart with a divider', () => {
+    const actions = toRowActions(customizationMenu(ctx({ canInstallOver: true, hasUndo: true, newAction: false })), all);
+    expect(actions.map((a) => [a.key, a.emphasis === true, a.separatorBefore === true])).toEqual([
+      ['installOver', true, false],
+      ['undo', false, false],
+      ['open', false, true],
+      ['edit', false, false],
+      ['toggle', false, false],
+      ['delete', false, false],
+    ]);
+    expect(actions.at(-1)?.danger).toBe(true);
+  });
+
+  it('no divider when nothing is primary', () => {
+    expect(toRowActions(customizationMenu(ctx({ newAction: false })), all).some((a) => a.separatorBefore === true)).toBe(false);
   });
 });

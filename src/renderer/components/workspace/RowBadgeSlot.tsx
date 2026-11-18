@@ -1,28 +1,31 @@
 import { useState } from 'react';
-import { Box, Typography, type Theme } from '@mui/material';
-import { ChannelWarning } from '../ds/ChannelWarning.js';
+import { Box, Tooltip, Typography } from '@mui/material';
+import { ChannelBadgeMark, badgeSize } from '../ChannelStateMark.js';
+import { SessionStateMark } from '../SessionStateMark.js';
+import { channelErrorLabel } from '../ds/ChannelWarning.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useInstallEntity, useUndoInstall } from '../../hooks/use-install-entity.js';
+import { useItemSessions, type ItemSession } from '../../hooks/use-sessions.js';
 import { IpcCallError } from '../../lib/ipc.js';
-import { channelsWith, isDisabled, rowBadge, type TreeItem } from '../../lib/customization-tree.js';
+import { openDiagnosticsFor } from '../../lib/diagnostics-focus.js';
+import { channelsWith, isDisabled, type TreeItem } from '../../lib/customization-tree.js';
 import { CHANNEL_IDS, CHANNELS, type ChannelId } from '../../../shared/channel.js';
+import type { SessionUsage } from '../../../shared/session.js';
 
 const TAG_SX = { flexShrink: 0, fontSize: '0.75rem', whiteSpace: 'nowrap' } as const;
+const MARK_SIZE = 14;
 
-/** Whether a detected row can be imported (a detected MCP/hook carries it in `source`). */
-function importable(item: TreeItem): boolean {
+/** Why a detected row can't be imported, or `undefined` when it can (or isn't detected). */
+function unimportableReason(item: TreeItem): string | undefined {
   const { entity } = item;
-  if (entity.kind === 'detected') return entity.value.importable;
-  if (entity.kind === 'mcp' && entity.value.source.kind === 'detected') return entity.value.source.importable === true;
-  if (entity.kind === 'hook' && entity.value.source.kind === 'detected') return entity.value.source.importable;
-  return false;
-}
-
-interface RowBadgeSlotProps {
-  item: TreeItem;
-  /** Imports a detected row; the `detectado · importar` tag is its button. */
-  onImport?: () => void;
-  busy?: boolean;
+  const source =
+    entity.kind === 'detected'
+      ? entity.value
+      : (entity.kind === 'mcp' || entity.kind === 'hook') && entity.value.source.kind === 'detected'
+        ? entity.value.source
+        : undefined;
+  if (source === undefined || source.importable === true) return undefined;
+  return source.reason ?? 'Não importável';
 }
 
 /** The channels where a file the app doesn't own holds the item's destination (registry order). */
@@ -31,25 +34,9 @@ function notInstalledChannels(item: TreeItem): ChannelId[] {
   return CHANNEL_IDS.filter((id) => channels[id]?.reason === 'not-installed');
 }
 
-/** The clickable tag's look: quiet text that reads as a link (info), like `Importar`. */
-const actionTagSx = (theme: Theme) => ({
-  ...TAG_SX,
-  font: 'inherit',
-  fontSize: '0.75rem',
-  fontWeight: 500,
-  color: theme.palette.info.main,
-  background: 'none',
-  border: 0,
-  borderRadius: `${theme.ogs.radius.xs}px`,
-  px: 0.5,
-  cursor: 'pointer',
-  '&:hover': { bgcolor: `${theme.palette.info.main}24` },
-  '&:disabled': { opacity: 0.5, cursor: 'default' },
-});
-
 /**
- * Installing over a file the app doesn't own (moved to `_backups/`), with "Desfazer" in its toast — shared by the
- * `Instalar` tag and the row menu's "Instalar por cima". `available` is false when nothing is in the way.
+ * Installing over a file the app doesn't own (moved to `_backups/`), with "Desfazer" in its toast — the first item
+ * of the row menu while a file is in the way ("Instalar por cima"). `available` is false when nothing is in the way.
  */
 export function useInstallOver(item: TreeItem | undefined): { available: boolean; run: () => void; pending: boolean; toast: React.ReactElement } {
   const install = useInstallEntity();
@@ -81,72 +68,132 @@ export function useInstallOver(item: TreeItem | undefined): { available: boolean
   };
 }
 
-/** `Instalar`: a file the app doesn't own sits where the item goes. Clicking installs over it. */
-function InstallTag({ item }: { item: TreeItem }): React.ReactElement {
-  const installOver = useInstallOver(item);
-  const where = notInstalledChannels(item).map((id) => CHANNELS[id].displayName).join(', ');
+function ErrorBadge(): React.ReactElement {
+  const d = badgeSize(MARK_SIZE);
+  return <Box component="span" aria-hidden sx={{ width: d, height: d, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Box component="span" sx={{ width: d * 0.7, height: d * 0.7, borderRadius: '50%', bgcolor: 'error.main' }} /></Box>;
+}
+
+function ExistsBadge(): React.ReactElement {
+  const d = badgeSize(MARK_SIZE);
   return (
-    <>
-      <Box
-        component="button"
-        type="button"
-        disabled={installOver.pending}
-        data-testid="row-tag-not-installed"
-        aria-label={`Instalar ${item.name} no ${where}`}
-        title={`Já existe um arquivo do ${where} neste lugar. Instalar faz backup dele e passa o controle para o app.`}
-        onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          installOver.run();
-        }}
-        sx={actionTagSx}
-      >
-        Instalar
-      </Box>
-      {installOver.toast}
-    </>
+    <Box component="svg" aria-hidden viewBox="0 0 12 12" sx={{ width: d, height: d, color: 'text.secondary' }}>
+      <path d="M6 1.6L10.4 6 6 10.4 1.6 6z" stroke="currentColor" strokeWidth="1.6" fill="none" />
+    </Box>
   );
 }
 
+/** A mark whose words live in the tooltip and the accessible name; the glyph alone carries shape and colour. */
+function SignalMark({ testId, label, children, onActivate }: { testId: string; label: string; children: React.ReactElement; onActivate?: () => void }): React.ReactElement {
+  return (
+    <Tooltip title={label}>
+      <Box
+        component="span"
+        role={onActivate ? 'button' : 'img'}
+        tabIndex={onActivate ? 0 : undefined}
+        aria-label={label}
+        data-testid={testId}
+        {...(onActivate
+          ? {
+              onClick: (e: React.MouseEvent) => {
+                e.stopPropagation();
+                onActivate();
+              },
+              onKeyDown: (e: React.KeyboardEvent) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                e.stopPropagation();
+                onActivate();
+              },
+            }
+          : {})}
+        sx={(theme) => ({
+          display: 'inline-flex',
+          flexShrink: 0,
+          mr: 0.5,
+          ...(onActivate ? { cursor: 'pointer', borderRadius: `${theme.ogs.radius.xs}px`, '&:focus-visible': { outline: `1px solid ${theme.palette.error.main}` } } : {}),
+        })}
+      >
+        {children}
+      </Box>
+    </Tooltip>
+  );
+}
+
+function sessionsLabel(sessions: readonly ItemSession[]): string {
+  const [first] = sessions;
+  if (first === undefined) return '';
+  const where = CHANNELS[first.harness].displayName;
+  if (first.state === 'needs-input') return `Uma sessão do ${where} está perguntando`;
+  return sessions.length === 1 ? `Em uso por 1 sessão do ${where}` : `Em uso por ${sessions.length} sessões`;
+}
+
+interface RowSignalProps {
+  item: TreeItem;
+  /** Skills, agents and MCP servers: sessions that used the item show as "em uso". */
+  usage?: SessionUsage;
+  /** The urn sessions started from the row are anchored on. */
+  anchorUrn?: string;
+  /** Sign-in is pending on this channel (an MCP server): an error there even before the status report says so. */
+  authChannel?: ChannelId;
+  /** Urns whose problems roll up into this row (a plugin's items); Diagnósticos shows theirs too. */
+  relatedUrns?: readonly string[];
+}
+
 /**
- * The row's single trailing tag, from its status: `● Erro no <canal>` (something the app installed went wrong), or a
- * draft's one word — `Importar` (detected), `Instalar` (a file the app doesn't own is there), `Desativado`.
- * Installed is silent.
+ * The row's one signal, the most urgent of: error (sign-in included) > a session asking > a file the app doesn't own
+ * in the way > in use by a session > disabled; a detected row that can't be imported says why. A signal that happens
+ * in a channel is that channel's mark with a badge; one that belongs to the app is a quiet word. Installed is silent.
+ * Signals only inform: the row's menu (⋯ or right-click) acts, its first item resolving the signal — except the error
+ * mark, which still opens Diagnósticos.
  */
-export function RowBadgeSlot({ item, onImport, busy = false }: RowBadgeSlotProps): React.ReactElement | null {
-  const badge = rowBadge(item);
-  if (badge === null) return null;
-  if (badge === 'error') return <ChannelWarning urn={item.urn} channels={channelsWith(item, 'error')} />;
-  if (item.status?.reason === 'not-installed') return <InstallTag item={item} />;
-  if (item.status?.reason === 'disabled') {
+export function RowSignal({ item, usage, anchorUrn, authChannel, relatedUrns = [] }: RowSignalProps): React.ReactElement | null {
+  const sessions = useItemSessions(usage, anchorUrn);
+  const errors = channelsWith(item, 'error');
+  const errorChannels = authChannel !== undefined && !errors.includes(authChannel) ? [authChannel, ...errors] : errors;
+  const [errorChannel] = errorChannels;
+  if (errorChannel !== undefined) {
+    const label = authChannel === errorChannel ? `Erro no ${CHANNELS[errorChannel].displayName}: login pendente` : channelErrorLabel(errorChannels);
+    return (
+      <SignalMark testId="channel-warning" label={`${label}. Abrir diagnóstico`} onActivate={() => openDiagnosticsFor(item.urn, relatedUrns)}>
+        <ChannelBadgeMark channel={errorChannel} size={MARK_SIZE}><ErrorBadge /></ChannelBadgeMark>
+      </SignalMark>
+    );
+  }
+  const [session] = sessions;
+  const sessionMark =
+    session !== undefined ? (
+      <SignalMark testId="row-signal-session" label={sessionsLabel(sessions)}>
+        <ChannelBadgeMark channel={session.harness} size={MARK_SIZE}>
+          <SessionStateMark state={session.state} size={badgeSize(MARK_SIZE)} />
+        </ChannelBadgeMark>
+      </SignalMark>
+    ) : null;
+  if (session?.state === 'needs-input') return sessionMark;
+  const [occupied] = notInstalledChannels(item);
+  if (item.status?.reason === 'not-installed' && occupied !== undefined) {
+    return (
+      <SignalMark testId="row-tag-not-installed" label={`Já existe um arquivo do ${CHANNELS[occupied].displayName} neste lugar`}>
+        <ChannelBadgeMark channel={occupied} size={MARK_SIZE}><ExistsBadge /></ChannelBadgeMark>
+      </SignalMark>
+    );
+  }
+  if (sessionMark !== null) return sessionMark;
+  if (isDisabled(item)) {
     return (
       <Typography component="span" data-testid="row-tag-disabled" sx={{ ...TAG_SX, color: 'text.secondary' }}>
         Desativado
       </Typography>
     );
   }
-  if (!importable(item) || onImport === undefined) {
+  const reason = unimportableReason(item);
+  if (reason !== undefined) {
     return (
-      <Typography component="span" data-testid="row-tag-detected" sx={{ ...TAG_SX, color: 'text.secondary' }}>
-        {importable(item) ? 'Detectado' : 'Não importável'}
+      <Typography component="span" noWrap data-testid="row-tag-unimportable" title={reason} sx={{ ...TAG_SX, color: 'text.secondary', minWidth: 0 }}>
+        {reason}
       </Typography>
     );
   }
-  return (
-    <Box
-      component="button"
-      type="button"
-      disabled={busy}
-      data-testid="row-tag-detected"
-      aria-label={`Importar ${item.name}`}
-      onClick={(e: React.MouseEvent) => {
-        e.stopPropagation();
-        onImport();
-      }}
-      sx={actionTagSx}
-    >
-      Importar
-    </Box>
-  );
+  return null;
 }
 
 /** The row's label: the name, then the folder tag of a multi-folder workspace. */
@@ -170,6 +217,14 @@ export function RowLabel({ item, label = item.name }: { item: TreeItem; label?: 
  */
 export function rowMuted(item: TreeItem): boolean {
   return item.origin === 'detected' || isDisabled(item);
+}
+
+/**
+ * Detected rows recede (primary text at lower opacity, back to full on hover/focus) so they stay readable in place;
+ * disabled ones go quiet (secondary text).
+ */
+export function rowMutedStyle(item: TreeItem): 'quiet' | 'recede' {
+  return item.origin === 'detected' ? 'recede' : 'quiet';
 }
 
 export function rowTestId(item: TreeItem): string {

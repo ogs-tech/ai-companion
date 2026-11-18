@@ -75,11 +75,13 @@ describe('PluginTreeRow', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
-  it('Atualizar on the row runs plugin.update without expanding it, then confirms in a toast', async () => {
+  it('Atualizar, first in the menu, runs plugin.update without expanding it, then confirms in a toast', async () => {
     const child = treeItem({ kind: 'skill', value: { name: 'brainstorm' } as never }, { urn: 'urn:skill:brainstorm', name: 'brainstorm' });
     const item = treeItem({ kind: 'plugin', value: plugin, items: [child] }, { urn: `urn:plugin:${plugin.id}`, name: plugin.id });
     renderWithShell(<PluginTreeRow item={item} renderChild={(c) => <div key={c.key} data-testid={`child-${c.name}`} />} />);
-    await userEvent.setup().click(screen.getByTestId('tree-plugin-update-local-plugin'));
+    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Atualizar');
+    fireEvent.contextMenu(screen.getByTestId(rowId(item)));
+    await userEvent.setup().click(await screen.findByTestId('tree-plugin-update-local-plugin'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('plugin.update', { id: 'local-plugin', scope: 'project' }));
     expect(await screen.findByText('Plugin "local-plugin" atualizado')).toBeInTheDocument();
     expect(screen.queryByTestId('child-brainstorm')).not.toBeInTheDocument();
@@ -91,7 +93,10 @@ describe('PluginTreeRow', () => {
       { ...plugin, installedRef: { kind: 'tag' as const, value: 'v1' } },
       { ...plugin, installedBy: 'claude' as const },
     ]) {
-      const { unmount } = renderWithShell(<PluginTreeRow item={itemOf(p)} />);
+      const item = itemOf(p);
+      const { unmount } = renderWithShell(<PluginTreeRow item={item} />);
+      fireEvent.contextMenu(screen.getByTestId(rowId(item)));
+      expect(screen.getByRole('menu')).toBeInTheDocument();
       expect(screen.queryByTestId('tree-plugin-update-local-plugin')).not.toBeInTheDocument();
       unmount();
     }
@@ -106,13 +111,13 @@ describe('PluginTreeRow', () => {
     expect(screen.getByTestId('tree-plugin-remove-local-plugin')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('menu: Desativar, Remover — Atualizar lives on the row', async () => {
+  it('menu: Atualizar first, then Desativar, Remover', async () => {
     const item = itemOf({ ...plugin, drift: { kind: 'diverged' } as never });
     renderWithShell(<PluginTreeRow item={item} />);
     fireEvent.contextMenu(screen.getByTestId(rowId(item)));
     const { within } = await import('@testing-library/react');
     const labels = within(await screen.findByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent);
-    expect(labels).toEqual(['Desativar', 'Remover']);
+    expect(labels).toEqual(['Atualizar', 'Desativar', 'Remover']);
   });
 
   it('Remover hands the removal to the undo window, with no confirm dialog', async () => {
@@ -133,10 +138,10 @@ describe('PluginTreeRow', () => {
     confirmSpy.mockRestore();
   });
 
-  it('a disabled plugin reads muted, with no desativado text', () => {
+  it('a disabled plugin reads muted and says Desativado, like any other row', () => {
     const item = itemOf({ ...plugin, enabled: false }, { disabled: true });
     renderWithShell(<PluginTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Desativado');
+    expect(screen.getByTestId(rowId(item))).toHaveTextContent('Desativado');
   });
 
   it('its ⚠ opens Diagnósticos on the plugin and on what it ships, where the error was reported', async () => {

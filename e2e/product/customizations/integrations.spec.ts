@@ -46,7 +46,8 @@ test.describe('Customizations › integrations', () => {
     await notion.click({ button: 'right' });
     await page.getByTestId('row-context-menu-toggle').click();
     await expect(notion.getByTestId('row-tag-disabled')).toHaveText('Desativado');
-    await expect(page.getByTestId('chip-draft')).toHaveText(/^[1-9]\d* rascunhos?$/);
+    // No "rascunhos" chip: the row says Desativado itself, and its menu now leads with Ativar.
+    await expect(page.getByTestId('chip-draft')).toHaveCount(0);
     // Turn it back on so the following tests see the seed as it was.
     await notion.click({ button: 'right' });
     await page.getByTestId('row-context-menu-toggle').click();
