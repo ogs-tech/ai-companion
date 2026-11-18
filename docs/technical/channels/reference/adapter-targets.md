@@ -145,6 +145,15 @@ canonical one with the same kind and name exists (hooks: same event/matcher/comm
 Not importable, with the reason shown: a skill folder with files besides `SKILL.md` (importing only the
 file would lose them), an invalid MCP definition, a Cursor hook with no Claude equivalent.
 
+MCP servers shipped by the plugins claude.ai syncs into `~/.claude/plugins/synced/<account>/<plugin>/.mcp.json`
+are detected too (Claude, personal; `DetectedEntity.plugin` names the plugin). The app does not manage those
+plugins, so each server is offered on its own and imports under its bare name (`atlassian`), after which
+`claude mcp login atlassian` signs it in for the app and the terminal alike. The runtime reports it as
+`plugin:<plugin>:<server>`, which the MCP list matches to the detected row. A server with no valid definition
+(claude.ai's `url: ""`, "Not configured") and an older plugin generation (`<plugin>~g2`) are not offered.
+A detected item is always a draft in the tree — a runtime failure or a pending sign-in on a server the app does
+not manage yet is not an error; it signs in once imported.
+
 ### Instruction files
 
 Detection also covers **Instructions**, per level (Global, or one folder of the workspace): `CLAUDE.md`,

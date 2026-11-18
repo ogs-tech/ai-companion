@@ -15,7 +15,7 @@ import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
 import { IpcCallError } from '../../lib/ipc.js';
 import { openMcpPage } from '../../lib/workspace-area-store.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
-import { isClaudeManagedMcp, needsAuth, type McpServer } from '../../../shared/mcp.js';
+import { needsAuth, type McpServer } from '../../../shared/mcp.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
 import { entityUrn } from '../../../shared/entity.js';
 
@@ -56,7 +56,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
   const server = item.entity.value;
   const onMutationError = (err: unknown): void => setToast({ variant: 'error', message: errorMessage(err) });
   const detectedId = server.source.kind === 'detected' && server.source.importable === true ? server.source.detectedId : undefined;
-  const runImport = detectedId !== undefined ? (): void => importer.mutate({ id: detectedId }, { onError: onMutationError }) : undefined;
+  const runImport = detectedId !== undefined ? (): void => importer.mutate({ id: detectedId, kind: 'mcp' }, { onError: onMutationError }) : undefined;
 
   const own = server.source.kind === 'workspace';
   const lifecycle = toRowActions(
@@ -82,12 +82,12 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
   );
   const actions: RowContextMenuAction[] = rowMenu.state
     ? [
-        ...(needsAuth(server) ? [{ key: 'authenticate', label: 'Autenticar', glyph: KeyRound, onSelect: () => openMcpPage(server) }] : []),
+        ...(server.source.kind !== 'detected' && needsAuth(server) ? [{ key: 'authenticate', label: 'Autenticar', glyph: KeyRound, onSelect: () => openMcpPage(server) }] : []),
         ...lifecycle,
       ]
     : [];
   // Detected servers offer a menu only when importable.
-  const hasMenu = own || needsAuth(server) || runImport !== undefined;
+  const hasMenu = own || (server.source.kind !== 'detected' && needsAuth(server)) || runImport !== undefined;
 
   return (
     <>
@@ -108,12 +108,8 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
             {server.source.kind === 'detected' && server.source.harness !== undefined && (
               <HarnessTag harness={server.source.harness} testId={`tree-mcp-harness-${server.id}`} />
             )}
-            {isClaudeManagedMcp(server.name) && (
-              <Typography component="span" data-testid={`tree-mcp-managed-${server.id}`} noWrap sx={QUIET_SX}>
-                Gerenciado pelo Claude
-              </Typography>
-            )}
-            {(needsAuth(server) || (server.name.startsWith('claude-ai-') && server.health?.state === 'error')) && (
+            {/* A detected server is the channel's until imported: it signs in once it is the app's. */}
+            {server.source.kind !== 'detected' && needsAuth(server) && (
               <Button
                 size="small"
                 variant="outlined"

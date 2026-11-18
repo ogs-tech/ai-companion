@@ -4,8 +4,13 @@ import { DomainError } from '../../domain/errors.js';
 
 const PROBE_TIMEOUT_MS = 45_000;
 
-/** The runtime's own naming: `claude.ai Google Drive` → `claude-ai-Google-Drive`, `plugin:a:b` → `plugin-a-b`. */
+/**
+ * The runtime's own naming: `claude.ai Google Drive` → `claude-ai-Google-Drive`. A plugin's server keeps its
+ * `plugin:<plugin>:<server>` form — it is the name `claude mcp login` takes, and hyphenating it cannot be
+ * undone (`plugin-customer-support-guru`).
+ */
 export function normalizeMcpName(display: string): string {
+  if (/^plugin:[^:]+:.+$/.test(display)) return display;
   return display.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 

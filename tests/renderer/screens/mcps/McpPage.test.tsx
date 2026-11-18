@@ -7,7 +7,9 @@ import type { McpServer } from '../../../../src/shared/mcp.js';
 import type { Settings } from '../../../../src/shared/settings.js';
 
 // xterm needs a real browser (matchMedia, canvas); the dialog only hosts it.
-vi.mock('../../../../src/renderer/components/workspace/TerminalPanel.js', () => ({ TerminalPanel: () => null }));
+vi.mock('../../../../src/renderer/components/workspace/TerminalPanel.js', () => ({
+  TerminalPanel: () => null,
+}));
 
 const settings: Settings = {
   adapters: { claude: { enabled: true }, cursor: { enabled: true }, lmstudio: { enabled: false } },
@@ -34,7 +36,8 @@ function route(servers: McpServer[], status: Record<string, unknown> = {}): void
     if (method === 'mcp.list') return ok(servers);
     if (method === 'settings.get') return ok(settings);
     if (method === 'customization.status') return ok({ generatedAt: '', items: status });
-    if (method === 'channelSetup.mcpLogin') return ok({ kind: 'terminal', terminalId: `t${++terminal}`, title: 'Conectar' });
+    if (method === 'channelSetup.mcpLogin')
+      return ok({ kind: 'terminal', terminalId: `t${++terminal}`, title: 'Conectar' });
     return ok(undefined);
   });
 }
@@ -42,7 +45,10 @@ function route(servers: McpServer[], status: Record<string, unknown> = {}): void
 beforeEach(() => {
   call = mockApi();
   exitListeners = new Map();
-  vi.mocked(window.api.terminal.onExit).mockImplementation(((id: string, listener: (code: number | null) => void) => {
+  vi.mocked(window.api.terminal.onExit).mockImplementation(((
+    id: string,
+    listener: (code: number | null) => void,
+  ) => {
     exitListeners.set(id, listener);
     return () => exitListeners.delete(id);
   }) as never);
@@ -55,30 +61,60 @@ describe('McpPage', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Conectar em todos' }));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('channelSetup.mcpLogin', { channelId: 'claude', server: 'context7' }));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('channelSetup.mcpLogin', {
+        channelId: 'claude',
+        server: 'context7',
+      }),
+    );
     await screen.findByTestId('channel-setup-dialog');
 
+    const rechecks = (): number =>
+      call.mock.calls.filter(([method]) => method === 'mcp.refreshHealth').length;
+    const before = rechecks();
     act(() => exitListeners.get('t1')?.(0));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('mcp.refreshHealth', {}));
+    await waitFor(() => expect(rechecks()).toBeGreaterThan(before));
     await user.click(await screen.findByRole('button', { name: 'Conectar no Cursor' }));
 
-    await waitFor(() => expect(call).toHaveBeenCalledWith('channelSetup.mcpLogin', { channelId: 'cursor', server: 'context7' }));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('channelSetup.mcpLogin', {
+        channelId: 'cursor',
+        server: 'context7',
+      }),
+    );
     expect(call).toHaveBeenCalledWith('channelSetup.close', { terminalId: 't1' });
   });
 
   it("a plugin's server lives only in Claude, signed in under its runtime name", async () => {
-    route([{ ...remote, id: 'p', scope: 'plugin', source: { kind: 'plugin', pluginId: 'context7', provenance: 'claude-code' } }]);
+    route([
+      {
+        ...remote,
+        id: 'p',
+        scope: 'plugin',
+        source: { kind: 'plugin', pluginId: 'context7', provenance: 'claude-code' },
+      },
+    ]);
     renderWithShell(<McpPage serverId="p" />);
 
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Conectar no Claude' }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Conectar no Claude' }));
 
-    await waitFor(() => expect(call).toHaveBeenCalledWith('channelSetup.mcpLogin', { channelId: 'claude', server: 'plugin:context7:context7' }));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('channelSetup.mcpLogin', {
+        channelId: 'claude',
+        server: 'plugin:context7:context7',
+      }),
+    );
     expect(screen.queryByTestId('mcp-page-channel-cursor')).not.toBeInTheDocument();
   });
 
   it("shows each channel's state: Claude's live error with its detail, Cursor's sync status", async () => {
     route([{ ...remote, health: { state: 'error', detail: 'Connection closed' } }], {
-      'urn:mcp:context7': { status: 'error', channels: { claude: { status: 'error' }, cursor: { status: 'installed' } } },
+      'urn:mcp:context7': {
+        status: 'error',
+        channels: { claude: { status: 'error' }, cursor: { status: 'installed' } },
+      },
     });
     renderWithShell(<McpPage serverId="own-ctx" />);
 
@@ -86,11 +122,39 @@ describe('McpPage', () => {
     expect(claude).toHaveTextContent('Erro');
     expect(claude).toHaveTextContent('Connection closed');
     expect(within(claude).getByRole('button', { name: 'Ver diagnóstico' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('mcp-page-channel-cursor')).toHaveTextContent('Configurado'));
+    await waitFor(() =>
+      expect(screen.getByTestId('mcp-page-channel-cursor')).toHaveTextContent('Configurado'),
+    );
+  });
+
+  it("shows Cursor's live state when its CLI reported one, and re-checks on open", async () => {
+    route(
+      [{ ...remote, health: { state: 'ok' }, channelHealth: { cursor: { state: 'needs-auth' } } }],
+      {
+        'urn:mcp:context7': {
+          status: 'installed',
+          channels: { claude: { status: 'installed' }, cursor: { status: 'installed' } },
+        },
+      },
+    );
+    renderWithShell(<McpPage serverId="own-ctx" />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mcp-page-channel-cursor')).toHaveTextContent('Precisa de login'),
+    );
+    expect(screen.getByTestId('mcp-page-channel-claude')).toHaveTextContent('Conectado');
+    expect(call).toHaveBeenCalledWith('mcp.refreshHealth', {});
   });
 
   it('a local stdio server has no login: its keys go in env', async () => {
-    route([{ ...remote, transport: 'stdio', def: { command: 'npx', args: ['-y', 'ctx'] }, health: { state: 'ok' } }]);
+    route([
+      {
+        ...remote,
+        transport: 'stdio',
+        def: { command: 'npx', args: ['-y', 'ctx'] },
+        health: { state: 'ok' },
+      },
+    ]);
     renderWithShell(<McpPage serverId="own-ctx" />);
 
     expect(await screen.findByTestId('mcp-page-no-login')).toHaveTextContent('env');

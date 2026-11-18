@@ -12,8 +12,8 @@ describe('parseMcpList', () => {
   it('maps each line to a runtime name and state, skipping the banner', () => {
     expect(parseMcpList(OUTPUT)).toEqual([
       { name: 'claude-ai-Google-Drive', state: 'connected' },
-      { name: 'plugin-context7-context7', state: 'needs-auth' },
-      { name: 'plugin-github-github', state: 'failed', detail: 'HTTP 400: bad request' },
+      { name: 'plugin:context7:context7', state: 'needs-auth' },
+      { name: 'plugin:github:github', state: 'failed', detail: 'HTTP 400: bad request' },
     ]);
   });
 
@@ -25,5 +25,9 @@ describe('parseMcpList', () => {
 describe('normalizeMcpName', () => {
   it('matches the runtime naming for claude.ai connectors', () => {
     expect(normalizeMcpName('claude.ai Google Calendar')).toBe('claude-ai-Google-Calendar');
+  });
+
+  it('keeps a plugin server’s `plugin:<plugin>:<server>` name — the one `claude mcp login` takes', () => {
+    expect(normalizeMcpName('plugin:customer-support:guru')).toBe('plugin:customer-support:guru');
   });
 });

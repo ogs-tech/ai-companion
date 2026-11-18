@@ -17,10 +17,19 @@ export function useDetected(kinds: readonly DetectedKind[]): UseQueryResult<Dete
  * (skills, agents, MCP, hooks, and the detected rows themselves) changes, so
  * the whole cache is invalidated rather than guessing keys.
  */
-export function useImportDetected(): UseMutationResult<unknown, Error, { id: string }> {
+export function useImportDetected(): UseMutationResult<unknown, Error, { id: string; kind?: DetectedKind }> {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars) => callIpc('detected.import', vars),
-    onSuccess: () => qc.invalidateQueries(),
+    mutationFn: ({ id }) => callIpc('detected.import', { id }),
+    onSuccess: (_result, { kind }) => {
+      void qc.invalidateQueries();
+      // An imported MCP server is now written to Claude's config under its own name: re-probe so a sign-in it
+      // needs shows up (Conectar) without waiting for a session. A failed probe leaves the last health in place.
+      if (kind === 'mcp') {
+        void callIpc('mcp.refreshHealth', {})
+          .then(() => qc.invalidateQueries())
+          .catch(() => undefined);
+      }
+    },
   });
 }

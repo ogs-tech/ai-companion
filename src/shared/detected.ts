@@ -27,6 +27,11 @@ export interface DetectedEntity {
   importable: boolean;
   /** Why it cannot be imported (when `importable` is false). */
   reason?: string;
+  /**
+   * The Claude plugin that ships it, for an MCP server read from a plugin synced from claude.ai
+   * (`~/.claude/plugins/synced/`). The runtime names it `plugin:<plugin>:<name>`; importing it makes `<name>` the app's own.
+   */
+  plugin?: string;
   /** Kind-specific, display-only view of the definition (mcp `def`, hook `event`/`matcher`/`handler`, …). */
   preview: Record<string, unknown>;
 }

@@ -85,6 +85,7 @@ export class DetectionService {
         if (kinds.includes('hook')) found.push(...(await this.hooks(location, harness)));
       }
     }
+    if (kinds.includes('mcp')) found.push(...(await this.syncedPluginMcps(found)));
     return this.withoutCanonical(found);
   }
 
@@ -270,6 +271,35 @@ export class DetectionService {
         ...(def.success ? {} : { importable: false, reason: 'Not a valid MCP server definition' }),
       });
     });
+  }
+
+  /**
+   * MCP servers shipped by the plugins claude.ai syncs into `~/.claude/plugins/synced/<account>/<plugin>/`.
+   * The app does not manage those plugins, so each server is offered on its own: importing it makes it the
+   * app's. A server without a valid definition (claude.ai leaves `url: ""` for "Not configured") is not
+   * offered, and a name Claude's own config already detected wins — both would import to the same entity.
+   */
+  private async syncedPluginMcps(found: readonly DetectedEntity[]): Promise<DetectedEntity[]> {
+    const loc: Location = { scope: 'personal', base: this.deps.homedir };
+    const taken = new Set(found.filter((d) => d.kind === 'mcp' && d.harness === 'claude' && d.scope === 'personal').map((d) => d.name));
+    const root = join(this.deps.homedir, '.claude', 'plugins', 'synced');
+    const out: DetectedEntity[] = [];
+    for (const account of await this.names(root)) {
+      for (const dir of await this.names(join(root, account))) {
+        // `<plugin>~g2` is an older generation of the same plugin.
+        if (dir.endsWith('.json') || dir.includes('~')) continue;
+        const file = join(root, account, dir, '.mcp.json');
+        const servers = (await this.readJson(file))?.['mcpServers'];
+        if (servers === null || typeof servers !== 'object' || Array.isArray(servers)) continue;
+        for (const [name, raw] of Object.entries(servers as Record<string, unknown>)) {
+          const def = mcpServerDefSchema.safeParse(raw);
+          if (!def.success || taken.has(name)) continue;
+          taken.add(name);
+          out.push({ ...this.make('mcp', name, 'claude', loc, { description: '', path: file, preview: { def: def.data } }), plugin: dir });
+        }
+      }
+    }
+    return out;
   }
 
   // ---- hooks -----------------------------------------------------------------

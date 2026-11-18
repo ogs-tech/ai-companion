@@ -88,6 +88,8 @@ import { MarketplaceService } from './application/services/marketplace-service.j
 import { MarketplaceSeeder } from './application/services/marketplace-seeder.js';
 import { SettingsMarketplaceRepository } from './infrastructure/marketplace/settings-marketplace-repository.js';
 import { ClaudeCliMcpProbe } from './infrastructure/claude-cli/claude-cli-mcp-probe.js';
+import { CursorCliMcpProbe } from './infrastructure/cursor-cli/cursor-cli-mcp-probe.js';
+import { LiveMcpHealth } from './application/mcp/live-mcp-health.js';
 import { ProbedClaudeRuntime } from './application/mcp/probed-claude-runtime.js';
 import { FsClaudeRuntimeReader } from './infrastructure/claude-runtime/fs-claude-runtime-reader.js';
 import { PluginMcpReader } from './infrastructure/mcp/plugin-mcp-reader.js';
@@ -395,6 +397,12 @@ async function wireIpc(): Promise<void> {
   // One shared view for the MCP list, the row warnings and Diagnósticos: files, overridden by the last live probe.
   const claudeRuntimeReader = new ProbedClaudeRuntime(claudeRuntimeFiles, new ClaudeCliMcpProbe({ cwd: homedir() }));
 
+  // Cursor's own check, run only while the Cursor channel is on (no `cursor-agent` spawn for users who don't use it).
+  const cursorMcpHealth = new LiveMcpHealth(
+    new CursorCliMcpProbe({ cwd: homedir() }),
+    async () => (await settingsService.load())?.adapters.cursor?.enabled === true,
+  );
+
   const pluginMcpReader = new PluginMcpReader({
     listRoots: (scope) => pluginProvenance.roots(scope),
   });
@@ -408,6 +416,7 @@ async function wireIpc(): Promise<void> {
     plugins: pluginMcpReader,
     runtime: claudeRuntimeReader,
     refreshHealth: () => claudeRuntimeReader.refresh(),
+    cursorHealth: cursorMcpHealth,
   });
 
   const customizationStatusService = new CustomizationStatusService({

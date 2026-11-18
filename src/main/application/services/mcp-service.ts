@@ -1,5 +1,8 @@
 import type { ClaudeRuntimePort } from '../ports/claude-runtime-port.js';
-import type { PluginMcpReader, PluginMcpServer } from '../../infrastructure/mcp/plugin-mcp-reader.js';
+import type {
+  PluginMcpReader,
+  PluginMcpServer,
+} from '../../infrastructure/mcp/plugin-mcp-reader.js';
 import type { McpServer, McpHealth, McpServerInput } from '../../../shared/mcp.js';
 import type { DetectedEntity } from '../../../shared/detected.js';
 import type { McpEntity } from '../../../shared/entity.js';
@@ -27,6 +30,8 @@ export interface McpServiceDeps {
   runtime: ClaudeRuntimePort;
   /** Re-checks every server's live connection state (`claude mcp list`) so `list()` stops reporting stale health. */
   refreshHealth?: () => Promise<void>;
+  /** Cursor's last `cursor-agent mcp list`, keyed by the `mcpServers` key — the server's own name. */
+  cursorHealth?: { current(): ReadonlyMap<string, McpHealth>; refresh(): Promise<void> };
 }
 
 export class McpService {
@@ -46,10 +51,15 @@ export class McpService {
     const fromPlugins = plugins.map((s) => this.pluginToDto(s, health));
     // A plugin's server is listed under the plugin only: a harness-file entry of the same name is the same server.
     const pluginNames = new Set(plugins.flatMap((s) => [s.name, ...runtimeAliases(s)]));
-    const found = detected.filter((d) => !pluginNames.has(d.name)).map((d) => this.detectedToDto(d, health));
+    const found = detected
+      .filter((d) => !pluginNames.has(d.name))
+      .map((d) => this.detectedToDto(d, health));
 
     // Names already represented, so the runtime-health join doesn't double-list them as orphans.
-    const claimed = new Set<string>([...canonical.map((e) => e.name), ...detected.map((d) => d.name)]);
+    const claimed = new Set<string>([
+      ...canonical.map((e) => e.name),
+      ...detected.flatMap((d) => [d.name, ...detectedAliases(d)]),
+    ]);
     for (const s of plugins) {
       for (const alias of runtimeAliases(s)) claimed.add(alias);
       claimed.add(s.name);
@@ -61,8 +71,9 @@ export class McpService {
   /** Called after the user signs in to a server (`channelSetup.mcpLogin`): re-probes the runtime, then the next `list()` reflects it. */
   async refreshHealth(): Promise<{ ok: true }> {
     const refresh = this.deps.refreshHealth;
-    if (refresh === undefined) throw new DomainError('internal', 'MCP health probe is not configured');
-    await refresh();
+    if (refresh === undefined)
+      throw new DomainError('internal', 'MCP health probe is not configured');
+    await Promise.all([refresh(), this.deps.cursorHealth?.refresh()]);
     return { ok: true };
   }
 
@@ -71,7 +82,10 @@ export class McpService {
     return (await this.list()).find((s) => s.id === mcpServerId(ref));
   }
 
-  async save(input: { server: McpServerInput; isCreate?: boolean }): Promise<{ ok: true; syncReport: SyncResult[] }> {
+  async save(input: {
+    server: McpServerInput;
+    isCreate?: boolean;
+  }): Promise<{ ok: true; syncReport: SyncResult[] }> {
     const { server } = input;
     if (server.name.trim().length === 0) {
       throw new DomainError('validation', 'MCP server name must not be empty');
@@ -80,10 +94,14 @@ export class McpService {
     const { entities, workspaceId } = this.deps.canonical();
     const scope = this.inputScope(server);
     if (scope === 'workspace' && workspaceId === null) {
-      throw new DomainError('validation', 'No workspace is open — open a folder before saving a workspace MCP server');
+      throw new DomainError(
+        'validation',
+        'No workspace is open — open a folder before saving a workspace MCP server',
+      );
     }
     const urn = entityUrn('mcp', server.name);
-    const existing = input.isCreate === true ? undefined : await entities.get(urn).catch(() => undefined);
+    const existing =
+      input.isCreate === true ? undefined : await entities.get(urn).catch(() => undefined);
     const entity: McpEntity = {
       urn,
       kind: 'mcp',
@@ -91,7 +109,9 @@ export class McpService {
       description: existing?.description ?? '',
       scopes: [scope],
       ...(scope === 'workspace' && workspaceId !== null ? { scopeId: workspaceId } : {}),
-      ...(scope === 'workspace' && server.repoPath !== undefined ? { folder: server.repoPath } : {}),
+      ...(scope === 'workspace' && server.repoPath !== undefined
+        ? { folder: server.repoPath }
+        : {}),
       metadata: existing?.metadata ?? { version: '1.0.0', createdAt: '', updatedAt: '' },
       source: WORKSPACE_SOURCE,
       def: def as Record<string, unknown>,
@@ -103,7 +123,9 @@ export class McpService {
 
   async delete(input: { id: string }): Promise<{ ok: true }> {
     const ref = this.canonicalRef(input.id, 'delete');
-    await this.deps.canonical().entities.delete({ urn: entityUrn('mcp', ref.name), removeSymlinks: true });
+    await this.deps
+      .canonical()
+      .entities.delete({ urn: entityUrn('mcp', ref.name), removeSymlinks: true });
     return { ok: true };
   }
 
@@ -135,7 +157,9 @@ export class McpService {
 
   private entityToDto(e: McpEntity, health: Map<string, McpHealth>): McpServer {
     const personal = e.scopes[0] === 'personal';
-    const location: McpLocation = personal ? { kind: 'global' } : { kind: 'project-shared', repoPath: e.folder ?? '' };
+    const location: McpLocation = personal
+      ? { kind: 'global' }
+      : { kind: 'project-shared', repoPath: e.folder ?? '' };
     const found = health.get(e.name);
     return {
       id: mcpServerId({ location, name: e.name }),
@@ -147,16 +171,23 @@ export class McpService {
       source: { kind: 'workspace' },
       enabled: e.enabled,
       ...(found !== undefined ? { health: found } : {}),
+      ...this.cursorHealthOf(e.name),
     };
   }
 
   private detectedToDto(d: DetectedEntity, health: Map<string, McpHealth>): McpServer {
     const def = (d.preview['def'] ?? {}) as Record<string, unknown>;
     const parsed = mcpServerDefSchema.safeParse(def);
-    const found = health.get(d.name);
+    // A synced plugin's server is reported by the runtime under its plugin-qualified name.
+    const found = [d.name, ...detectedAliases(d)]
+      .map((n) => health.get(n))
+      .find((h) => h !== undefined);
     return {
       // Harness-qualified so the same server found in Claude and Cursor gets two distinct row ids.
-      id: mcpServerId({ location: { kind: 'detected' }, name: `${d.harness}/${d.scope}/${d.name}` }),
+      id: mcpServerId({
+        location: { kind: 'detected' },
+        name: `${d.harness}/${d.scope}/${d.name}`,
+      }),
       name: d.name,
       ...(parsed.success ? { transport: transportOf(parsed.data) } : {}),
       def,
@@ -171,12 +202,21 @@ export class McpService {
       },
       enabled: true,
       ...(found !== undefined ? { health: found } : {}),
+      ...(d.harness === 'cursor' ? this.cursorHealthOf(d.name) : {}),
     };
+  }
+
+  /** Cursor's live state for a server it holds under `name`, as a spreadable DTO fragment. */
+  private cursorHealthOf(name: string): Pick<McpServer, 'channelHealth'> {
+    const found = this.deps.cursorHealth?.current().get(name);
+    return found !== undefined ? { channelHealth: { cursor: found } } : {};
   }
 
   private pluginToDto(s: PluginMcpServer, health: Map<string, McpHealth>): McpServer {
     const ref: McpServerRef = { location: s.location, name: s.name };
-    const found = [...runtimeAliases(s), s.name].map((n) => health.get(n)).find((h) => h !== undefined);
+    const found = [...runtimeAliases(s), s.name]
+      .map((n) => health.get(n))
+      .find((h) => h !== undefined);
     return {
       id: mcpServerId(ref),
       name: s.name,
@@ -244,4 +284,9 @@ export class McpService {
 /** The names the Claude runtime reports a plugin's server under: `plugin:<plugin>:<server>`, or its hyphenated CLI form. */
 function runtimeAliases(s: { pluginId: string; name: string }): string[] {
   return [`plugin:${s.pluginId}:${s.name}`, `plugin-${s.pluginId}-${s.name}`];
+}
+
+/** The runtime names of a server detected in a synced claude.ai plugin (none for one found in a harness's config). */
+function detectedAliases(d: DetectedEntity): string[] {
+  return d.plugin !== undefined ? runtimeAliases({ pluginId: d.plugin, name: d.name }) : [];
 }

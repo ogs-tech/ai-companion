@@ -48,6 +48,18 @@ describe('McpTreeRow', () => {
     expect(screen.getByTestId('tree-mcp-harness-d1')).toHaveTextContent('Cursor');
     await userEvent.setup().click(screen.getByTestId('row-tag-detected'));
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'det-1' }));
+    // Now Claude's own server: re-probed so a sign-in it needs shows as Conectar.
+    await waitFor(() => expect(call).toHaveBeenCalledWith('mcp.refreshHealth', {}));
+  });
+
+  it('a detected server needing auth offers Importar, not Conectar — it signs in once it is the app’s', () => {
+    const synced = itemOf(
+      { ...own, id: 'd2', name: 'atlassian', transport: 'http', scope: 'detected', source: { kind: 'detected', detectedId: 'det-2', harness: 'claude', importable: true }, health: { state: 'needs-auth' } },
+      { origin: 'detected' },
+    );
+    renderWithShell(<McpTreeRow item={synced} />);
+    expect(screen.queryByTestId('tree-mcp-connect-d2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('row-tag-detected')).toBeInTheDocument();
   });
 
   it('a click on the row, or on Conectar, opens the server page instead of a browser link', async () => {

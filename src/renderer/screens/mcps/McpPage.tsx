@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChannelSetupDialog } from '../config/ChannelSetupDialog.js';
@@ -14,9 +14,21 @@ import { CHANNEL_IDS, CHANNELS, type ChannelId } from '../../../shared/channel.j
 import type { ChannelSetupStart } from '../../../shared/channel-setup.js';
 import type { ItemStatus } from '../../../shared/customization-status.js';
 import { entityUrn } from '../../../shared/entity.js';
-import { mcpChannelTargets, mcpSignsIn, type McpChannelTarget, type McpServer } from '../../../shared/mcp.js';
+import {
+  mcpChannelTargets,
+  mcpSignsIn,
+  type McpChannelTarget,
+  type McpServer,
+} from '../../../shared/mcp.js';
 
-const SECTION_SX = { fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', mt: 3, mb: 1 } as const;
+const SECTION_SX = {
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  color: 'text.secondary',
+  textTransform: 'uppercase',
+  mt: 3,
+  mb: 1,
+} as const;
 
 /** `stdio · npx -y @upstash/context7-mcp`, `http · https://…`: what runs, in one line. */
 function definitionLine(server: McpServer): string {
@@ -24,29 +36,39 @@ function definitionLine(server: McpServer): string {
   const target =
     typeof def['url'] === 'string'
       ? def['url']
-      : [def['command'], ...(Array.isArray(def['args']) ? def['args'] : [])].filter((p) => typeof p === 'string').join(' ');
+      : [def['command'], ...(Array.isArray(def['args']) ? def['args'] : [])]
+          .filter((p) => typeof p === 'string')
+          .join(' ');
   return [server.transport, target].filter((p) => p !== undefined && p !== '').join(' · ');
 }
 
 function originLine(server: McpServer): string {
   const { source } = server;
   if (source.kind === 'plugin') return `Plugin ${source.pluginId} · somente leitura`;
-  if (source.kind === 'detected') return source.harness !== undefined ? `Detectado no ${CHANNELS[source.harness].displayName}` : 'Gerenciado pelo Claude';
+  if (source.kind === 'detected')
+    return `Detectado no ${CHANNELS[source.harness ?? 'claude'].displayName}`;
   return 'Seu · escrito em todos os canais ativos';
 }
 
 type ChannelState = { tone: 'ok' | 'error' | 'quiet'; label: string; detail?: string };
 
 /**
- * What the app actually knows per channel. Only Claude reports a live connection (`claude mcp list` / runtime logs);
- * for the others it knows whether the entry was written, so the label says that and nothing more.
+ * What the app actually knows per channel. Claude and Cursor report a live connection through their own CLI
+ * (`claude mcp list`, `cursor-agent mcp list`); without one the app only knows whether the entry was written,
+ * so the label says that and nothing more.
  */
-function channelState(channelId: ChannelId, server: McpServer, status: ItemStatus | undefined): ChannelState {
+function channelState(
+  channelId: ChannelId,
+  server: McpServer,
+  status: ItemStatus | undefined,
+): ChannelState {
   const channel = status?.channels[channelId];
-  if (channelId === 'claude' && server.health !== undefined) {
-    const { state, detail } = server.health;
+  const live = channelId === 'claude' ? server.health : server.channelHealth?.[channelId];
+  if (live !== undefined) {
+    const { state, detail } = live;
     if (state === 'ok') return { tone: 'ok', label: 'Conectado' };
     if (state === 'needs-auth') return { tone: 'error', label: 'Precisa de login' };
+    if (state === 'warning') return { tone: 'quiet', label: detail ?? 'Atenção' };
     return { tone: 'error', label: 'Erro', ...(detail !== undefined ? { detail } : {}) };
   }
   if (channel?.status === 'error') return { tone: 'error', label: 'Erro' };
@@ -81,11 +103,18 @@ export function McpPage({ serverId }: { serverId: string }): React.ReactElement 
     refreshMutate(undefined, { onSettled: () => void invalidateHealth(qc) });
   }, [refreshMutate, qc]);
 
+  // Opening the page re-checks the live state: without it Cursor's row only knows the entry was written.
+  useEffect(() => {
+    recheck();
+  }, [serverId, recheck]);
+
   const server = servers?.find((s) => s.id === serverId);
   if (server === undefined) {
     return (
       <Box data-testid="mcp-page" sx={{ p: 3 }}>
-        <Typography color="text.secondary">{isLoading ? 'Carregando…' : 'Este servidor não está mais configurado.'}</Typography>
+        <Typography color="text.secondary">
+          {isLoading ? 'Carregando…' : 'Este servidor não está mais configurado.'}
+        </Typography>
       </Box>
     );
   }
@@ -100,8 +129,12 @@ export function McpPage({ serverId }: { serverId: string }): React.ReactElement 
     if (target === undefined) return;
     setError(null);
     try {
-      const started = await callIpc<ChannelSetupStart>('channelSetup.mcpLogin', { channelId: target.channelId, server: target.loginName });
-      if (started.kind === 'terminal') setRun({ queue, index, terminalId: started.terminalId, title: started.title });
+      const started = await callIpc<ChannelSetupStart>('channelSetup.mcpLogin', {
+        channelId: target.channelId,
+        server: target.loginName,
+      });
+      if (started.kind === 'terminal')
+        setRun({ queue, index, terminalId: started.terminalId, title: started.title });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -118,12 +151,21 @@ export function McpPage({ serverId }: { serverId: string }): React.ReactElement 
           {originLine(server)}
         </Typography>
         {own && (
-          <Button size="small" sx={{ ml: 'auto' }} data-testid="mcp-page-edit" onClick={() => setEditing(true)}>
+          <Button
+            size="small"
+            sx={{ ml: 'auto' }}
+            data-testid="mcp-page-edit"
+            onClick={() => setEditing(true)}
+          >
             Editar
           </Button>
         )}
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, mt: 0.5, wordBreak: 'break-all' })}>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={(theme) => ({ fontFamily: theme.ogs.fonts.mono, mt: 0.5, wordBreak: 'break-all' })}
+      >
         {definitionLine(server)}
       </Typography>
 
@@ -134,16 +176,27 @@ export function McpPage({ serverId }: { serverId: string }): React.ReactElement 
         </Typography>
       ) : mcpSignsIn(server) ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Button variant="contained" size="small" data-testid="mcp-page-connect" disabled={run !== null} onClick={() => void startLogin(targets, 0)}>
-            {targets.length > 1 ? 'Conectar em todos' : `Conectar no ${CHANNELS[targets[0]!.channelId].displayName}`}
+          <Button
+            variant="contained"
+            size="small"
+            data-testid="mcp-page-connect"
+            disabled={run !== null}
+            onClick={() => void startLogin(targets, 0)}
+          >
+            {targets.length > 1
+              ? 'Conectar em todos'
+              : `Conectar no ${CHANNELS[targets[0]!.channelId].displayName}`}
           </Button>
           <Typography variant="body2" color="text.secondary">
-            {targets.length > 1 ? 'Um login por canal: cada um guarda o próprio token.' : 'O login abre no navegador.'}
+            {targets.length > 1
+              ? 'Um login por canal: cada um guarda o próprio token.'
+              : 'O login abre no navegador.'}
           </Typography>
         </Box>
       ) : (
         <Typography variant="body2" color="text.secondary" data-testid="mcp-page-no-login">
-          Sem login: chaves vão em <code>env</code> na config{own ? ', escrita igual em todos os canais' : ''}.
+          Sem login: chaves vão em <code>env</code> na config
+          {own ? ', escrita igual em todos os canais' : ''}.
         </Typography>
       )}
       {error !== null && (
@@ -161,22 +214,50 @@ export function McpPage({ serverId }: { serverId: string }): React.ReactElement 
               <Box
                 key={channelId}
                 data-testid={`mcp-page-channel-${channelId}`}
-                sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, py: 0.75, borderTop: 1, borderColor: 'divider' }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 1.5,
+                  py: 0.75,
+                  borderTop: 1,
+                  borderColor: 'divider',
+                }}
               >
                 <Typography variant="body2" sx={{ width: 96, flexShrink: 0 }}>
                   {CHANNELS[channelId].displayName}
                 </Typography>
-                <Typography variant="body2" sx={{ flexShrink: 0, color: state.tone === 'error' ? 'error.main' : state.tone === 'ok' ? 'success.main' : 'text.secondary' }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    flexShrink: 0,
+                    color:
+                      state.tone === 'error'
+                        ? 'error.main'
+                        : state.tone === 'ok'
+                          ? 'success.main'
+                          : 'text.secondary',
+                  }}
+                >
                   {state.tone === 'error' ? '● ' : state.tone === 'ok' ? '✓ ' : ''}
                   {state.label}
                 </Typography>
                 {state.detail !== undefined && (
-                  <Typography variant="body2" color="text.secondary" noWrap title={state.detail} sx={{ minWidth: 0 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    noWrap
+                    title={state.detail}
+                    sx={{ minWidth: 0 }}
+                  >
                     {state.detail}
                   </Typography>
                 )}
                 {state.tone === 'error' && (
-                  <Button size="small" sx={{ ml: 'auto', flexShrink: 0 }} onClick={() => openDiagnosticsFor(urn)}>
+                  <Button
+                    size="small"
+                    sx={{ ml: 'auto', flexShrink: 0 }}
+                    onClick={() => openDiagnosticsFor(urn)}
+                  >
                     Ver diagnóstico
                   </Button>
                 )}
@@ -209,7 +290,15 @@ export function McpPage({ serverId }: { serverId: string }): React.ReactElement 
           }}
         />
       )}
-      {editing && <McpEditorDialog key={server.id} open mode="edit" initial={server} onClose={() => setEditing(false)} />}
+      {editing && (
+        <McpEditorDialog
+          key={server.id}
+          open
+          mode="edit"
+          initial={server}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </Box>
   );
 }

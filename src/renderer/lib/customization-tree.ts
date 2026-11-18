@@ -153,6 +153,8 @@ interface Candidate {
   group: TreeGroupId;
   /** Fields the search matches against. */
   haystack: ReadonlyArray<string | undefined>;
+  /** The section the row is listed in when its origin alone does not say (a detected item found outside the workspace). */
+  section?: TreeSectionId;
   /** Placeholder rows: shown only while nothing narrows the list (or when `alwaysMatch`), never counted. */
   placeholder?: { alwaysMatch: boolean };
   /** Keeps the row's position instead of sorting it by name (instruction rows follow their level's order). */
@@ -372,12 +374,9 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
   }
 
   for (const server of input.mcps) {
+    const local = isMcpLocal(server, options.mcpMatchPath);
     const origin: TreeOrigin =
-      server.source.kind === 'detected'
-        ? 'detected'
-        : isMcpLocal(server, options.mcpMatchPath)
-          ? 'local'
-          : 'global';
+      server.source.kind === 'detected' ? 'detected' : local ? 'local' : 'global';
     const urn = entityUrn('mcp', server.name);
     // Only the user's own servers can be turned off; a detected one (e.g. a claude.ai connector) reports
     // `enabled: false` just because the app does not manage it.
@@ -396,6 +395,8 @@ function candidates(input: TreeInput, options: TreeOptions): Candidate[] {
       ),
       group: 'mcp',
       ...parentOf(server.source),
+      // One found in the user's own config (`~/.claude.json`, `~/.cursor/mcp.json`) applies to every workspace.
+      ...(origin === 'detected' && !local ? { section: 'global' as const } : {}),
       haystack: [server.name],
     });
   }
@@ -520,7 +521,22 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
     ),
     ...searchedChildren,
   ];
-  const totals = totalsOf(searched.filter(counted).map((c) => c.item));
+  // A plugin row's status is its items' rolled up in main: when an item it ships carries that status, the item
+  // is the one counted, or `N com erro` would say 2 for one broken MCP.
+  const rolledUp = new Set(
+    all.flatMap((c) =>
+      c.parent !== undefined && c.item.status !== undefined
+        ? [`${c.parent}:${c.item.status.status}`]
+        : [],
+    ),
+  );
+  const forCounting = (item: TreeItem): TreeItem => {
+    if (item.entity.kind !== 'plugin' || item.status === undefined) return item;
+    if (!rolledUp.has(`${item.name}:${item.status.status}`)) return item;
+    const { status: _rolledUp, ...rest } = item;
+    return rest;
+  };
+  const totals = totalsOf(searched.filter(counted).map((c) => forCounting(c.item)));
 
   const childrenOf = new Map<string, Candidate[]>();
   for (const c of searchedChildren) {
@@ -562,7 +578,7 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
         label,
         items: inGroup.map((c) => c.item),
         count: countedItems.length,
-        problems: countedItems.filter((i) => i.status?.status === 'error').length,
+        problems: countedItems.map(forCounting).filter((i) => i.status?.status === 'error').length,
       });
     }
     return {
@@ -572,15 +588,17 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
       problems: groups.reduce((sum, g) => sum + g.problems, 0),
     };
   };
+  const sectionOf = (c: Candidate): TreeSectionId =>
+    c.section ?? (c.item.origin === 'global' ? 'global' : 'local');
   const sections = [
     section(
       'local',
-      visible.filter((c) => c.item.origin !== 'global'),
+      visible.filter((c) => sectionOf(c) === 'local'),
     ),
   ];
   const global = section(
     'global',
-    visible.filter((c) => c.item.origin === 'global'),
+    visible.filter((c) => sectionOf(c) === 'global'),
   );
   if (global.groups.length > 0) sections.push(global);
   return {

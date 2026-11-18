@@ -33,7 +33,10 @@ export interface McpServer {
   repoPath?: string;
   source: McpProvenance;
   enabled: boolean;
+  /** Claude's live state (`claude mcp list`, then its runtime files). */
   health?: McpHealth;
+  /** Other channels' live state from their own CLI (`cursor-agent mcp list`); absent = not checked. */
+  channelHealth?: Partial<Record<ChannelId, McpHealth>>;
 }
 
 /** True when a server can be re-authenticated via the external claude.ai flow. */

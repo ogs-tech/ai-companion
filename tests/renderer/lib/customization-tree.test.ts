@@ -498,6 +498,25 @@ describe('buildCustomizationTree', () => {
     expect(tree.totals).toMatchObject({ draft: 3, error: 0 });
   });
 
+  it('counts an error once: a plugin row rolling up its item’s error is not a second one', () => {
+    const tree = buildCustomizationTree(
+      input({
+        mcps: [mcp('m', { plugin: 'p' })],
+        plugins: [plugin('p'), plugin('broken')],
+        status: {
+          'urn:mcp:m': err('claude'),
+          'urn:plugin:p': err('claude'),
+          'urn:plugin:broken': err('claude'),
+        },
+      }),
+      HOME,
+    );
+    // `p` only mirrors its MCP's error; `broken` has one of its own (nothing it ships explains it).
+    expect(tree.totals).toMatchObject({ error: 2, byChannel: { error: { claude: 2 } } });
+    expect(group(tree, 'plugin')).toMatchObject({ count: 3, problems: 2 });
+    expect(group(tree, 'plugin')?.items.find((i) => i.name === 'p')?.status?.status).toBe('error');
+  });
+
   it('a detected MCP server reporting enabled false is not "desativado" — only the user’s own can be turned off', () => {
     const tree = buildCustomizationTree(
       input({ mcps: [{ ...mcp('claude-ai-Gmail', { detected: true }), enabled: false }] }),
@@ -545,11 +564,35 @@ describe('buildCustomizationTree', () => {
       source: { kind: 'detected', detectedId: 'x', harness: 'cursor', importable: true },
     };
     const tree = buildCustomizationTree(
-      input({ mcps: [mcp('dm', { detected: true })], hooks: [detectedHook] }),
+      input({ mcps: [mcp('dm', { detected: true, repoPath: '/r/app' })], hooks: [detectedHook] }),
       WS,
     );
     expect(group(tree, 'mcp')?.items[0]?.origin).toBe('detected');
     expect(group(tree, 'hook')?.items[0]?.origin).toBe('detected');
+  });
+
+  it('lists an MCP server detected in the user’s own config under Global, one found in the workspace under it', () => {
+    const tree = buildCustomizationTree(
+      input({
+        mcps: [
+          mcp('home', { detected: true }),
+          mcp('here', { detected: true, repoPath: '/r/app' }),
+        ],
+      }),
+      WS,
+    );
+    expect(names(tree, 'mcp', 'local')).toEqual(['here']);
+    expect(names(tree, 'mcp', 'global')).toEqual(['home']);
+    // Still a detected row (Importar, draft) wherever it is listed.
+    const globalMcp = tree.sections
+      .find((s) => s.id === 'global')
+      ?.groups.find((g) => g.id === 'mcp')?.items[0];
+    expect(globalMcp?.origin).toBe('detected');
+  });
+
+  it('keeps every detected MCP server in Início’s own section', () => {
+    const tree = buildCustomizationTree(input({ mcps: [mcp('home', { detected: true })] }), HOME);
+    expect(names(tree, 'mcp', 'local')).toEqual(['home']);
   });
 
   it('tags rows with their folder in a multi-folder workspace', () => {

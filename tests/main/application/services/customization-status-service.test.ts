@@ -109,6 +109,18 @@ describe('CustomizationStatusService', () => {
     expect(report.items).toEqual({});
   });
 
+  it('keeps a detected MCP server a draft when the Claude runtime reports it failing or needing auth', async () => {
+    const report = await make({
+      checks: [check('urn:mcp:atlassian', 'claude', 'error'), check('urn:mcp:ide', 'claude', 'error')],
+      mcps: [
+        { name: 'atlassian', enabled: true, source: { kind: 'detected', harness: 'claude' } },
+        { name: 'ide', enabled: false, source: { kind: 'detected' } },
+      ],
+    }).getReport();
+    expect(report.items['urn:mcp:atlassian']).toEqual({ status: 'draft', reason: 'detected', channels: { claude: { status: 'draft', reason: 'detected' } } });
+    expect(report.items['urn:mcp:ide']).toMatchObject({ status: 'draft', reason: 'detected' });
+  });
+
   it('marks detected skills and detected MCP servers/hooks as drafts on the channel they were found in', async () => {
     const report = await make({
       detected: [detectedSkill('legacy', 'claude'), detectedSkill('legacy', 'cursor')],

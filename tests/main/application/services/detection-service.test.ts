@@ -94,6 +94,23 @@ describe('DetectionService', () => {
     expect(await service.list()).toEqual([]);
   });
 
+  it('offers the MCP servers of a plugin synced from claude.ai, each importable as the app’s own', async () => {
+    const { fs, service, saved } = make({ open: false });
+    const synced = `${HOME}/.claude/plugins/synced/org_user`;
+    const slack = { type: 'http', url: 'https://mcp.slack.com/mcp', oauth: { clientId: 'c', callbackPort: 3118 } };
+    fs.createFile(`${synced}/design/.mcp.json`, JSON.stringify({ mcpServers: { slack, gmail: { type: 'http', url: '' } } }));
+    fs.createFile(`${synced}/design~g2/.mcp.json`, JSON.stringify({ mcpServers: { old: { type: 'http', url: 'https://old.example/mcp' } } }));
+    fs.createFile(`${synced}/design.meta.json`, '{}');
+    fs.createFile(`${synced}/marketing/.mcp.json`, JSON.stringify({ mcpServers: { gh: { type: 'http', url: 'https://gh.example/mcp' } } }));
+    fs.createFile(`${HOME}/.claude.json`, JSON.stringify({ mcpServers: { gh: { command: 'gh-mcp' } } }));
+
+    const list = await service.list({ kinds: ['mcp'] });
+    // `gmail` is "Not configured" (no url), `design~g2` an older generation, and Claude's own `gh` wins the name.
+    expect(list.map((d) => [d.name, d.plugin])).toEqual([['gh', undefined], ['slack', 'design']]);
+    await service.import(list.find((d) => d.name === 'slack')!.id);
+    expect(saved[0]).toMatchObject({ kind: 'mcp', name: 'slack', scopes: ['personal'], def: slack });
+  });
+
   it('imports an item as a canonical entity re-homed to its scope', async () => {
     const { fs, service, saved } = make();
     fs.createFile(`${FOLDER}/.mcp.json`, JSON.stringify({ mcpServers: { local: { command: 'x' } } }));

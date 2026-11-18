@@ -92,7 +92,9 @@ export class CustomizationStatusService {
       ...entities.map((e) => ({ urn: e.urn, source: e.source, disabled: e.source.kind === 'workspace' && !e.enabled })),
     ];
     for (const { urn, source, disabled } of subjects) {
-      if (source.kind === 'detected' && source.harness !== undefined) merge(items, urn, source.harness, DETECTED);
+      // Detected is what a channel runs on its own — the app has nothing to fix there until it is imported, so a
+      // runtime problem (needs auth, IDE not attached) does not make it an error. No harness = the Claude runtime.
+      if (source.kind === 'detected') items.set(urn, { ...DETECTED, channels: { [source.harness ?? 'claude']: DETECTED } });
       if (source.kind === 'plugin' && source.pluginId !== undefined) pluginChildren.push({ urn, pluginId: source.pluginId });
       if (disabled) items.set(urn, DISABLED);
     }
