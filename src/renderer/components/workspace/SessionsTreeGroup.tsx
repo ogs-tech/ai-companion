@@ -372,7 +372,7 @@ export function SessionsTreeGroup({
       <Stack
         direction="row"
         data-testid="sessions-filters"
-        sx={{ gap: 0.625, px: 1.5, pb: 0.75, flexWrap: 'wrap' }}
+        sx={{ gap: 0.625, px: 1.5, pt: 1, pb: 0.75, flexWrap: 'wrap' }}
       >
         {/* A state nobody is in gets no chip; the chosen one stays so it can be cleared. */}
         {SESSION_FILTERS.filter((key) => counts[key] > 0 || filter === key).map((key) => {

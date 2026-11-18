@@ -65,9 +65,9 @@ export interface TreeGroup {
   id: TreeGroupId;
   label: string;
   items: TreeItem[];
-  /** The app's own items (detected ones are listed, not counted). */
+  /** The app's own top-level rows (detected ones are listed, not counted; a plugin's nested items are not either). */
   count: number;
-  /** Every listed item, detected included. */
+  /** Every listed item, detected and a plugin's nested ones included. */
   rows: number;
   /** Items with status `error`: the group header's ⚠. */
   problems: number;
@@ -568,23 +568,26 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
 
   const section = (id: TreeSectionId, members: readonly Candidate[]): TreeSection => {
     const groups: TreeGroup[] = [];
+    /** The section's own items, a plugin's nested ones included — what its header and the panel total name. */
+    let sectionCount = 0;
     for (const { id: groupId, label } of GROUPS) {
       const inGroup = members.filter((c) => c.group === groupId).sort(compare);
       // Skills and Agents stay in the scope's own section as the place to create, while nothing narrows the list.
       const keepEmpty =
         id === 'local' && !narrowing && (groupId === 'skill' || groupId === 'agent');
       if (inGroup.length === 0 && !keepEmpty) continue;
-      // A plugin's nested items count in its group, so the header totals still add up.
-      const countedItems = inGroup
-        .filter(counted)
-        .flatMap((c) =>
-          c.item.entity.kind === 'plugin' ? [c.item, ...c.item.entity.items] : [c.item],
-        );
+      // A plugin's nested items count toward the section (so its total still adds up), but the
+      // Plugins header names plugins: 3 plugins shipping 40 skills read "3", not "43".
+      const rowItems = inGroup.filter(counted).map((c) => c.item);
+      const countedItems = rowItems.flatMap((item) =>
+        item.entity.kind === 'plugin' ? [item, ...item.entity.items] : [item],
+      );
+      sectionCount += countedItems.filter(owned).length;
       groups.push({
         id: groupId,
         label,
         items: inGroup.map((c) => c.item),
-        count: countedItems.filter(owned).length,
+        count: rowItems.filter(owned).length,
         rows: countedItems.length,
         problems: countedItems.map(forCounting).filter((i) => i.status?.status === 'error').length,
       });
@@ -592,7 +595,7 @@ export function buildCustomizationTree(input: TreeInput, options: TreeOptions): 
     return {
       id,
       groups,
-      count: groups.reduce((sum, g) => sum + g.count, 0),
+      count: sectionCount,
       rows: groups.reduce((sum, g) => sum + g.rows, 0),
       problems: groups.reduce((sum, g) => sum + g.problems, 0),
     };

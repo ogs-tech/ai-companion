@@ -356,7 +356,7 @@ export function CustomizationsList({
       />
       <Stack
         spacing={1}
-        sx={{ px: 1.5, pb: 1, flexShrink: 0, ...(collapsed ? { display: 'none' } : {}) }}
+        sx={{ px: 1.5, pt: 1, pb: 1, flexShrink: 0, ...(collapsed ? { display: 'none' } : {}) }}
       >
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <Box
@@ -410,7 +410,7 @@ export function CustomizationsList({
       </Stack>
 
       <Box
-        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', ...(collapsed ? { display: 'none' } : {}) }}
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pb: 1, ...(collapsed ? { display: 'none' } : {}) }}
       >
         <UndoableDeleteContext.Provider value={undo.requestDelete}>
           {rows}

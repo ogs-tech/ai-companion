@@ -319,7 +319,9 @@ describe('buildCustomizationTree', () => {
       'from-plugin',
       'pm',
     ]);
-    expect(group(tree, 'plugin')?.count).toBe(3);
+    // The header names the plugins; what they ship still counts toward the section and the panel total.
+    expect(group(tree, 'plugin')?.count).toBe(1);
+    expect(tree.sections[0]?.count).toBe(4);
     expect(tree.shown).toBe(tree.grandTotal);
   });
 
@@ -527,7 +529,7 @@ describe('buildCustomizationTree', () => {
     );
     // `p` only mirrors its MCP's error; `broken` has one of its own (nothing it ships explains it).
     expect(tree.totals).toMatchObject({ error: 2, byChannel: { error: { claude: 2 } } });
-    expect(group(tree, 'plugin')).toMatchObject({ count: 3, problems: 2 });
+    expect(group(tree, 'plugin')).toMatchObject({ count: 2, problems: 2 });
     expect(group(tree, 'plugin')?.items.find((i) => i.name === 'p')?.status?.status).toBe('error');
   });
 
