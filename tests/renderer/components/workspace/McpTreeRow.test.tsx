@@ -5,6 +5,7 @@ import { McpTreeRow } from '../../../../src/renderer/components/workspace/McpTre
 import { mockApi, ok, renderWithShell, type CallSpy } from '../../test-utils.js';
 import { rowId, treeItem } from './tree-item-fixture.js';
 import type { McpServer } from '../../../../src/shared/mcp.js';
+import { registerMcpOpener } from '../../../../src/renderer/lib/workspace-area-store.js';
 
 const own: McpServer = { id: 's1', name: 'github', transport: 'stdio', def: {}, scope: 'global', source: { kind: 'workspace' }, enabled: true };
 const itemOf = (server: McpServer, opts: { disabled?: boolean; origin?: 'local' | 'detected' } = {}) =>
@@ -49,15 +50,17 @@ describe('McpTreeRow', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('detected.import', { id: 'det-1' }));
   });
 
-  it('re-probes the runtime when the window regains focus after Conectar', async () => {
-    const connector: McpServer = { id: 'c1', name: 'claude-ai-Gmail', transport: 'http', def: {}, scope: 'detected', source: { kind: 'detected' }, enabled: false, health: { state: 'needs-auth' } };
-    const item = itemOf(connector, { origin: 'detected' });
+  it('a click on the row, or on Conectar, opens the server page instead of a browser link', async () => {
+    const opened: string[] = [];
+    registerMcpOpener((server) => opened.push(server.id));
+    const connector: McpServer = { id: 'c1', name: 'context7', transport: 'http', def: {}, scope: 'plugin', source: { kind: 'plugin', pluginId: 'context7', provenance: 'claude-code' }, enabled: true, health: { state: 'needs-auth' } };
+    const item = itemOf(connector);
     renderWithShell(<McpTreeRow item={item} />);
-    expect(screen.getByTestId(rowId(item))).not.toHaveTextContent('Desativado');
-    await userEvent.setup().click(screen.getByTestId('tree-mcp-connect-c1'));
-    expect(call).toHaveBeenCalledWith('mcp.authenticate', { id: 'c1' });
-    expect(call).not.toHaveBeenCalledWith('mcp.refreshHealth', expect.anything());
-    fireEvent.focus(window);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('mcp.refreshHealth', {}));
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('tree-mcp-connect-c1'));
+    await user.click(screen.getByTestId(rowId(item)));
+    expect(opened).toEqual(['c1', 'c1']);
+    expect(call).not.toHaveBeenCalledWith('mcp.authenticate', expect.anything());
+    registerMcpOpener(null);
   });
 });

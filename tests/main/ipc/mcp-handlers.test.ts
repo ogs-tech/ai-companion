@@ -50,14 +50,6 @@ describe('mcp handlers', () => {
     await expect(handlers['mcp.delete']!({})).rejects.toThrow();
   });
 
-  it('mcp.authenticate validates id and delegates', async () => {
-    const authenticate = vi.fn(async () => ({ ok: true as const }));
-    const handlers = buildMcpHandlers(fakeService({ authenticate } as never));
-    await handlers['mcp.authenticate']!({ id: 'id1' });
-    expect(authenticate).toHaveBeenCalledWith({ id: 'id1' });
-    await expect(handlers['mcp.authenticate']!({})).rejects.toThrow();
-  });
-
   it('mcp.refreshHealth delegates', async () => {
     const refreshHealth = vi.fn(async () => ({ ok: true as const }));
     const handlers = buildMcpHandlers(fakeService({ refreshHealth } as never));

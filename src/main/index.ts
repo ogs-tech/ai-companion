@@ -407,7 +407,6 @@ async function wireIpc(): Promise<void> {
     }),
     plugins: pluginMcpReader,
     runtime: claudeRuntimeReader,
-    shell: shellPort,
     refreshHealth: () => claudeRuntimeReader.refresh(),
   });
 

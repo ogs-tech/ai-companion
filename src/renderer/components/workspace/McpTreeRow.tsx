@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Typography } from '@mui/material';
 import { KeyRound } from 'lucide-react';
 import { SessionsUsingBadge } from './SessionsUsingBadge.js';
@@ -10,9 +10,10 @@ import { HarnessTag } from './DetectedTreeRow.js';
 import { RowContextMenu, useRowContextMenu, type RowContextMenuAction } from './RowContextMenu.js';
 import { Toast, type ToastMessage } from '../Toast.js';
 import { useImportDetected } from '../../hooks/use-detected.js';
-import { useDeleteMcp, useAuthenticateMcp, useRefreshMcpHealth } from '../../hooks/use-mcp-mutations.js';
+import { useDeleteMcp } from '../../hooks/use-mcp-mutations.js';
 import { useSetEntityEnabled } from '../../hooks/use-set-entity-enabled.js';
 import { IpcCallError } from '../../lib/ipc.js';
+import { openMcpPage } from '../../lib/workspace-area-store.js';
 import { McpEditorDialog } from '../../screens/mcps/McpEditorDialog.js';
 import { isClaudeManagedMcp, needsAuth, type McpServer } from '../../../shared/mcp.js';
 import type { TreeItem } from '../../lib/customization-tree.js';
@@ -39,28 +40,17 @@ interface McpTreeRowProps {
   depth?: number;
 }
 
-/** One MCP server: toggle/edit/delete for the user's own, "Autenticar" when it needs auth, "Importar" when detected. */
+/**
+ * One MCP server: a click opens its page (`McpPage`), where sign-in happens; toggle/edit/delete for the user's own,
+ * "Conectar" when it needs auth (to the same page), "Importar" when detected.
+ */
 export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowProps): React.ReactElement | null {
   const del = useDeleteMcp();
   const requestDelete = useRequestDelete();
   const setEnabled = useSetEntityEnabled();
-  const authenticate = useAuthenticateMcp();
-  const refreshHealth = useRefreshMcpHealth();
   const importer = useImportDetected();
   const [editing, setEditing] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  // Connecting happens in the browser; the app can't see it finish, so it re-checks once the user comes back.
-  const [awaitingReturn, setAwaitingReturn] = useState(false);
-  useEffect(() => {
-    if (!awaitingReturn) return undefined;
-    const onFocus = (): void => {
-      setAwaitingReturn(false);
-      refreshHealth.mutate(undefined, { onError: (err) => setToast({ variant: 'error', message: errorMessage(err) }) });
-    };
-    window.addEventListener('focus', onFocus, { once: true });
-    return () => window.removeEventListener('focus', onFocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `mutate` is stable; the mutation object is not.
-  }, [awaitingReturn]);
   const rowMenu = useRowContextMenu<McpServer>();
   if (item.entity.kind !== 'mcp') return null;
   const server = item.entity.value;
@@ -92,7 +82,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
   );
   const actions: RowContextMenuAction[] = rowMenu.state
     ? [
-        ...(needsAuth(server) ? [{ key: 'authenticate', label: 'Autenticar', glyph: KeyRound, onSelect: () => authenticate.mutate({ id: server.id }) }] : []),
+        ...(needsAuth(server) ? [{ key: 'authenticate', label: 'Autenticar', glyph: KeyRound, onSelect: () => openMcpPage(server) }] : []),
         ...lifecycle,
       ]
     : [];
@@ -106,6 +96,7 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
         depth={depth}
         muted={rowMuted(item)}
         primary={<RowLabel item={item} />}
+        onClick={() => openMcpPage(server)}
         {...(hasMenu ? { onContextMenu: (e: React.MouseEvent) => rowMenu.openMenu(e, server) } : {})}
         badge={
           <>
@@ -122,19 +113,18 @@ export function McpTreeRow({ item, showScope = false, depth = 1 }: McpTreeRowPro
                 Gerenciado pelo Claude
               </Typography>
             )}
-            {server.name.startsWith('claude-ai-') && (server.health?.state === 'error' || needsAuth(server)) && (
+            {(needsAuth(server) || (server.name.startsWith('claude-ai-') && server.health?.state === 'error')) && (
               <Button
                 size="small"
                 variant="outlined"
                 data-testid={`tree-mcp-connect-${server.id}`}
-                disabled={refreshHealth.isPending}
                 onClick={(e) => {
                   e.stopPropagation();
-                  authenticate.mutate({ id: server.id }, { onSuccess: () => setAwaitingReturn(true), onError: onMutationError });
+                  openMcpPage(server);
                 }}
                 sx={{ flexShrink: 0, minWidth: 0, py: 0, px: 0.75, fontSize: '0.75rem', textTransform: 'none' }}
               >
-                {refreshHealth.isPending ? 'Verificando…' : 'Conectar'}
+                Conectar
               </Button>
             )}
             <SessionsUsingBadge usage={{ kind: 'mcp', name: server.name }} testId={`tree-mcp-using-${server.id}`} />

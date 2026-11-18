@@ -65,6 +65,11 @@ export interface ChannelSetup {
     /** Output that means "not signed in" for a CLI whose status command exits 0 either way. */
     readonly signedInMarker: string;
   } | null;
+  /**
+   * Signs in to one MCP server the channel has configured (OAuth for a remote server or a claude.ai connector):
+   * `<bin> <args…> '<server>'`, run in the same visible terminal. `null` when the channel holds no MCP config.
+   */
+  readonly mcpLogin: { readonly args: readonly string[] } | null;
 }
 
 export interface ChannelDescriptor {
@@ -93,6 +98,7 @@ export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
       versionArgs: ['--version'],
       install: { kind: 'command', command: 'curl -fsSL https://claude.ai/install.sh | bash' },
       auth: { loginCommand: 'claude auth login', statusArgs: ['auth', 'status'], signedInMarker: '"loggedIn": true' },
+      mcpLogin: { args: ['mcp', 'login'] },
     },
   },
   cursor: {
@@ -108,6 +114,7 @@ export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
       versionArgs: ['--version'],
       install: { kind: 'command', command: 'curl https://cursor.com/install -fsS | bash' },
       auth: { loginCommand: 'cursor-agent login', statusArgs: ['status'], signedInMarker: 'Logged in' },
+      mcpLogin: { args: ['mcp', 'login'] },
     },
   },
   // Run-only: `lms` serves and chats with local models but has no skills, agents or instructions on disk to manage,
@@ -122,6 +129,7 @@ export const CHANNELS: Readonly<Record<ChannelId, ChannelDescriptor>> = {
       versionArgs: ['version'],
       install: { kind: 'command', command: 'curl -fsSL https://lmstudio.ai/install.sh | bash' },
       auth: null,
+      mcpLogin: null,
     },
   },
 };

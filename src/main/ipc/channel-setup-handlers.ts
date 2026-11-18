@@ -25,6 +25,10 @@ export function buildChannelSetupHandlers(service: ChannelSetupService): IpcHand
       if (action !== 'install' && action !== 'login') throw new DomainError('validation', "Invalid 'action': expected 'install' | 'login'");
       return service.start(asChannel(p['channelId']), action as ChannelSetupAction);
     },
+    'channelSetup.mcpLogin': async (params) => {
+      const p = asObject(params, 'channelSetup.mcpLogin');
+      return service.startMcpLogin(asChannel(p['channelId']), asRawString(p['server'], 'server'));
+    },
     'channelSetup.terminal': async (params) => service.terminal(asString(asObject(params, 'channelSetup.terminal')['terminalId'], 'terminalId')),
     'channelSetup.write': async (params) => {
       const p = asObject(params, 'channelSetup.write');

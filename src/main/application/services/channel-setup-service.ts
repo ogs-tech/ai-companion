@@ -7,6 +7,11 @@ import type { ChannelProbePort } from '../ports/channel-probe-port.js';
 import type { TerminalPort } from '../ports/terminal-port.js';
 import { appendToScrollback, DEFAULT_MAX_SCROLLBACK_CHARS } from '../scrollback-buffer.js';
 
+/** POSIX single-quoting: the whole value is one literal argument; `'` becomes `'\\''`. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 interface SetupTerminal {
   status: 'running' | 'exited';
   exitCode: number | null;
@@ -76,6 +81,28 @@ export class ChannelSetupService {
     const command = action === 'install' ? (setup.install.kind === 'command' ? setup.install.command : null) : (setup.auth?.loginCommand ?? null);
     if (command === null) throw new DomainError('validation', `${displayName} has no '${action}' step`, { reason: 'no_setup_step', channelId, action });
 
+    return this.spawnVisible(command, `${action === 'install' ? 'Instalar' : 'Entrar no'} ${displayName}`, `${displayName} ${action}`);
+  }
+
+  /**
+   * Signs in to one MCP server through the channel's own CLI (`claude mcp login <name>`), so the token lands where
+   * that channel keeps it. The renderer sends the name only; the command comes from the registry and the name is
+   * passed as one shell-quoted argument.
+   */
+  async startMcpLogin(channelId: ChannelId, server: string): Promise<ChannelSetupStart> {
+    const { setup, displayName } = CHANNELS[channelId];
+    if (setup.mcpLogin === null) {
+      throw new DomainError('validation', `${displayName} keeps no MCP config to sign in to`, { reason: 'no_mcp_login', channelId });
+    }
+    // A name is one line of text; control characters (a newline would start a second command) are refused outright.
+    if (server.trim() === '' || [...server].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)) {
+      throw new DomainError('validation', 'Invalid MCP server name', { reason: 'invalid_mcp_name' });
+    }
+    const command = [setup.bin, ...setup.mcpLogin.args, shellQuote(server)].join(' ');
+    return this.spawnVisible(command, `Conectar ${server} no ${displayName}`, `${displayName} mcp login`);
+  }
+
+  private async spawnVisible(command: string, title: string, label: string): Promise<ChannelSetupStart> {
     const terminalId = randomUUID();
     this.terminals.set(terminalId, { status: 'running', exitCode: null, buffer: [] });
     try {
@@ -83,9 +110,9 @@ export class ChannelSetupService {
       await this.port.spawn(terminalId, { command: this.deps.shell, args: ['-lc', command], cwd: this.deps.cwd, env: this.deps.env(), cols: 80, rows: 24 });
     } catch (err) {
       this.terminals.delete(terminalId);
-      throw ioError({ message: `Failed to start ${displayName} ${action}: ${(err as Error).message}`, details: { reason: 'channel_setup_spawn_failed' } });
+      throw ioError({ message: `Failed to start ${label}: ${(err as Error).message}`, details: { reason: 'channel_setup_spawn_failed' } });
     }
-    return { kind: 'terminal', terminalId, title: `${action === 'install' ? 'Instalar' : 'Entrar no'} ${displayName}` };
+    return { kind: 'terminal', terminalId, title };
   }
 
   terminal(terminalId: string): ChannelSetupTerminal | null {

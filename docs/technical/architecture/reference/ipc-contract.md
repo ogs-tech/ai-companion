@@ -390,6 +390,7 @@ neither a workspace nor a session, so it works at Início. `ChannelSetupService`
 |---|---|---|
 | `channelSetup.status` | `{ channelId: ChannelId }` | `ChannelStatus` — `{ channelId; installed; version?; signedIn: boolean \| null }` (`null` = the channel has no account) |
 | `channelSetup.start` | `{ channelId: ChannelId; action: 'install' \| 'login' }` | `{ kind: 'terminal'; terminalId; title } \| { kind: 'opened'; url }` — `opened` for a download-style install (LM Studio opens the vendor page); a step the channel lacks (`login` on LM Studio) is `validation` |
+| `channelSetup.mcpLogin` | `{ channelId: ChannelId; server: string }` | `{ kind: 'terminal'; terminalId; title }` — runs the registry's `setup.mcpLogin` (`<bin> mcp login '<server>'`, the name single-quoted) in the same visible PTY; `validation` for a channel with `mcpLogin: null` (LM Studio) or a name that is empty or has control characters. `server` is the name **that channel's CLI** knows: `plugin:<id>:<server>` and `claude.ai <name>` in Claude (see `mcpChannelTargets` in `src/shared/mcp.ts`) |
 | `channelSetup.terminal` | `{ terminalId: string }` | `ChannelSetupTerminal \| null` — `{ terminalId; status; exitCode; outputBuffer }`, the scrollback a reattaching view replays |
 | `channelSetup.write` | `{ terminalId: string; data: string }` | `void` |
 | `channelSetup.resize` | `{ terminalId: string; cols: number; rows: number }` (positive integers) | `void` |
@@ -711,8 +712,7 @@ and import](../../channels/reference/adapter-targets.md#detected-items-and-impor
 | `mcp.get` | `{ id: string }` | `McpServer \| undefined` |
 | `mcp.save` | `{ server: McpServerInput; isCreate?: boolean }` | `{ ok: true; syncReport: SyncResult[] }` |
 | `mcp.delete` | `{ id: string }` | `{ ok: true }` |
-| `mcp.authenticate` | `{ id: string }` | `{ ok: true }` |
-| `mcp.refreshHealth` | `{}` | `{ ok: true }` |
+| `mcp.refreshHealth` | `{}` | `{ ok: true }` — re-probes `claude mcp list`; the MCP page calls it after each sign-in terminal exits |
 
 `McpServer` is read-only when `source.kind === 'plugin'` **or** `source.kind === 'detected'`. `mcp.delete` throws `OperationNotAllowedForOriginError` (kind `validation`) for plugin- and detected-sourced ids. `mcp.save` cannot target a plugin/detected server by construction (its `scope` excludes both). `mcp.*` now operate on the canonical `mcp` entity (`<data>/mcps/<name>.json`): `McpServerInput.scope` `global` → `personal`, the two `project-*` scopes → `workspace` (needs an open workspace; `repoPath` becomes the entity's `folder`). Turning a server on or off is `entity.setEnabled` (`mcp.setEnabled` was removed). Harness files are written by `MergeMaterializer` — see [Adapter targets](../../channels/reference/adapter-targets.md#merged-entries-mcp-and-hooks).
 

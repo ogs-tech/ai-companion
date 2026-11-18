@@ -84,3 +84,31 @@ describe('ChannelSetupService.start', () => {
     expect(service.terminal(started.terminalId)).toBeNull();
   });
 });
+
+describe('ChannelSetupService.startMcpLogin', () => {
+  const none = probeReturning(() => ({ found: false, exitCode: null, output: '' }));
+
+  it("runs the channel's `mcp login` for the server, quoted so a name with spaces stays one argument", async () => {
+    const { service, port } = setup(none);
+    const started = await service.startMcpLogin('claude', "plugin:support:google calendar");
+    expect(started).toMatchObject({ kind: 'terminal', title: 'Conectar plugin:support:google calendar no Claude' });
+    expect(port.spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ args: ['-lc', "claude mcp login 'plugin:support:google calendar'"] }),
+    );
+  });
+
+  it('escapes a single quote in the name instead of ending the argument', async () => {
+    const { service, port } = setup(none);
+    await service.startMcpLogin('cursor', "it's");
+    expect(port.spawn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ args: ['-lc', `cursor-agent mcp login 'it'\\''s'`] }));
+  });
+
+  it('refuses a channel without MCP config, and an empty or multi-line name', async () => {
+    const { service, port } = setup(none);
+    await expect(service.startMcpLogin('lmstudio', 'x')).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.startMcpLogin('claude', '')).rejects.toMatchObject({ kind: 'validation' });
+    await expect(service.startMcpLogin('claude', 'a\nrm -rf ~')).rejects.toMatchObject({ kind: 'validation' });
+    expect(port.spawn).not.toHaveBeenCalled();
+  });
+});

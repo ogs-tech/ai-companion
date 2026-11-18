@@ -18,6 +18,41 @@ export interface CliStub {
    * new conversation (`session-start`, `source: clear`).
    */
   interactive?: boolean;
+  /**
+   * Remote MCP servers this CLI has configured (name → url), each needing OAuth until `<bin> mcp login <name>` runs —
+   * the login records a `<bin>.mcp-<name>.authed` marker next to the stub, as the real CLI stores a token. `mcp list`
+   * then prints the server the way `claude mcp list` does (`! Needs authentication` → `✔ Connected`), which is what
+   * the app's health probe parses. An unknown name fails like the real CLI.
+   */
+  mcpServers?: Record<string, string>;
+}
+
+/** The marker a stub's `mcp login <server>` leaves: proof that channel's own CLI signed in. */
+export function mcpLoginMarker(dir: string, bin: string, server: string): string {
+  return join(dir, `${bin}.mcp-${server.replace(/[^A-Za-z0-9_-]/g, '-')}.authed`);
+}
+
+function mcpArms(dir: string, bin: string, servers: Record<string, string>): string {
+  const listLines = Object.entries(servers)
+    .map(([name, url]) => {
+      const marker = mcpLoginMarker(dir, bin, name);
+      return `    if [ -f "${marker}" ]; then echo "${name}: ${url} (HTTP) - ✔ Connected"; else echo "${name}: ${url} (HTTP) - ! Needs authentication"; fi`;
+    })
+    .join('\n');
+  const loginArms = Object.keys(servers)
+    .map(
+      (name) => `  "mcp login ${name}")
+    echo "Opening your browser to authenticate with ${name}…"
+    echo "Authentication successful. Tokens stored for ${name}."
+    touch "${mcpLoginMarker(dir, bin, name)}"; exit 0 ;;\n`,
+    )
+    .join('');
+  return `  "mcp list")
+    echo "Checking MCP server health…"; echo
+${listLines}
+    exit 0 ;;
+${loginArms}  "mcp login "*) echo "No MCP server named '$3'." >&2; exit 1 ;;
+`;
 }
 
 const DIRS_APP_ALSO_PROBES = ['/opt/homebrew/bin', '/usr/local/bin'];
@@ -106,7 +141,7 @@ case "$*" in
     if [ -f "${marker}" ]; then echo '${shape.signedInOutput}'; exit 0; fi
     echo "not signed in"; exit 1 ;;
   "${shape.loginArgs}") touch "${marker}"; echo "signed in (e2e stub)"; exit 0 ;;
-${shape.extraArms ?? ''}esac
+${shape.extraArms ?? ''}${stub.mcpServers ? mcpArms(dir, bin, stub.mcpServers) : ''}esac
 ${stub.interactive ? interactiveLoop(bin) : ''}echo "unexpected args: $*" >&2; exit 2
 `;
     const path = join(dir, bin);

@@ -24,11 +24,6 @@ export function buildMcpHandlers(service: McpService): IpcHandlers {
       return service.delete({ id: asString(raw['id'], 'id') });
     },
 
-    'mcp.authenticate': async (params) => {
-      const raw = asObject(params, 'mcp.authenticate');
-      return service.authenticate({ id: asString(raw['id'], 'id') });
-    },
-
     'mcp.refreshHealth': async () => service.refreshHealth(),
   };
 }

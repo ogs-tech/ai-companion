@@ -40,3 +40,16 @@ export function registerConfigOpener(next: ((page?: string) => void) | null): vo
 export function openConfig(page?: string): void {
   configOpener?.(page);
 }
+
+// An MCP server's page: its row sits deep in the customizations tree, which has no prop path to the Workbench tabs.
+let mcpOpener: ((server: { id: string; name: string }) => void) | null = null;
+
+/** Called by `WorkspaceScreen` while mounted; pass `null` on unmount. */
+export function registerMcpOpener(next: ((server: { id: string; name: string }) => void) | null): void {
+  mcpOpener = next;
+}
+
+/** Opens (or focuses) the server's Workbench tab — one per server. A no-op if WorkspaceScreen isn't mounted. */
+export function openMcpPage(server: { id: string; name: string }): void {
+  mcpOpener?.(server);
+}

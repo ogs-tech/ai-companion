@@ -52,9 +52,15 @@ found in `.claude/` and `.cursor/` appear the same way, under **Draft**.
 
 ## Fix a server that needs authentication
 
-A server Claude Code has flagged as needing OAuth shows an **Authenticate** button. It opens
-`https://claude.ai/customize/connectors` in your browser — the app cannot complete the OAuth flow itself.
-For servers you configured locally, run `/mcp` inside a `claude` session instead.
+Click a server to open its page in the Workbench: what it runs, one **Autenticação** section, and each
+channel's state (Claude reports the live connection; Cursor only whether the entry was written). A server
+that needs OAuth also shows **Conectar** on its row, which opens the same page.
+
+**Conectar em todos** signs in to every enabled channel the server lives in, one after the other, each with
+that channel's own CLI (`claude mcp login`, `cursor-agent mcp login`) in a visible terminal — every CLI keeps
+its own OAuth token, so it is one click and one browser login per channel. A plugin's server and a claude.ai
+connector live only in Claude. A local `stdio` server has no login: put its keys in `env` (**Editar**), and the
+app writes that config to every channel.
 
 Servers that Claude Code reports as failing or needing auth, but whose config the app cannot find, are
 listed as **detected** so the failure is visible. The **Diagnóstico** tab lists the same problems with a

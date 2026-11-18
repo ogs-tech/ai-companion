@@ -10,6 +10,7 @@ import {
   House,
   NotebookPen,
   History,
+  Plug,
   RefreshCw,
   EyeOff,
   SquareTerminal,
@@ -40,6 +41,7 @@ import { WorkspacesScreen } from '../workspaces/WorkspacesScreen.js';
 import { StarterPackScreen } from '../starter-pack/StarterPackScreen.js';
 import { MarketplaceList } from '../marketplaces/MarketplaceList.js';
 import { HealthScreen } from '../health/HealthScreen.js';
+import { McpPage } from '../mcps/McpPage.js';
 import { Toast, type ToastMessage } from '../../components/Toast.js';
 import { useMenuCommand } from '../../lib/menu-commands.js';
 import { openEditorFind } from '../../lib/editor-find.js';
@@ -53,7 +55,7 @@ import {
   type WorkspaceHistoryEntry,
 } from '../../lib/workspace-history-store.js';
 import { shortcutFor } from '../../lib/shortcut-labels.js';
-import { registerAreaOpener, registerConfigOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
+import { registerAreaOpener, registerConfigOpener, registerMcpOpener, type WorkspaceAreaTab } from '../../lib/workspace-area-store.js';
 import { registerPaletteActions } from '../../lib/palette-actions-store.js';
 import { ConfigPage } from '../config/ConfigPage.js';
 import { DEFAULT_CONFIG_PAGE, configPageOfTabId, configTabId, findConfigPage } from '../config/config-pages.js';
@@ -969,6 +971,17 @@ export function WorkspaceScreen(): React.ReactElement {
     return () => registerConfigOpener(null);
   });
 
+  // One tab per MCP server: clicking its row again focuses the page already open.
+  const openMcpTab = ({ id: serverId, name }: { id: string; name: string }): void => {
+    const id = `mcp:${serverId}`;
+    setOpenTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, kind: 'mcp', serverId, label: name }]));
+    setActiveTabId(id);
+  };
+  useEffect(() => {
+    registerMcpOpener(openMcpTab);
+    return () => registerMcpOpener(null);
+  });
+
   // The command palette (above this screen) opens sessions and customizations,
   // and starts a session with a draft question, through these.
   useEffect(() => {
@@ -1164,6 +1177,17 @@ export function WorkspaceScreen(): React.ReactElement {
         dense: true,
         onClose: () => closeTab(tab.id),
         render: () => <ConfigPage page={tab.page} />,
+      };
+    }
+    if (tab.kind === 'mcp') {
+      return {
+        id: tab.id,
+        glyph: Plug,
+        label: tab.label,
+        breadcrumb: `MCP › ${tab.label}`,
+        dense: true,
+        onClose: () => closeTab(tab.id),
+        render: () => <McpPage serverId={tab.serverId} />,
       };
     }
     if (tab.kind === 'browser') {

@@ -19,6 +19,8 @@ export type OpenTab =
   | { id: string; kind: 'preview'; label: string; source: PreviewSource }
   | { id: string; kind: 'history' }
   | { id: string; kind: 'config'; page: string }
+  // Not persisted: a server's id follows its scope and source, which a later launch may not have.
+  | { id: string; kind: 'mcp'; serverId: string; label: string }
   | { id: string; kind: 'browser'; tabId: string }
   | { id: string; kind: 'git-diff'; path: string; source: GitDiffSource }
   | { id: string; kind: WorkspaceAreaTab };
@@ -56,6 +58,8 @@ export function toPersisted(tabs: readonly OpenTab[]): PersistedTab[] {
         return [{ id: tab.id, kind: 'config', page: tab.page }];
       case 'browser':
         return []; // recovered from the main process by `reconcileBrowserTabs`
+      case 'mcp':
+        return [];
       default:
         return [{ id: tab.id, kind: 'area', area: tab.kind }];
     }

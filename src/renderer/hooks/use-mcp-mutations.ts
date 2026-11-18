@@ -22,14 +22,6 @@ export function useDeleteMcp(): UseMutationResult<{ ok: true }, Error, { id: str
   });
 }
 
-// Opens the external claude.ai connectors page; the actual OAuth happens there.
-// Health is re-probed separately (`useRefreshMcpHealth`) once the user comes back from the browser.
-export function useAuthenticateMcp(): UseMutationResult<{ ok: true }, Error, { id: string }> {
-  return useMutation({
-    mutationFn: (vars) => callIpc<{ ok: true }>('mcp.authenticate', vars),
-  });
-}
-
 /** Re-probes every server's live state (`claude mcp list`), then refreshes the list and the warnings. */
 export function useRefreshMcpHealth(): UseMutationResult<{ ok: true }, Error, void> {
   const qc = useQueryClient();
