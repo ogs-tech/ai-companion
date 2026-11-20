@@ -64,7 +64,7 @@ export class McpRuntimeCollector implements HealthCollector {
         observedAt,
         ...(summary?.detail !== undefined ? { detail: summary.detail } : {}),
         ...(severity !== 'ok'
-          ? { remediation: 'Check the MCP server logs and restart Claude Code.' }
+          ? { cause: 'runtime-failed' as const, remediation: 'Check the MCP server logs and restart Claude Code.' }
           : {}),
       });
     }

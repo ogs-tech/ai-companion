@@ -28,6 +28,7 @@ export class PluginEntityCollector implements HealthCollector {
           // Plugins are a Claude Code concept, as in the config-drift check.
           entityUrn: `urn:plugin:${f.pluginId}`,
           outcome: 'error',
+          cause: 'not-loaded',
           channel: 'claude',
           detail: f.reason,
           remediation: 'Fix the file\'s frontmatter (quote values containing ": " or "["), or update the plugin.',

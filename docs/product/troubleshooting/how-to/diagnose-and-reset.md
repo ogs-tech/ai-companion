@@ -7,22 +7,38 @@ description: Read the Diagnóstico screen, fix broken links, MCP auth and plugin
 
 ## Check overall health
 
-The chip at the left of the status bar (bottom of the window) summarizes the latest health report: **sincronizado**, **atenção** or **erro**.
-Click it, or open **Diagnóstico** in Início's left panel, for the details.
+The diagnostics entry on the right of the status bar (bottom of the window) names the worst state of the latest
+health report: **Conectado**, **N em alerta** or **N com erro**. Click it for a summary: the customizations with a
+problem (click one to open Diagnóstico on it), **Atualizar** and **Abrir diagnóstico**. Diagnóstico is also in
+Início's left panel.
 
 ![Diagnóstico on Início](../../../assets/screenshots/diagnose-and-reset/01-diagnostico.png) When a new error appears, the app also sends a
 macOS notification.
 
-**Diagnóstico** groups checks by category; each failing check has a title, a detail line and, when there
-is one, a suggested fix. **Atualizar** re-runs every check.
+**Diagnóstico** is a matrix: one row per synced customization, grouped like the Customizações tree (Instruções,
+Skills, Agents, MCP, Hooks, Plugins), and one column per channel that is on. Each cell says one of three things:
 
-| Section | What it compares | Typical fix |
-|---|---|---|
-| **MCP Authentication** | Servers Claude Code flagged as needing OAuth | Run `/mcp` in a session, or **Authenticate** on the server ([MCP how-to](../../customizations/how-to/configure-mcp-servers-and-hooks.md#fix-a-server-that-needs-authentication)). |
-| **MCP Runtime** | Servers that failed to start, from Claude Code's logs | Fix the command/URL in the server's definition. |
-| **Config Drift** | Installed plugins vs. what `~/.claude/settings.json` says | Toggle the plugin off and on, or reinstall it. |
-| **Symlinks** | Every expected adapter link vs. what is on disk (missing, broken, pointing elsewhere, replaced by a real file) | Re-save the entity, or toggle the harness off/on in Settings to re-sync all. |
-| **Generated Files** | Every expected marker-owned file (Cursor `AGENTS.md`, Cursor plugin) vs. disk | Same as Symlinks. |
+| State | Meaning |
+|---|---|
+| **Conectado** | The channel holds exactly what the app installed (or, for a channel that reads another channel's file, that file is fine). |
+| **Em alerta** | Something outside the app changed or blocks it — a drifted file, a file of yours in the way, an MCP server waiting for sign-in, plugin drift. |
+| **Com erro** | What the app installed is gone or broken — a missing or repointed link, a missing entry, a server that fails to start. |
+| **—** | Nothing was checked there (for instance a server only Claude runs). |
+
+A plugin shows the worst state of its own checks and of its MCP servers, listed under it. **Click a cell** to see,
+under its row, what happened, the path (and where a link should point), when it was checked, and the one action
+that fixes that cause:
+
+| Cause | Action |
+|---|---|
+| Link or file missing, link pointing elsewhere, file or entry edited outside the app | **Sincronizar \<canal\>** — re-syncs that whole channel (backups for anything replaced). |
+| A file of yours at the destination | **Instalar por cima** — moves it to `_backups/`, with **Desfazer** in the toast. |
+| MCP server waiting for sign-in / failing | **Entrar** / **Abrir MCP** — opens the server's page ([MCP how-to](../../customizations/how-to/configure-mcp-servers-and-hooks.md#fix-a-server-that-needs-authentication)). |
+| Plugin drift, an unreadable plugin file, an entry of yours in a shared JSON file | No button: a hint says what to do by hand. |
+
+**Atualizar** syncs every channel, re-probes the MCP servers, scans the channels again for items you can import,
+and re-runs every check; a summary line says when it synced, what it replaced with a backup and how many detected
+items are waiting in the tree's **Detectados** filter.
 
 Symlink and generated-file checks cover the **active workspace's** entities only.
 

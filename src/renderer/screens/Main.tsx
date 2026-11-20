@@ -8,7 +8,7 @@ export function Main(): React.ReactElement {
   useHealthNotifications(healthReport);
 
   return (
-    <AppShell {...(healthReport ? { healthSeverity: healthReport.worst } : {})}>
+    <AppShell>
       <WorkspaceScreen />
     </AppShell>
   );

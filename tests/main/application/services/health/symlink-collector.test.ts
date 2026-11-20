@@ -79,4 +79,15 @@ describe('SymlinkCollector', () => {
     const collector = setup([entry('alpha')], { '/home/.claude/skills/alpha': state });
     expect((await collector.collect())[0]?.outcome).toBe(outcome);
   });
+
+  it.each([
+    ['symlink-to-source', undefined],
+    ['none', 'missing'],
+    ['symlink-to-other', 'repointed'],
+    ['real-file', 'unmanaged'],
+  ] as const)('gives %s the cause %s, with the source it should point at', async (state, cause) => {
+    const check = (await setup([entry('alpha')], { '/home/.claude/skills/alpha': state }).collect())[0];
+    expect(check?.cause).toBe(cause);
+    expect(check?.expected).toBe(cause === undefined ? undefined : '/ws/skills/alpha');
+  });
 });

@@ -9,6 +9,21 @@ export type CheckOutcome = CustomizationStatus;
 
 export type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry' | 'plugin-entity';
 
+/**
+ * Why a check is not ok, in terms the UI can word and act on without parsing `title` (which stays English, for
+ * logs and notifications). Set on every non-ok check by its collector.
+ */
+export type CheckCause =
+  | 'missing'
+  | 'repointed'
+  | 'drifted'
+  | 'unmanaged'
+  | 'needs-auth'
+  | 'runtime-failed'
+  | 'not-loaded'
+  | 'plugin-drift'
+  | 'collector-failed';
+
 export interface HealthCheck {
   /** Stable id, e.g. "mcp-auth:claude.ai Gmail". Used for notification diffing. */
   id: string;
@@ -30,6 +45,10 @@ export interface HealthCheck {
   outcome?: CheckOutcome;
   /** Set on a covered channel's check: that channel reads `coveredBy`'s file natively, and this is that file's verdict. */
   coveredBy?: ChannelId;
+  /** Why it is not ok; absent on ok checks. */
+  cause?: CheckCause;
+  /** What the destination should be — the source a symlink must point at — when the collector knows it. */
+  expected?: string;
   /** Actionable hint, e.g. "Run /mcp to authenticate". */
   remediation?: string;
   /** ISO timestamp, stamped by the service via ClockPort. */

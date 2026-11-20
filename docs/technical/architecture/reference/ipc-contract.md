@@ -736,6 +736,7 @@ Disable semantics: project-shared servers use `projects[repoPath].disabledMcpjso
 ```ts
 type Severity = 'ok' | 'warning' | 'error';
 type HealthCategory = 'mcp-auth' | 'mcp-runtime' | 'config-drift' | 'symlink' | 'generated-file' | 'merge-entry' | 'plugin-entity';
+type CheckCause = 'missing' | 'repointed' | 'drifted' | 'unmanaged' | 'needs-auth' | 'runtime-failed' | 'not-loaded' | 'plugin-drift' | 'collector-failed';
 
 interface HealthCheck {
   id: string;           // stable id used for notification diffing
@@ -747,6 +748,9 @@ interface HealthCheck {
   entityUrn?: string;   // the customization it concerns
   channel?: ChannelId;  // the channel it concerns
   outcome?: 'installed' | 'draft' | 'error'; // set with entityUrn: draft = blocked by a file the app doesn't own
+  coveredBy?: ChannelId; // on a covered channel's copy: the channel whose file it reads
+  cause?: CheckCause;   // set on every non-ok check; the UI words and acts on it (title stays English)
+  expected?: string;    // symlink checks: the source the link must point at
   remediation?: string; // actionable hint, e.g. "Run /mcp to authenticate"
   observedAt: string;   // ISO timestamp
 }

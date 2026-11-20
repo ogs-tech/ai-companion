@@ -1,52 +1,22 @@
 import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Box, Tooltip } from '@mui/material';
+import { Box } from '@mui/material';
 import { Activity, CircleAlert, GitBranch } from 'lucide-react';
-import { CHANNELS, CHANNEL_IDS } from '../../../shared/channel.js';
 import { Icon } from '../ds/Icon.js';
 import { ContextSwitcher } from './ContextSwitcher.js';
-import { useAreaNavigation } from '../../hooks/use-area-navigation.js';
+import { DiagnosticsStatus } from './DiagnosticsStatus.js';
 import { gitStatusOptions } from '../../hooks/use-git.js';
 import { useSessions } from '../../hooks/use-sessions.js';
-import { useSettings } from '../../hooks/use-settings.js';
 import { useActiveWorkspace } from '../../hooks/use-workspaces.js';
 import { dispatchMenuCommand } from '../../lib/menu-commands.js';
 import { getShellStatus, subscribeShellStatus } from '../../lib/shell-status-store.js';
 
-type HealthSeverity = 'ok' | 'warning' | 'error';
-
 interface StatusBarProps {
   /** The switcher's "Todos…": opens the palette on its workspace list. */
   onOpenWorkspacePicker: () => void;
-  healthSeverity?: HealthSeverity;
 }
-
-const SYNC_COLOR: Record<HealthSeverity, 'success.main' | 'warning.main' | 'error.main'> = {
-  ok: 'success.main',
-  warning: 'warning.main',
-  error: 'error.main',
-};
-
-const SYNC_LABEL: Record<HealthSeverity, string> = {
-  ok: 'sincronizado',
-  warning: 'atenção',
-  error: 'erro',
-};
-
-const SYNC_TOOLTIP: Record<HealthSeverity, string> = {
-  ok: 'Tudo sincronizado.',
-  warning: 'Alguns itens estão desincronizados — ver Diagnóstico.',
-  error: 'Falha ao sincronizar — ver Diagnóstico.',
-};
 
 const timeFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-/** The sync verdict plus which harness adapters are on ("Claude Code ✓ · Cursor —"). */
-function syncTooltip(severity: HealthSeverity, settings: ReturnType<typeof useSettings>['data']): string {
-  if (!settings) return SYNC_TOOLTIP[severity];
-  const adapters = CHANNEL_IDS.map((id) => `${CHANNELS[id].displayName} ${settings.adapters[id]?.enabled === true ? '✓' : '—'}`).join(' · ');
-  return `${SYNC_TOOLTIP[severity]} ${adapters}`;
-}
 
 /** Role=button behaviour for a clickable span: click, Enter and Space. */
 function buttonProps(onActivate: () => void): {
@@ -71,14 +41,12 @@ function buttonProps(onActivate: () => void): {
  * The one global status bar. Left: where you are — the workspace switcher (also the way back to Início) and the git branch.
  * Right, only what changes what you do next: cursor and save state (only with
  * an editor active), one sessions summary with "precisa de você" first (click →
- * jumps to it), then sync health (click → Diagnóstico). Which harness adapters
- * are on lives in the sync tooltip and in Configurações; idle sessions are not
+ * jumps to it), then the diagnostics state (click → summary popover). Which channels
+ * are on lives in Configurações; idle sessions are not
  * information and are not counted. Layout controls live in the header; the context switcher lives here.
  * Every item is derived from state that already exists; nothing here detects anything.
  */
-export function StatusBar({ healthSeverity, onOpenWorkspacePicker }: StatusBarProps): React.ReactElement {
-  const navigate = useAreaNavigation();
-  const { data: settings } = useSettings();
+export function StatusBar({ onOpenWorkspacePicker }: StatusBarProps): React.ReactElement {
   const { data: workspace } = useActiveWorkspace();
   const { data: sessions } = useSessions();
   const { tab, cursor } = useSyncExternalStore(subscribeShellStatus, getShellStatus);
@@ -154,19 +122,7 @@ export function StatusBar({ healthSeverity, onOpenWorkspacePicker }: StatusBarPr
           </Box>
         )}
 
-        {healthSeverity !== undefined && (
-          <Tooltip title={syncTooltip(healthSeverity, settings)}>
-            <Box
-              data-testid="status-pill-sync"
-              data-variant={healthSeverity}
-              {...buttonProps(() => navigate('diagnostico'))}
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.625, cursor: 'pointer', '&:hover': { color: 'text.primary' } }}
-            >
-              <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: SYNC_COLOR[healthSeverity] }} />
-              {SYNC_LABEL[healthSeverity]}
-            </Box>
-          </Tooltip>
-        )}
+        <DiagnosticsStatus />
       </Box>
     </Box>
   );

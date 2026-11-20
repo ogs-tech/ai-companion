@@ -54,4 +54,14 @@ describe('MergeEntryCollector', () => {
     const checks = await make([entry('claude', 'urn:hook:stop')], state).collect();
     expect(checks[0]?.outcome).toBe(outcome);
   });
+
+  it.each([
+    ['ok', undefined],
+    ['foreign', 'unmanaged'],
+    ['missing', 'missing'],
+    ['drift', 'drifted'],
+  ] as const)('gives %s the cause %s', async (state, cause) => {
+    const checks = await make([entry('claude', 'urn:hook:stop')], state).collect();
+    expect(checks[0]?.cause).toBe(cause);
+  });
 });

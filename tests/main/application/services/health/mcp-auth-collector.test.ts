@@ -34,6 +34,7 @@ describe('McpAuthCollector', () => {
       id: 'mcp-auth:Gmail',
       category: 'mcp-auth',
       severity: 'warning',
+      cause: 'needs-auth',
       target: 'Gmail',
       remediation: 'Run /mcp in Claude Code to authenticate.',
       observedAt: FROZEN.toISOString(),

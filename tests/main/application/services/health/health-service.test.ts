@@ -69,7 +69,7 @@ describe('HealthService.getReport', () => {
 
     expect(report.checks).toHaveLength(2);
     const failure = report.checks.find((c) => c.category === 'config-drift');
-    expect(failure).toMatchObject({ severity: 'error', observedAt: FROZEN.toISOString() });
+    expect(failure).toMatchObject({ severity: 'error', cause: 'collector-failed', observedAt: FROZEN.toISOString() });
     expect(failure?.detail).toContain('disk on fire');
     expect(report.worst).toBe('error');
   });

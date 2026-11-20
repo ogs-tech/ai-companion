@@ -18,6 +18,7 @@ describe('PluginEntityCollector', () => {
     expect(check).toMatchObject({
       category: 'plugin-entity',
       severity: 'warning',
+      cause: 'not-loaded',
       entityUrn: 'urn:plugin:code-modernization',
       channel: 'claude',
       detail: 'bad yaml',

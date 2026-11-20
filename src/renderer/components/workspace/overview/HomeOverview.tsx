@@ -5,6 +5,7 @@ import { OverviewCard, OverviewGrid, OverviewLink, OverviewRow, todayFilters } f
 import { useSessions } from '../../../hooks/use-sessions.js';
 import { useSessionHistoryStats } from '../../../hooks/use-session-history.js';
 import { useHealthReport } from '../../../hooks/use-health-report.js';
+import { causeText, STATE_LABEL } from '../../../lib/diagnostics-copy.js';
 import { usePersonalInstruction } from '../../../hooks/use-instructions.js';
 import { useCustomizationList } from '../../../hooks/use-customization-list.js';
 import { useMcpList } from '../../../hooks/use-mcp-list.js';
@@ -15,8 +16,6 @@ import type { SessionSnapshot } from '../../../../shared/session.js';
 import type { Severity } from '../../../../shared/health.js';
 
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, ok: 2 };
-const SEVERITY_LABEL: Record<Severity, string> = { ok: 'Tudo certo', warning: 'Atenção', error: 'Erro' };
-
 interface HomeOverviewProps {
   onOpenSession: (session: SessionSnapshot) => void;
   /** Opens the Histórico tab (scope `all`). */
@@ -79,10 +78,10 @@ export function HomeOverview({ onOpenSession, onOpenHistory, onOpenDiagnostics }
         {health ? (
           <>
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', mb: 0.5 }}>
-              <StatusPill variant={health.worst} label={SEVERITY_LABEL[health.worst]} testId="overview-health-worst" />
+              <StatusPill variant={health.worst} label={STATE_LABEL[health.worst]} testId="overview-health-worst" />
             </Stack>
             {problems.map((c) => (
-              <OverviewRow key={c.id} testId={`overview-health-check-${c.id}`} primary={c.title} {...(c.target ? { secondary: c.target } : {})} />
+              <OverviewRow key={c.id} testId={`overview-health-check-${c.id}`} primary={causeText(c)} {...(c.target ? { secondary: c.target } : {})} />
             ))}
           </>
         ) : (

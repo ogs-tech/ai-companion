@@ -36,6 +36,7 @@ export class HealthService {
           id: `collector-error:${collector.category}`,
           category: collector.category,
           severity: 'error',
+          cause: 'collector-failed',
           title: `Health check failed: ${collector.category}`,
           detail: err instanceof Error ? err.message : String(err),
           observedAt: this.clock.now().toISOString(),

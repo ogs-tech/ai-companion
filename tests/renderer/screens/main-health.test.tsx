@@ -54,12 +54,13 @@ describe('<Main> — sync status + diagnostics', () => {
     expect(pill).toHaveAttribute('data-variant', 'error');
   });
 
-  it('opens Diagnóstico as a Workbench tab from the status bar sync entry', async () => {
-    setupRoute('ok');
+  it('opens Diagnóstico as a Workbench tab from the status bar popover', async () => {
+    setupRoute('error');
     renderWithShell(<Main />);
 
     await screen.findByTestId('workspaces-list');
-    await userEvent.click(screen.getByTestId('status-pill-sync'));
+    await userEvent.click(await screen.findByTestId('status-pill-sync'));
+    await userEvent.click(await screen.findByTestId('diagnostics-popover-open'));
 
     expect(await screen.findByTestId('health-screen')).toBeInTheDocument();
   });

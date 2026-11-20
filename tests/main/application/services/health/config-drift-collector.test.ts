@@ -48,6 +48,7 @@ describe('ConfigDriftCollector', () => {
       id: 'config-drift:ghost',
       category: 'config-drift',
       severity: 'warning',
+      cause: 'plugin-drift',
       observedAt: FROZEN.toISOString(),
     });
     expect(ghost?.detail).toContain('not_in_registry');

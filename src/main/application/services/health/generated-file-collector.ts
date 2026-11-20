@@ -1,4 +1,4 @@
-import type { CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
+import type { CheckCause, CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
 import type { Settings } from '../../../../shared/settings.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { Scope } from '../../ports/scope.js';
@@ -22,6 +22,7 @@ export interface SettingsReader {
 interface Verdict {
   severity: Severity;
   title: string;
+  cause?: CheckCause;
   remediation?: string;
 }
 
@@ -33,18 +34,21 @@ function verdictFor(state: GeneratedFileState, destination: string): Verdict {
       return {
         severity: 'error',
         title: `Generated file missing: ${destination}`,
+        cause: 'missing',
         remediation: 'Re-sync the adapter to regenerate this file.',
       };
     case 'drift':
       return {
         severity: 'warning',
         title: `Generated file drifted: ${destination}`,
+        cause: 'drifted',
         remediation: 'Re-sync to overwrite manual edits.',
       };
     case 'foreign':
       return {
         severity: 'warning',
         title: `Not installed — an unmanaged file is at: ${destination}`,
+        cause: 'unmanaged',
         remediation: 'Install it from the customizations tree (the existing file is backed up).',
       };
   }
@@ -94,6 +98,7 @@ export class GeneratedFileCollector implements HealthCollector {
         entityUrn: entry.entityUrn,
         outcome: outcomeFor(state),
         ...channelOf(entry.adapterId),
+        ...(verdict.cause !== undefined ? { cause: verdict.cause } : {}),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),
       });

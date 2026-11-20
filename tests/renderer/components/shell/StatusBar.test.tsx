@@ -75,29 +75,6 @@ describe('StatusBar', () => {
     off();
   });
 
-  it('renders the sync entry with the health severity and its label', () => {
-    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} healthSeverity="warning" />);
-    const sync = screen.getByTestId('status-pill-sync');
-    expect(sync).toHaveAttribute('data-variant', 'warning');
-    expect(sync).toHaveTextContent('atenção');
-  });
-
-  it('hides the sync entry when there is no health severity yet', () => {
-    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
-    expect(screen.queryByTestId('status-pill-sync')).not.toBeInTheDocument();
-  });
-
-  it('clicking the sync entry opens the Diagnóstico Workbench tab', async () => {
-    const opener = vi.fn();
-    registerAreaOpener(opener);
-    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} healthSeverity="error" />);
-    await waitFor(() => expect(call).toHaveBeenCalledWith('workspace.getActive', {}));
-
-    await userEvent.click(screen.getByTestId('status-pill-sync'));
-
-    expect(opener).toHaveBeenCalledWith('diagnostico');
-  });
-
   it('keeps adapters and idle sessions out of the bar', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'workspace.getActive') return ok(null);
@@ -105,8 +82,8 @@ describe('StatusBar', () => {
       if (method === 'session.list') return ok([{ sessionId: 's1', status: 'running', activity: 'idle' }]);
       return ok(null);
     });
-    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} healthSeverity="ok" />);
-    await screen.findByTestId('status-pill-sync');
+    renderWithShell(<StatusBar onOpenWorkspacePicker={() => undefined} />);
+    await waitFor(() => expect(call.mock.calls.map((c) => c[0])).toContain('session.list'));
     expect(screen.queryByTestId('status-adapter-claude')).not.toBeInTheDocument();
     expect(screen.queryByTestId('status-idle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('status-sessions')).not.toBeInTheDocument();

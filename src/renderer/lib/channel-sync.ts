@@ -1,5 +1,6 @@
 import { CHANNELS, CHANNEL_IDS, channelSupports, type ChannelId } from '../../shared/channel.js';
 import type { HealthCheck } from '../../shared/health.js';
+import { causeHint, causeText } from './diagnostics-copy.js';
 
 export interface SyncLine {
   /** Where the channel receives the item (the check's `target`). */
@@ -48,8 +49,8 @@ function lineOf(check: HealthCheck): SyncLine {
   if (check.severity === 'ok') return { ...path, text: okText(check) };
   return {
     ...path,
-    text: check.detail !== undefined ? `${check.title} — ${check.detail}` : check.title,
-    ...(check.remediation !== undefined ? { remediation: check.remediation } : {}),
+    text: check.detail !== undefined ? `${causeText(check)} — ${check.detail}` : causeText(check),
+    ...(causeHint(check) !== undefined ? { remediation: causeHint(check) as string } : {}),
   };
 }
 

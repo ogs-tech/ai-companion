@@ -1,4 +1,4 @@
-import type { CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
+import type { CheckCause, CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { SymlinkPlanEntry } from '../adapter-manager.js';
 import type { SymlinkValidateState } from '../symlink-manager.js';
@@ -17,6 +17,7 @@ export interface SymlinkValidator {
 interface Verdict {
   severity: Severity;
   title: string;
+  cause?: CheckCause;
   remediation?: string;
 }
 
@@ -28,18 +29,21 @@ function verdictFor(state: SymlinkValidateState, destination: string): Verdict {
       return {
         severity: 'error',
         title: `Symlink missing: ${destination}`,
+        cause: 'missing',
         remediation: 'Re-sync the adapter to recreate this symlink.',
       };
     case 'symlink-to-other':
       return {
         severity: 'error',
         title: `Symlink points elsewhere: ${destination}`,
+        cause: 'repointed',
         remediation: 'Re-sync the adapter to repoint this symlink.',
       };
     case 'real-file':
       return {
         severity: 'warning',
         title: `Not installed — an unmanaged file is at: ${destination}`,
+        cause: 'unmanaged',
         remediation: 'Install it from the customizations tree (the existing file is backed up).',
       };
   }
@@ -82,6 +86,7 @@ export class SymlinkCollector implements HealthCollector {
         entityUrn: entry.entityUrn,
         outcome: outcomeFor(state),
         ...channelOf(entry.adapterId),
+        ...(verdict.cause !== undefined ? { cause: verdict.cause, expected: entry.source } : {}),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),
       });

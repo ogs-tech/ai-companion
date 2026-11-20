@@ -1,4 +1,4 @@
-import type { CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
+import type { CheckCause, CheckOutcome, HealthCheck, Severity } from '../../../../shared/health.js';
 import type { ClockPort } from '../../ports/clock-port.js';
 import type { MergePlanEntry } from '../adapter-manager.js';
 import type { MergeState } from '../merge-materializer.js';
@@ -16,6 +16,7 @@ export interface MergeValidator {
 interface Verdict {
   severity: Severity;
   title: string;
+  cause?: CheckCause;
   remediation?: string;
 }
 
@@ -24,13 +25,14 @@ function verdictFor(state: MergeState, label: string): Verdict {
     case 'ok':
       return { severity: 'ok', title: `Entry OK: ${label}` };
     case 'missing':
-      return { severity: 'error', title: `Entry missing: ${label}`, remediation: 'Re-sync the adapter to write this entry.' };
+      return { severity: 'error', title: `Entry missing: ${label}`, cause: 'missing', remediation: 'Re-sync the adapter to write this entry.' };
     case 'drift':
-      return { severity: 'warning', title: `Entry drifted: ${label}`, remediation: 'Re-sync to overwrite manual edits.' };
+      return { severity: 'warning', title: `Entry drifted: ${label}`, cause: 'drifted', remediation: 'Re-sync to overwrite manual edits.' };
     case 'foreign':
       return {
         severity: 'warning',
         title: `Unmanaged entry blocks sync: ${label}`,
+        cause: 'unmanaged',
         remediation: 'Remove or back up the existing entry, then re-sync.',
       };
   }
@@ -72,6 +74,7 @@ export class MergeEntryCollector implements HealthCollector {
         entityUrn: entry.entityUrn,
         outcome: outcomeFor(state),
         ...channelOf(entry.adapterId),
+        ...(verdict.cause !== undefined ? { cause: verdict.cause } : {}),
         observedAt,
         ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),
       });

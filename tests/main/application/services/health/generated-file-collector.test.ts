@@ -77,4 +77,18 @@ describe('GeneratedFileCollector', () => {
     });
     expect((await collector.collect('personal'))[0]?.outcome).toBe(outcome);
   });
+
+  it.each([
+    ['ok', undefined],
+    ['foreign', 'unmanaged'],
+    ['missing', 'missing'],
+    ['drift', 'drifted'],
+  ] as const)('gives %s the cause %s', async (state, cause) => {
+    const collector = make({
+      plan: [{ adapterId: 'cursor', entityUrn: 'urn:instruction:default', destination: '/repos/app/AGENTS.md', content: 'x' }],
+      state,
+      settings: settings({}),
+    });
+    expect((await collector.collect('personal'))[0]?.cause).toBe(cause);
+  });
 });

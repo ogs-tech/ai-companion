@@ -50,6 +50,7 @@ describe('McpRuntimeCollector', () => {
 
     expect(check).toMatchObject({
       severity: 'error',
+      cause: 'runtime-failed',
       detail: 'timed out',
       remediation: expect.stringContaining('restart'),
     });

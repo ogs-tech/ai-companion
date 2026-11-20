@@ -70,7 +70,7 @@ describe('HomeOverview', () => {
       },
     });
     renderHome({ onOpenDiagnostics });
-    expect(await screen.findByTestId('status-pill-overview-health-worst')).toHaveTextContent('Erro');
+    expect(await screen.findByTestId('status-pill-overview-health-worst')).toHaveTextContent('Com erro');
     const shown = screen.getAllByTestId(/^overview-health-check-/).map((r) => r.getAttribute('data-testid'));
     expect(shown).toEqual(['overview-health-check-c', 'overview-health-check-a']);
     await user.click(screen.getByTestId('overview-open-diagnostics'));

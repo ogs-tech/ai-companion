@@ -15,11 +15,10 @@ import { hasActiveEditor } from '../../lib/editor-navigation.js';
 import { openConfig } from '../../lib/workspace-area-store.js';
 
 interface AppShellProps {
-  healthSeverity?: 'ok' | 'warning' | 'error';
   children: ReactNode;
 }
 
-export function AppShell({ healthSeverity, children }: AppShellProps): React.ReactElement {
+export function AppShell({ children }: AppShellProps): React.ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteIntent, setPaletteIntent] = useState<PaletteIntent>('commands');
   // A fresh key per opening resets the palette's query and mode.
@@ -98,7 +97,7 @@ export function AppShell({ healthSeverity, children }: AppShellProps): React.Rea
           {children}
         </Box>
       </Box>
-      <StatusBar onOpenWorkspacePicker={() => openPalette('workspaces')} {...(healthSeverity !== undefined ? { healthSeverity } : {})} />
+      <StatusBar onOpenWorkspacePicker={() => openPalette('workspaces')} />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <CommandPalette key={paletteKey} open={paletteOpen} intent={paletteIntent} onClose={() => setPaletteOpen(false)} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />

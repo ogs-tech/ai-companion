@@ -48,6 +48,7 @@ export class ConfigDriftCollector implements HealthCollector {
           // Plugins are a Claude Code concept: settings and registry are Claude's.
           entityUrn: `urn:plugin:${id}`,
           outcome: 'error',
+          cause: 'plugin-drift',
           channel: 'claude',
           detail,
           remediation: REMEDIATION[item.drift.kind],
